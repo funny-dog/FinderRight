@@ -310,19 +310,6 @@ final class FinderRightService {
 
     private func serviceLog(_ message: String) {
         NSLog("[FinderRightService] \(message)")
-        // 同时写入扩展共享日志，方便联调
-        let logURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first?.appendingPathComponent("FinderRight/service.log")
-        guard let url = logURL else { return }
-        let line = "[\(Date())] \(message)\n"
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: url.path),
-               let h = try? FileHandle(forWritingTo: url) {
-                h.seekToEndOfFile(); h.write(data); h.closeFile()
-            } else {
-                try? data.write(to: url)
-            }
-        }
     }
 
     private func toggleHiddenFilesViaDefaults(_ req: IPCRequest) -> IPCResponse {

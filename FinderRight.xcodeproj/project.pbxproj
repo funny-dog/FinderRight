@@ -21,7 +21,6 @@
 		92CCF71F66868C6BAC801D62 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 746734F8223DB9C94A0D330E /* Assets.xcassets */; };
 		9895825146825C72D3986054 /* FullDiskAccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C7B87B62BE72A560198E4E /* FullDiskAccessView.swift */; };
 		A7C9497FF2C94368E6E8862A /* XPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8B76F8A462E4C81AD54EC1 /* XPCClient.swift */; };
-		BB532EF0C767ADBC155E0CD7 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C343730726423BB83FAC9E5C /* MenuBarView.swift */; };
 		C492E48C0EAC4E3CBAE9F3FA /* XPCListenerHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 821B634B8F3D9C655AA237BA /* XPCListenerHost.swift */; };
 		F8D7AD999BEE984BCABB9621 /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8B4A18F714BACF0360E55F6B /* FinderSync.framework */; };
 		FCD0BAE49FFA5142E0878AC1 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 64863E5FB61838EC00E245C2 /* Localizable.strings */; };
@@ -73,7 +72,6 @@
 		9669126096D152256BE4423B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B268E2B004E7E363C5BB2B91 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		B4FED1F5B6DE1EB92FB8811E /* FinderRightKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FinderRightKit; path = FinderRightKit; sourceTree = SOURCE_ROOT; };
-		C343730726423BB83FAC9E5C /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -146,7 +144,6 @@
 				9304FFC555F7390829DD77C4 /* Components */,
 				12BB40FE596DC418390953E5 /* AccessibilityView.swift */,
 				64C7B87B62BE72A560198E4E /* FullDiskAccessView.swift */,
-				C343730726423BB83FAC9E5C /* MenuBarView.swift */,
 				4839D1478C003FF4A88EACA4 /* OnboardingView.swift */,
 				840F1B44B9D41300F8164D49 /* SettingsView.swift */,
 			);
@@ -299,7 +296,6 @@
 				80F82831D00976393409CBCB /* FinderRightApp.swift in Sources */,
 				7860690B8DD6BF4B486C2E53 /* FinderRightService.swift in Sources */,
 				9895825146825C72D3986054 /* FullDiskAccessView.swift in Sources */,
-				BB532EF0C767ADBC155E0CD7 /* MenuBarView.swift in Sources */,
 				2645451A35BE42EB08159A77 /* OnboardingView.swift in Sources */,
 				34550D5B74F768E4D0AD3693 /* SettingsView.swift in Sources */,
 				C492E48C0EAC4E3CBAE9F3FA /* XPCListenerHost.swift in Sources */,

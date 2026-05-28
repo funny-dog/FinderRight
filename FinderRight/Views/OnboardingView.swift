@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    @Binding var hasCompletedOnboarding: Bool
+    /// 由 AppKit 宿主（NSWindow）注入的关闭回调
+    var onClose: () -> Void = {}
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var currentStep = 0
-    @Environment(\.dismiss) private var dismiss
 
     private let totalSteps = 3
 
@@ -71,7 +72,7 @@ struct OnboardingView: View {
                         } else {
                             Button("开始使用") {
                                 hasCompletedOnboarding = true
-                                dismiss()
+                                onClose()
                             }
                             .buttonStyle(.borderedProminent)
                         }
