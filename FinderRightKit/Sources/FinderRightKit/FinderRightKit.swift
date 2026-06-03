@@ -1,13 +1,10 @@
 /// FinderRightKit — macOS Finder 右键增强应用核心业务逻辑层
 ///
-/// 提供 Action 注册、配置管理、应用检测、文件操作等基础服务。
+/// 提供跨进程 IPC 桥接与共享配置管理等基础服务。
 
 @_exported import struct Foundation.URL
 @_exported import class Foundation.UserDefaults
 
-// Re-export key types for convenience
-// ActionCategory, FinderAction — from Models/ActionProtocol.swift
-// ActionRegistry — from Services/ActionRegistry.swift
-// SharedConfig — from Services/SharedConfig.swift
-// AppDetector — from Services/AppDetector.swift
-// FileOperationService — from Services/FileOperationService.swift
+// 主要类型：
+// IPCBridge / IPCRequest / IPCResponse / AnyJSON — from Services/XPCEndpointBridge.swift
+// SharedConfig / ActionShortcut / FileTemplate    — from Services/SharedConfig.swift

@@ -46,6 +46,15 @@
 "复制相对路径" = "Copy Relative Path";
 "复制相对路径到剪贴板" = "Copy relative path to clipboard";
 
+/* Menu features (settings ↔ Finder right-click) */
+"打开编辑器" = "Open in Editor";
+"剪切选中的文件" = "Cut the selected files";
+"粘贴已剪切的文件" = "Paste the cut files";
+"解压选中的压缩包" = "Extract the selected archive";
+"显示或隐藏隐藏文件" = "Show or hide hidden files";
+"右键菜单功能" = "Right-Click Menu Features";
+"关闭的功能不会出现在 Finder 右键菜单中。" = "Disabled features won't appear in the Finder right-click menu.";
+
 /* General tab */
 "开机自动启动" = "Launch at Login";
 "登录时自动运行 FinderRight" = "Run FinderRight automatically at login";

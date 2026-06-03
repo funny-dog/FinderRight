@@ -2,64 +2,6 @@ import SwiftUI
 import AppKit
 import FinderRightKit
 
-// MARK: - 功能分类定义
-
-enum ActionCategory: String, CaseIterable, Identifiable {
-    case fileOperation = "文件操作"
-    case development = "开发工具"
-    case quickAction = "快捷操作"
-    case clipboard = "剪贴板"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .fileOperation: return "folder"
-        case .development: return "terminal"
-        case .quickAction: return "bolt"
-        case .clipboard: return "doc.on.clipboard"
-        }
-    }
-
-    var features: [FeatureItem] {
-        switch self {
-        case .fileOperation:
-            return [
-                FeatureItem(key: "feature.newFile", name: "新建文件", description: "在当前目录新建文件", icon: "doc.badge.plus"),
-                FeatureItem(key: "feature.newFolder", name: "新建文件夹", description: "在当前目录新建文件夹", icon: "folder.badge.plus"),
-                FeatureItem(key: "feature.copyPath", name: "复制路径", description: "复制文件或文件夹的完整路径", icon: "doc.on.doc"),
-                FeatureItem(key: "feature.moveToTrash", name: "移到废纸篓", description: "将选中项移到废纸篓", icon: "trash"),
-            ]
-        case .development:
-            return [
-                FeatureItem(key: "feature.openInTerminal", name: "在终端中打开", description: "使用默认终端打开当前目录", icon: "terminal"),
-                FeatureItem(key: "feature.openInEditor", name: "在编辑器中打开", description: "使用默认编辑器打开文件", icon: "curlybraces"),
-                FeatureItem(key: "feature.gitInit", name: "Git 初始化", description: "在当前目录初始化 Git 仓库", icon: "arrow.triangle.branch"),
-            ]
-        case .quickAction:
-            return [
-                FeatureItem(key: "feature.compress", name: "压缩", description: "压缩选中的文件或文件夹", icon: "archivebox"),
-                FeatureItem(key: "feature.share", name: "分享", description: "快速分享选中的文件", icon: "square.and.arrow.up"),
-                FeatureItem(key: "feature.preview", name: "快速预览", description: "预览文件内容", icon: "eye"),
-            ]
-        case .clipboard:
-            return [
-                FeatureItem(key: "feature.copyFileName", name: "复制文件名", description: "复制文件名到剪贴板", icon: "textformat"),
-                FeatureItem(key: "feature.copyRelativePath", name: "复制相对路径", description: "复制相对路径到剪贴板", icon: "link"),
-            ]
-        }
-    }
-}
-
-struct FeatureItem: Identifiable {
-    let key: String
-    let name: LocalizedStringKey
-    let description: LocalizedStringKey
-    let icon: String
-
-    var id: String { key }
-}
-
 // MARK: - 终端 & 编辑器定义
 
 struct TerminalApp: Identifiable, Hashable {
@@ -93,59 +35,6 @@ struct EditorApp: Identifiable, Hashable {
         EditorApp(id: "bbedit", name: "BBEdit", bundleIdentifier: "com.barebones.bbedit", icon: "doc.plaintext"),
     ]
 }
-
-// MARK: - SharedDefaults
-
-final class SharedDefaults: ObservableObject {
-    // 使用文件共享代替 App Group，避免需要 Provisioning Profile
-    static let sharedContainerURL: URL = {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("FinderRight")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("settings.plist")
-    }()
-
-    private var store: [String: Any] = [:]
-
-    init() {
-        load()
-    }
-
-    private func load() {
-        guard let data = try? Data(contentsOf: SharedDefaults.sharedContainerURL),
-              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            store = [:]
-            return
-        }
-        store = dict
-    }
-
-    private func save() {
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: store, format: .xml, options: 0) else { return }
-        try? data.write(to: SharedDefaults.sharedContainerURL, options: .atomic)
-    }
-
-    func bool(forKey key: String, defaultValue: Bool = true) -> Bool {
-        return store[key] as? Bool ?? defaultValue
-    }
-
-    func set(_ value: Bool, forKey key: String) {
-        store[key] = value
-        save()
-        objectWillChange.send()
-    }
-
-    func string(forKey key: String, defaultValue: String = "") -> String {
-        return store[key] as? String ?? defaultValue
-    }
-
-    func set(_ value: String, forKey key: String) {
-        store[key] = value
-        save()
-        objectWillChange.send()
-    }
-}
-
 
 // MARK: - SettingsView
 
@@ -291,29 +180,18 @@ struct GeneralTab: View {
 // MARK: - 功能 Tab
 
 struct FeaturesTab: View {
-    @StateObject private var sharedDefaults = SharedDefaults()
-
     var body: some View {
         Form {
-            ForEach(ActionCategory.allCases) { category in
-                Section {
-                    DisclosureGroup {
-                        ForEach(category.features) { feature in
-                            FeatureToggleRow(
-                                feature: feature,
-                                sharedDefaults: sharedDefaults
-                            )
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: category.icon)
-                                .foregroundColor(.accentColor)
-                                .frame(width: 20)
-                            Text(LocalizedStringKey(category.rawValue))
-                                .font(.headline)
-                        }
-                    }
+            Section {
+                ForEach(MenuFeatureCatalog.all) { feature in
+                    FeatureToggleRow(feature: feature)
                 }
+            } header: {
+                Text("右键菜单功能")
+            } footer: {
+                Text("关闭的功能不会出现在 Finder 右键菜单中。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -324,23 +202,25 @@ struct FeaturesTab: View {
 // MARK: - 终端/编辑器 Tab
 
 struct ToolsTab: View {
-    @StateObject private var sharedDefaults = SharedDefaults()
     @State private var availableTerminals: [TerminalApp] = []
     @State private var availableEditors: [EditorApp] = []
-    @State private var selectedTerminalID: String = "terminal"
-    @State private var selectedEditorID: String = "textedit"
+    @State private var selectedTerminalBundleId: String = "com.apple.Terminal"
+    @State private var selectedEditorBundleId: String = "com.microsoft.VSCode"
 
     var body: some View {
         Form {
             Section {
-                Picker("默认终端", selection: $selectedTerminalID) {
+                Picker("默认终端", selection: Binding(
+                    get: { selectedTerminalBundleId },
+                    set: { newValue in
+                        selectedTerminalBundleId = newValue
+                        SharedConfig.shared.preferredTerminal = newValue
+                    }
+                )) {
                     ForEach(availableTerminals) { terminal in
                         Label(LocalizedStringKey(terminal.name), systemImage: terminal.icon)
-                            .tag(terminal.id)
+                            .tag(terminal.bundleIdentifier)
                     }
-                }
-                .onChange(of: selectedTerminalID) { newValue in
-                    sharedDefaults.set(newValue, forKey: "defaultTerminal")
                 }
             } header: {
                 Text("终端")
@@ -351,14 +231,17 @@ struct ToolsTab: View {
             }
 
             Section {
-                Picker("默认编辑器", selection: $selectedEditorID) {
+                Picker("默认编辑器", selection: Binding(
+                    get: { selectedEditorBundleId },
+                    set: { newValue in
+                        selectedEditorBundleId = newValue
+                        SharedConfig.shared.preferredEditor = newValue
+                    }
+                )) {
                     ForEach(availableEditors) { editor in
                         Label(LocalizedStringKey(editor.name), systemImage: editor.icon)
-                            .tag(editor.id)
+                            .tag(editor.bundleIdentifier)
                     }
-                }
-                .onChange(of: selectedEditorID) { newValue in
-                    sharedDefaults.set(newValue, forKey: "defaultEditor")
                 }
             } header: {
                 Text("编辑器")
@@ -372,8 +255,19 @@ struct ToolsTab: View {
         .padding()
         .onAppear {
             detectInstalledApps()
-            selectedTerminalID = sharedDefaults.string(forKey: "defaultTerminal", defaultValue: "terminal")
-            selectedEditorID = sharedDefaults.string(forKey: "defaultEditor", defaultValue: "textedit")
+            // 读取已保存偏好（bundleId）；若对应 App 未安装则回退到第一个可用项，
+            // 并把解析结果写回，保证「设置里显示的」与「扩展实际使用的」一致。
+            let savedTerminal = SharedConfig.shared.preferredTerminal
+            selectedTerminalBundleId = availableTerminals.contains { $0.bundleIdentifier == savedTerminal }
+                ? savedTerminal
+                : (availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal")
+            SharedConfig.shared.preferredTerminal = selectedTerminalBundleId
+
+            let savedEditor = SharedConfig.shared.preferredEditor
+            selectedEditorBundleId = availableEditors.contains { $0.bundleIdentifier == savedEditor }
+                ? savedEditor
+                : (availableEditors.first?.bundleIdentifier ?? "com.apple.TextEdit")
+            SharedConfig.shared.preferredEditor = selectedEditorBundleId
         }
     }
 
@@ -466,6 +360,7 @@ struct ShortcutsTab: View {
     private let actions: [(id: String, name: String, icon: String)] = [
         ("shortcut.copyPath",     "复制路径",       "doc.on.doc"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
+        ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
         ("shortcut.cut",          "剪切",           "scissors"),
         ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
         ("shortcut.compress",     "压缩为 ZIP",     "archivebox"),

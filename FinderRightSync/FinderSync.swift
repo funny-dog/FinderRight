@@ -111,6 +111,9 @@ class FinderSync: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
+        // 读取主 App 设置界面最新写入的功能开关 / 终端 / 编辑器偏好
+        SharedConfig.shared.reload()
+
         let (directory, selected) = currentContext()
         let hasSelection = !selected.isEmpty
         let exts = selected.map { $0.pathExtension.lowercased() }.joined(separator: ",")
@@ -118,40 +121,54 @@ class FinderSync: FIFinderSync {
 
         let menu = NSMenu(title: "FinderRight")
 
-        // 新建文件 —— 容器/侧边栏/空选中时
-        if menuKind == .contextualMenuForContainer
+        // 功能开关：默认开启，用户在设置里关闭后对应菜单项隐藏
+        func featureOn(_ id: String) -> Bool { SharedConfig.shared.isActionEnabled(id) }
+
+        let isContainerLike = menuKind == .contextualMenuForContainer
             || menuKind == .contextualMenuForSidebar
-            || !hasSelection {
+            || !hasSelection
+
+        // 新建文件 —— 容器/侧边栏/空选中时
+        if featureOn(MenuFeatureCatalog.newFile), isContainerLike {
             menu.addItem(submenuItem("📄 新建文件", build: buildNewFileMenu))
         }
 
-        if hasSelection {
+        if featureOn(MenuFeatureCatalog.copyPath), hasSelection {
             menu.addItem(shortcutItem("📋 复制路径", #selector(copyPath(_:)), id: "shortcut.copyPath"))
         }
 
-        menu.addItem(shortcutItem("💻 打开终端", #selector(openTerminal(_:)), id: "shortcut.openTerminal"))
+        if featureOn(MenuFeatureCatalog.openTerminal) {
+            menu.addItem(shortcutItem("💻 打开终端", #selector(openTerminal(_:)), id: "shortcut.openTerminal"))
+        }
+
+        if featureOn(MenuFeatureCatalog.openEditor), hasSelection {
+            menu.addItem(shortcutItem("✏️ 打开编辑器", #selector(openEditor(_:)), id: "shortcut.openEditor"))
+        }
 
         // 剪切 / 粘贴
-        if hasSelection {
+        if featureOn(MenuFeatureCatalog.cut), hasSelection {
             menu.addItem(shortcutItem("✂️ 剪切", #selector(cutFiles(_:)), id: "shortcut.cut"))
         }
-        let hasCut = hasCutQueue()
-        if hasCut || menuKind == .contextualMenuForContainer
-            || menuKind == .contextualMenuForSidebar || !hasSelection {
-            let pasteItem = shortcutItem("📋 粘贴", #selector(pasteFiles(_:)), id: "shortcut.paste")
-            pasteItem.isEnabled = hasCut
-            menu.addItem(pasteItem)
-        }
-
-        // 压缩解压
-        if hasSelection {
-            menu.addItem(shortcutItem("📦 压缩为 ZIP", #selector(archiveOperation(_:)), id: "shortcut.compress", tag: 0))
-            if selected.contains(where: isArchive) {
-                menu.addItem(shortcutItem("📂 解压到当前目录", #selector(archiveOperation(_:)), id: "shortcut.decompress", tag: 2))
+        if featureOn(MenuFeatureCatalog.paste) {
+            let hasCut = hasCutQueue()
+            if hasCut || isContainerLike {
+                let pasteItem = shortcutItem("📋 粘贴", #selector(pasteFiles(_:)), id: "shortcut.paste")
+                pasteItem.isEnabled = hasCut
+                menu.addItem(pasteItem)
             }
         }
 
-        menu.addItem(shortcutItem("👁 切换隐藏文件", #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
+        // 压缩解压
+        if featureOn(MenuFeatureCatalog.compress), hasSelection {
+            menu.addItem(shortcutItem("📦 压缩为 ZIP", #selector(archiveOperation(_:)), id: "shortcut.compress", tag: 0))
+        }
+        if featureOn(MenuFeatureCatalog.decompress), hasSelection, selected.contains(where: isArchive) {
+            menu.addItem(shortcutItem("📂 解压到当前目录", #selector(archiveOperation(_:)), id: "shortcut.decompress", tag: 2))
+        }
+
+        if featureOn(MenuFeatureCatalog.toggleHidden) {
+            menu.addItem(shortcutItem("👁 切换隐藏文件", #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
+        }
         return menu
     }
 
@@ -239,6 +256,20 @@ class FinderSync: FIFinderSync {
             "bundleId": .string(bundleId)
         ])
         logToFile("openTerminal ipc result: success=\(r.success) msg=\(r.message ?? "")")
+    }
+
+    @objc func openEditor(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { logToFile("openEditor: no items"); return }
+        // 使用 SharedConfig 中配置的编辑器
+        let bundleId = SharedConfig.shared.preferredEditor
+        let paths = urls.map(\.path)
+        logToFile("openEditor ipc → bundle=\(bundleId) paths=\(paths.joined(separator: ","))")
+        let r = IPCClient.shared.call(action: "openWithApp", payload: [
+            "paths": .stringArray(paths),
+            "bundleId": .string(bundleId)
+        ])
+        logToFile("openEditor ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
     @objc func cutFiles(_ sender: NSMenuItem) {

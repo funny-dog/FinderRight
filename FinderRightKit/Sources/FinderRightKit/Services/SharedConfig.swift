@@ -23,10 +23,13 @@ public struct FileTemplate: Codable, Equatable, Identifiable {
 /// 替代 App Group UserDefaults，避免需要开发者账号和 Provisioning Profile
 public final class SharedConfig {
 
-    /// 共享配置文件路径
+    /// 共享配置文件路径。
+    ///
+    /// 复用 `IPCBridge.rootDirectory`（真实 home 下的硬编码路径），绕过沙箱重定向。
+    /// 若用 `FileManager` 的 `.applicationSupportDirectory`，沙箱化的 FinderSync 扩展
+    /// 会被重定向到沙箱容器内的私有目录，从而读不到主 App（非沙箱）写入的配置。
     public static let sharedFileURL: URL = {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("FinderRight")
+        let dir = IPCBridge.rootDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("settings.plist")
     }()
@@ -61,6 +64,14 @@ public final class SharedConfig {
     private func save() {
         guard let data = try? PropertyListSerialization.data(fromPropertyList: store, format: .xml, options: 0) else { return }
         try? data.write(to: SharedConfig.sharedFileURL, options: .atomic)
+    }
+
+    /// 重新从磁盘加载配置。
+    ///
+    /// 单例在各进程内独立缓存，扩展进程需要在读取前调用此方法，
+    /// 才能拿到主 App 设置界面刚写入磁盘的最新值（开关 / 终端 / 编辑器 / 快捷键）。
+    public func reload() {
+        load()
     }
 
     // MARK: - Enabled Actions
