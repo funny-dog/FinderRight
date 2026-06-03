@@ -24,6 +24,10 @@
     <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
     <array>
         <string>/Library/Application Support/FinderRight/</string>
+        <!-- iCloud Drive：~/Library/Mobile Documents/ 下所有内容 -->
+        <string>/Library/Mobile Documents/</string>
+        <!-- Google Drive / OneDrive / Dropbox 等：~/Library/CloudStorage/ -->
+        <string>/Library/CloudStorage/</string>
     </array>
 
     <!-- 允许 fork 子进程执行命令行工具（zip/tar/unzip/defaults/killall 等） -->
