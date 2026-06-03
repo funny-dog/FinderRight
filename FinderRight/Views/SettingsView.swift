@@ -19,23 +19,6 @@ struct TerminalApp: Identifiable, Hashable {
     ]
 }
 
-struct EditorApp: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let bundleIdentifier: String
-    let icon: String
-
-    static let knownEditors: [EditorApp] = [
-        EditorApp(id: "textedit", name: "文本编辑", bundleIdentifier: "com.apple.TextEdit", icon: "doc.text"),
-        EditorApp(id: "vscode", name: "Visual Studio Code", bundleIdentifier: "com.microsoft.VSCode", icon: "curlybraces"),
-        EditorApp(id: "cursor", name: "Cursor", bundleIdentifier: "com.todesktop.230313mzl4w4u92", icon: "curlybraces"),
-        EditorApp(id: "sublime", name: "Sublime Text", bundleIdentifier: "com.sublimetext.4", icon: "curlybraces.square"),
-        EditorApp(id: "xcode", name: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", icon: "hammer"),
-        EditorApp(id: "nova", name: "Nova", bundleIdentifier: "com.panic.Nova", icon: "star"),
-        EditorApp(id: "bbedit", name: "BBEdit", bundleIdentifier: "com.barebones.bbedit", icon: "doc.plaintext"),
-    ]
-}
-
 // MARK: - SettingsView
 
 struct SettingsView: View {
@@ -43,7 +26,7 @@ struct SettingsView: View {
         case general = "通用"
         case features = "功能"
         case shortcuts = "快捷键"
-        case tools = "终端 / 编辑器"
+        case tools = "终端"
         case about = "关于"
 
         var icon: String {
@@ -199,13 +182,11 @@ struct FeaturesTab: View {
     }
 }
 
-// MARK: - 终端/编辑器 Tab
+// MARK: - 终端 Tab
 
 struct ToolsTab: View {
     @State private var availableTerminals: [TerminalApp] = []
-    @State private var availableEditors: [EditorApp] = []
     @State private var selectedTerminalBundleId: String = "com.apple.Terminal"
-    @State private var selectedEditorBundleId: String = "com.microsoft.VSCode"
 
     var body: some View {
         Form {
@@ -229,27 +210,6 @@ struct ToolsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-
-            Section {
-                Picker("默认编辑器", selection: Binding(
-                    get: { selectedEditorBundleId },
-                    set: { newValue in
-                        selectedEditorBundleId = newValue
-                        SharedConfig.shared.preferredEditor = newValue
-                    }
-                )) {
-                    ForEach(availableEditors) { editor in
-                        Label(LocalizedStringKey(editor.name), systemImage: editor.icon)
-                            .tag(editor.bundleIdentifier)
-                    }
-                }
-            } header: {
-                Text("编辑器")
-            } footer: {
-                Text("选择右键菜单中「在编辑器中打开」使用的编辑器应用")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
         }
         .formStyle(.grouped)
         .padding()
@@ -262,12 +222,6 @@ struct ToolsTab: View {
                 ? savedTerminal
                 : (availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal")
             SharedConfig.shared.preferredTerminal = selectedTerminalBundleId
-
-            let savedEditor = SharedConfig.shared.preferredEditor
-            selectedEditorBundleId = availableEditors.contains { $0.bundleIdentifier == savedEditor }
-                ? savedEditor
-                : (availableEditors.first?.bundleIdentifier ?? "com.apple.TextEdit")
-            SharedConfig.shared.preferredEditor = selectedEditorBundleId
         }
     }
 
@@ -277,13 +231,6 @@ struct ToolsTab: View {
         }
         if availableTerminals.isEmpty {
             availableTerminals = [TerminalApp.knownTerminals[0]] // 系统终端总是可用
-        }
-
-        availableEditors = EditorApp.knownEditors.filter { editor in
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: editor.bundleIdentifier) != nil
-        }
-        if availableEditors.isEmpty {
-            availableEditors = [EditorApp.knownEditors[0]] // 文本编辑总是可用
         }
     }
 }
@@ -360,7 +307,6 @@ struct ShortcutsTab: View {
     private let actions: [(id: String, name: String, icon: String)] = [
         ("shortcut.copyPath",     "复制路径",       "doc.on.doc"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
-        ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
         ("shortcut.cut",          "剪切",           "scissors"),
         ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
         ("shortcut.compress",     "压缩为 ZIP",     "archivebox"),

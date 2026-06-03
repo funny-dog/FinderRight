@@ -142,7 +142,10 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.openEditor), hasSelection {
-            menu.addItem(shortcutItem("✏️ 打开编辑器", #selector(openEditor(_:)), id: "shortcut.openEditor"))
+            let editors = installedEditors()
+            if !editors.isEmpty {
+                menu.addItem(submenuItem("✏️ 打开编辑器", build: { self.buildEditorMenu(editors) }))
+            }
         }
 
         // 剪切 / 粘贴
@@ -258,18 +261,46 @@ class FinderSync: FIFinderSync {
         logToFile("openTerminal ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
-    @objc func openEditor(_ sender: NSMenuItem) {
+    /// 检测系统已安装的编辑器（按 EditorCatalog 顺序，Zed 置顶）。
+    /// 返回项带 catalogIndex —— 即在 EditorCatalog.all 中的下标，用作菜单项 tag。
+    private func installedEditors() -> [(name: String, catalogIndex: Int)] {
+        EditorCatalog.all.enumerated().compactMap { idx, ed in
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: ed.id) != nil
+                ? (ed.name, idx) : nil
+        }
+    }
+
+    /// 构建「打开编辑器」子菜单。
+    ///
+    /// 注意：FIFinderSync 的菜单会跨进程传给 Finder 渲染，NSMenuItem 的
+    /// `representedObject`（Any）在跨进程序列化时会丢失，因此必须用 `tag`（Int）
+    /// 携带数据 —— 这里 tag = 编辑器在 EditorCatalog.all 中的下标。
+    private func buildEditorMenu(_ editors: [(name: String, catalogIndex: Int)]) -> NSMenu {
+        let m = NSMenu(title: "打开编辑器")
+        for ed in editors {
+            let item = NSMenuItem(title: ed.name, action: #selector(openEditorWith(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = ed.catalogIndex
+            m.addItem(item)
+        }
+        return m
+    }
+
+    @objc func openEditorWith(_ sender: NSMenuItem) {
+        let idx = sender.tag
+        guard idx >= 0, idx < EditorCatalog.all.count else {
+            logToFile("openEditorWith: bad tag \(idx)"); return
+        }
+        let bundleId = EditorCatalog.all[idx].id
         let urls = currentContext().selectedItems
-        guard !urls.isEmpty else { logToFile("openEditor: no items"); return }
-        // 使用 SharedConfig 中配置的编辑器
-        let bundleId = SharedConfig.shared.preferredEditor
+        guard !urls.isEmpty else { logToFile("openEditorWith: no items"); return }
         let paths = urls.map(\.path)
-        logToFile("openEditor ipc → bundle=\(bundleId) paths=\(paths.joined(separator: ","))")
+        logToFile("openEditorWith ipc → bundle=\(bundleId) paths=\(paths.joined(separator: ","))")
         let r = IPCClient.shared.call(action: "openWithApp", payload: [
             "paths": .stringArray(paths),
             "bundleId": .string(bundleId)
         ])
-        logToFile("openEditor ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        logToFile("openEditorWith ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
     @objc func cutFiles(_ sender: NSMenuItem) {
