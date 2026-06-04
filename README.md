@@ -31,7 +31,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 
 ### 📥 安装
 
-1. 从 [Releases](https://github.com/funny-dog/FinderRight/releases) 下载最新的 `FinderRight-x.x.dmg`
+1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release
 2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`
 3. **首次打开**（应用未经 Apple 公证，需手动放行）：
    ```bash
@@ -90,7 +90,7 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 
 ### 📥 Installation
 
-1. Download the latest `FinderRight-x.x.dmg` from [Releases](https://github.com/funny-dog/FinderRight/releases)
+1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release
 2. Open the DMG and drag `FinderRight.app` into `Applications`
 3. **First launch** (the app is not notarized by Apple, so Gatekeeper must be bypassed):
    ```bash
