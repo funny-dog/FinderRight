@@ -11,12 +11,7 @@ private var cutQueueFileURL: URL {
     IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
 }
 
-private func writeCutQueue(_ paths: [String]) {
-    let data = (try? JSONSerialization.data(withJSONObject: paths)) ?? Data()
-    try? IPCBridge.ensureDirectory()
-    try? data.write(to: cutQueueFileURL, options: .atomic)
-}
-
+/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态
 private func hasCutQueue() -> Bool {
     if let data = try? Data(contentsOf: cutQueueFileURL),
        let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
@@ -150,6 +145,17 @@ class FinderSync: FIFinderSync {
             }
         }
         return target
+    }
+
+    // MARK: - Directory Observation (诊断用)
+
+    /// Finder 开始显示某个受监控目录时调用，记录原始 URL 供排查
+    override func beginObservingDirectory(at url: URL) {
+        logToFile("beginObserving: \(url.absoluteString) | path=\(url.path)")
+    }
+
+    override func endObservingDirectory(at url: URL) {
+        logToFile("endObserving: \(url.path)")
     }
 
     // MARK: - Context Menu
@@ -359,12 +365,18 @@ class FinderSync: FIFinderSync {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("cutFiles: no items"); return }
         let paths = urls.map { $0.path }
-        writeCutQueue(paths)
-        logToFile("cutFiles: wrote \(paths.count) path(s) to cut-queue")
+        logToFile("cutFiles ipc → paths=\(paths.joined(separator: ","))")
+        // 由主 App（非沙箱）执行：将文件立即移到暂存区，源文件消失，暂存路径写入 cut-queue.json
+        let r = IPCClient.shared.call(action: "cutFiles", payload: [
+            "paths": .stringArray(paths)
+        ])
+        logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
     @objc func pasteFiles(_ sender: NSMenuItem) {
-        guard let destDir = currentContext().directory else {
+        // 粘贴目标始终是 Finder 当前正在浏览的目录（targetedURL），
+        // 而不是选中的项——否则当用户选中一个子文件夹时会错误地粘贴进去。
+        guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
         logToFile("pasteFiles ipc → destDir=\(destDir.path)")

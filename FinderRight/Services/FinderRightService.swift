@@ -38,6 +38,8 @@ final class FinderRightService {
             return openWithApp(req)
         case "toggleHiddenFiles":
             return toggleHiddenFiles(req)
+        case "cutFiles":
+            return cutFiles(req)
         case "pasteFiles":
             return pasteFiles(req)
         default:
@@ -344,11 +346,72 @@ final class FinderRightService {
         }
     }
 
-    // MARK: - 粘贴文件（剪切移动）
+    // MARK: - 剪切 / 粘贴（先移到暂存区，再粘贴到目标）
 
-    /// 剪切队列文件路径（就是 IPCBridge.rootDirectory/cut-queue.json）
+    /// 剪切队列文件路径（存储暂存区内的文件路径）
     private var cutQueueFileURL: URL {
         IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
+    }
+
+    /// 暂存目录：文件剪切后先放到这里，粘贴时再移走
+    private var stagingDirectory: URL {
+        IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
+    }
+
+    /// 剪切：立即将源文件移到暂存区，源文件从原位置消失。
+    /// 暂存路径写入 cut-queue.json，供后续粘贴使用。
+    private func cutFiles(_ req: IPCRequest) -> IPCResponse {
+        guard let paths = req.payload["paths"]?.stringArrayValue, !paths.isEmpty else {
+            return IPCResponse(id: req.id, success: false, message: "cutFiles 参数缺失：paths")
+        }
+
+        let fileManager = FileManager.default
+        let staging = stagingDirectory
+
+        // 每次剪切都清空旧的暂存区，避免残留文件干扰
+        try? fileManager.removeItem(at: staging)
+        do {
+            try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+        } catch {
+            return IPCResponse(id: req.id, success: false, message: "无法创建暂存目录: \(error.localizedDescription)")
+        }
+
+        var stagedPaths: [String] = []
+        var firstError: String?
+
+        for sourcePath in paths {
+            let sourceURL = URL(fileURLWithPath: sourcePath)
+            var destURL = staging.appendingPathComponent(sourceURL.lastPathComponent)
+
+            // 避免暂存区内命名冲突
+            if fileManager.fileExists(atPath: destURL.path) {
+                let base = destURL.deletingPathExtension().lastPathComponent
+                let ext  = destURL.pathExtension
+                var counter = 1
+                repeat {
+                    let numbered = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
+                    destURL = staging.appendingPathComponent(numbered)
+                    counter += 1
+                } while fileManager.fileExists(atPath: destURL.path)
+            }
+
+            do {
+                try fileManager.moveItem(at: sourceURL, to: destURL)
+                stagedPaths.append(destURL.path)
+            } catch {
+                if firstError == nil { firstError = error.localizedDescription }
+            }
+        }
+
+        // 将暂存路径写入队列文件，供粘贴时读取
+        if let data = try? JSONSerialization.data(withJSONObject: stagedPaths) {
+            try? data.write(to: cutQueueFileURL, options: .atomic)
+        }
+
+        if let err = firstError {
+            return IPCResponse(id: req.id, success: false, message: err)
+        }
+        return IPCResponse(id: req.id, success: true, message: "已暂存 \(stagedPaths.count) 个文件")
     }
 
     private func pasteFiles(_ req: IPCRequest) -> IPCResponse {
@@ -367,6 +430,7 @@ final class FinderRightService {
         let fileManager = FileManager.default
         var firstError: String?
         var pastedPaths: [URL] = []
+        var failedPaths: [String] = []
 
         for sourcePath in sourcePaths {
             let sourceURL = URL(fileURLWithPath: sourcePath)
@@ -389,12 +453,15 @@ final class FinderRightService {
                 pastedPaths.append(destURL)
             } catch {
                 if firstError == nil { firstError = error.localizedDescription }
+                failedPaths.append(sourcePath)
             }
         }
 
-        // 全部成功后清除剪切队列文件
-        if firstError == nil {
+        // 更新剪切队列：只保留未能移动成功的路径，防止队列指向已不存在的源文件
+        if failedPaths.isEmpty {
             try? fileManager.removeItem(at: cutQueueFileURL)
+        } else if let updatedData = try? JSONSerialization.data(withJSONObject: failedPaths) {
+            try? updatedData.write(to: cutQueueFileURL, options: .atomic)
         }
 
         if let err = firstError {
