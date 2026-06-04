@@ -62,6 +62,10 @@ xcodebuild -scheme FinderRight -configuration Release \
 - **Finder 扩展**（沙箱）：负责右键菜单
 - **IPC**：扩展通过"文件 + URL scheme"唤醒主 App 执行操作，无需 App Group / 付费开发者账号
 
+### ☁️ iCloud / Google Drive 等云盘
+
+iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **File Provider 域**，系统只允许其自身扩展提供右键菜单，第三方 Finder 扩展无法在其中显示菜单（**与完全磁盘访问无关**）。因此在这些云盘文件夹里，FinderRight 的操作改为出现在 **右键 →「服务」子菜单**（选中文件后可用：复制路径 / 打开终端 / 打开编辑器 / 剪切 / 压缩 / 解压）。「新建文件」和空白处「粘贴」因没有选中项，无法走此路径。
+
 ### 📄 许可证
 
 [MIT](LICENSE)
@@ -116,6 +120,10 @@ xcodebuild -scheme FinderRight -configuration Release \
 - **Main app** (non-sandboxed): menu bar + settings UI, runs the actual file operations using its TCC permissions
 - **Finder extension** (sandboxed): provides the right-click menu
 - **IPC**: the extension wakes the main app via a file + URL scheme to perform actions — no App Group or paid developer account required
+
+### ☁️ iCloud / Google Drive and other cloud folders
+
+iCloud Drive, Google Drive, OneDrive, Dropbox and similar cloud storage are **File Provider domains** on macOS; the system only lets their own extension provide the right-click menu, so third-party Finder extensions can't show a menu there (**unrelated to Full Disk Access**). Inside these cloud folders, FinderRight's actions appear under **right-click → Services** instead (available with a file selected: Copy Path / Open in Terminal / Open in Editor / Cut / Compress / Extract). "New File" and pasting into empty space can't use this path since they have no selection.
 
 ### 📄 License
 

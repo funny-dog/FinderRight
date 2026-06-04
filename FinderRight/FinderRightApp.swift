@@ -48,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupStatusItem()
 
+        // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
+        // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
+        ServicesProvider.register()
+
         // 监听窗口关闭：当所有标准窗口都关闭后，恢复 accessory（隐藏 Dock 图标）
         NotificationCenter.default.addObserver(
             self, selector: #selector(windowWillClose(_:)),

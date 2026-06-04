@@ -67,12 +67,17 @@ class FinderSync: FIFinderSync {
         logToFile("updateMonitoredDirectories: \(dirs.map(\.path).joined(separator: ", "))")
     }
 
-    /// 构建需要监控的目录集合：用户主目录 + 已挂载卷 + 云盘目录
+    /// 构建需要监控的目录集合：用户主目录 + 已挂载卷。
     ///
-    /// iCloud Drive 和 Google Drive 等云存储在 macOS 上以普通目录而非挂载卷的形式存在，
-    /// mountedVolumeURLs() 无法枚举到它们，必须显式加入 directoryURLs。
     /// FIFinderSync 只有当 Finder 当前目录在 directoryURLs 集合内（或其子目录内）时，
     /// 才会触发右键菜单回调。
+    ///
+    /// 注意：iCloud Drive、Google Drive 等云盘是 macOS 的 **File Provider 域**，系统把右键
+    /// 菜单 / 徽章扩展点保留给域自身的 File Provider 扩展，会**静默忽略**第三方 Finder Sync
+    /// 对这些路径的 directoryURLs 注册（实测 `beginObservingDirectory` / `menu(for:)` 回调
+    /// 永不触发，且与完全磁盘访问无关 —— 那是文件权限，这是扩展点路由）。
+    /// 因此这里不再尝试注册云盘路径；云盘文件夹的右键操作改由主 App 的 macOS Services 提供
+    /// （见主 App 的 `ServicesProvider`）。
     private static func buildMonitoredDirectories() -> Set<URL> {
         let fm = FileManager.default
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
@@ -82,46 +87,6 @@ class FinderSync: FIFinderSync {
         if let volumes = fm.mountedVolumeURLs(
             includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) {
             dirs.formUnion(volumes)
-        }
-
-        // iCloud Drive 根目录：~/Library/Mobile Documents/com~apple~CloudDocs/
-        let icloudRoot = home.appendingPathComponent(
-            "Library/Mobile Documents/com~apple~CloudDocs")
-        if fm.fileExists(atPath: icloudRoot.path) {
-            dirs.insert(icloudRoot)
-        }
-
-        // iCloud 其他 App 文档目录（整体），覆盖 Pages / Numbers / Keynote 等
-        let mobileDocs = home.appendingPathComponent("Library/Mobile Documents")
-        if fm.fileExists(atPath: mobileDocs.path) {
-            dirs.insert(mobileDocs)
-        }
-
-        // Google Drive / OneDrive / Dropbox 等：~/Library/CloudStorage/ 下各服务商目录
-        let cloudStorage = home.appendingPathComponent("Library/CloudStorage")
-        if let subs = try? fm.contentsOfDirectory(
-            at: cloudStorage,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]) {
-            for sub in subs {
-                var isDir: ObjCBool = false
-                guard fm.fileExists(atPath: sub.path, isDirectory: &isDir),
-                      isDir.boolValue else { continue }
-                dirs.insert(sub)
-                // 同时加入第二层（如 Google Drive 的"我的云端硬盘"、"其他计算机"）
-                if let subsubs = try? fm.contentsOfDirectory(
-                    at: sub,
-                    includingPropertiesForKeys: [.isDirectoryKey],
-                    options: [.skipsHiddenFiles]) {
-                    for subsub in subsubs {
-                        var isSubDir: ObjCBool = false
-                        if fm.fileExists(atPath: subsub.path, isDirectory: &isSubDir),
-                           isSubDir.boolValue {
-                            dirs.insert(subsub)
-                        }
-                    }
-                }
-            }
         }
 
         return dirs

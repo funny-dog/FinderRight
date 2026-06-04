@@ -11,6 +11,7 @@
 		22C25A9128FE6FCCAFD49B12 /* FinderRightKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2F6EC8301EC5AA41DAB8B7A0 /* FinderRightKit */; };
 		243E762F0056764ACE4745E1 /* FinderRightSync.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 38B5FAD57D085D6D23C277F0 /* FinderRightSync.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2645451A35BE42EB08159A77 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4839D1478C003FF4A88EACA4 /* OnboardingView.swift */; };
+		3439550A89D863794B0580BA /* ServicesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9C457953093E65A5E0FB987 /* ServicesProvider.swift */; };
 		34550D5B74F768E4D0AD3693 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840F1B44B9D41300F8164D49 /* SettingsView.swift */; };
 		3E85571839F1F6EC9E3E7E28 /* FinderSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D1AEA8AE1C16B1FEE5913D /* FinderSync.swift */; };
 		4E1466EB093F383B811A175C /* AccessibilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12BB40FE596DC418390953E5 /* AccessibilityView.swift */; };
@@ -72,6 +73,7 @@
 		9669126096D152256BE4423B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B268E2B004E7E363C5BB2B91 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		B4FED1F5B6DE1EB92FB8811E /* FinderRightKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FinderRightKit; path = FinderRightKit; sourceTree = SOURCE_ROOT; };
+		B9C457953093E65A5E0FB987 /* ServicesProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -170,6 +172,7 @@
 			isa = PBXGroup;
 			children = (
 				5E2ACE88CF8425D287BFD98E /* FinderRightService.swift */,
+				B9C457953093E65A5E0FB987 /* ServicesProvider.swift */,
 				821B634B8F3D9C655AA237BA /* XPCListenerHost.swift */,
 			);
 			path = Services;
@@ -297,6 +300,7 @@
 				7860690B8DD6BF4B486C2E53 /* FinderRightService.swift in Sources */,
 				9895825146825C72D3986054 /* FullDiskAccessView.swift in Sources */,
 				2645451A35BE42EB08159A77 /* OnboardingView.swift in Sources */,
+				3439550A89D863794B0580BA /* ServicesProvider.swift in Sources */,
 				34550D5B74F768E4D0AD3693 /* SettingsView.swift in Sources */,
 				C492E48C0EAC4E3CBAE9F3FA /* XPCListenerHost.swift in Sources */,
 			);

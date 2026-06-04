@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.2</string>
+	<string>1.1.3</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -28,8 +28,131 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：复制路径</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>copyPath</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：打开终端</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openTerminal</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：打开编辑器</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openEditor</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：剪切</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>cutFiles</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：压缩为 ZIP</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>compressZip</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight：解压到当前目录</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>decompress</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
