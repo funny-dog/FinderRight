@@ -239,6 +239,41 @@ final class FinderRightService {
               let bundleId = req.payload["bundleId"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "openTerminal 参数缺失")
         }
+
+        // 针对通过命令行参数指定工作目录的终端（如 Ghostty / Alacritty / Kitty）
+        if bundleId == "com.mitchellh.ghostty" {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            proc.arguments = ["-b", bundleId, "--args", "--working-directory=\(directory)"]
+            do {
+                try proc.run()
+                return IPCResponse(id: req.id, success: true, message: nil)
+            } catch {
+                NSLog("[FinderRightService] open ghostty via cli failed: \(error)")
+            }
+        } else if bundleId == "org.alacritty" {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            proc.arguments = ["-b", bundleId, "--args", "--working-directory", directory]
+            do {
+                try proc.run()
+                return IPCResponse(id: req.id, success: true, message: nil)
+            } catch {
+                NSLog("[FinderRightService] open alacritty via cli failed: \(error)")
+            }
+        } else if bundleId == "net.kovidgoyal.kitty" {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            proc.arguments = ["-b", bundleId, "--args", "--directory", directory]
+            do {
+                try proc.run()
+                return IPCResponse(id: req.id, success: true, message: nil)
+            } catch {
+                NSLog("[FinderRightService] open kitty via cli failed: \(error)")
+            }
+        }
+
+        // 通用方式：NSWorkspace.open 传递目录 URL（Terminal / iTerm2 / Warp 原生支持）
         let url = URL(fileURLWithPath: directory)
         let success = NSWorkspace.shared.open(
             [url],

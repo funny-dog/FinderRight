@@ -78,6 +78,7 @@
 "文本编辑" = "TextEdit";
 
 /* About tab */
+"版本 %@" = "Version %@";
 "版本 %@ (%@)" = "Version %@ (%@)";
 "增强 macOS Finder 右键菜单的强大工具。\n快速访问开发工具、文件操作和自定义动作。" = "A powerful tool to enhance the macOS Finder right-click menu.\nQuick access to dev tools, file operations, and custom actions.";
 "GitHub 仓库" = "GitHub Repository";
@@ -138,3 +139,13 @@
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";
 "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app" = "2. Find FinderRight and turn it on; if it's not listed, click + and add FinderRight.app";
 "3. 回到此处点击「重新检测」" = "3. Come back and click \"Re-check\"";
+
+/* Terminal */
+"系统默认" = "System Default";
+
+/* Updates */
+"检查更新" = "Check for Updates";
+"已是最新版本" = "Up to Date";
+"发现新版本 %@" = "New version %@";
+"点击在浏览器中打开最新版本下载页面" = "Click to open latest download page in browser";
+

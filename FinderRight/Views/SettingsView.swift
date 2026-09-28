@@ -2,22 +2,7 @@ import SwiftUI
 import AppKit
 import FinderRightKit
 
-// MARK: - 终端 & 编辑器定义
-
-struct TerminalApp: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let bundleIdentifier: String
-    let icon: String
-
-    static let knownTerminals: [TerminalApp] = [
-        TerminalApp(id: "terminal", name: "终端", bundleIdentifier: "com.apple.Terminal", icon: "terminal"),
-        TerminalApp(id: "iterm", name: "iTerm2", bundleIdentifier: "com.googlecode.iterm2", icon: "terminal.fill"),
-        TerminalApp(id: "warp", name: "Warp", bundleIdentifier: "dev.warp.Warp-Stable", icon: "terminal.fill"),
-        TerminalApp(id: "alacritty", name: "Alacritty", bundleIdentifier: "org.alacritty", icon: "terminal.fill"),
-        TerminalApp(id: "kitty", name: "Kitty", bundleIdentifier: "net.kovidgoyal.kitty", icon: "terminal.fill"),
-    ]
-}
+// MARK: - 终端定义（使用 FinderRightKit 中的 TerminalCatalog）
 
 // MARK: - SettingsView
 
@@ -147,10 +132,35 @@ struct GeneralTab: View {
                 Divider()
                 AccessibilityView()
                     .padding(.vertical, 4)
+                Divider()
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("访达右键扩展")
+                        Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button("重启访达") {
+                        let proc = Process()
+                        proc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+                        proc.arguments = ["Finder"]
+                        try? proc.run()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("扩展设置...") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.vertical, 4)
             } header: {
-                Text("权限")
+                Text("权限与扩展")
             } footer: {
-                Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」时 Finder 窗口不闪烁。")
+                Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」不闪烁。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -185,8 +195,9 @@ struct FeaturesTab: View {
 // MARK: - 终端 Tab
 
 struct ToolsTab: View {
-    @FRState private var availableTerminals: [TerminalApp] = []
+    @FRState private var availableTerminals: [KnownTerminal] = []
     @FRState private var selectedTerminalBundleId: String = "com.apple.Terminal"
+    @FRState private var defaultSystemTerminalId: String = "com.apple.Terminal"
 
     var body: some View {
         Form {
@@ -199,7 +210,10 @@ struct ToolsTab: View {
                     }
                 )) {
                     ForEach(availableTerminals) { terminal in
-                        Label(LocalizedStringKey(terminal.name), systemImage: terminal.icon)
+                        let isDefault = terminal.bundleIdentifier == defaultSystemTerminalId
+                        let localizedName = NSLocalizedString(terminal.name, comment: "")
+                        let title = isDefault ? "\(localizedName) (\(NSLocalizedString("系统默认", comment: "")))" : localizedName
+                        Label(title, systemImage: terminal.icon)
                             .tag(terminal.bundleIdentifier)
                     }
                 }
@@ -215,31 +229,50 @@ struct ToolsTab: View {
         .padding()
         .onAppear {
             detectInstalledApps()
-            // 读取已保存偏好（bundleId）；若对应 App 未安装则回退到第一个可用项，
-            // 并把解析结果写回，保证「设置里显示的」与「扩展实际使用的」一致。
+            let defaultId = TerminalCatalog.defaultTerminalBundleIdentifier()
+            defaultSystemTerminalId = defaultId
+
+            // 读取已保存偏好；若已保存的 terminal 在可用列表中，则保留；
+            // 否则优先选中系统默认终端（若可用），最后回退到第一个可用项。
             let savedTerminal = SharedConfig.shared.preferredTerminal
-            selectedTerminalBundleId = availableTerminals.contains { $0.bundleIdentifier == savedTerminal }
-                ? savedTerminal
-                : (availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal")
+            if availableTerminals.contains(where: { $0.bundleIdentifier == savedTerminal }) {
+                selectedTerminalBundleId = savedTerminal
+            } else if availableTerminals.contains(where: { $0.bundleIdentifier == defaultId }) {
+                selectedTerminalBundleId = defaultId
+            } else {
+                selectedTerminalBundleId = availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal"
+            }
             SharedConfig.shared.preferredTerminal = selectedTerminalBundleId
         }
     }
 
     private func detectInstalledApps() {
-        availableTerminals = TerminalApp.knownTerminals.filter { terminal in
+        var installed = TerminalCatalog.all.filter { terminal in
             NSWorkspace.shared.urlForApplication(withBundleIdentifier: terminal.bundleIdentifier) != nil
         }
-        if availableTerminals.isEmpty {
-            availableTerminals = [TerminalApp.knownTerminals[0]] // 系统终端总是可用
+        let sysDefault = TerminalCatalog.defaultTerminalBundleIdentifier()
+        // 若系统默认终端未在预设清单中（如第三方冷门终端），但系统内确实已安装，则动态加入
+        if !installed.contains(where: { $0.bundleIdentifier == sysDefault }),
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: sysDefault) {
+            let name = Bundle(url: appURL)?.localizedInfoDictionary?["CFBundleDisplayName"] as? String
+                ?? Bundle(url: appURL)?.infoDictionary?["CFBundleDisplayName"] as? String
+                ?? Bundle(url: appURL)?.infoDictionary?["CFBundleName"] as? String
+                ?? appURL.deletingPathExtension().lastPathComponent
+            installed.append(KnownTerminal(id: sysDefault, name: name, bundleIdentifier: sysDefault, icon: "terminal.fill"))
         }
+        if installed.isEmpty {
+            installed = [TerminalCatalog.all[0]] // 系统终端兜底
+        }
+        availableTerminals = installed
     }
 }
 
 // MARK: - 关于 Tab
 
 struct AboutTab: View {
-    private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-    private let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    private let appVersion = UpdateChecker.shared.currentAppVersion
+
+    @FRState private var updateStatus: UpdateCheckStatus = UpdateChecker.shared.currentStatus
 
     var body: some View {
         VStack(spacing: 20) {
@@ -260,14 +293,80 @@ struct AboutTab: View {
                 .shadow(color: .blue.opacity(0.3), radius: 10, y: 5)
 
             // 名称与版本
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text("FinderRight")
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("版本 \(appVersion) (\(buildNumber))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // 版本号与新版本提示
+                HStack(alignment: .center, spacing: 8) {
+                    Text("版本 \(appVersion)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if case .updateAvailable(let newVersion, let releaseURL) = updateStatus {
+                        Button {
+                            NSWorkspace.shared.open(releaseURL)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                Text("发现新版本 \(newVersion)")
+                                    .fontWeight(.medium)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .font(.system(size: 11))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(LinearGradient(colors: [.blue, .purple], startPoint: .leading, endPoint: .trailing))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help("点击在浏览器中打开最新版本下载页面")
+                    } else if updateStatus == .checking {
+                        ProgressView()
+                            .scaleEffect(0.55)
+                            .frame(width: 14, height: 14)
+                    }
+                }
+
+                // 辅助状态及手动刷新按钮
+                HStack(spacing: 8) {
+                    if updateStatus == .upToDate {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("已是最新版本")
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    } else if case .failed(let msg) = updateStatus {
+                        HStack(spacing: 3) {
+                            Image(systemName: "exclamationmark.circle")
+                                .foregroundColor(.secondary)
+                            Text(msg)
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    }
+
+                    if updateStatus != .checking {
+                        Button {
+                            performCheck(force: true)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("检查更新")
+                            }
+                            .font(.caption2)
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+                .padding(.top, 2)
             }
 
             // 描述
@@ -297,6 +396,15 @@ struct AboutTab: View {
                 .padding(.bottom, 16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            performCheck(force: false)
+        }
+    }
+
+    private func performCheck(force: Bool) {
+        UpdateChecker.shared.check(force: force) { newStatus in
+            self.updateStatus = newStatus
+        }
     }
 }
 

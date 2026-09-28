@@ -42,6 +42,7 @@
         <string>com.apple.systemevents</string>
         <string>com.googlecode.iterm2</string>
         <string>dev.warp.Warp-Stable</string>
+        <string>com.mitchellh.ghostty</string>
     </array>
 </dict>
 </plist>
