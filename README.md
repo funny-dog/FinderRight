@@ -21,7 +21,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 
 - 📄 **新建文件** —— 一键新建 txt / Markdown / Python / Shell / JSON / Swift / JS 等十种文件
 - 📋 **复制路径** —— 复制选中文件/文件夹的完整路径
-- 💻 **打开终端** —— 在当前目录打开终端（支持 Terminal / iTerm2 / Warp）
+- 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）
 - ✏️ **打开编辑器** —— 用 VS Code / Cursor / Sublime / Xcode 等打开
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"
 - 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录
@@ -80,7 +80,7 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 
 - 📄 **New File** — create txt / Markdown / Python / Shell / JSON / Swift / JS and more with one click
 - 📋 **Copy Path** — copy the full path of selected files/folders
-- 💻 **Open in Terminal** — open the current folder in Terminal / iTerm2 / Warp
+- 💻 **Open in Terminal** — open the current folder in your default terminal, or choose Ghostty / Terminal / iTerm2 / Warp, etc.
 - ✏️ **Open in Editor** — open with VS Code / Cursor / Sublime / Xcode, etc.
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively
 - 📦 **Compress / Extract** — compress to ZIP; extract archives in place

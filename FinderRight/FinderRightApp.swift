@@ -40,17 +40,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 启动时的 Dock 图标策略（LSUIElement=YES 默认无 Dock 图标）
+        // 根据偏好动态设定激活策略
         if alwaysShowDockIcon {
             NSApp.setActivationPolicy(.regular)
+        } else {
+            NSApp.setActivationPolicy(.accessory)
         }
         NSLog("[AppDelegate] activation policy = \(alwaysShowDockIcon ? "regular" : "accessory")")
 
         setupStatusItem()
 
+        // 注册系统级 AppleEvent 拦截（处理通过 Spotlight、Finder、命令行触发的应用打开/重打开）
+        registerAppleEventHandlers()
+
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
         // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
         ServicesProvider.register()
+
+        // 自动注册并启用自身包含的 FinderSync 扩展
+        registerFinderSyncPlugin()
 
         // 监听窗口关闭：当所有标准窗口都关闭后，恢复 accessory（隐藏 Dock 图标）
         NotificationCenter.default.addObserver(
@@ -61,6 +69,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(defaultsChanged),
             name: UserDefaults.didChangeNotification, object: nil)
+    }
+
+    /// 自动检查并向系统注册自身的 FinderSync 扩展
+    private func registerFinderSyncPlugin() {
+        guard let pluginsURL = Bundle.main.builtInPlugInsURL else { return }
+        let appexURL = pluginsURL.appendingPathComponent("FinderRightSync.appex")
+        guard FileManager.default.fileExists(atPath: appexURL.path) else { return }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            // 1. 注册插件到 PluginKit
+            let regProc = Process()
+            regProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+            regProc.arguments = ["-a", appexURL.path]
+            try? regProc.run()
+            regProc.waitUntilExit()
+
+            // 2. 启用插件
+            let enableProc = Process()
+            enableProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+            enableProc.arguments = ["-e", "use", "-i", "com.finderright.app.sync"]
+            try? enableProc.run()
+            enableProc.waitUntilExit()
+
+            NSLog("[AppDelegate] FinderRightSync appex registered and enabled via pluginkit")
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Spotlight 搜索回车或点击应用图标激活 App 时，若当前没有可见窗口，主动弹出设置
+        let hasVisibleWindow = NSApp.windows.contains { $0.isVisible && $0.canBecomeMain }
+        if !hasVisibleWindow {
+            openSettings()
+        }
+    }
+
+    private func registerAppleEventHandlers() {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleAppleEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEOpenApplication)
+        )
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleAppleEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEReopenApplication)
+        )
+    }
+
+    @objc private func handleAppleEvent(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        openSettings()
     }
 
     // MARK: - 原生状态栏菜单
@@ -108,7 +168,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
         // accessory→regular 切换需延一拍，否则窗口创建早于策略生效会不显示
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -123,12 +182,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.settingsWindow?.makeKeyAndOrderFront(nil)
             self.settingsWindow?.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     @objc private func openOnboarding() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.onboardingWindow == nil {
@@ -147,11 +206,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.onboardingWindow?.makeKeyAndOrderFront(nil)
             self.onboardingWindow?.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - Reopen 响应（修复 Spotlight / 启动台 / 访达重复启动时无法弹出设置的问题）
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NSLog("[AppDelegate] applicationShouldHandleReopen: hasVisibleWindows=\(flag)")
+        openSettings()
+        return true
     }
 
     // MARK: - 偏好变化
@@ -175,6 +243,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 标准窗口关闭后，如果用户没要求常驻 Dock，且已无可见标准窗口，则切回 accessory
     @objc private func windowWillClose(_ note: Notification) {
+        if let closing = note.object as? NSWindow {
+            if closing === settingsWindow { settingsWindow = nil }
+            if closing === onboardingWindow { onboardingWindow = nil }
+        }
         guard !alwaysShowDockIcon else { return }
         let closing = note.object as? NSWindow
         DispatchQueue.main.async { [weak self] in
@@ -188,11 +260,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 处理 finderright:// URL scheme（IPC 唤醒入口）
+    /// 处理 finderright:// URL scheme（IPC 唤醒入口，以及外部打开设置的命令）
     func application(_ application: NSApplication, open urls: [URL]) {
         NSLog("[AppDelegate] application(open:) urls=\(urls)")
         for url in urls {
-            IPCWatcher.shared.handle(url: url)
+            if url.host == "settings" || url.host == "preferences" {
+                openSettings()
+            } else {
+                IPCWatcher.shared.handle(url: url)
+            }
         }
     }
 }

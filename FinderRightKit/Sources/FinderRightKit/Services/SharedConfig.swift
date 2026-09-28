@@ -104,7 +104,10 @@ public final class SharedConfig {
     /// 首选终端应用 bundle identifier
     public var preferredTerminal: String {
         get {
-            return store[Keys.preferredTerminal] as? String ?? "com.apple.Terminal"
+            if let saved = store[Keys.preferredTerminal] as? String, !saved.isEmpty {
+                return saved
+            }
+            return TerminalCatalog.defaultTerminalBundleIdentifier()
         }
         set {
             store[Keys.preferredTerminal] = newValue
