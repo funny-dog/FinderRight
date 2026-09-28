@@ -45,6 +45,32 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 
 > ⚠️ 当前为 adhoc 签名版本。若未来提供 Developer ID 公证版，可省去第 3 步。
 
+### 🔄 升级说明
+
+直接下载最新版 `FinderRight.dmg`，打开并将 `FinderRight.app` 拖入 `Applications`（应用程序）直接覆盖即可。
+
+> 💡 **覆盖升级注意事项**：
+> 1. **先退出旧版**：若旧版正在后台运行，建议先在菜单栏点击图标选择「退出 FinderRight」后再拖动覆盖。
+> 2. **解除拦截**：覆盖后若提示未公证拦截，请重新执行：
+>    ```bash
+>    xattr -dr com.apple.quarantine /Applications/FinderRight.app
+>    ```
+> 3. **刷新访达**：若覆盖后右键菜单没有即时更新，终端运行 `killall Finder` 即可。
+> 4. **辅助功能提示未授权**：因自签名（ad-hoc）重新编译后的二进制哈希变化，系统设置中「辅助功能」开关虽显示开启，但内部校验可能已失效。**解决方法**：在「系统设置 → 隐私与安全性 → 辅助功能」中，选中 FinderRight 点击底部的 **`-`（减号）删除**，再重新添加即可（或终端运行 `tccutil reset Accessibility com.finderright.app` 重置）。
+
+### 🗑️ 完全卸载
+
+若需彻底清理应用及配置残留，可在终端执行：
+
+```bash
+killall FinderRight 2>/dev/null || true
+rm -rf /Applications/FinderRight.app
+rm -rf ~/Library/Application\ Support/FinderRight
+rm -f ~/Library/Preferences/com.finderright.app.plist
+tccutil reset All com.finderright.app 2>/dev/null || true
+killall Finder
+```
+
 ### 🛠 从源码构建
 
 需要 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)：
@@ -103,6 +129,32 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
    - **Grant Accessibility** (so "Toggle Hidden Files" doesn't flicker)
 
 > ⚠️ This is an ad-hoc signed build. A Developer ID notarized build would remove step 3.
+
+### 🔄 Upgrading from Older Versions
+
+Simply download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
+
+> 💡 **Upgrade Tips**:
+> 1. **Quit the old version**: If running, select "Quit FinderRight" from the menu bar before overwriting.
+> 2. **Bypass Gatekeeper**: Run:
+>    ```bash
+>    xattr -dr com.apple.quarantine /Applications/FinderRight.app
+>    ```
+> 3. **Refresh Finder**: If the context menu doesn't update immediately, run `killall Finder`.
+> 4. **Accessibility Permission Notice**: Due to ad-hoc code signature changes, macOS may internally invalidate the Accessibility trust even if the switch appears ON in System Settings. **Fix**: In System Settings → Privacy & Security → Accessibility, select FinderRight, click the **`-` (minus)** button to remove it, then re-add it (or run `tccutil reset Accessibility com.finderright.app` in Terminal).
+
+### 🗑️ Complete Uninstall
+
+To completely remove FinderRight and all associated preferences, staging files, and cache:
+
+```bash
+killall FinderRight 2>/dev/null || true
+rm -rf /Applications/FinderRight.app
+rm -rf ~/Library/Application\ Support/FinderRight
+rm -f ~/Library/Preferences/com.finderright.app.plist
+tccutil reset All com.finderright.app 2>/dev/null || true
+killall Finder
+```
 
 ### 🛠 Build from Source
 
