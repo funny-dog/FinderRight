@@ -282,63 +282,91 @@ final class FinderRightService {
     }
 
     private func toggleHiddenFiles(_ req: IPCRequest) -> IPCResponse {
-        // 用 CGEventPostToPid 直接向 Finder 进程发送 Cmd+Shift+.
-        // 只需辅助功能权限，无需 Automation（Apple Events）权限，也不依赖前台焦点。
-        let opts = ["AXTrustedCheckOptionPrompt": false] as CFDictionary
-        guard AXIsProcessTrustedWithOptions(opts) else {
-            serviceLog("no Accessibility permission, fallback to defaults")
-            return toggleHiddenFilesViaDefaults(req)
+        // 目标状态：优先使用扩展端传入的 targetState
+        let stateURL = IPCBridge.rootDirectory.appendingPathComponent("hidden_state")
+        let targetState: String
+        if let s = req.payload["targetState"]?.stringValue {
+            targetState = s
+        } else {
+            var current = "NO"
+            if let data = try? Data(contentsOf: stateURL),
+               let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                current = str
+            }
+            targetState = (current.uppercased() == "YES" || current == "1") ? "NO" : "YES"
         }
 
-        guard let finder = NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.apple.finder").first else {
-            serviceLog("Finder not running, fallback to defaults")
-            return toggleHiddenFilesViaDefaults(req)
+        // 统一持久化状态到共享文件和系统偏好中，绝不再发生二次翻转
+        try? targetState.write(to: stateURL, atomically: true, encoding: .utf8)
+        let writeProc = Process()
+        writeProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        writeProc.arguments = ["write", "com.apple.finder", "AppleShowAllFiles", targetState]
+        try? writeProc.run()
+
+        // 1. 如果已具备辅助功能权限，直接通过 CGEvent 向 Finder 发送 Cmd+Shift+.
+        // 无需 killall Finder，0 闪退，窗口直接在原地无缝刷新
+        let checkOpts = ["AXTrustedCheckOptionPrompt": false] as CFDictionary
+        if AXIsProcessTrustedWithOptions(checkOpts),
+           let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+            let pid = finder.processIdentifier
+            finder.activate(options: .activateIgnoringOtherApps)
+
+            let src = CGEventSource(stateID: .hidSystemState)
+            // kVK_ANSI_Period = 0x2F
+            let down = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: true)
+            let up   = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: false)
+            down?.flags = [.maskCommand, .maskShift]
+            up?.flags   = [.maskCommand, .maskShift]
+            down?.postToPid(pid)
+            up?.postToPid(pid)
+
+            serviceLog("sent Cmd+Shift+. to Finder pid=\(pid), targetState=\(targetState)")
+            return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
-        let pid = finder.processIdentifier
-        let src = CGEventSource(stateID: .hidSystemState)
-        // kVK_ANSI_Period = 0x2F
-        let down = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: true)
-        let up   = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: false)
-        down?.flags = [.maskCommand, .maskShift]
-        up?.flags   = [.maskCommand, .maskShift]
-        down?.postToPid(pid)
-        up?.postToPid(pid)
+        // 2. 若尚未授权，主动弹窗提示用户授权辅助功能
+        let promptOpts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(promptOpts)
 
-        serviceLog("sent Cmd+Shift+. to Finder pid=\(pid)")
-        return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
+        // 3. 走 defaults + 安全重启通道，并施加多段强力窗口置顶
+        return toggleHiddenFilesViaDefaults(req, newValue: targetState)
     }
 
     private func serviceLog(_ message: String) {
         NSLog("[FinderRightService] \(message)")
     }
 
-    private func toggleHiddenFilesViaDefaults(_ req: IPCRequest) -> IPCResponse {
+    private func toggleHiddenFilesViaDefaults(_ req: IPCRequest, newValue: String) -> IPCResponse {
         do {
-            let readProc = Process()
-            readProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-            readProc.arguments = ["read", "com.apple.finder", "AppleShowAllFiles"]
-            let pipe = Pipe()
-            readProc.standardOutput = pipe
-            readProc.standardError = Pipe()
-            try readProc.run()
-            readProc.waitUntilExit()
-            let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let newValue = (output.uppercased() == "YES" || output == "1") ? "NO" : "YES"
-
-            let writeProc = Process()
-            writeProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
-            writeProc.arguments = ["write", "com.apple.finder", "AppleShowAllFiles", newValue]
-            try writeProc.run()
-            writeProc.waitUntilExit()
-
             let killProc = Process()
             killProc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
             killProc.arguments = ["Finder"]
             try killProc.run()
             killProc.waitUntilExit()
+
+            // 核心修复：多次重试激活与 reopen，跨越 0.2s 到 2.2s 覆盖 Finder 恢复的整个生命周期，确保窗口绝对置顶于最前台！
+            DispatchQueue.global().async {
+                for delay in [0.2, 0.4, 0.7, 1.1, 1.6, 2.2] {
+                    Thread.sleep(forTimeInterval: delay)
+                    let actScript = """
+                    tell application "Finder"
+                        activate
+                        reopen
+                    end tell
+                    """
+                    let actProc = Process()
+                    actProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                    actProc.arguments = ["-e", actScript]
+                    try? actProc.run()
+                    actProc.waitUntilExit()
+
+                    DispatchQueue.main.async {
+                        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+                            finder.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
+                        }
+                    }
+                }
+            }
 
             return IPCResponse(id: req.id, success: true, message: "set to \(newValue), restarted Finder")
         } catch {

@@ -4,8 +4,8 @@ import AppKit
 /// 完全磁盘访问（FDA）状态检测和引导界面
 struct FullDiskAccessView: View {
 
-    @State private var hasFDA: Bool = FullDiskAccessChecker.check()
-    @State private var lastCheckedAt: Date = Date()
+    @FRState private var hasFDA: Bool = FullDiskAccessChecker.check()
+    @FRState private var lastCheckedAt: Date = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -98,6 +98,6 @@ enum FullDiskAccessChecker {
     }
 }
 
-#Preview {
-    FullDiskAccessView()
-}
+// #Preview {
+//     FullDiskAccessView()
+// }

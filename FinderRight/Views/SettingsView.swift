@@ -185,8 +185,8 @@ struct FeaturesTab: View {
 // MARK: - 终端 Tab
 
 struct ToolsTab: View {
-    @State private var availableTerminals: [TerminalApp] = []
-    @State private var selectedTerminalBundleId: String = "com.apple.Terminal"
+    @FRState private var availableTerminals: [TerminalApp] = []
+    @FRState private var selectedTerminalBundleId: String = "com.apple.Terminal"
 
     var body: some View {
         Form {
@@ -342,9 +342,9 @@ struct ShortcutCell: View {
     let actionName: String
     let actionIcon: String
 
-    @State private var shortcut: ActionShortcut?
-    @State private var isRecording = false
-    @State private var monitor: Any?
+    @FRState private var shortcut: ActionShortcut?
+    @FRState private var isRecording = false
+    @FRState private var monitor: Any?
 
     var body: some View {
         HStack(spacing: 12) {

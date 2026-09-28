@@ -4,7 +4,7 @@ struct OnboardingView: View {
     /// 由 AppKit 宿主（NSWindow）注入的关闭回调
     var onClose: () -> Void = {}
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var currentStep = 0
+    @FRState private var currentStep = 0
 
     private let totalSteps = 3
 
@@ -284,7 +284,7 @@ struct StepInstruction: View {
 // MARK: - Step 3: 完成
 
 struct CompletionStep: View {
-    @State private var showCheckmark = false
+    @FRState private var showCheckmark = false
 
     var body: some View {
         VStack(spacing: 24) {
