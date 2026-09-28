@@ -193,12 +193,39 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            menu.addItem(shortcutItem("👁 切换隐藏文件", #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
+            let isShowing = isShowingHiddenFiles()
+            let title = isShowing ? "👁 隐藏隐藏文件" : "👁 显示隐藏文件"
+            logToFile("toggleHidden menu item: title='\(title)', isShowing=\(isShowing)")
+            menu.addItem(shortcutItem(title, #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
         }
         return menu
     }
 
     // MARK: - 菜单构建辅助
+
+    private var hiddenStateFileURL: URL {
+        IPCBridge.rootDirectory.appendingPathComponent("hidden_state")
+    }
+
+    /// 判断当前 Finder 是否开启了显示隐藏文件
+    private func isShowingHiddenFiles() -> Bool {
+        // 1. 优先读取跨进程共享状态文件（完全放行，不受沙箱隔离影响）
+        if let data = try? Data(contentsOf: hiddenStateFileURL),
+           let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return str.uppercased() == "YES" || str == "1" || str.uppercased() == "TRUE"
+        }
+
+        // 2. 备选方案
+        if let val = CFPreferencesCopyAppValue("AppleShowAllFiles" as CFString, "com.apple.finder" as CFString) {
+            if let boolVal = val as? Bool {
+                return boolVal
+            }
+            if let strVal = val as? String {
+                return strVal.uppercased() == "YES" || strVal == "1" || strVal.uppercased() == "TRUE"
+            }
+        }
+        return false
+    }
 
     /// 本地化菜单标题（中文做 key，en.lproj 提供英文）
     private func L(_ title: String) -> String {
@@ -379,8 +406,19 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func toggleHiddenFiles(_ sender: NSMenuItem) {
-        logToFile("toggleHiddenFiles ipc →")
-        let r = IPCClient.shared.call(action: "toggleHiddenFiles", payload: [:])
+        logToFile("toggleHiddenFiles clicked")
+        let currentShowing = isShowingHiddenFiles()
+        let nextShowing = !currentShowing
+        let nextStr = nextShowing ? "YES" : "NO"
+
+        // 1. 立即写入共享状态，使后续右键菜单文本即刻准确翻转
+        try? nextStr.write(to: hiddenStateFileURL, atomically: true, encoding: .utf8)
+        logToFile("toggleHiddenFiles updated hidden_state to \(nextStr)")
+
+        // 2. 委托主 App 执行（主 App 拥有非沙盒辅助功能权限与多段窗口强力置顶恢复）
+        let r = IPCClient.shared.call(action: "toggleHiddenFiles", payload: [
+            "targetState": .string(nextStr)
+        ])
         logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 

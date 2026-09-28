@@ -18,3 +18,8 @@ Package.resolved
 .DS_Store
 *.swp
 *~
+
+# Archives & Installers
+*.zip
+*.dmg
+

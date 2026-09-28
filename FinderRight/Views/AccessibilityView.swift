@@ -6,7 +6,7 @@ import ApplicationServices  // for AXIsProcessTrusted...
 /// 用于：让"切换隐藏文件"通过 Cmd+Shift+. 快捷键实现，避免 killall Finder 带来的窗口闪烁。
 struct AccessibilityView: View {
 
-    @State private var hasAccess: Bool = AccessibilityChecker.check()
+    @FRState private var hasAccess: Bool = AccessibilityChecker.check()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -76,6 +76,6 @@ enum AccessibilityChecker {
     }
 }
 
-#Preview {
-    AccessibilityView()
-}
+// #Preview {
+//     AccessibilityView()
+// }
