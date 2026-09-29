@@ -50,9 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupStatusItem()
 
-        // 注册系统级 AppleEvent 拦截（处理通过 Spotlight、Finder、命令行触发的应用打开/重打开）
-        registerAppleEventHandlers()
-
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
         // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
         ServicesProvider.register()
@@ -94,33 +91,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             NSLog("[AppDelegate] FinderRightSync appex registered and enabled via pluginkit")
         }
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        // Spotlight 搜索回车或点击应用图标激活 App 时，若当前没有可见窗口，主动弹出设置
-        let hasVisibleWindow = NSApp.windows.contains { $0.isVisible && $0.canBecomeMain }
-        if !hasVisibleWindow {
-            openSettings()
-        }
-    }
-
-    private func registerAppleEventHandlers() {
-        NSAppleEventManager.shared().setEventHandler(
-            self,
-            andSelector: #selector(handleAppleEvent(_:withReplyEvent:)),
-            forEventClass: AEEventClass(kCoreEventClass),
-            andEventID: AEEventID(kAEOpenApplication)
-        )
-        NSAppleEventManager.shared().setEventHandler(
-            self,
-            andSelector: #selector(handleAppleEvent(_:withReplyEvent:)),
-            forEventClass: AEEventClass(kCoreEventClass),
-            andEventID: AEEventID(kAEReopenApplication)
-        )
-    }
-
-    @objc private func handleAppleEvent(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
-        openSettings()
     }
 
     // MARK: - 原生状态栏菜单
@@ -214,8 +184,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
-    // MARK: - Reopen 响应（修复 Spotlight / 启动台 / 访达重复启动时无法弹出设置的问题）
+    // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复启动时弹出设置的唯一入口）
 
+    /// 只在用户主动"重新打开"已运行的 App（双击图标、启动台、Spotlight 回车）时由系统派发；
+    /// Services 派发、finderright:// IPC 唤醒均不会触发，是弹设置的唯一安全入口。
+    ///
+    /// ⚠️ 不要在 applicationDidBecomeActive 或 kAEOpenApplication/kAEReopenApplication
+    /// AppleEvent 里弹设置：Services 派发会激活 App、IPC 冷启动会收到 kAEOpenApplication，
+    /// 都会导致右键"打开终端"时误弹设置窗口并抢焦（2026-09 已修，勿回归）。
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NSLog("[AppDelegate] applicationShouldHandleReopen: hasVisibleWindows=\(flag)")
         openSettings()
@@ -224,12 +200,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 偏好变化
 
+    /// 防止 defaultsChanged 重入：
+    /// 设置 NSStatusItem.isVisible 时，AppKit 会把可见性自动保存写回 UserDefaults，
+    /// 并同步再次发出 didChangeNotification。若无保护，defaultsChanged → setVisible
+    /// → 通知 → defaultsChanged 无限递归，最终栈溢出崩溃（EXC_BAD_ACCESS）。
+    /// 重入瞬间 isVisible 读到的仍是旧值，靠 "值是否相等" 判断挡不住，必须用标志位。
+    private var isUpdatingStatusItemVisibility = false
+
     @objc private func defaultsChanged() {
         // 实时同步菜单栏图标显隐（设置里 showMenuBarIcon 改变时）
+        guard !isUpdatingStatusItemVisibility else { return }
         let want = showMenuBarIcon
-        if statusItem?.isVisible != want {
-            statusItem?.isVisible = want
-        }
+        guard statusItem?.isVisible != want else { return }
+        isUpdatingStatusItemVisibility = true
+        defer { isUpdatingStatusItemVisibility = false }
+        statusItem?.isVisible = want
     }
 
     // MARK: - 窗口与激活策略
