@@ -5,7 +5,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-VERSION="1.1.5"
+VERSION="1.1.6"
 STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
@@ -13,6 +13,11 @@ KIT_BUILD_DIR="$PROJECT_DIR/FinderRightKit/.build/out/Products/Release"
 
 echo "=== 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --package-path FinderRightKit
+
+# 清空 stage 目录：历史上 Assets.car 靠旧构建残留"碰巧"被带进 DMG，
+# 掩盖了脚本从未编译 asset catalog 的问题（v1.1.5 干净构建后菜单栏图标消失）。
+# 每次从干净目录组装，残留文件不再掩盖缺步骤。
+rm -rf "$STAGE_DIR"
 
 echo "=== 2. 编译主程序 FinderRight (Release) ==="
 mkdir -p "$APP_DIR/Contents/MacOS"
@@ -53,6 +58,29 @@ mkdir -p "$APP_DIR/Contents/Resources/en.lproj"
 cp FinderRight/en.lproj/Localizable.strings "$APP_DIR/Contents/Resources/en.lproj/"
 if [ -f "FinderRight/Resources/AppIcon.icns" ]; then
   cp FinderRight/Resources/AppIcon.icns "$APP_DIR/Contents/Resources/"
+fi
+
+# 菜单栏图标 MenuBarIcon 只存在于 asset catalog 中，NSImage(named:) 必须在
+# bundle 内找到同名资源，否则返回 nil → 状态栏项零宽不可见（v1.1.5 曾因此回归）。
+# 优先用 actool 编译整个 xcassets（需完整 Xcode）；本仓库支持无 Xcode 构建，
+# 无 actool 时退化为把 imageset 的 PNG 按 NSImage 命名约定（name.png / name@2x.png）
+# 复制为散文件——NSImage(named:) 对散文件同样自动处理 @2x。
+if xcrun -f actool >/dev/null 2>&1; then
+  xcrun actool FinderRight/Assets.xcassets \
+    --compile "$APP_DIR/Contents/Resources" \
+    --platform macosx \
+    --minimum-deployment-target 13.0 \
+    --errors --warnings
+else
+  MENU_ICON_SET="FinderRight/Assets.xcassets/MenuBarIcon.imageset"
+  cp "$MENU_ICON_SET/menubar_16x16.png" "$APP_DIR/Contents/Resources/MenuBarIcon.png"
+  cp "$MENU_ICON_SET/menubar_32x32.png" "$APP_DIR/Contents/Resources/MenuBarIcon@2x.png"
+fi
+
+# 硬校验：菜单栏图标必须进了 bundle，否则立即构建失败，不再静默回归
+if [ ! -f "$APP_DIR/Contents/Resources/Assets.car" ] && [ ! -f "$APP_DIR/Contents/Resources/MenuBarIcon.png" ]; then
+  echo "错误：菜单栏图标未打进 bundle（既无 Assets.car 也无 MenuBarIcon.png）" >&2
+  exit 1
 fi
 
 # 扩展 Info.plist
