@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.4</string>
+	<string>1.1.5</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
@@ -32,13 +32,24 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>7</string>
+	<string>8</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>MacOSX</string>
 	</array>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
+	<!-- 声明为后台代理应用：菜单栏类 App 的标准做法。
+	     修复：FinderSync 扩展用 NSWorkspace.open 唤醒主 App 时，LaunchServices
+	     会按 Info.plist 声明的类型处理——此前声明为普通应用，LS 在处理 URL 打开时
+	     把 App 提到前台并给出 Dock 图标（activates=false 对已运行 App 无效），
+	     而这条路径没有窗口，windowWillClose 不会触发，图标就一直留着。
+	     声明 LSUIElement 后 LS 不再将其前置；需要开窗时 openSettings()/
+	     openOnboarding() 会临时切 .regular，关窗后 windowWillClose 切回。
+	     showDockIcon=true 的用户不受影响：applicationDidFinishLaunching
+	     仍会把策略设为 .regular。顺带消除冷启动时 Dock 图标的一闪。 -->
+	<key>LSUIElement</key>
+	<true/>
 
 	<key>NSServices</key>
 	<array>

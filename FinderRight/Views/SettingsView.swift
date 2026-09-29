@@ -304,32 +304,72 @@ struct AboutTab: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    if case .updateAvailable(let newVersion, let releaseURL) = updateStatus {
-                        Button {
-                            NSWorkspace.shared.open(releaseURL)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.up.circle.fill")
-                                Text("发现新版本 \(newVersion)")
-                                    .fontWeight(.medium)
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 9, weight: .bold))
+                    switch updateStatus {
+                    case .updateAvailable(let newVersion, let releaseURL, let downloadURL):
+                        HStack(spacing: 6) {
+                            if let downloadURL = downloadURL {
+                                Button {
+                                    UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL) { newStatus in
+                                        self.updateStatus = newStatus
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                        Text("立即更新到 \(newVersion)")
+                                            .fontWeight(.medium)
+                                    }
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 3.5)
+                                    .background(
+                                        Capsule()
+                                            .fill(LinearGradient(colors: [.blue, .purple], startPoint: .leading, endPoint: .trailing))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .help("自动下载并安装新版本")
                             }
-                            .font(.system(size: 11))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule()
-                                    .fill(LinearGradient(colors: [.blue, .purple], startPoint: .leading, endPoint: .trailing))
-                            )
+
+                            Button {
+                                NSWorkspace.shared.open(releaseURL)
+                            } label: {
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("在浏览器中查看更新说明")
                         }
-                        .buttonStyle(.plain)
-                        .help("点击在浏览器中打开最新版本下载页面")
-                    } else if updateStatus == .checking {
+
+                    case .downloading(let progress):
+                        HStack(spacing: 6) {
+                            ProgressView(value: progress)
+                                .progressViewStyle(.linear)
+                                .frame(width: 80)
+                            Text("\(Int(progress * 100))%")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                        }
+
+                    case .installing:
+                        HStack(spacing: 5) {
+                            ProgressView()
+                                .scaleEffect(0.55)
+                                .frame(width: 14, height: 14)
+                            Text("正在安装并重启...")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                    case .checking:
                         ProgressView()
                             .scaleEffect(0.55)
                             .frame(width: 14, height: 14)
+
+                    default:
+                        EmptyView()
                     }
                 }
 
@@ -353,7 +393,7 @@ struct AboutTab: View {
                         .foregroundColor(.secondary)
                     }
 
-                    if updateStatus != .checking {
+                    if updateStatus != .checking, !isUpdating(updateStatus) {
                         Button {
                             performCheck(force: true)
                         } label: {
@@ -404,6 +444,15 @@ struct AboutTab: View {
     private func performCheck(force: Bool) {
         UpdateChecker.shared.check(force: force) { newStatus in
             self.updateStatus = newStatus
+        }
+    }
+
+    private func isUpdating(_ status: UpdateCheckStatus) -> Bool {
+        switch status {
+        case .downloading, .installing:
+            return true
+        default:
+            return false
         }
     }
 }
