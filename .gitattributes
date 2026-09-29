@@ -1,0 +1,2 @@
+# 排除构建与工具脚本参与语言统计，保持仓库主要语言统计纯净（100% Swift）
+scripts/* linguist-detectable=false
