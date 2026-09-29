@@ -8,7 +8,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-VERSION="1.1.6"
+VERSION="1.1.7"
 STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
