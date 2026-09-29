@@ -64,6 +64,10 @@
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
 "启动" = "Startup";
 "显示" = "Appearance";
+"右键菜单图标" = "Right-Click Menu Icons";
+"简洁 (SF Symbols)" = "Clean (SF Symbols)";
+"彩色 (Emoji)" = "Color (Emoji)";
+"无图标" = "No Icons";
 "两个图标都关闭后，可通过 Spotlight 搜索「FinderRight」重新打开偏好设置" = "With both icons off, search \"FinderRight\" in Spotlight to reopen Settings";
 "权限" = "Permissions";
 "「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」时 Finder 窗口不闪烁。" = "\"Full Disk Access\" lets all features work in protected folders like ~/Documents, ~/Desktop, ~/Pictures. \"Accessibility\" keeps the Finder window from flickering when toggling hidden files.";

@@ -24,3 +24,28 @@
 "📈 CSV (.csv)" = "📈 CSV (.csv)";
 "🍎 Swift (.swift)" = "🍎 Swift (.swift)";
 "🟨 JavaScript (.js)" = "🟨 JavaScript (.js)";
+
+/* Modern / Clean style (Without Emoji) */
+"新建文件" = "New File";
+"复制路径" = "Copy Path";
+"打开终端" = "Open in Terminal";
+"打开编辑器" = "Open in Editor";
+"剪切" = "Cut";
+"粘贴" = "Paste";
+"压缩为 ZIP" = "Compress to ZIP";
+"解压到当前目录" = "Extract Here";
+"切换隐藏文件" = "Toggle Hidden Files";
+"显示隐藏文件" = "Show Hidden Files";
+"隐藏隐藏文件" = "Hide Hidden Files";
+
+"文本文件 (.txt)" = "Text File (.txt)";
+"Markdown (.md)" = "Markdown (.md)";
+"HTML (.html)" = "HTML (.html)";
+"Python (.py)" = "Python (.py)";
+"Shell (.sh)" = "Shell (.sh)";
+"JSON (.json)" = "JSON (.json)";
+"XML (.xml)" = "XML (.xml)";
+"CSV (.csv)" = "CSV (.csv)";
+"Swift (.swift)" = "Swift (.swift)";
+"JavaScript (.js)" = "JavaScript (.js)";
+
