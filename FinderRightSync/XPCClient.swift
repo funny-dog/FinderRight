@@ -49,9 +49,9 @@ final class IPCClient {
         openCfg.hides = true
         NSWorkspace.shared.open(url, configuration: openCfg, completionHandler: nil)
 
-        // 3. 轮询等待 response
+        // 3. 轮询等待 response（自适应递增间隔：初始 2ms 瞬时捕获极速请求，后退避至 30ms 保障低开销）
         let deadline = Date().addingTimeInterval(timeout)
-        let pollInterval: TimeInterval = 0.05  // 50ms
+        var pollInterval: TimeInterval = 0.002
         while Date() < deadline {
             if FileManager.default.fileExists(atPath: respURL.path) {
                 // 4. 读取并清理
@@ -65,6 +65,9 @@ final class IPCClient {
                 }
             }
             Thread.sleep(forTimeInterval: pollInterval)
+            if pollInterval < 0.03 {
+                pollInterval = min(pollInterval * 2, 0.03)
+            }
         }
 
         // 超时——把残留的 request 清掉

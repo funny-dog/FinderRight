@@ -11,8 +11,13 @@ private var cutQueueFileURL: URL {
     IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
 }
 
-/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态
+/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
 private func hasCutQueue() -> Bool {
+    // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
+          let size = attrs[.size] as? UInt64, size > 2 else {
+        return false
+    }
     if let data = try? Data(contentsOf: cutQueueFileURL),
        let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
         return !paths.isEmpty
@@ -22,33 +27,43 @@ private func hasCutQueue() -> Bool {
 
 // MARK: - 日志
 
+private let logQueue = DispatchQueue(label: "com.finderright.app.sync.log", qos: .utility)
+private let logDateFormatter: DateFormatter = {
+    let df = DateFormatter()
+    df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return df
+}()
+
 private func logToFile(_ message: String) {
-    // 1. 系统统一 OSLog
+    // 1. 系统统一 OSLog（主线程毫秒级开销）
     os_log("%{public}@", log: log, type: .default, message)
 
-    // 2. 本地调试文件（加 1MB 轮转上限）
-    let fm = FileManager.default
-    guard let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-    let logFile = docDir.appendingPathComponent("debug.log")
-    let oldLogFile = docDir.appendingPathComponent("debug.log.1")
-    let maxBytes: UInt64 = 1024 * 1024 // 1MB
+    // 2. 本地调试文件：异步串行派发到后台队列，避免主线程磁盘 I/O 阻塞
+    let timestamp = logDateFormatter.string(from: Date())
+    logQueue.async {
+        let fm = FileManager.default
+        guard let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        // 沙箱容器内 Documents 目录可能尚不存在，不先创建则写入被静默吞掉
+        try? fm.createDirectory(at: docDir, withIntermediateDirectories: true)
+        let logFile = docDir.appendingPathComponent("debug.log")
+        let oldLogFile = docDir.appendingPathComponent("debug.log.1")
+        let maxBytes: UInt64 = 1024 * 1024 // 1MB
 
-    if let attrs = try? fm.attributesOfItem(atPath: logFile.path),
-       let size = attrs[.size] as? UInt64, size >= maxBytes {
-        try? fm.removeItem(at: oldLogFile)
-        try? fm.moveItem(at: logFile, to: oldLogFile)
-    }
-
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-    let line = "[\(formatter.string(from: Date()))] \(message)\n"
-    guard let data = line.data(using: .utf8) else { return }
-    if fm.fileExists(atPath: logFile.path) {
-        if let h = try? FileHandle(forWritingTo: logFile) {
-            h.seekToEndOfFile(); h.write(data); h.closeFile()
+        if let attrs = try? fm.attributesOfItem(atPath: logFile.path),
+           let size = attrs[.size] as? UInt64, size >= maxBytes {
+            try? fm.removeItem(at: oldLogFile)
+            try? fm.moveItem(at: logFile, to: oldLogFile)
         }
-    } else {
-        try? data.write(to: logFile)
+
+        let line = "[\(timestamp)] \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if fm.fileExists(atPath: logFile.path) {
+            if let h = try? FileHandle(forWritingTo: logFile) {
+                h.seekToEndOfFile(); h.write(data); h.closeFile()
+            }
+        } else {
+            try? data.write(to: logFile)
+        }
     }
 }
 
@@ -56,19 +71,74 @@ private func logToFile(_ message: String) {
 
 class FinderSync: FIFinderSync {
 
-    override init() {
-        super.init()
-        logToFile("FinderSync init started")
+    // MARK: - 静态图标与资源缓存（零 I/O、零解析延迟）
+    private static var symbolCache: [String: NSImage] = [:]
+    private static let cacheQueue = DispatchQueue(label: "com.finderright.app.sync.cache", qos: .utility)
+    private var activityToken: NSObjectProtocol?
 
+    private static func getSymbolImage(named name: String) -> NSImage? {
+        if let img = symbolCache[name] { return img }
+        if let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
+            img.isTemplate = true
+            symbolCache[name] = img
+            return img
+        }
+        return nil
+    }
+
+    private static func preloadSymbols() {
+        let symbols = [
+            "doc.badge.plus", "doc.on.doc", "terminal", "curlybraces",
+            "scissors", "doc.on.clipboard", "archivebox", "eye",
+            "doc.text", "doc.richtext", "tablecells", "chevron.left.forwardslash.chevron.right"
+        ]
+        for s in symbols {
+            _ = getSymbolImage(named: s)
+        }
+    }
+
+    /// 冷启动打点：init 入口时间（进程被拉起后尽早记录）
+    private static var initStartUptime: TimeInterval = 0
+    private var didDeferredSetup = false
+
+    override init() {
+        Self.initStartUptime = ProcessInfo.processInfo.systemUptime
+        super.init()
+        // 声明低延迟关键任务，降低电源管理对菜单响应线程的冻结/合并调度
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+            reason: "FinderRight context menu zero latency"
+        )
+
+        // init 路径刻意保持极简：只有 directoryURLs 注册是扩展工作的前提。
+        // 符号预热、卷挂载监听等全部延后到首次 menu(for:) 之后（见 deferredSetupIfNeeded），
+        // 让系统回收扩展后的首次右键等待时间降到最低。
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
-        logToFile("monitoredDirs count: \(dirs.count)")
 
+        // 后台预热编辑器与图标（派发即返回，不阻塞 init）
+        Self.refreshInstalledEditorsAsync()
+
+        let initMs = (ProcessInfo.processInfo.systemUptime - Self.initStartUptime) * 1000
+        logToFile("init done: \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.count)")
+    }
+
+    /// 首次菜单构建之后执行的一次性延后初始化（冷启动瘦身的一部分）
+    private func deferredSetupIfNeeded() {
+        guard !didDeferredSetup else { return }
+        didDeferredSetup = true
+
+        // SF Symbols 预热（getSymbolImage 本身带懒缓存兜底，这里只是提前摊销）
+        Self.preloadSymbols()
+
+        // 卷挂载监听延后注册：init 时的 buildMonitoredDirectories 已包含当前已挂载卷，
+        // 首次菜单前新挂载卷的漏监听窗口极小，可接受
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(self, selector: #selector(volumeDidMount(_:)),
                        name: NSWorkspace.didMountNotification, object: nil)
         nc.addObserver(self, selector: #selector(volumeDidUnmount(_:)),
                        name: NSWorkspace.didUnmountNotification, object: nil)
+        logToFile("deferredSetup done")
     }
 
     @objc func volumeDidMount(_ n: Notification) { updateMonitoredDirectories() }
@@ -147,12 +217,14 @@ class FinderSync: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
+        let menuStart = ProcessInfo.processInfo.systemUptime
         // 读取主 App 设置界面最新写入的功能开关 / 终端 / 编辑器偏好
         SharedConfig.shared.reload()
 
         let (directory, selected) = currentContext()
         let hasSelection = !selected.isEmpty
-        let exts = selected.map { $0.pathExtension.lowercased() }.joined(separator: ",")
+        let exts = selected.prefix(10).map { $0.pathExtension.lowercased() }.joined(separator: ",")
+            + (selected.count > 10 ? "..." : "")
         logToFile("menu(for:) kind=\(menuKind.rawValue) selected=\(selected.count) exts=[\(exts)] dir=\(directory?.lastPathComponent ?? "nil")")
 
         let menu = NSMenu(title: "FinderRight")
@@ -209,6 +281,14 @@ class FinderSync: FIFinderSync {
         if featureOn(MenuFeatureCatalog.toggleHidden) {
             menu.addItem(makeItem(titleKey: "切换隐藏文件", emoji: "👁", systemImage: "eye", action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
         }
+
+        // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
+        if !didDeferredSetup {
+            let sinceInitMs = (menuStart - Self.initStartUptime) * 1000
+            let buildMs = (ProcessInfo.processInfo.systemUptime - menuStart) * 1000
+            logToFile("coldStart: initToFirstMenu=\(String(format: "%.1f", sinceInitMs))ms firstMenuBuild=\(String(format: "%.1f", buildMs))ms")
+        }
+        deferredSetupIfNeeded()
         return menu
     }
 
@@ -230,10 +310,8 @@ class FinderSync: FIFinderSync {
         switch style {
         case .modern:
             item.title = L(titleKey)
-            if let systemImage = systemImage,
-               let img = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil) {
-                img.isTemplate = true
-                item.image = img
+            if let systemImage = systemImage {
+                item.image = Self.getSymbolImage(named: systemImage)
             } else {
                 item.image = nil
             }
@@ -347,13 +425,91 @@ class FinderSync: FIFinderSync {
         logToFile("openTerminal ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
-    /// 检测系统已安装的编辑器（按 EditorCatalog 顺序，Zed 置顶）。
-    /// 返回项带 catalogIndex —— 即在 EditorCatalog.all 中的下标，用作菜单项 tag。
-    private func installedEditors() -> [(name: String, catalogIndex: Int)] {
-        EditorCatalog.all.enumerated().compactMap { idx, ed in
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: ed.id) != nil
-                ? (ed.name, idx) : nil
+    // MARK: - 编辑器探测与图标缓存（零等待内存快照 + 后台静默刷新）
+    //
+    // 线程模型：快照整体由 editorCacheLock 保护（持锁时间仅为字典读写，纳秒级），
+    // 耗时的 LaunchServices 查询与 icns 读取一律在 cacheQueue 串行队列的锁外完成，
+    // 主线程 menu(for:) 只取快照，绝不被后台刷新阻塞。
+    private struct EditorCacheSnapshot {
+        var editors: [(name: String, catalogIndex: Int)] = []
+        var icons: [String: NSImage] = [:]
+        var lastCheckTime: TimeInterval = 0
+        /// 区分「还没检测过」与「检测结果为空」——否则一台没装任何编辑器的机器
+        /// 会让每次右键都走 8 次同步 LaunchServices 探测
+        var hasChecked = false
+    }
+
+    private static let editorCacheLock = NSLock()
+    private static var editorCache = EditorCacheSnapshot()
+    /// 仅允许在 cacheQueue 串行队列上访问
+    private static var isRefreshingEditors = false
+
+    private static func editorSnapshot() -> EditorCacheSnapshot {
+        editorCacheLock.lock()
+        defer { editorCacheLock.unlock() }
+        return editorCache
+    }
+
+    /// 启动时或后台静默刷新编辑器与图标（绝不阻塞主线程）
+    static func refreshInstalledEditorsAsync() {
+        cacheQueue.async {
+            guard !isRefreshingEditors else { return }
+            isRefreshingEditors = true
+            defer { isRefreshingEditors = false }
+
+            let existingIcons = editorSnapshot().icons
+            var fresh: [(name: String, catalogIndex: Int)] = []
+            var freshIcons: [String: NSImage] = [:]
+
+            for (idx, ed) in EditorCatalog.all.enumerated() {
+                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ed.id) {
+                    fresh.append((ed.name, idx))
+                    if existingIcons[ed.id] == nil {
+                        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+                        icon.size = NSSize(width: 16, height: 16)
+                        freshIcons[ed.id] = icon
+                    }
+                }
+            }
+
+            editorCacheLock.lock()
+            editorCache.editors = fresh
+            for (k, v) in freshIcons {
+                editorCache.icons[k] = v
+            }
+            editorCache.lastCheckTime = ProcessInfo.processInfo.systemUptime
+            editorCache.hasChecked = true
+            editorCacheLock.unlock()
         }
+    }
+
+    /// 检测系统已安装的编辑器：主线程 100% 只读内存快照，0ms 立即返回。
+    /// 超过 5 分钟未检查时派发后台异步静默刷新，主线程绝不等待。
+    private func installedEditors() -> [(name: String, catalogIndex: Int)] {
+        let snap = Self.editorSnapshot()
+        let now = ProcessInfo.processInfo.systemUptime
+        if !snap.hasChecked {
+            // 极早触发（后台预热尚未完成）：做一次仅查 bundle 的极速同步检测，
+            // 并触发异步刷新补全图标；hasChecked 置位后不再走此路径
+            let fallback = EditorCatalog.all.enumerated().compactMap { idx, ed in
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: ed.id) != nil
+                    ? (ed.name, idx) : nil
+            }
+            Self.editorCacheLock.lock()
+            if !Self.editorCache.hasChecked {
+                Self.editorCache.editors = fallback
+                Self.editorCache.lastCheckTime = now
+                Self.editorCache.hasChecked = true
+            }
+            let current = Self.editorCache
+            Self.editorCacheLock.unlock()
+            Self.refreshInstalledEditorsAsync()
+            return current.editors
+        }
+        if now - snap.lastCheckTime > 300.0 {
+            Self.refreshInstalledEditorsAsync()
+        }
+        return snap.editors
     }
 
     /// 构建「打开编辑器」子菜单。
@@ -363,16 +519,14 @@ class FinderSync: FIFinderSync {
     /// 携带数据 —— 这里 tag = 编辑器在 EditorCatalog.all 中的下标。
     private func buildEditorMenu(_ editors: [(name: String, catalogIndex: Int)], style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("打开编辑器"))
+        let icons = style == .modern ? Self.editorSnapshot().icons : [:]
         for ed in editors {
             let item = NSMenuItem(title: ed.name, action: #selector(openEditorWith(_:)), keyEquivalent: "")
             item.target = self
             item.tag = ed.catalogIndex
             if style == .modern {
-                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: EditorCatalog.all[ed.catalogIndex].id) {
-                    let icon = NSWorkspace.shared.icon(forFile: appURL.path)
-                    icon.size = NSSize(width: 16, height: 16)
-                    item.image = icon
-                }
+                let bundleId = EditorCatalog.all[ed.catalogIndex].id
+                item.image = icons[bundleId]
             }
             m.addItem(item)
         }

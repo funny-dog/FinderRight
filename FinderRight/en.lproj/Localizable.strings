@@ -140,9 +140,11 @@
 "未授权 — 「切换隐藏文件」会让 Finder 窗口短暂闪烁" = "Not granted — \"Toggle Hidden Files\" will briefly flicker the Finder window";
 "FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，实现 Finder 隐藏文件即时切换（无需重启 Finder）。授权后 Finder 窗口不再闪烁。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut for instant hidden-file toggling (without restarting Finder). Once granted, the Finder window stops flickering.";
 "打开辅助功能设置…" = "Open Accessibility Settings…";
+"提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。" = "Note: If authorization fails after an update, remove the old entry with \"-\" in System Settings and re-add it with \"+\".";
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";
 "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app" = "2. Find FinderRight and turn it on; if it's not listed, click + and add FinderRight.app";
-"3. 回到此处点击「重新检测」" = "3. Come back and click \"Re-check\"";
+"3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加" = "3. After updates: if still inactive, select FinderRight, click \"-\" to remove the old entry, then click \"+\" to re-add";
+"4. 回到此处点击「重新检测」" = "4. Come back and click \"Re-check\"";
 
 /* Terminal */
 "系统默认" = "System Default";
