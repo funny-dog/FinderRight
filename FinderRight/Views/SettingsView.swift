@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import FinderRightKit
+import ServiceManagement
 
 // MARK: - 终端定义（使用 FinderRightKit 中的 TerminalCatalog）
 
@@ -67,16 +68,43 @@ struct GeneralTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showDockIcon") private var showDockIcon = false
+    @FRState private var launchAtLoginError: String?
+    @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $launchAtLogin) {
+                Toggle(isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { newValue in
+                        updateLaunchAtLogin(to: newValue)
+                    }
+                )) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("开机自动启动")
                         Text("登录时自动运行 FinderRight")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+                }
+
+                if let error = launchAtLoginError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+
+                if currentLoginStatus == .requiresApproval {
+                    HStack {
+                        Text("已注册，但需要在「系统设置」-「通用」-「登录项」中允许启动")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        Spacer()
+                        Button("打开系统设置") {
+                            LaunchAtLoginManager.openLoginItemsSettings()
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
                     }
                 }
             } header: {
@@ -160,13 +188,44 @@ struct GeneralTab: View {
             } header: {
                 Text("权限与扩展")
             } footer: {
-                Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」不闪烁。")
+                Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」时 Finder 窗口不闪烁。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            calibrateLaunchAtLoginStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            calibrateLaunchAtLoginStatus()
+        }
+    }
+
+    private func updateLaunchAtLogin(to newValue: Bool) {
+        launchAtLoginError = nil
+        do {
+            try LaunchAtLoginManager.shared.setEnabled(newValue)
+            launchAtLogin = newValue
+            currentLoginStatus = LaunchAtLoginManager.shared.status
+        } catch {
+            NSLog("[SettingsView] 设置开机自动启动失败 (\(newValue ? "开启" : "关闭")): \(error)")
+            // 回滚开关状态到系统实际状态
+            launchAtLogin = LaunchAtLoginManager.shared.isEnabled
+            currentLoginStatus = LaunchAtLoginManager.shared.status
+            launchAtLoginError = "设置开机自动启动失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func calibrateLaunchAtLoginStatus() {
+        let status = LaunchAtLoginManager.shared.status
+        currentLoginStatus = status
+        let isEnabled = LaunchAtLoginManager.shared.isEnabled
+        if launchAtLogin != isEnabled {
+            NSLog("[SettingsView] 校准开机自启状态: 本地=\(launchAtLogin) -> 系统=\(isEnabled) (系统状态: \(LaunchAtLoginManager.shared.statusDescription(status)))")
+            launchAtLogin = isEnabled
+        }
     }
 }
 

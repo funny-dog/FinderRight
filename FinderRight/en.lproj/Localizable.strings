@@ -143,9 +143,22 @@
 /* Terminal */
 "系统默认" = "System Default";
 
+/* Permissions & Extensions */
+"权限与扩展" = "Permissions & Extensions";
+"访达右键扩展" = "Finder Right-Click Extension";
+"若右键未显示菜单，可尝试重启访达或检查扩展开关" = "If the context menu does not appear, try restarting Finder or checking extension settings";
+"重启访达" = "Relaunch Finder";
+"扩展设置..." = "Extension Settings…";
+
+/* Launch at Login */
+"已注册，但需要在「系统设置」-「通用」-「登录项」中允许启动" = "Registered, but needs approval in System Settings > General > Login Items";
+
 /* Updates */
 "检查更新" = "Check for Updates";
 "已是最新版本" = "Up to Date";
 "发现新版本 %@" = "New version %@";
 "点击在浏览器中打开最新版本下载页面" = "Click to open latest download page in browser";
+"立即更新到 %@" = "Update to %@ Now";
+"正在安装并重启..." = "Installing and restarting…";
+"自动下载并安装新版本" = "Automatically download and install the new version";
 
