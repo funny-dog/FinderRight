@@ -38,6 +38,7 @@ public final class SharedConfig {
     public static let shared = SharedConfig()
 
     private var store: [String: Any] = [:]
+    private var lastLoadedMtime: Date?
 
     private enum Keys {
         static let enabledActions = "enabledActions"
@@ -54,17 +55,35 @@ public final class SharedConfig {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: SharedConfig.sharedFileURL),
-              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            store = [:]
+        let fileURL = SharedConfig.sharedFileURL
+        // 检查文件修改时间，若与上次载入一致且已有缓存，则跳过重复磁盘读取与反序列化
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+           let mtime = attrs[.modificationDate] as? Date {
+            if let last = lastLoadedMtime, last == mtime, !store.isEmpty {
+                return
+            }
+            guard let data = try? Data(contentsOf: fileURL),
+                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+                store = [:]
+                lastLoadedMtime = nil
+                return
+            }
+            store = dict
+            lastLoadedMtime = mtime
             return
         }
-        store = dict
+
+        store = [:]
+        lastLoadedMtime = nil
     }
 
     private func save() {
         guard let data = try? PropertyListSerialization.data(fromPropertyList: store, format: .xml, options: 0) else { return }
         try? data.write(to: SharedConfig.sharedFileURL, options: .atomic)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: SharedConfig.sharedFileURL.path),
+           let mtime = attrs[.modificationDate] as? Date {
+            lastLoadedMtime = mtime
+        }
     }
 
     /// 重新从磁盘加载配置。

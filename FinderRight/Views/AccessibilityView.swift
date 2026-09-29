@@ -41,11 +41,17 @@ struct AccessibilityView: View {
                     }
                 }
 
+                Text("提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 DisclosureGroup("授权步骤说明") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("1. 点击上方按钮，会跳转到「辅助功能」列表")
                         Text("2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app")
-                        Text("3. 回到此处点击「重新检测」")
+                        Text("3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加")
+                        Text("4. 回到此处点击「重新检测」")
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)
