@@ -47,16 +47,24 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 
 ### 🔄 升级说明
 
-直接下载最新版 `FinderRight.dmg`，打开并将 `FinderRight.app` 拖入 `Applications`（应用程序）直接覆盖即可。
+可以通过应用内「关于」页面的自动更新直接升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
 
-> 💡 **覆盖升级注意事项**：
-> 1. **先退出旧版**：若旧版正在后台运行，建议先在菜单栏点击图标选择「退出 FinderRight」后再拖动覆盖。
-> 2. **解除拦截**：覆盖后若提示未公证拦截，请重新执行：
+> 💡 **版本升级注意事项**：
+> 1. **权限重新授权说明（无法避免）**：因本项目目前使用免证书的 Ad-hoc 签名（`codesign -s -`），重新编译后主程序的二进制代码哈希（CDHash）必然改变。macOS 的安全管控机制（TCC）会判定新版本为不同身份的程序，因此**「完全磁盘访问权限」与「辅助功能权限」在每次版本更新后都需要重新确认授权**。虽然系统设置里开关可能看起来仍显示开启，但底层校验实际已失效。
+>    - **完全磁盘访问**：前往「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，将 FinderRight 的开关**关闭再重新开启**（或点 `-` 删除后重新拖入添加）。
+>    - **辅助功能权限**：前往「系统设置 → 隐私与安全性 → 辅助功能」，选中 FinderRight 点击底部的 **`-`（减号）删除**，再重新打开应用添加即可。
+>    - **终端一键重置法（推荐，最省心）**：
+>      ```bash
+>      tccutil reset SystemPolicyAllFiles com.finderright.app
+>      tccutil reset Accessibility com.finderright.app
+>      ```
+>      执行后重新打开 FinderRight 即可按引导一次性勾选授权。
+> 2. **先退出旧版**：若旧版正在后台运行，建议先在菜单栏点击图标选择「退出 FinderRight」后再拖动覆盖。
+> 3. **解除拦截**：覆盖后若提示未公证拦截，请重新执行：
 >    ```bash
 >    xattr -dr com.apple.quarantine /Applications/FinderRight.app
 >    ```
-> 3. **刷新访达**：若覆盖后右键菜单没有即时更新，终端运行 `killall Finder` 即可。
-> 4. **辅助功能提示未授权**：因自签名（ad-hoc）重新编译后的二进制哈希变化，系统设置中「辅助功能」开关虽显示开启，但内部校验可能已失效。**解决方法**：在「系统设置 → 隐私与安全性 → 辅助功能」中，选中 FinderRight 点击底部的 **`-`（减号）删除**，再重新添加即可（或终端运行 `tccutil reset Accessibility com.finderright.app` 重置）。
+> 4. **刷新访达**：若覆盖后右键菜单没有即时更新，终端运行 `killall Finder` 即可。
 
 ### 🗑️ 完全卸载
 
@@ -132,16 +140,24 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 
 ### 🔄 Upgrading from Older Versions
 
-Simply download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
+You can upgrade directly via the built-in auto-updater in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
 
 > 💡 **Upgrade Tips**:
-> 1. **Quit the old version**: If running, select "Quit FinderRight" from the menu bar before overwriting.
-> 2. **Bypass Gatekeeper**: Run:
+> 1. **Permission Re-authorization Notice (Expected)**: Because this project currently uses ad-hoc signing (`codesign -s -`) without an Apple Developer ID, the executable's binary hash (CDHash) changes with every build. macOS Transparency, Consent, and Control (TCC) treats the new binary as a different entity. Therefore, **Full Disk Access and Accessibility permissions must be re-granted after every update**, even if the toggle switches in System Settings still appear to be ON.
+>    - **Full Disk Access**: Go to System Settings → Privacy & Security → Full Disk Access, toggle FinderRight OFF and back ON (or remove it with `-` and re-add).
+>    - **Accessibility**: Go to System Settings → Privacy & Security → Accessibility, select FinderRight, click the **`-` (minus)** button to remove it, then restart the app to re-add.
+>    - **One-click Terminal reset (Recommended)**:
+>      ```bash
+>      tccutil reset SystemPolicyAllFiles com.finderright.app
+>      tccutil reset Accessibility com.finderright.app
+>      ```
+>      Then reopen FinderRight to complete the onboarding permission prompt.
+> 2. **Quit the old version**: If running, select "Quit FinderRight" from the menu bar before overwriting.
+> 3. **Bypass Gatekeeper**: Run:
 >    ```bash
 >    xattr -dr com.apple.quarantine /Applications/FinderRight.app
 >    ```
-> 3. **Refresh Finder**: If the context menu doesn't update immediately, run `killall Finder`.
-> 4. **Accessibility Permission Notice**: Due to ad-hoc code signature changes, macOS may internally invalidate the Accessibility trust even if the switch appears ON in System Settings. **Fix**: In System Settings → Privacy & Security → Accessibility, select FinderRight, click the **`-` (minus)** button to remove it, then re-add it (or run `tccutil reset Accessibility com.finderright.app` in Terminal).
+> 4. **Refresh Finder**: If the context menu doesn't update immediately, run `killall Finder`.
 
 ### 🗑️ Complete Uninstall
 
