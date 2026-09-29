@@ -55,7 +55,7 @@ public enum IPCBridge {
 /// 一次 IPC 请求的统一信封
 public struct IPCRequest: Codable {
     public let id: String
-    public let action: String     // 操作类型，如 "createFile" / "moveToTrash" / ...
+    public let action: String     // 操作类型，如 "createFile" / "compressZip" / ...
     public let payload: [String: AnyJSON]  // 参数字典
 
     public init(id: String, action: String, payload: [String: AnyJSON]) {

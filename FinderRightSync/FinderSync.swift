@@ -23,9 +23,22 @@ private func hasCutQueue() -> Bool {
 // MARK: - 日志
 
 private func logToFile(_ message: String) {
+    // 1. 系统统一 OSLog
+    os_log("%{public}@", log: log, type: .default, message)
+
+    // 2. 本地调试文件（加 1MB 轮转上限）
     let fm = FileManager.default
     guard let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
     let logFile = docDir.appendingPathComponent("debug.log")
+    let oldLogFile = docDir.appendingPathComponent("debug.log.1")
+    let maxBytes: UInt64 = 1024 * 1024 // 1MB
+
+    if let attrs = try? fm.attributesOfItem(atPath: logFile.path),
+       let size = attrs[.size] as? UInt64, size >= maxBytes {
+        try? fm.removeItem(at: oldLogFile)
+        try? fm.moveItem(at: logFile, to: oldLogFile)
+    }
+
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
     let line = "[\(formatter.string(from: Date()))] \(message)\n"
@@ -49,7 +62,7 @@ class FinderSync: FIFinderSync {
 
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
-        logToFile("monitoredDirs: \(dirs.map(\.path).joined(separator: ", "))")
+        logToFile("monitoredDirs count: \(dirs.count)")
 
         let nc = NSWorkspace.shared.notificationCenter
         nc.addObserver(self, selector: #selector(volumeDidMount(_:)),
@@ -64,7 +77,7 @@ class FinderSync: FIFinderSync {
     private func updateMonitoredDirectories() {
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
-        logToFile("updateMonitoredDirectories: \(dirs.map(\.path).joined(separator: ", "))")
+        logToFile("updateMonitoredDirectories count: \(dirs.count)")
     }
 
     /// 构建需要监控的目录集合：用户主目录 + 已挂载卷。
@@ -116,11 +129,11 @@ class FinderSync: FIFinderSync {
 
     /// Finder 开始显示某个受监控目录时调用，记录原始 URL 供排查
     override func beginObservingDirectory(at url: URL) {
-        logToFile("beginObserving: \(url.absoluteString) | path=\(url.path)")
+        logToFile("beginObserving: \(url.lastPathComponent)")
     }
 
     override func endObservingDirectory(at url: URL) {
-        logToFile("endObserving: \(url.path)")
+        logToFile("endObserving: \(url.lastPathComponent)")
     }
 
     // MARK: - Context Menu
@@ -140,7 +153,7 @@ class FinderSync: FIFinderSync {
         let (directory, selected) = currentContext()
         let hasSelection = !selected.isEmpty
         let exts = selected.map { $0.pathExtension.lowercased() }.joined(separator: ",")
-        logToFile("menu(for:) kind=\(menuKind.rawValue) selected=\(selected.count) exts=[\(exts)] dir=\(directory?.path ?? "nil")")
+        logToFile("menu(for:) kind=\(menuKind.rawValue) selected=\(selected.count) exts=[\(exts)] dir=\(directory?.lastPathComponent ?? "nil")")
 
         let menu = NSMenu(title: "FinderRight")
 
@@ -193,39 +206,12 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            let isShowing = isShowingHiddenFiles()
-            let title = isShowing ? "👁 隐藏隐藏文件" : "👁 显示隐藏文件"
-            logToFile("toggleHidden menu item: title='\(title)', isShowing=\(isShowing)")
-            menu.addItem(shortcutItem(title, #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
+            menu.addItem(shortcutItem("👁 切换隐藏文件", #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
         }
         return menu
     }
 
     // MARK: - 菜单构建辅助
-
-    private var hiddenStateFileURL: URL {
-        IPCBridge.rootDirectory.appendingPathComponent("hidden_state")
-    }
-
-    /// 判断当前 Finder 是否开启了显示隐藏文件
-    private func isShowingHiddenFiles() -> Bool {
-        // 1. 优先读取跨进程共享状态文件（完全放行，不受沙箱隔离影响）
-        if let data = try? Data(contentsOf: hiddenStateFileURL),
-           let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
-            return str.uppercased() == "YES" || str == "1" || str.uppercased() == "TRUE"
-        }
-
-        // 2. 备选方案
-        if let val = CFPreferencesCopyAppValue("AppleShowAllFiles" as CFString, "com.apple.finder" as CFString) {
-            if let boolVal = val as? Bool {
-                return boolVal
-            }
-            if let strVal = val as? String {
-                return strVal.uppercased() == "YES" || strVal == "1" || strVal.uppercased() == "TRUE"
-            }
-        }
-        return false
-    }
 
     /// 本地化菜单标题（中文做 key，en.lproj 提供英文）
     private func L(_ title: String) -> String {
@@ -278,7 +264,7 @@ class FinderSync: FIFinderSync {
             logToFile("newFile: no directory"); return
         }
         let (ext, content) = newFileTypeInfo(for: sender.tag)
-        logToFile("newFile ipc → dir=\(dir.path) tag=\(sender.tag) ext=\(ext)")
+        logToFile("newFile ipc → dir=\(dir.lastPathComponent) tag=\(sender.tag) ext=\(ext)")
         let r = IPCClient.shared.call(action: "createFile", payload: [
             "directory": .string(dir.path),
             "baseName": .string("untitled"),
@@ -294,7 +280,7 @@ class FinderSync: FIFinderSync {
         let path = urls.map(\.path).joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
-        logToFile("copyPath ok: \(path)")
+        logToFile("copyPath ok: count=\(urls.count)")
     }
 
     @objc func openTerminal(_ sender: NSMenuItem) {
@@ -303,7 +289,7 @@ class FinderSync: FIFinderSync {
         }
         // 使用 SharedConfig 中配置的终端
         let bundleId = SharedConfig.shared.preferredTerminal
-        logToFile("openTerminal ipc → dir=\(dir.path) bundle=\(bundleId)")
+        logToFile("openTerminal ipc → dir=\(dir.lastPathComponent) bundle=\(bundleId)")
         let r = IPCClient.shared.call(action: "openTerminal", payload: [
             "directory": .string(dir.path),
             "bundleId": .string(bundleId)
@@ -345,7 +331,7 @@ class FinderSync: FIFinderSync {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("openEditorWith: no items"); return }
         let paths = urls.map(\.path)
-        logToFile("openEditorWith ipc → bundle=\(bundleId) paths=\(paths.joined(separator: ","))")
+        logToFile("openEditorWith ipc → bundle=\(bundleId) count=\(paths.count)")
         let r = IPCClient.shared.call(action: "openWithApp", payload: [
             "paths": .stringArray(paths),
             "bundleId": .string(bundleId)
@@ -357,7 +343,7 @@ class FinderSync: FIFinderSync {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("cutFiles: no items"); return }
         let paths = urls.map { $0.path }
-        logToFile("cutFiles ipc → paths=\(paths.joined(separator: ","))")
+        logToFile("cutFiles ipc → count=\(paths.count)")
         // 由主 App（非沙箱）执行：将文件立即移到暂存区，源文件消失，暂存路径写入 cut-queue.json
         let r = IPCClient.shared.call(action: "cutFiles", payload: [
             "paths": .stringArray(paths)
@@ -371,7 +357,7 @@ class FinderSync: FIFinderSync {
         guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
-        logToFile("pasteFiles ipc → destDir=\(destDir.path)")
+        logToFile("pasteFiles ipc → destDir=\(destDir.lastPathComponent)")
         let r = IPCClient.shared.call(action: "pasteFiles", payload: [
             "destination": .string(destDir.path)
         ])
@@ -382,14 +368,12 @@ class FinderSync: FIFinderSync {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("archiveOperation: no items"); return }
         let paths = urls.map(\.path)
-        logToFile("archiveOperation ipc → tag=\(sender.tag) paths=\(paths.joined(separator: ","))")
+        logToFile("archiveOperation ipc → tag=\(sender.tag) count=\(paths.count)")
 
         let r: (success: Bool, message: String?)
         switch sender.tag {
         case 0:
             r = IPCClient.shared.call(action: "compressZip", payload: ["items": .stringArray(paths)], timeout: 30)
-        case 1:
-            r = IPCClient.shared.call(action: "compressTarGz", payload: ["items": .stringArray(paths)], timeout: 30)
         case 2:
             var firstErr: String?
             for p in paths {
@@ -407,18 +391,7 @@ class FinderSync: FIFinderSync {
 
     @objc func toggleHiddenFiles(_ sender: NSMenuItem) {
         logToFile("toggleHiddenFiles clicked")
-        let currentShowing = isShowingHiddenFiles()
-        let nextShowing = !currentShowing
-        let nextStr = nextShowing ? "YES" : "NO"
-
-        // 1. 立即写入共享状态，使后续右键菜单文本即刻准确翻转
-        try? nextStr.write(to: hiddenStateFileURL, atomically: true, encoding: .utf8)
-        logToFile("toggleHiddenFiles updated hidden_state to \(nextStr)")
-
-        // 2. 委托主 App 执行（主 App 拥有非沙盒辅助功能权限与多段窗口强力置顶恢复）
-        let r = IPCClient.shared.call(action: "toggleHiddenFiles", payload: [
-            "targetState": .string(nextStr)
-        ])
+        let r = IPCClient.shared.call(action: "toggleHiddenFiles", payload: [:])
         logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 

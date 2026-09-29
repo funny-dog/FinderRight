@@ -233,18 +233,45 @@ public final class UpdateChecker: NSObject {
                 /bin/sleep 0.2
             done
 
-            # 覆盖更新
-            /bin/rm -rf "\(targetAppURL.path)"
-            /bin/cp -R "\(newAppURL.path)" "\(targetAppURL.path)"
+            TARGET="\(targetAppURL.path)"
+            TARGET_DIR="$(dirname "$TARGET")"
+            NEW_APP="$TARGET_DIR/FinderRight.new.app"
+            OLD_APP="$TARGET_DIR/FinderRight.old.app"
+
+            # 清理历史可能残留的临时文件
+            /bin/rm -rf "$NEW_APP" "$OLD_APP"
+
+            # 1. 先复制到同目录临时位置
+            if ! /bin/cp -R "\(newAppURL.path)" "$NEW_APP"; then
+                /bin/rm -rf "$NEW_APP"
+                exit 1
+            fi
+
+            # 2. 成功后 mv 旧 App 到备份位置
+            if ! /bin/mv "$TARGET" "$OLD_APP"; then
+                /bin/rm -rf "$NEW_APP"
+                exit 1
+            fi
+
+            # 3. mv 新的到位
+            if ! /bin/mv "$NEW_APP" "$TARGET"; then
+                # 若移动失败则将旧 App 回滚到位
+                /bin/mv "$OLD_APP" "$TARGET"
+                /bin/rm -rf "$NEW_APP"
+                exit 1
+            fi
+
+            # 4. 成功后清理 .old 备份
+            /bin/rm -rf "$OLD_APP"
 
             # 确保清除隔离属性并刷新注册
-            /usr/bin/xattr -dr com.apple.quarantine "\(targetAppURL.path)" 2>/dev/null || true
-            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "\(targetAppURL.path)"
+            /usr/bin/xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
 
             # 重新打开新版
-            /usr/bin/open "\(targetAppURL.path)"
+            /usr/bin/open "$TARGET"
 
-            # 清理临时文件
+            # 清理下载解压临时文件
             /bin/rm -rf "\(baseDir.path)"
             """
 

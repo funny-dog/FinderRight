@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 注意：当前构建目标指定为 arm64-apple-macos13.0（仅支持 Apple Silicon 架构）。
+# 未构建 Universal Binary（x86_64 + arm64），因此编译产物仅适用于 Apple Silicon (M 系列芯片) Mac，Intel Mac 无法直接运行。
+
 # 根目录
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"

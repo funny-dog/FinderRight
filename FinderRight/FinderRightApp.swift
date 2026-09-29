@@ -1,4 +1,5 @@
 import SwiftUI
+import FinderRightKit
 
 @main
 struct FinderRightApp: App {
@@ -66,6 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(defaultsChanged),
             name: UserDefaults.didChangeNotification, object: nil)
+
+        // 首次启动：若尚未完成引导，自动弹出引导设置窗口
+        let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        if !hasCompletedOnboarding {
+            openOnboarding()
+        }
     }
 
     /// 自动检查并向系统注册自身的 FinderSync 扩展
@@ -82,14 +89,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? regProc.run()
             regProc.waitUntilExit()
 
-            // 2. 启用插件
+            // 2. 查询插件当前选举状态（避免覆盖用户在系统设置里的显式禁用）
+            let matchProc = Process()
+            let pipe = Pipe()
+            matchProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+            matchProc.arguments = ["-m", "-i", "com.finderright.app.sync"]
+            matchProc.standardOutput = pipe
+            try? matchProc.run()
+            matchProc.waitUntilExit()
+
+            let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // "+" 表示已处于启用状态（elected to use），无需重复开启
+            if trimmed.hasPrefix("+") {
+                NSLog("[AppDelegate] FinderRightSync appex 已经处于启用状态 (+)，无需重复执行 pluginkit -e use")
+                return
+            }
+
+            // "-" 表示用户在系统设置里显式禁用了扩展（elected to ignore），必须尊重用户意图，禁止强制覆盖
+            if trimmed.hasPrefix("-") {
+                NSLog("[AppDelegate] FinderRightSync appex 已被用户手动关闭 (-)，尊重用户设置，跳过 pluginkit -e use")
+                return
+            }
+
+            // 既非 "+" 也非 "-"（未选举的默认初始状态），进行首次自动开启
             let enableProc = Process()
             enableProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
             enableProc.arguments = ["-e", "use", "-i", "com.finderright.app.sync"]
             try? enableProc.run()
             enableProc.waitUntilExit()
 
-            NSLog("[AppDelegate] FinderRightSync appex registered and enabled via pluginkit")
+            NSLog("[AppDelegate] FinderRightSync appex 首次注册并自动启用成功")
         }
     }
 

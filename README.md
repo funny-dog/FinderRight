@@ -6,7 +6,7 @@
 
 [English](#english) · [中文](#中文)
 
-![platform](https://img.shields.io/badge/platform-macOS%2013%2B-blue)
+![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 </div>
@@ -30,6 +30,8 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 - 🌗 **中英文双语** —— 跟随系统语言自动切换
 
 ### 📥 安装
+
+> ⚠️ **芯片架构说明**：当前版本仅支持 **Apple Silicon（M 系列芯片，ARM64）**，要求 macOS 13.0+，暂不支持 Intel 架构。
 
 1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release
 2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`
@@ -123,6 +125,8 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 - 🌗 **Bilingual** — follows your system language (English / 简体中文)
 
 ### 📥 Installation
+
+> ⚠️ **Architecture Requirement**: The pre-built release currently supports **Apple Silicon (M-series, ARM64)** Mac only, running macOS 13.0+. Intel (x86_64) architecture is not supported.
 
 1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release
 2. Open the DMG and drag `FinderRight.app` into `Applications`
