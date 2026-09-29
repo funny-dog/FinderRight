@@ -41,6 +41,7 @@ public final class SharedConfig {
 
     private enum Keys {
         static let enabledActions = "enabledActions"
+        static let menuIconStyle = "menuIconStyle"
         static let preferredTerminal = "preferredTerminal"
         static let preferredEditor = "preferredEditor"
         static let customFileTemplates = "customFileTemplates"
@@ -97,6 +98,23 @@ public final class SharedConfig {
         var current = enabledActions
         current[actionId] = enabled
         enabledActions = current
+    }
+
+    // MARK: - Menu Icon Style
+
+    /// 右键菜单图标风格（默认简洁：SF Symbols）
+    public var menuIconStyle: MenuIconStyle {
+        get {
+            if let raw = store[Keys.menuIconStyle] as? String,
+               let style = MenuIconStyle(rawValue: raw) {
+                return style
+            }
+            return .modern
+        }
+        set {
+            store[Keys.menuIconStyle] = newValue.rawValue
+            save()
+        }
     }
 
     // MARK: - Preferred Terminal

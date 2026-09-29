@@ -349,7 +349,7 @@ final class FinderRightService {
         if AXIsProcessTrustedWithOptions(checkOpts),
            let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
             let pid = finder.processIdentifier
-            finder.activate(options: .activateIgnoringOtherApps)
+            // 不 activate Finder：postToPid 直达进程事件队列，activate 会抢焦点导致菜单栏跳变卡顿
 
             let src = CGEventSource(stateID: .hidSystemState)
             // kVK_ANSI_Period = 0x2F (47)

@@ -156,6 +156,7 @@ class FinderSync: FIFinderSync {
         logToFile("menu(for:) kind=\(menuKind.rawValue) selected=\(selected.count) exts=[\(exts)] dir=\(directory?.lastPathComponent ?? "nil")")
 
         let menu = NSMenu(title: "FinderRight")
+        let style = SharedConfig.shared.menuIconStyle
 
         // 功能开关：默认开启，用户在设置里关闭后对应菜单项隐藏
         func featureOn(_ id: String) -> Bool { SharedConfig.shared.isActionEnabled(id) }
@@ -166,32 +167,32 @@ class FinderSync: FIFinderSync {
 
         // 新建文件 —— 容器/侧边栏/空选中时
         if featureOn(MenuFeatureCatalog.newFile), isContainerLike {
-            menu.addItem(submenuItem("📄 新建文件", build: buildNewFileMenu))
+            menu.addItem(makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", style: style, build: { self.buildNewFileMenu(style: style) }))
         }
 
         if featureOn(MenuFeatureCatalog.copyPath), hasSelection {
-            menu.addItem(shortcutItem("📋 复制路径", #selector(copyPath(_:)), id: "shortcut.copyPath"))
+            menu.addItem(makeItem(titleKey: "复制路径", emoji: "📋", systemImage: "doc.on.doc", action: #selector(copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
         }
 
         if featureOn(MenuFeatureCatalog.openTerminal) {
-            menu.addItem(shortcutItem("💻 打开终端", #selector(openTerminal(_:)), id: "shortcut.openTerminal"))
+            menu.addItem(makeItem(titleKey: "打开终端", emoji: "💻", systemImage: "terminal", action: #selector(openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
         }
 
         if featureOn(MenuFeatureCatalog.openEditor), hasSelection {
             let editors = installedEditors()
             if !editors.isEmpty {
-                menu.addItem(submenuItem("✏️ 打开编辑器", build: { self.buildEditorMenu(editors) }))
+                menu.addItem(makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", style: style, build: { self.buildEditorMenu(editors, style: style) }))
             }
         }
 
         // 剪切 / 粘贴
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
-            menu.addItem(shortcutItem("✂️ 剪切", #selector(cutFiles(_:)), id: "shortcut.cut"))
+            menu.addItem(makeItem(titleKey: "剪切", emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
         }
         if featureOn(MenuFeatureCatalog.paste) {
             let hasCut = hasCutQueue()
             if hasCut || isContainerLike {
-                let pasteItem = shortcutItem("📋 粘贴", #selector(pasteFiles(_:)), id: "shortcut.paste")
+                let pasteItem = makeItem(titleKey: "粘贴", emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
                 pasteItem.isEnabled = hasCut
                 menu.addItem(pasteItem)
             }
@@ -199,14 +200,14 @@ class FinderSync: FIFinderSync {
 
         // 压缩解压
         if featureOn(MenuFeatureCatalog.compress), hasSelection {
-            menu.addItem(shortcutItem("📦 压缩为 ZIP", #selector(archiveOperation(_:)), id: "shortcut.compress", tag: 0))
+            menu.addItem(makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
         }
         if featureOn(MenuFeatureCatalog.decompress), hasSelection, selected.contains(where: isArchive) {
-            menu.addItem(shortcutItem("📂 解压到当前目录", #selector(archiveOperation(_:)), id: "shortcut.decompress", tag: 2))
+            menu.addItem(makeItem(titleKey: "解压到当前目录", emoji: "📂", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            menu.addItem(shortcutItem("👁 切换隐藏文件", #selector(toggleHiddenFiles(_:)), id: "shortcut.toggleHidden"))
+            menu.addItem(makeItem(titleKey: "切换隐藏文件", emoji: "👁", systemImage: "eye", action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
         }
         return menu
     }
@@ -218,42 +219,91 @@ class FinderSync: FIFinderSync {
         NSLocalizedString(title, comment: "menu item")
     }
 
-    /// 普通菜单项
-    private func item(_ title: String, _ action: Selector, tag: Int = 0) -> NSMenuItem {
-        let i = NSMenuItem(title: L(title), action: action, keyEquivalent: "")
-        i.target = self
-        i.tag = tag
-        return i
+    /// 根据配置的图标风格（简洁 / 彩色 Emoji / 无图标）设置菜单项的标题与图标
+    private func configureMenuItem(
+        _ item: NSMenuItem,
+        titleKey: String,
+        emoji: String,
+        systemImage: String?,
+        style: MenuIconStyle
+    ) {
+        switch style {
+        case .modern:
+            item.title = L(titleKey)
+            if let systemImage = systemImage,
+               let img = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil) {
+                img.isTemplate = true
+                item.image = img
+            } else {
+                item.image = nil
+            }
+        case .classic:
+            let prefix = emoji.isEmpty ? "" : "\(emoji) "
+            let localizedWithEmoji = NSLocalizedString("\(prefix)\(titleKey)", comment: "")
+            if localizedWithEmoji != "\(prefix)\(titleKey)" {
+                item.title = localizedWithEmoji
+            } else {
+                item.title = "\(prefix)\(L(titleKey))"
+            }
+            item.image = nil
+        case .none:
+            item.title = L(titleKey)
+            item.image = nil
+        }
     }
 
-    /// 带快捷键查找的菜单项
-    private func shortcutItem(_ title: String, _ action: Selector, id: String, tag: Int = 0) -> NSMenuItem {
-        let sc = SharedConfig.shared.shortcut(forActionId: id)
+    /// 构建通用菜单项（支持快捷键、tag 与图标风格自适应）
+    private func makeItem(
+        titleKey: String,
+        emoji: String,
+        systemImage: String?,
+        action: Selector? = nil,
+        shortcutId: String? = nil,
+        tag: Int = 0,
+        style: MenuIconStyle
+    ) -> NSMenuItem {
+        let sc = shortcutId.flatMap { SharedConfig.shared.shortcut(forActionId: $0) }
         let key = sc?.key ?? ""
-        let i = NSMenuItem(title: L(title), action: action, keyEquivalent: key)
+        let i = NSMenuItem(title: "", action: action, keyEquivalent: key)
         i.target = self
         i.tag = tag
         if let sc = sc, !key.isEmpty {
             i.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: UInt(sc.modifiers))
         }
+        configureMenuItem(i, titleKey: titleKey, emoji: emoji, systemImage: systemImage, style: style)
         return i
     }
 
-    private func submenuItem(_ title: String, build: () -> NSMenu) -> NSMenuItem {
-        let i = NSMenuItem(title: L(title), action: nil, keyEquivalent: "")
+    private func makeSubmenuItem(
+        titleKey: String,
+        emoji: String,
+        systemImage: String?,
+        style: MenuIconStyle,
+        build: () -> NSMenu
+    ) -> NSMenuItem {
+        let i = makeItem(titleKey: titleKey, emoji: emoji, systemImage: systemImage, style: style)
         i.submenu = build()
         return i
     }
 
-    private func buildNewFileMenu() -> NSMenu {
-        let m = NSMenu(title: "新建文件")
-        let types: [(String, Int)] = [
-            ("📝 文本文件 (.txt)", 0), ("📖 Markdown (.md)", 1), ("🌐 HTML (.html)", 2),
-            ("🐍 Python (.py)", 3), ("🔧 Shell (.sh)", 4), ("📊 JSON (.json)", 5),
-            ("📃 XML (.xml)", 6), ("📈 CSV (.csv)", 7), ("🍎 Swift (.swift)", 8),
-            ("🟨 JavaScript (.js)", 9),
+    private func buildNewFileMenu(style: MenuIconStyle) -> NSMenu {
+        let m = NSMenu(title: L("新建文件"))
+        let types: [(nameKey: String, emoji: String, symbol: String, tag: Int)] = [
+            ("文本文件 (.txt)", "📝", "doc.text", 0),
+            ("Markdown (.md)", "📖", "doc.richtext", 1),
+            ("HTML (.html)", "🌐", "chevron.left.forwardslash.chevron.right", 2),
+            ("Python (.py)", "🐍", "terminal", 3),
+            ("Shell (.sh)", "🔧", "terminal", 4),
+            ("JSON (.json)", "📊", "curlybraces", 5),
+            ("XML (.xml)", "📃", "doc.text", 6),
+            ("CSV (.csv)", "📈", "tablecells", 7),
+            ("Swift (.swift)", "🍎", "curlybraces", 8),
+            ("JavaScript (.js)", "🟨", "curlybraces", 9),
         ]
-        for (t, tag) in types { m.addItem(item(t, #selector(newFile(_:)), tag: tag)) }
+        for t in types {
+            let item = makeItem(titleKey: t.nameKey, emoji: t.emoji, systemImage: t.symbol, action: #selector(newFile(_:)), tag: t.tag, style: style)
+            m.addItem(item)
+        }
         return m
     }
 
@@ -311,12 +361,19 @@ class FinderSync: FIFinderSync {
     /// 注意：FIFinderSync 的菜单会跨进程传给 Finder 渲染，NSMenuItem 的
     /// `representedObject`（Any）在跨进程序列化时会丢失，因此必须用 `tag`（Int）
     /// 携带数据 —— 这里 tag = 编辑器在 EditorCatalog.all 中的下标。
-    private func buildEditorMenu(_ editors: [(name: String, catalogIndex: Int)]) -> NSMenu {
-        let m = NSMenu(title: "打开编辑器")
+    private func buildEditorMenu(_ editors: [(name: String, catalogIndex: Int)], style: MenuIconStyle) -> NSMenu {
+        let m = NSMenu(title: L("打开编辑器"))
         for ed in editors {
             let item = NSMenuItem(title: ed.name, action: #selector(openEditorWith(_:)), keyEquivalent: "")
             item.target = self
             item.tag = ed.catalogIndex
+            if style == .modern {
+                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: EditorCatalog.all[ed.catalogIndex].id) {
+                    let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+                    icon.size = NSSize(width: 16, height: 16)
+                    item.image = icon
+                }
+            }
             m.addItem(item)
         }
         return m

@@ -68,6 +68,7 @@ struct GeneralTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showDockIcon") private var showDockIcon = false
+    @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var launchAtLoginError: String?
     @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
@@ -112,6 +113,18 @@ struct GeneralTab: View {
             }
 
             Section {
+                Picker("右键菜单图标", selection: Binding(
+                    get: { menuIconStyle },
+                    set: { newValue in
+                        menuIconStyle = newValue
+                        SharedConfig.shared.menuIconStyle = newValue
+                    }
+                )) {
+                    ForEach(MenuIconStyle.allCases) { style in
+                        Text(LocalizedStringKey(style.titleKey)).tag(style)
+                    }
+                }
+
                 Toggle(isOn: $showMenuBarIcon) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("显示菜单栏图标")
@@ -197,9 +210,11 @@ struct GeneralTab: View {
         .padding()
         .onAppear {
             calibrateLaunchAtLoginStatus()
+            menuIconStyle = SharedConfig.shared.menuIconStyle
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             calibrateLaunchAtLoginStatus()
+            menuIconStyle = SharedConfig.shared.menuIconStyle
         }
     }
 
