@@ -11,13 +11,21 @@ private var cutQueueFileURL: URL {
     IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
 }
 
+private func normalizePath(_ path: String) -> String {
+    var p = URL(fileURLWithPath: path).standardizedFileURL.path
+    if p.hasPrefix("/System/Volumes/Data") {
+        p = String(p.dropFirst("/System/Volumes/Data".count))
+    }
+    return p
+}
+
 /// 获取当前待剪切队列中的所有源文件路径集合
 private func currentCutQueuePaths() -> Set<String> {
     guard let data = try? Data(contentsOf: cutQueueFileURL),
           let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
         return []
     }
-    return Set(paths)
+    return Set(paths.map { normalizePath($0) })
 }
 
 private let cutBadgeIdentifier = "com.finderright.badge.cut"
@@ -36,6 +44,7 @@ private func createCutBadgeImage() -> NSImage {
 
         if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
             let scImg = scissors.withSymbolConfiguration(config) ?? scissors
             let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
             NSColor.white.setFill()
@@ -148,8 +157,10 @@ class FinderSync: FIFinderSync {
     // MARK: - 文件角标徽章回调
 
     override func requestBadgeIdentifier(for url: URL) {
+        let normPath = normalizePath(url.path)
         let cutPaths = currentCutQueuePaths()
-        if cutPaths.contains(url.path) {
+        if cutPaths.contains(normPath) {
+            logToFile("requestBadgeIdentifier: MATCH cut badge for \(url.lastPathComponent)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
@@ -198,6 +209,10 @@ class FinderSync: FIFinderSync {
         let fm = FileManager.default
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
         var dirs: Set<URL> = [home]
+
+        if let desktop = fm.urls(for: .desktopDirectory, in: .userDomainMask).first {
+            dirs.insert(desktop)
+        }
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
         if let volumes = fm.mountedVolumeURLs(
@@ -295,7 +310,7 @@ class FinderSync: FIFinderSync {
         let hasCut = !cutPaths.isEmpty
 
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
-            let selectedPaths = Set(selected.map(\.path))
+            let selectedPaths = Set(selected.map { normalizePath($0.path) })
             let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
             let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
             menu.addItem(makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
@@ -666,6 +681,13 @@ class FinderSync: FIFinderSync {
             "paths": .stringArray(paths)
         ]) { r in
             logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+            if r.success {
+                DispatchQueue.main.async {
+                    for url in urls {
+                        FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+                    }
+                }
+            }
         }
     }
 
@@ -678,6 +700,13 @@ class FinderSync: FIFinderSync {
         }
         IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
             logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
+            if r.success {
+                DispatchQueue.main.async {
+                    for path in cutPaths {
+                        FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+                    }
+                }
+            }
         }
     }
 
