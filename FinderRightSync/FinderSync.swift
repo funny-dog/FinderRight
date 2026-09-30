@@ -136,11 +136,7 @@ class FinderSync: FIFinderSync {
         FIFinderSyncController.default().directoryURLs = dirs
 
         // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）
-        FIFinderSyncController.default().setBadgeImage(
-            createCutBadgeImage(),
-            label: NSLocalizedString("已剪切", comment: "badge label"),
-            forBadgeIdentifier: cutBadgeIdentifier
-        )
+        FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
 
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
@@ -149,62 +145,14 @@ class FinderSync: FIFinderSync {
         logToFile("init done: \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.count)")
     }
 
-    // MARK: - 剪切队列缓存
-
-    /// cut-queue.json 的进程内缓存。
-    ///
-    /// menu(for:) 每次构建都会查询剪切队列（「粘贴」「取消剪切」「已在剪切队列」的启用态），
-    /// 以文件 mtime 做失效依据：主 App 写入用 `.atomic`（替换式），
-    /// mtime 必然变化，缓存失效可靠；命中缓存时只剩一次 stat 开销。
-    /// 键额外带上 size：个别文件系统 mtime 只有秒级粒度，仅比 mtime 有极小概率命中陈旧缓存。
-    private var cutPathsCache: (mtime: Date?, size: UInt64, paths: Set<String>) = (nil, 0, [])
-    private let cutPathsCacheLock = NSLock()
-
-    /// 读取剪切队列路径集合（mtime 缓存版）。慢路径仍是 `currentCutQueuePaths()` 的磁盘读取。
-    private func currentCutQueuePathsCached() -> Set<String> {
-        let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path)
-        let mtime = attrs?[.modificationDate] as? Date
-        let size = attrs?[.size] as? UInt64 ?? 0
-
-        cutPathsCacheLock.lock()
-        defer { cutPathsCacheLock.unlock() }
-
-        guard let mtime else {
-            // 文件不存在 / 不可读：清空缓存
-            cutPathsCache = (nil, 0, [])
-            return []
-        }
-        if cutPathsCache.mtime == mtime, cutPathsCache.size == size { return cutPathsCache.paths }
-
-        let paths = currentCutQueuePaths()   // 原有磁盘读取逻辑保留为慢路径
-        cutPathsCache = (mtime, size, paths)
-        return paths
-    }
-
-    /// 暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态
-    private func hasCutQueue() -> Bool {
-        !currentCutQueuePathsCached().isEmpty
-    }
-
-    // MARK: - 剪切状态角标跟踪
-
-    private var badgedCutPaths = Set<String>()
-    private let badgedCutPathsLock = NSLock()
-
     // MARK: - 文件角标徽章回调
 
     override func requestBadgeIdentifier(for url: URL) {
-        let cutPaths = currentCutQueuePathsCached()
+        let cutPaths = currentCutQueuePaths()
         if cutPaths.contains(url.path) {
-            badgedCutPathsLock.lock()
-            badgedCutPaths.insert(url.path)
-            badgedCutPathsLock.unlock()
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
-            badgedCutPathsLock.lock()
-            badgedCutPaths.remove(url.path)
-            badgedCutPathsLock.unlock()
         }
     }
 
@@ -343,8 +291,8 @@ class FinderSync: FIFinderSync {
         }
 
         // 剪切 / 粘贴
-        let cutPaths = currentCutQueuePathsCached()
-        let hasCut = hasCutQueue()
+        let cutPaths = currentCutQueuePaths()
+        let hasCut = !cutPaths.isEmpty
 
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
             let selectedPaths = Set(selected.map(\.path))
@@ -359,7 +307,7 @@ class FinderSync: FIFinderSync {
                     // 统一用带 %d 的格式化 key：原实现按 1 / N 分支，而 strings 里只有「1 项」，
                     // 英文界面下 N>1 会回落成中文。先本地化再格式化；configureMenuItem 对
                     // 已本地化的字符串二次 L() 会原样返回，无副作用。
-                    let fmt = NSLocalizedString("粘贴 (已剪切 %d 项)", comment: "menu item")
+                    let fmt = L("粘贴 (已剪切 %d 项)")
                     pasteTitleKey = String(format: fmt, cutPaths.count)
                 } else {
                     pasteTitleKey = "粘贴"
@@ -441,7 +389,7 @@ class FinderSync: FIFinderSync {
             }
         case .classic:
             let prefix = emoji.isEmpty ? "" : "\(emoji) "
-            let localizedWithEmoji = NSLocalizedString("\(prefix)\(titleKey)", comment: "")
+            let localizedWithEmoji = L("\(prefix)\(titleKey)")
             if localizedWithEmoji != "\(prefix)\(titleKey)" {
                 item.title = localizedWithEmoji
             } else {
@@ -710,12 +658,9 @@ class FinderSync: FIFinderSync {
         logToFile("cutFiles ipc (async) → count=\(paths.count)")
 
         // 立即给选中的文件打上剪切角标，提供即时视觉反馈
-        badgedCutPathsLock.lock()
         for url in urls {
-            badgedCutPaths.insert(url.path)
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         }
-        badgedCutPathsLock.unlock()
 
         IPCClient.shared.callAsync(action: "cutFiles", payload: [
             "paths": .stringArray(paths)
@@ -725,29 +670,12 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func cancelCut(_ sender: NSMenuItem) {
-        // 1. 获取所有待清除角标的文件路径（包含缓存中队列路径及已标记角标路径）
-        var pathsToClear = currentCutQueuePathsCached()
-        badgedCutPathsLock.lock()
-        pathsToClear.formUnion(badgedCutPaths)
-        badgedCutPaths.removeAll()
-        badgedCutPathsLock.unlock()
-
-        logToFile("cancelCut ipc (async) → clearing \(pathsToClear.count) badges")
-
-        // 2. 立即将扩展本地缓存置空，防止后续 requestBadgeIdentifier 回调又读回旧路径
-        cutPathsCacheLock.lock()
-        cutPathsCache = (Date.distantFuture, 0, [])
-        cutPathsCacheLock.unlock()
-
-        // 3. 立即从共享目录移除 cut-queue.json，消除由于跨进程 IPC 排队导致的竞态读回
-        try? FileManager.default.removeItem(at: cutQueueFileURL)
-
-        // 4. 清除所有相关文件的角标
-        for path in pathsToClear {
+        // 先清掉队列里所有文件的角标，再让主 App 删除 cut-queue.json
+        let cutPaths = currentCutQueuePaths()
+        logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
+        for path in cutPaths {
             FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
         }
-
-        // 5. 异步向主 App 发送 cancelCut 保持服务状态一致并记录日志
         IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
             logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
@@ -759,18 +687,13 @@ class FinderSync: FIFinderSync {
         guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
-        let cutPaths = currentCutQueuePathsCached()
+        let cutPaths = currentCutQueuePaths()
         logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent) pendingCutCount=\(cutPaths.count)")
 
         // 立即清除待粘贴源文件的剪切角标
-        var pathsToClear = cutPaths
-        badgedCutPathsLock.lock()
-        pathsToClear.formUnion(badgedCutPaths)
-        badgedCutPaths.removeAll()
-        badgedCutPathsLock.unlock()
-
-        for path in pathsToClear {
-            FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+        for path in cutPaths {
+            let u = URL(fileURLWithPath: path)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: u)
         }
 
         IPCClient.shared.callAsync(action: "pasteFiles", payload: [
