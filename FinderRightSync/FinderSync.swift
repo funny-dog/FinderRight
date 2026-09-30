@@ -74,7 +74,6 @@ class FinderSync: FIFinderSync {
     // MARK: - 静态图标与资源缓存（零 I/O、零解析延迟）
     private static var symbolCache: [String: NSImage] = [:]
     private static let cacheQueue = DispatchQueue(label: "com.finderright.app.sync.cache", qos: .utility)
-    private var activityToken: NSObjectProtocol?
 
     private static func getSymbolImage(named name: String) -> NSImage? {
         if let img = symbolCache[name] { return img }
@@ -104,11 +103,6 @@ class FinderSync: FIFinderSync {
     override init() {
         Self.initStartUptime = ProcessInfo.processInfo.systemUptime
         super.init()
-        // 声明低延迟关键任务，降低电源管理对菜单响应线程的冻结/合并调度
-        activityToken = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
-            reason: "FinderRight context menu zero latency"
-        )
 
         // init 路径刻意保持极简：只有 directoryURLs 注册是扩展工作的前提。
         // 符号预热、卷挂载监听等全部延后到首次 menu(for:) 之后（见 deferredSetupIfNeeded），
@@ -239,7 +233,7 @@ class FinderSync: FIFinderSync {
 
         // 新建文件 —— 容器/侧边栏/空选中时
         if featureOn(MenuFeatureCatalog.newFile), isContainerLike {
-            menu.addItem(makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", style: style, build: { self.buildNewFileMenu(style: style) }))
+            menu.addItem(makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
         }
 
         if featureOn(MenuFeatureCatalog.copyPath), hasSelection {
@@ -253,7 +247,7 @@ class FinderSync: FIFinderSync {
         if featureOn(MenuFeatureCatalog.openEditor), hasSelection {
             let editors = installedEditors()
             if !editors.isEmpty {
-                menu.addItem(makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", style: style, build: { self.buildEditorMenu(editors, style: style) }))
+                menu.addItem(makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
             }
         }
 
@@ -279,7 +273,10 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            menu.addItem(makeItem(titleKey: "切换隐藏文件", emoji: "👁", systemImage: "eye", action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
+            let showHidden = SharedConfig.shared.showHiddenFiles
+            let titleKey = showHidden ? "隐藏隐藏文件" : "显示隐藏文件"
+            let icon = showHidden ? "eye.slash" : "eye"
+            menu.addItem(makeItem(titleKey: titleKey, emoji: "👁", systemImage: icon, action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
         }
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
@@ -356,10 +353,11 @@ class FinderSync: FIFinderSync {
         titleKey: String,
         emoji: String,
         systemImage: String?,
+        shortcutId: String? = nil,
         style: MenuIconStyle,
         build: () -> NSMenu
     ) -> NSMenuItem {
-        let i = makeItem(titleKey: titleKey, emoji: emoji, systemImage: systemImage, style: style)
+        let i = makeItem(titleKey: titleKey, emoji: emoji, systemImage: systemImage, shortcutId: shortcutId, style: style)
         i.submenu = build()
         return i
     }
@@ -382,6 +380,19 @@ class FinderSync: FIFinderSync {
             let item = makeItem(titleKey: t.nameKey, emoji: t.emoji, systemImage: t.symbol, action: #selector(newFile(_:)), tag: t.tag, style: style)
             m.addItem(item)
         }
+
+        // 自定义文件模板（D1）
+        let customTemplates = SharedConfig.shared.customFileTemplates
+        if !customTemplates.isEmpty {
+            m.addItem(.separator())
+            for (index, tmpl) in customTemplates.enumerated() {
+                let tag = 1000 + index
+                let title = tmpl.name.isEmpty ? ".\(tmpl.fileExtension)" : "\(tmpl.name) (.\(tmpl.fileExtension))"
+                let item = makeItem(titleKey: title, emoji: "📄", systemImage: "doc.badge.plus", action: #selector(newFile(_:)), tag: tag, style: style)
+                m.addItem(item)
+            }
+        }
+
         return m
     }
 
@@ -391,15 +402,28 @@ class FinderSync: FIFinderSync {
         guard let dir = currentContext().directory else {
             logToFile("newFile: no directory"); return
         }
-        let (ext, content) = newFileTypeInfo(for: sender.tag)
-        logToFile("newFile ipc → dir=\(dir.lastPathComponent) tag=\(sender.tag) ext=\(ext)")
-        let r = IPCClient.shared.call(action: "createFile", payload: [
+        let (ext, content): (String, String)
+        if sender.tag >= 1000 {
+            let idx = sender.tag - 1000
+            let customs = SharedConfig.shared.customFileTemplates
+            guard idx >= 0, idx < customs.count else {
+                logToFile("newFile: custom template index out of bounds (\(idx))"); return
+            }
+            let tmpl = customs[idx]
+            ext = tmpl.fileExtension
+            content = tmpl.content
+        } else {
+            (ext, content) = newFileTypeInfo(for: sender.tag)
+        }
+        logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) tag=\(sender.tag) ext=\(ext)")
+        IPCClient.shared.callAsync(action: "createFile", payload: [
             "directory": .string(dir.path),
             "baseName": .string("untitled"),
             "ext": .string(ext),
             "content": .string(content)
-        ])
-        logToFile("newFile ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        ]) { r in
+            logToFile("newFile ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     @objc func copyPath(_ sender: NSMenuItem) {
@@ -417,12 +441,13 @@ class FinderSync: FIFinderSync {
         }
         // 使用 SharedConfig 中配置的终端
         let bundleId = SharedConfig.shared.preferredTerminal
-        logToFile("openTerminal ipc → dir=\(dir.lastPathComponent) bundle=\(bundleId)")
-        let r = IPCClient.shared.call(action: "openTerminal", payload: [
+        logToFile("openTerminal ipc (async) → dir=\(dir.lastPathComponent) bundle=\(bundleId)")
+        IPCClient.shared.callAsync(action: "openTerminal", payload: [
             "directory": .string(dir.path),
             "bundleId": .string(bundleId)
-        ])
-        logToFile("openTerminal ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        ]) { r in
+            logToFile("openTerminal ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     // MARK: - 编辑器探测与图标缓存（零等待内存快照 + 后台静默刷新）
@@ -542,24 +567,25 @@ class FinderSync: FIFinderSync {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("openEditorWith: no items"); return }
         let paths = urls.map(\.path)
-        logToFile("openEditorWith ipc → bundle=\(bundleId) count=\(paths.count)")
-        let r = IPCClient.shared.call(action: "openWithApp", payload: [
+        logToFile("openEditorWith ipc (async) → bundle=\(bundleId) count=\(paths.count)")
+        IPCClient.shared.callAsync(action: "openWithApp", payload: [
             "paths": .stringArray(paths),
             "bundleId": .string(bundleId)
-        ])
-        logToFile("openEditorWith ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        ]) { r in
+            logToFile("openEditorWith ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     @objc func cutFiles(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("cutFiles: no items"); return }
         let paths = urls.map { $0.path }
-        logToFile("cutFiles ipc → count=\(paths.count)")
-        // 由主 App（非沙箱）执行：将文件立即移到暂存区，源文件消失，暂存路径写入 cut-queue.json
-        let r = IPCClient.shared.call(action: "cutFiles", payload: [
+        logToFile("cutFiles ipc (async) → count=\(paths.count)")
+        IPCClient.shared.callAsync(action: "cutFiles", payload: [
             "paths": .stringArray(paths)
-        ])
-        logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        ]) { r in
+            logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     @objc func pasteFiles(_ sender: NSMenuItem) {
@@ -568,42 +594,46 @@ class FinderSync: FIFinderSync {
         guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
-        logToFile("pasteFiles ipc → destDir=\(destDir.lastPathComponent)")
-        let r = IPCClient.shared.call(action: "pasteFiles", payload: [
+        logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent)")
+        IPCClient.shared.callAsync(action: "pasteFiles", payload: [
             "destination": .string(destDir.path)
-        ])
-        logToFile("pasteFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        ]) { r in
+            logToFile("pasteFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     @objc func archiveOperation(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("archiveOperation: no items"); return }
         let paths = urls.map(\.path)
-        logToFile("archiveOperation ipc → tag=\(sender.tag) count=\(paths.count)")
+        logToFile("archiveOperation ipc (async) → tag=\(sender.tag) count=\(paths.count)")
 
-        let r: (success: Bool, message: String?)
         switch sender.tag {
         case 0:
-            r = IPCClient.shared.call(action: "compressZip", payload: ["items": .stringArray(paths)], timeout: 30)
-        case 2:
-            var firstErr: String?
-            for p in paths {
-                let one = IPCClient.shared.call(action: "decompress",
-                                                payload: ["archive": .string(p)],
-                                                timeout: 30)
-                if !one.success, firstErr == nil { firstErr = one.message }
+            IPCClient.shared.callAsync(action: "compressZip", payload: ["items": .stringArray(paths)], timeout: 30) { r in
+                logToFile("compressZip ipc result: success=\(r.success) msg=\(r.message ?? "")")
             }
-            r = (firstErr == nil, firstErr)
+        case 2:
+            DispatchQueue.global(qos: .userInitiated).async {
+                var firstErr: String?
+                for p in paths {
+                    let one = IPCClient.shared.call(action: "decompress",
+                                                    payload: ["archive": .string(p)],
+                                                    timeout: 30)
+                    if !one.success, firstErr == nil { firstErr = one.message }
+                }
+                logToFile("decompress ipc result: success=\(firstErr == nil) msg=\(firstErr ?? "")")
+            }
         default:
             return
         }
-        logToFile("archiveOperation ipc result: success=\(r.success) msg=\(r.message ?? "")")
     }
 
     @objc func toggleHiddenFiles(_ sender: NSMenuItem) {
-        logToFile("toggleHiddenFiles clicked")
-        let r = IPCClient.shared.call(action: "toggleHiddenFiles", payload: [:])
-        logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        logToFile("toggleHiddenFiles clicked (async)")
+        IPCClient.shared.callAsync(action: "toggleHiddenFiles", payload: [:]) { r in
+            logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     // MARK: - Utility

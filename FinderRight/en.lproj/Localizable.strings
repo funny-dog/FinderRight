@@ -96,8 +96,12 @@
 "切换隐藏文件" = "Toggle Hidden Files";
 "右键菜单快捷键" = "Right-Click Menu Shortcuts";
 "需含 ⌘、⌥ 或 ⌃ 之一。点击按钮后按键录制，Delete 清除，ESC 取消。" = "Must include ⌘, ⌥, or ⌃. Click to record, Delete to clear, ESC to cancel.";
+"需含 ⌘、⌥ 或 ⌃ 之一。点击按钮后按键录制，Delete 清除，ESC 取消。\n快捷键仅在 Finder 右键菜单已展开时生效，不是全局热键。" = "Must include ⌘, ⌥, or ⌃. Click to record, Delete to clear, ESC to cancel.\nShortcuts only take effect when the Finder context menu is open; they are not global hotkeys.";
 "按下快捷键…" = "Press shortcut…";
 "未设置" = "Not Set";
+"快捷键冲突" = "Shortcut Conflict";
+"该快捷键已被「%@」占用" = "This shortcut is already assigned to \"%@\"";
+"好" = "OK";
 
 /* Onboarding */
 "上一步" = "Back";
