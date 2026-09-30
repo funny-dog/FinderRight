@@ -599,6 +599,12 @@ final class FinderRightService {
         var failedPaths: [String] = []
 
         for sourcePath in sourcePaths {
+            // 防御性校验：cut-queue.json 是普通文件，可能被其他进程直接改写；
+            // 剪切时虽已校验过白名单，粘贴执行前必须对队列内容再校验一次。
+            guard isPathAllowed(sourcePath) else {
+                serviceLog("粘贴源路径越界被拦截: \(sourcePath)")
+                continue
+            }
             let sourceURL = URL(fileURLWithPath: sourcePath)
 
             // 若源文件已被外部删除或不存在，则跳过且不作为待重试项保留在队列中
