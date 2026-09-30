@@ -53,7 +53,7 @@ public final class SharedConfig {
         static let shortcuts = "shortcuts"
     }
 
-    internal init(fileURL: URL = SharedConfig.sharedFileURL) {
+    public init(fileURL: URL = SharedConfig.sharedFileURL) {
         self.configFileURL = fileURL
         load()
     }

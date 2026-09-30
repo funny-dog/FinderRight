@@ -14,11 +14,10 @@ struct FinderRightApp: App {
     }
 
     var body: some Scene {
-        // 设置窗口保留 SwiftUI Settings scene（提供 ⌘, 与标准设置窗口）。
-        // 菜单栏入口与引导窗口改由 AppDelegate 用原生 AppKit 管理，
-        // 以兼容 Ice/Thaw/Bartender 等菜单栏管理器（SwiftUI MenuBarExtra 与它们不兼容）。
+        // 设置窗口改由 AppDelegate 唯一管理（菜单栏与 ⌘, 唤起相同实例），
+        // 此处 Settings 留空以避免产生双设置窗口实例与状态分叉。
         Settings {
-            SettingsView()
+            EmptyView()
         }
     }
 }
