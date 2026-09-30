@@ -11,13 +11,7 @@ private var cutQueueFileURL: URL {
     IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
 }
 
-private func normalizePath(_ path: String) -> String {
-    var p = URL(fileURLWithPath: path).standardizedFileURL.path
-    if p.hasPrefix("/System/Volumes/Data") {
-        p = String(p.dropFirst("/System/Volumes/Data".count))
-    }
-    return p
-}
+private let cutBadgeIdentifier = "com.finderright.badge.cut"
 
 /// 获取当前待剪切队列中的所有源文件路径集合
 private func currentCutQueuePaths() -> Set<String> {
@@ -25,10 +19,18 @@ private func currentCutQueuePaths() -> Set<String> {
           let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
         return []
     }
-    return Set(paths.map { normalizePath($0) })
+    return Set(paths)
 }
 
-private let cutBadgeIdentifier = "com.finderright.badge.cut"
+/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
+private func hasCutQueue() -> Bool {
+    // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
+          let size = attrs[.size] as? UInt64, size > 2 else {
+        return false
+    }
+    return !currentCutQueuePaths().isEmpty
+}
 
 /// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
 private func createCutBadgeImage() -> NSImage {
@@ -44,7 +46,6 @@ private func createCutBadgeImage() -> NSImage {
 
         if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
             let scImg = scissors.withSymbolConfiguration(config) ?? scissors
             let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
             NSColor.white.setFill()
@@ -157,10 +158,8 @@ class FinderSync: FIFinderSync {
     // MARK: - 文件角标徽章回调
 
     override func requestBadgeIdentifier(for url: URL) {
-        let normPath = normalizePath(url.path)
         let cutPaths = currentCutQueuePaths()
-        if cutPaths.contains(normPath) {
-            logToFile("requestBadgeIdentifier: MATCH cut badge for \(url.lastPathComponent)")
+        if cutPaths.contains(url.path) {
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
@@ -209,10 +208,6 @@ class FinderSync: FIFinderSync {
         let fm = FileManager.default
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
         var dirs: Set<URL> = [home]
-
-        if let desktop = fm.urls(for: .desktopDirectory, in: .userDomainMask).first {
-            dirs.insert(desktop)
-        }
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
         if let volumes = fm.mountedVolumeURLs(
@@ -310,7 +305,7 @@ class FinderSync: FIFinderSync {
         let hasCut = !cutPaths.isEmpty
 
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
-            let selectedPaths = Set(selected.map { normalizePath($0.path) })
+            let selectedPaths = Set(selected.map(\.path))
             let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
             let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
             menu.addItem(makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
@@ -319,11 +314,7 @@ class FinderSync: FIFinderSync {
             if hasCut || isContainerLike {
                 let pasteTitleKey: String
                 if hasCut {
-                    // 统一用带 %d 的格式化 key：原实现按 1 / N 分支，而 strings 里只有「1 项」，
-                    // 英文界面下 N>1 会回落成中文。先本地化再格式化；configureMenuItem 对
-                    // 已本地化的字符串二次 L() 会原样返回，无副作用。
-                    let fmt = L("粘贴 (已剪切 %d 项)")
-                    pasteTitleKey = String(format: fmt, cutPaths.count)
+                    pasteTitleKey = cutPaths.count == 1 ? "粘贴 (已剪切 1 项)" : "粘贴 (已剪切 \(cutPaths.count) 项)"
                 } else {
                     pasteTitleKey = "粘贴"
                 }
@@ -332,8 +323,6 @@ class FinderSync: FIFinderSync {
                 menu.addItem(pasteItem)
             }
         }
-        // 队列非空时提供清空入口：连续剪切保持累加语义，用户需要显式「取消剪切」
-        // （挂在 feature.cut 开关下，不新增 MenuFeatureCatalog 条目）
         if featureOn(MenuFeatureCatalog.cut), hasCut {
             menu.addItem(makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(cancelCut(_:)), shortcutId: nil, style: style))
         }
@@ -347,10 +336,10 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），
-            // 跨进程读 com.apple.finder 偏好又命中 cfprefsd 客户端缓存，
-            // 不存在可靠的状态通道——「显示/隐藏」状态文案曾两轮实测反转，改固定文案后永不撒谎。
-            menu.addItem(makeItem(titleKey: "切换隐藏文件", emoji: "👁", systemImage: "eye", action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
+            let showHidden = SharedConfig.shared.showHiddenFiles
+            let titleKey = showHidden ? "隐藏隐藏文件" : "显示隐藏文件"
+            let icon = showHidden ? "eye.slash" : "eye"
+            menu.addItem(makeItem(titleKey: titleKey, emoji: "👁", systemImage: icon, action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
         }
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
@@ -365,25 +354,9 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 菜单构建辅助
 
-    /// 本地化菜单标题（中文做 key，en.lproj 提供英文）。
-    ///
-    /// 尊重设置里的「语言」选项：选 English 时直接查 en.lproj 的 Bundle，
-    /// 运行时即时生效（menu(for:) 每次构建前都会 reload SharedConfig）；
-    /// 选中文时直接返回 key（key 本身即中文）；跟随系统走 NSLocalizedString 默认行为。
-    private static let englishBundle: Bundle? = {
-        guard let path = Bundle.main.path(forResource: "en", ofType: "lproj") else { return nil }
-        return Bundle(path: path)
-    }()
-
+    /// 本地化菜单标题（中文做 key，en.lproj 提供英文）
     private func L(_ title: String) -> String {
-        switch SharedConfig.shared.appLanguage {
-        case "en":
-            return Self.englishBundle?.localizedString(forKey: title, value: nil, table: nil) ?? title
-        case "zh-Hans":
-            return title
-        default:
-            return NSLocalizedString(title, comment: "menu item")
-        }
+        NSLocalizedString(title, comment: "menu item")
     }
 
     /// 根据配置的图标风格（简洁 / 彩色 Emoji / 无图标）设置菜单项的标题与图标
@@ -404,7 +377,7 @@ class FinderSync: FIFinderSync {
             }
         case .classic:
             let prefix = emoji.isEmpty ? "" : "\(emoji) "
-            let localizedWithEmoji = L("\(prefix)\(titleKey)")
+            let localizedWithEmoji = NSLocalizedString("\(prefix)\(titleKey)", comment: "")
             if localizedWithEmoji != "\(prefix)\(titleKey)" {
                 item.title = localizedWithEmoji
             } else {
@@ -681,18 +654,10 @@ class FinderSync: FIFinderSync {
             "paths": .stringArray(paths)
         ]) { r in
             logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
-            if r.success {
-                DispatchQueue.main.async {
-                    for url in urls {
-                        FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
-                    }
-                }
-            }
         }
     }
 
     @objc func cancelCut(_ sender: NSMenuItem) {
-        // 先清掉队列里所有文件的角标，再让主 App 删除 cut-queue.json
         let cutPaths = currentCutQueuePaths()
         logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
         for path in cutPaths {
@@ -700,13 +665,6 @@ class FinderSync: FIFinderSync {
         }
         IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
             logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
-            if r.success {
-                DispatchQueue.main.async {
-                    for path in cutPaths {
-                        FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
-                    }
-                }
-            }
         }
     }
 
