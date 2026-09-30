@@ -113,7 +113,7 @@ class FinderSync: FIFinderSync {
     private static func preloadSymbols() {
         let symbols = [
             "doc.badge.plus", "doc.on.doc", "terminal", "curlybraces",
-            "scissors", "doc.on.clipboard", "archivebox", "eye",
+            "scissors", "doc.on.clipboard", "archivebox", "eye", "xmark.circle",
             "doc.text", "doc.richtext", "tablecells", "chevron.left.forwardslash.chevron.right"
         ]
         for s in symbols {
@@ -349,6 +349,11 @@ class FinderSync: FIFinderSync {
                 pasteItem.isEnabled = hasCut
                 menu.addItem(pasteItem)
             }
+        }
+        // 队列非空时提供清空入口：连续剪切保持累加语义，用户需要显式「取消剪切」
+        // （挂在 feature.cut 开关下，不新增 MenuFeatureCatalog 条目）
+        if featureOn(MenuFeatureCatalog.cut), hasCut {
+            menu.addItem(makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(cancelCut(_:)), shortcutId: nil, style: style))
         }
 
         // 压缩解压
@@ -678,6 +683,18 @@ class FinderSync: FIFinderSync {
             "paths": .stringArray(paths)
         ]) { r in
             logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    @objc func cancelCut(_ sender: NSMenuItem) {
+        // 先清掉队列里所有文件的角标，再让主 App 删除 cut-queue.json
+        let cutPaths = currentCutQueuePathsCached()
+        logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
+        for path in cutPaths {
+            FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+        }
+        IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
+            logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
 
