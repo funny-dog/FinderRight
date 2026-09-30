@@ -222,6 +222,20 @@ final class FinderRightService {
         UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 
+    private func notifyCutSuccess(count: Int, firstFileName: String) {
+        let content = UNMutableNotificationContent()
+        if count == 1 {
+            content.title = "已剪切文件"
+            content.body = "「\(firstFileName)」已剪切，前往目标目录右键「粘贴」即可移动"
+        } else {
+            content.title = "已剪切 \(count) 个文件"
+            content.body = "已放入剪切队列，前往目标目录右键「粘贴」即可移动"
+        }
+        content.sound = .default
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+    }
+
     private func decompress(_ req: IPCRequest) -> IPCResponse {
         guard let archive = req.payload["archive"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "decompress 参数缺失")
@@ -560,6 +574,9 @@ final class FinderRightService {
             } catch {
                 return IPCResponse(id: req.id, success: false, message: "写入剪切队列失败: \(error.localizedDescription)")
             }
+
+            let firstName = URL(fileURLWithPath: validPaths.first ?? "").lastPathComponent
+            notifyCutSuccess(count: validPaths.count, firstFileName: firstName)
 
             return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
         }
