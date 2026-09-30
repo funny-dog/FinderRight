@@ -185,6 +185,12 @@
 "发现暂存区遗留文件" = "Leftover Files in Staging Area";
 "暂存区有 %d 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging" = "%d leftover files from an older version are in ~/Library/Application Support/FinderRight/staging";
 "自动更新失败" = "Automatic Update Failed";
+"ditto 退出码: %d" = "ditto exit code: %d";
+"退出码 %d" = "Exit code %d";
+"创建解压目录失败: %@" = "Failed to create the destination folder: %@";
+"复制新版本到临时目录失败" = "Failed to copy the new version to a temporary location";
+"备份旧版本失败" = "Failed to back up the old version";
+"移动新版本到目标目录失败，已回滚旧版本" = "Failed to move the new version into place; the old version was restored";
 
 /* Custom File Templates */
 "自定义文件模板" = "Custom File Templates";
