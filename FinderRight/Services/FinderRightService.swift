@@ -15,8 +15,69 @@ final class FinderRightService {
     /// 剪切/粘贴专用串行队列：确保 staging 目录与 cut-queue.json 互斥访问，绝不并发竞态
     private let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
+    // MARK: - 安全白名单与校验 (B5)
+
+    // TODO: 未来可通过 NSXPCConnection + audit token 实现进程级双向严格鉴权
+    /// 校验路径是否在允许的安全范围：真实用户 home、/Volumes 或系统临时目录
+    private func isPathAllowed(_ rawPath: String) -> Bool {
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded).resolvingSymlinksInPath()
+        let path = url.path
+
+        let home = IPCBridge.realUserHomeDirectory.resolvingSymlinksInPath().path
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().path
+
+        if path == home || path.hasPrefix(home + "/") {
+            return true
+        }
+        if path == "/Volumes" || path.hasPrefix("/Volumes/") {
+            return true
+        }
+        if path == tmp || path.hasPrefix(tmp + "/") || path.hasPrefix("/private/tmp/") || path.hasPrefix("/tmp/") {
+            return true
+        }
+        return false
+    }
+
+    /// 校验 Bundle Identifier 字符集（仅限字母、数字、点号和横线）
+    private func isValidBundleId(_ bundleId: String) -> Bool {
+        guard !bundleId.isEmpty, bundleId.count <= 128 else { return false }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
+        return bundleId.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
+        // 1. 路径白名单校验
+        let pathKeys = ["directory", "destination", "archive", "testPath"]
+        for key in pathKeys {
+            if let path = req.payload[key]?.stringValue {
+                guard isPathAllowed(path) else {
+                    serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                    return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                }
+            }
+        }
+        let arrayKeys = ["items", "paths"]
+        for key in arrayKeys {
+            if let paths = req.payload[key]?.stringArrayValue {
+                for path in paths {
+                    guard isPathAllowed(path) else {
+                        serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                    }
+                }
+            }
+        }
+
+        // 2. bundleId 字符集校验（防注入）
+        if let bundleId = req.payload["bundleId"]?.stringValue {
+            guard isValidBundleId(bundleId) else {
+                serviceLog("非法 bundleId 被拦截: \(bundleId)")
+                return IPCResponse(id: req.id, success: false, message: "非法的 bundleId: \(bundleId)")
+            }
+        }
+
         switch req.action {
         case "ping":
             return ping(req)

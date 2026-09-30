@@ -14,10 +14,21 @@ import Foundation
 ///   - 扩展 poll 等待 response 文件出现
 public enum IPCBridge {
 
+    /// 真实用户 home 目录（绕过沙箱重定向）。
+    /// 注意：不能用 NSHomeDirectory()（沙箱环境下会返回容器私有目录）。
+    public static var realUserHomeDirectory: URL {
+        if let pw = getpwuid(getuid()), let pwDir = pw.pointee.pw_dir {
+            let path = String(cString: pwDir)
+            if !path.isEmpty {
+                return URL(fileURLWithPath: path)
+            }
+        }
+        return URL(fileURLWithPath: "/Users/\(NSUserName())")
+    }
+
     /// 共享根目录（在真实用户 home，绕过沙箱重定向）
     public static var rootDirectory: URL {
-        let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
-        return home
+        return realUserHomeDirectory
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Application Support", isDirectory: true)
             .appendingPathComponent("FinderRight", isDirectory: true)

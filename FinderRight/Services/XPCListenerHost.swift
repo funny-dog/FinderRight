@@ -22,9 +22,28 @@ final class IPCWatcher {
     func start() {
         do {
             try IPCBridge.ensureDirectory()
+            cleanupOrphanFiles()
             NSLog("[IPCWatcher] ready, ipc dir = \(IPCBridge.pendingDir.path)")
         } catch {
             NSLog("[IPCWatcher] failed to create ipc dir: \(error)")
+        }
+    }
+
+    /// 扫描 pendingDir，删除修改时间超过 10 分钟的残留 *.req.json 和 *.resp.json 孤儿文件
+    private func cleanupOrphanFiles() {
+        let fm = FileManager.default
+        let pending = IPCBridge.pendingDir
+        guard let files = try? fm.contentsOfDirectory(atPath: pending.path) else { return }
+        let now = Date()
+        for file in files {
+            guard file.hasSuffix(".req.json") || file.hasSuffix(".resp.json") else { continue }
+            let fileURL = pending.appendingPathComponent(file)
+            if let attrs = try? fm.attributesOfItem(atPath: fileURL.path),
+               let mtime = attrs[.modificationDate] as? Date,
+               now.timeIntervalSince(mtime) > 600 {
+                try? fm.removeItem(at: fileURL)
+                NSLog("[IPCWatcher] 清理孤儿文件: \(file)")
+            }
         }
     }
 
