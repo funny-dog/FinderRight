@@ -24,4 +24,5 @@ Package.resolved
 *.dmg
 
 .workbuddy/
+.workbuddy-ai/
 

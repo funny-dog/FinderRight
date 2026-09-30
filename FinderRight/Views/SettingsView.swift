@@ -621,6 +621,10 @@ struct ShortcutCell: View {
             .opacity(shortcut != nil && !isRecording ? 1 : 0)
         }
         .onAppear { shortcut = SharedConfig.shared.shortcut(forActionId: actionId) }
+        .onDisappear {
+            isRecording = false
+            removeMonitor()
+        }
     }
 
     private func startRecording() {
