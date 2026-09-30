@@ -37,6 +37,9 @@ public final class SharedConfig {
     /// 单例
     public static let shared = SharedConfig()
 
+    private let lock = NSRecursiveLock()
+    private let configFileURL: URL
+
     private var store: [String: Any] = [:]
     private var lastLoadedMtime: Date?
 
@@ -50,12 +53,15 @@ public final class SharedConfig {
         static let shortcuts = "shortcuts"
     }
 
-    private init() {
+    internal init(fileURL: URL = SharedConfig.sharedFileURL) {
+        self.configFileURL = fileURL
         load()
     }
 
     private func load() {
-        let fileURL = SharedConfig.sharedFileURL
+        lock.lock()
+        defer { lock.unlock() }
+        let fileURL = configFileURL
         // 检查文件修改时间，若与上次载入一致且已有缓存，则跳过重复磁盘读取与反序列化
         if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
            let mtime = attrs[.modificationDate] as? Date {
@@ -78,9 +84,11 @@ public final class SharedConfig {
     }
 
     private func save() {
+        lock.lock()
+        defer { lock.unlock() }
         guard let data = try? PropertyListSerialization.data(fromPropertyList: store, format: .xml, options: 0) else { return }
-        try? data.write(to: SharedConfig.sharedFileURL, options: .atomic)
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: SharedConfig.sharedFileURL.path),
+        try? data.write(to: configFileURL, options: .atomic)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: configFileURL.path),
            let mtime = attrs[.modificationDate] as? Date {
             lastLoadedMtime = mtime
         }
@@ -99,9 +107,13 @@ public final class SharedConfig {
     /// 每个 action 的开关状态，key 为 action id
     public var enabledActions: [String: Bool] {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             return store[Keys.enabledActions] as? [String: Bool] ?? [:]
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             store[Keys.enabledActions] = newValue
             save()
         }
@@ -114,6 +126,8 @@ public final class SharedConfig {
 
     /// 设置指定 action 的启用状态
     public func setActionEnabled(_ actionId: String, enabled: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
         var current = enabledActions
         current[actionId] = enabled
         enabledActions = current
@@ -124,6 +138,8 @@ public final class SharedConfig {
     /// 右键菜单图标风格（默认简洁：SF Symbols）
     public var menuIconStyle: MenuIconStyle {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             if let raw = store[Keys.menuIconStyle] as? String,
                let style = MenuIconStyle(rawValue: raw) {
                 return style
@@ -131,6 +147,8 @@ public final class SharedConfig {
             return .modern
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             store[Keys.menuIconStyle] = newValue.rawValue
             save()
         }
@@ -141,12 +159,16 @@ public final class SharedConfig {
     /// 首选终端应用 bundle identifier
     public var preferredTerminal: String {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             if let saved = store[Keys.preferredTerminal] as? String, !saved.isEmpty {
                 return saved
             }
             return TerminalCatalog.defaultTerminalBundleIdentifier()
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             store[Keys.preferredTerminal] = newValue
             save()
         }
@@ -157,9 +179,13 @@ public final class SharedConfig {
     /// 首选编辑器应用 bundle identifier
     public var preferredEditor: String {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             return store[Keys.preferredEditor] as? String ?? "com.microsoft.VSCode"
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             store[Keys.preferredEditor] = newValue
             save()
         }
@@ -170,10 +196,14 @@ public final class SharedConfig {
     /// 自定义文件模板列表
     public var customFileTemplates: [FileTemplate] {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             guard let data = store[Keys.customFileTemplates] as? Data else { return [] }
             return (try? JSONDecoder().decode([FileTemplate].self, from: data)) ?? []
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             if let data = try? JSONEncoder().encode(newValue) {
                 store[Keys.customFileTemplates] = data
                 save()
@@ -183,6 +213,8 @@ public final class SharedConfig {
 
     /// 添加自定义文件模板
     public func addFileTemplate(_ template: FileTemplate) {
+        lock.lock()
+        defer { lock.unlock() }
         var templates = customFileTemplates
         templates.append(template)
         customFileTemplates = templates
@@ -190,6 +222,8 @@ public final class SharedConfig {
 
     /// 删除自定义文件模板
     public func removeFileTemplate(withId id: String) {
+        lock.lock()
+        defer { lock.unlock() }
         var templates = customFileTemplates
         templates.removeAll { $0.id == id }
         customFileTemplates = templates
@@ -200,9 +234,13 @@ public final class SharedConfig {
     /// 是否显示隐藏文件
     public var showHiddenFiles: Bool {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             return store[Keys.showHiddenFiles] as? Bool ?? false
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             store[Keys.showHiddenFiles] = newValue
             save()
         }
@@ -213,10 +251,14 @@ public final class SharedConfig {
     /// 菜单项快捷键，key 为 action ID（如 "shortcut.cut"）
     public var shortcuts: [String: ActionShortcut] {
         get {
+            lock.lock()
+            defer { lock.unlock() }
             guard let data = store[Keys.shortcuts] as? Data else { return [:] }
             return (try? JSONDecoder().decode([String: ActionShortcut].self, from: data)) ?? [:]
         }
         set {
+            lock.lock()
+            defer { lock.unlock() }
             if let data = try? JSONEncoder().encode(newValue) {
                 store[Keys.shortcuts] = data
                 save()
@@ -226,11 +268,15 @@ public final class SharedConfig {
 
     /// 获取指定 action 的快捷键
     public func shortcut(forActionId id: String) -> ActionShortcut? {
-        shortcuts[id]
+        lock.lock()
+        defer { lock.unlock() }
+        return shortcuts[id]
     }
 
     /// 设置或清除指定 action 的快捷键
     public func setShortcut(_ shortcut: ActionShortcut?, forActionId id: String) {
+        lock.lock()
+        defer { lock.unlock() }
         var current = shortcuts
         if let s = shortcut { current[id] = s } else { current.removeValue(forKey: id) }
         shortcuts = current
@@ -240,6 +286,8 @@ public final class SharedConfig {
 
     /// 重置所有配置为默认值
     public func resetToDefaults() {
+        lock.lock()
+        defer { lock.unlock() }
         store = [:]
         save()
     }
