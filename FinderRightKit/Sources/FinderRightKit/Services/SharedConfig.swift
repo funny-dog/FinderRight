@@ -49,6 +49,7 @@ public final class SharedConfig {
         static let preferredTerminal = "preferredTerminal"
         static let preferredEditor = "preferredEditor"
         static let customFileTemplates = "customFileTemplates"
+        static let showHiddenFiles = "showHiddenFiles"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
     }
@@ -227,6 +228,23 @@ public final class SharedConfig {
         var templates = customFileTemplates
         templates.removeAll { $0.id == id }
         customFileTemplates = templates
+    }
+
+    // MARK: - Show Hidden Files
+
+    /// 是否显示隐藏文件
+    public var showHiddenFiles: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.showHiddenFiles] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.showHiddenFiles] = newValue
+            save()
+        }
     }
 
     // MARK: - App Language
