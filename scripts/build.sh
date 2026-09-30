@@ -8,7 +8,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-VERSION="1.1.8"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/FinderRight/Info.plist")
+BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PROJECT_DIR/FinderRight/Info.plist")
 STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
@@ -94,6 +95,10 @@ sed \
   -e 's/\$(PRODUCT_NAME)/FinderRightSync/g' \
   -e 's/\$(PRODUCT_MODULE_NAME)/FinderRightSync/g' \
   FinderRightSync/Info.plist > "$APPEX_DIR/Contents/Info.plist"
+
+# 同步主 App 版本号到扩展 Info.plist（单一版本来源）
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APPEX_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APPEX_DIR/Contents/Info.plist"
 
 echo -n "XPC!????" > "$APPEX_DIR/Contents/PkgInfo"
 mkdir -p "$APPEX_DIR/Contents/Resources/en.lproj"
