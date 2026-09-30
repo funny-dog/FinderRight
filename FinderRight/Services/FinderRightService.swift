@@ -430,7 +430,7 @@ final class FinderRightService {
                 // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
                 try? fileManager.removeItem(at: targetDir)
                 let detail = errStr.isEmpty ? String(format: L("退出码 %d"), proc.terminationStatus) : errStr
-                    notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(detail)")
+                notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(detail)")
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
@@ -520,11 +520,7 @@ final class FinderRightService {
             let pid = finder.processIdentifier
             // 不 activate Finder：postToPid 直达进程事件队列，activate 会抢焦点导致菜单栏跳变卡顿
 
-            // 先读切换前的真实状态，发完事件直接写入取反值。
-            // 原实现是 usleep(100ms) 后读回 com.apple.finder 的 AppleShowAllFiles —— Finder
-            // 异步回写该键，读回存在竞态（可能读到旧值），导致菜单文案偶尔与实际状态相反。
-            let before = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
-
+            // fire-and-forget：不再跟踪/回写任何状态（菜单文案已改无状态，见 FinderSync）。
             let src = CGEventSource(stateID: .hidSystemState)
             // kVK_ANSI_Period = 0x2F (47)
             let down = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: true)
@@ -535,9 +531,6 @@ final class FinderRightService {
             up?.postToPid(pid)
 
             serviceLog("sent Cmd+Shift+. to Finder pid=\(pid)")
-            // 已知限制：用户在 Finder 里直接按 Cmd+Shift+. 绕开本 App 时，这里仍会滞后，
-            // 下次冷启动会重新锚定到 Finder 真实状态（见 applicationDidFinishLaunching）
-            SharedConfig.shared.showHiddenFiles = !before
             return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
@@ -554,7 +547,21 @@ final class FinderRightService {
     }
 
     private func toggleHiddenFilesViaDefaults(_ req: IPCRequest, newValue: String) -> IPCResponse {
-        let currentBool = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
+        // 用 defaults CLI 读当前值：子进程每次冷启动读盘，绕开本进程 cfprefsd 客户端缓存
+        // （UserDefaults(suiteName:) 读其他 App 的域可能命中过期缓存，导致取反后写回同值、看似没切换）
+        var currentBool = false
+        let readProc = Process()
+        let readOut = Pipe()
+        readProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        readProc.arguments = ["read", "com.apple.finder", "AppleShowAllFiles"]
+        readProc.standardOutput = readOut
+        readProc.standardError = FileHandle.nullDevice
+        if (try? readProc.run()) != nil {
+            let data = readOut.fileHandleForReading.readDataToEndOfFile()
+            readProc.waitUntilExit()
+            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            currentBool = (s == "1" || s.lowercased() == "true" || s.lowercased() == "yes")
+        }
         let nextVal = !currentBool ? "YES" : "NO"
         let writeProc = Process()
         writeProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
@@ -569,8 +576,6 @@ final class FinderRightService {
             try killProc.run()
             killProc.waitUntilExit()
 
-            let actual = (nextVal == "YES")
-            SharedConfig.shared.showHiddenFiles = actual
             return IPCResponse(id: req.id, success: true, message: "set to \(nextVal), restarted Finder")
         } catch {
             return IPCResponse(id: req.id, success: false, message: error.localizedDescription)

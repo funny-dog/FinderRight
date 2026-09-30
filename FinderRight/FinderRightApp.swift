@@ -55,13 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 请求本地通知权限（用于异步失败通知与系统告警）
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
-        // 启动时把菜单文案锚定到 Finder 真实状态：SharedConfig 默认 false，
-        // 若用户本已开着「显示隐藏文件」，首次点击菜单的行为会与文案相反。
-        // 只在两者不一致时写入，避免每次冷启动都重写 settings.plist（无谓的 mtime 抖动）。
-        let finderShowsHidden = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
-        if SharedConfig.shared.showHiddenFiles != finderShowsHidden {
-            SharedConfig.shared.showHiddenFiles = finderShowsHidden
-        }
+        // 「切换隐藏文件」已改为无状态固定文案（见 FinderSync.menu(for:) 注释），
+        // 不再需要在启动时把 SharedConfig 锚定到 Finder 真实状态。
 
         // 根据偏好动态设定激活策略
         if alwaysShowDockIcon {

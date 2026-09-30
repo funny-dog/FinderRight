@@ -64,6 +64,9 @@
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
 "启动" = "Startup";
 "显示" = "Appearance";
+"语言" = "Language";
+"跟随系统" = "System";
+"切换语言将立即自动重启应用以生效" = "Switching language will immediately restart the app to take effect";
 "右键菜单图标" = "Right-Click Menu Icons";
 "简洁 (SF Symbols)" = "Clean (SF Symbols)";
 "彩色 (Emoji)" = "Color (Emoji)";
