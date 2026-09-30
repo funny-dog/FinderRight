@@ -60,7 +60,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Copy Path</string>
+				<key>en</key>
+				<string>FinderRight: Copy Path</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：复制路径</string>
+				<key>zh_CN</key>
 				<string>FinderRight：复制路径</string>
 			</dict>
 			<key>NSMessage</key>
@@ -82,7 +86,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Open in Terminal</string>
+				<key>en</key>
+				<string>FinderRight: Open in Terminal</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：打开终端</string>
+				<key>zh_CN</key>
 				<string>FinderRight：打开终端</string>
 			</dict>
 			<key>NSMessage</key>
@@ -104,7 +112,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Open in Editor</string>
+				<key>en</key>
+				<string>FinderRight: Open in Editor</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：打开编辑器</string>
+				<key>zh_CN</key>
 				<string>FinderRight：打开编辑器</string>
 			</dict>
 			<key>NSMessage</key>
@@ -126,7 +138,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Cut</string>
+				<key>en</key>
+				<string>FinderRight: Cut</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：剪切</string>
+				<key>zh_CN</key>
 				<string>FinderRight：剪切</string>
 			</dict>
 			<key>NSMessage</key>
@@ -148,7 +164,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Compress to ZIP</string>
+				<key>en</key>
+				<string>FinderRight: Compress to ZIP</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：压缩为 ZIP</string>
+				<key>zh_CN</key>
 				<string>FinderRight：压缩为 ZIP</string>
 			</dict>
 			<key>NSMessage</key>
@@ -170,7 +190,11 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Extract Here</string>
+				<key>en</key>
+				<string>FinderRight: Extract Here</string>
 				<key>zh-Hans</key>
+				<string>FinderRight：解压到当前目录</string>
+				<key>zh_CN</key>
 				<string>FinderRight：解压到当前目录</string>
 			</dict>
 			<key>NSMessage</key>
