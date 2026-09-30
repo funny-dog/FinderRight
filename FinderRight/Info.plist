@@ -59,6 +59,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Copy Path</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：复制路径</string>
 			</dict>
 			<key>NSMessage</key>
@@ -79,6 +81,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Open in Terminal</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：打开终端</string>
 			</dict>
 			<key>NSMessage</key>
@@ -99,6 +103,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Open in Editor</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：打开编辑器</string>
 			</dict>
 			<key>NSMessage</key>
@@ -119,6 +125,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Cut</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：剪切</string>
 			</dict>
 			<key>NSMessage</key>
@@ -139,6 +147,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Compress to ZIP</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：压缩为 ZIP</string>
 			</dict>
 			<key>NSMessage</key>
@@ -159,6 +169,8 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Extract Here</string>
+				<key>zh-Hans</key>
 				<string>FinderRight：解压到当前目录</string>
 			</dict>
 			<key>NSMessage</key>

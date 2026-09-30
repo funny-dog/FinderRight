@@ -247,6 +247,9 @@ struct GeneralTab: View {
 // MARK: - 功能 Tab
 
 struct FeaturesTab: View {
+    @FRState private var customTemplates: [FileTemplate] = SharedConfig.shared.customFileTemplates
+    @FRState private var showingAddSheet = false
+
     var body: some View {
         Form {
             Section {
@@ -260,11 +263,139 @@ struct FeaturesTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section {
+                if customTemplates.isEmpty {
+                    Text("暂无自定义模板")
+                        .foregroundColor(.secondary)
+                        .font(.callout)
+                } else {
+                    ForEach(customTemplates) { tmpl in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tmpl.name.isEmpty ? ".\(tmpl.fileExtension)" : tmpl.name)
+                                    .fontWeight(.medium)
+                                Text(".\(tmpl.fileExtension)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                deleteTemplate(tmpl)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red.opacity(0.8))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                Button {
+                    showingAddSheet = true
+                } label: {
+                    Label("添加自定义模板...", systemImage: "plus")
+                }
+            } header: {
+                Text("自定义文件模板")
+            } footer: {
+                Text("添加的模板将显示在 Finder 右键「新建文件」子菜单底部。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .sheet(isPresented: $showingAddSheet) {
+            AddTemplateSheet(
+                isPresented: $showingAddSheet,
+                onAdd: { template in
+                    SharedConfig.shared.addFileTemplate(template)
+                    customTemplates = SharedConfig.shared.customFileTemplates
+                }
+            )
+        }
+        .onAppear {
+            customTemplates = SharedConfig.shared.customFileTemplates
+        }
+    }
+
+    private func deleteTemplate(_ tmpl: FileTemplate) {
+        SharedConfig.shared.removeFileTemplate(withId: tmpl.id)
+        customTemplates = SharedConfig.shared.customFileTemplates
     }
 }
+
+// MARK: - 添加自定义模板弹窗
+
+struct AddTemplateSheet: View {
+    @Binding var isPresented: Bool
+    let onAdd: (FileTemplate) -> Void
+
+    @FRState private var name: String = ""
+    @FRState private var fileExtension: String = ""
+    @FRState private var content: String = ""
+    @FRState private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("新建文件模板")
+                .font(.headline)
+
+            Form {
+                TextField("模板名称 (例如: 配置文件)", text: $name)
+                TextField("文件后缀 (例如: conf，无需带点)", text: $fileExtension)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("默认内容 (可选):")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextEditor(text: $content)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(height: 100)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                        )
+                }
+            }
+
+            if let err = errorMessage {
+                Text(err)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("添加") {
+                    let cleanExt = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cleanExt.isEmpty else {
+                        errorMessage = "文件后缀不能为空"
+                        return
+                    }
+                    let tmpl = FileTemplate(name: cleanName.isEmpty ? cleanExt : cleanName,
+                                            fileExtension: cleanExt,
+                                            content: content)
+                    onAdd(tmpl)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 420, height: 300)
+    }
+}
+
 
 // MARK: - 终端 Tab
 
