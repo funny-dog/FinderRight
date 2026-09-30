@@ -1,11 +1,12 @@
 import Foundation
 import AppKit
+import CryptoKit
 
 public enum UpdateCheckStatus: Equatable {
     case idle
     case checking
     case upToDate
-    case updateAvailable(version: String, releaseURL: URL, downloadURL: URL?)
+    case updateAvailable(version: String, releaseURL: URL, downloadURL: URL?, sha256URL: URL? = nil)
     case downloading(progress: Double)
     case installing
     case failed(String)
@@ -67,7 +68,6 @@ public final class UpdateChecker: NSObject {
                 DispatchQueue.main.async {
                     let status = UpdateCheckStatus.failed(error.localizedDescription)
                     self.currentStatus = status
-                    self.lastCheckedDate = Date()
                     completion(status)
                 }
                 return
@@ -78,7 +78,6 @@ public final class UpdateChecker: NSObject {
                     let msg = httpResp.statusCode == 403 ? "GitHub 请求超限，请稍后再试" : "检查失败 (\(httpResp.statusCode))"
                     let status = UpdateCheckStatus.failed(msg)
                     self.currentStatus = status
-                    self.lastCheckedDate = Date()
                     completion(status)
                 }
                 return
@@ -88,7 +87,6 @@ public final class UpdateChecker: NSObject {
                 DispatchQueue.main.async {
                     let status = UpdateCheckStatus.failed("未接收到数据")
                     self.currentStatus = status
-                    self.lastCheckedDate = Date()
                     completion(status)
                 }
                 return
@@ -102,18 +100,23 @@ public final class UpdateChecker: NSObject {
                 let fallbackURL = URL(string: "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest")!
                 let releaseURL = URL(string: release.htmlUrl) ?? fallbackURL
 
-                // 寻找用于自动安装的 ZIP 安装包下载链接
+                // 寻找用于自动安装的 ZIP 安装包下载链接及可选的 SHA256 校验文件
                 var downloadURL: URL?
+                var sha256URL: URL?
                 if let assets = release.assets {
                     if let zipAsset = assets.first(where: { $0.name.hasSuffix(".zip") }) {
                         downloadURL = URL(string: zipAsset.browserDownloadUrl)
+                        let expectedShaName = zipAsset.name + ".sha256"
+                        if let shaAsset = assets.first(where: { $0.name == expectedShaName || $0.name.hasSuffix(".zip.sha256") }) {
+                            sha256URL = URL(string: shaAsset.browserDownloadUrl)
+                        }
                     }
                 }
 
                 DispatchQueue.main.async {
                     let status: UpdateCheckStatus
                     if isNewer {
-                        status = .updateAvailable(version: remoteTag, releaseURL: releaseURL, downloadURL: downloadURL)
+                        status = .updateAvailable(version: remoteTag, releaseURL: releaseURL, downloadURL: downloadURL, sha256URL: sha256URL)
                     } else {
                         status = .upToDate
                     }
@@ -125,7 +128,6 @@ public final class UpdateChecker: NSObject {
                 DispatchQueue.main.async {
                     let status = UpdateCheckStatus.failed("解析版本信息失败")
                     self.currentStatus = status
-                    self.lastCheckedDate = Date()
                     completion(status)
                 }
             }
@@ -135,7 +137,7 @@ public final class UpdateChecker: NSObject {
     }
 
     /// 开始下载并自动安装更新
-    public func startDownloadAndInstall(downloadURL: URL, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+    public func startDownloadAndInstall(downloadURL: URL, sha256URL: URL? = nil, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
         let updateStatus = UpdateCheckStatus.downloading(progress: 0.0)
         self.currentStatus = updateStatus
         statusHandler(updateStatus)
@@ -151,21 +153,7 @@ public final class UpdateChecker: NSObject {
                 guard let self = self else { return }
                 switch result {
                 case .success(let zipLocation):
-                    let status = UpdateCheckStatus.installing
-                    self.currentStatus = status
-                    statusHandler(status)
-
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        self.performInstallAndRelaunch(zipURL: zipLocation) { installError in
-                            if let installError = installError {
-                                DispatchQueue.main.async {
-                                    let failedStatus = UpdateCheckStatus.failed("安装失败: \(installError.localizedDescription)")
-                                    self.currentStatus = failedStatus
-                                    statusHandler(failedStatus)
-                                }
-                            }
-                        }
-                    }
+                    self.verifyAndInstall(zipLocation: zipLocation, sha256URL: sha256URL, statusHandler: statusHandler)
 
                 case .failure(let error):
                     let failedStatus = UpdateCheckStatus.failed("下载失败: \(error.localizedDescription)")
@@ -183,6 +171,83 @@ public final class UpdateChecker: NSObject {
         request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
         let downloadTask = session.downloadTask(with: request)
         downloadTask.resume()
+    }
+
+    private func verifyAndInstall(zipLocation: URL, sha256URL: URL?, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        if let sha256URL = sha256URL {
+            var shaReq = URLRequest(url: sha256URL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+            shaReq.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
+            URLSession.shared.dataTask(with: shaReq) { [weak self] data, _, error in
+                guard let self = self else { return }
+                if let error = error {
+                    DispatchQueue.main.async {
+                        let failed = UpdateCheckStatus.failed("校验和下载失败: \(error.localizedDescription)")
+                        self.currentStatus = failed
+                        statusHandler(failed)
+                    }
+                    return
+                }
+
+                guard let data = data,
+                      let shaText = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      let expectedHash = shaText.components(separatedBy: .whitespaces).first?.lowercased(),
+                      !expectedHash.isEmpty else {
+                    DispatchQueue.main.async {
+                        let failed = UpdateCheckStatus.failed("无法解析校验和文件")
+                        self.currentStatus = failed
+                        statusHandler(failed)
+                    }
+                    return
+                }
+
+                do {
+                    let zipData = try Data(contentsOf: zipLocation)
+                    let actualHash = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
+                    if actualHash != expectedHash {
+                        DispatchQueue.main.async {
+                            let failed = UpdateCheckStatus.failed("更新包校验失败: SHA256 不匹配")
+                            self.currentStatus = failed
+                            statusHandler(failed)
+                        }
+                        return
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        let failed = UpdateCheckStatus.failed("计算更新包哈希失败: \(error.localizedDescription)")
+                        self.currentStatus = failed
+                        statusHandler(failed)
+                    }
+                    return
+                }
+
+                self.proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
+            }.resume()
+        } else {
+            // TODO: v1.2.0 起强制要求校验和
+            NSLog("[UpdateChecker] 警告: 未找到 .sha256 校验和文件，跳过校验 (向后兼容)")
+            proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
+        }
+    }
+
+    private func proceedToInstall(zipLocation: URL, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        let status = UpdateCheckStatus.installing
+        self.currentStatus = status
+        DispatchQueue.main.async {
+            statusHandler(status)
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.performInstallAndRelaunch(zipURL: zipLocation) { installError in
+                if let installError = installError {
+                    DispatchQueue.main.async {
+                        let failedStatus = UpdateCheckStatus.failed("安装失败: \(installError.localizedDescription)")
+                        self.currentStatus = failedStatus
+                        statusHandler(failedStatus)
+                    }
+                }
+            }
+        }
     }
 
     /// 解压、覆盖替换当前应用并重新拉起新版
@@ -217,6 +282,20 @@ public final class UpdateChecker: NSObject {
                 targetAppURL = URL(fileURLWithPath: "/Applications/FinderRight.app")
             }
 
+            // 检查目标路径及其父目录的写权限
+            let targetDir = targetAppURL.deletingLastPathComponent()
+            let isTargetWritable = fileManager.isWritableFile(atPath: targetAppURL.path)
+            let isParentWritable = fileManager.isWritableFile(atPath: targetDir.path)
+            if (fileManager.fileExists(atPath: targetAppURL.path) && !isTargetWritable) || !isParentWritable {
+                let errMsg = "无权限写入 \(targetAppURL.path)，请手动下载安装"
+                DispatchQueue.main.async {
+                    if let releaseURL = URL(string: "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest") {
+                        NSWorkspace.shared.open(releaseURL)
+                    }
+                }
+                throw NSError(domain: "UpdateChecker", code: 3, userInfo: [NSLocalizedDescriptionKey: errMsg])
+            }
+
             // 4. 清除解压产物的隔离属性（Quarantine）
             let xattrProc = Process()
             xattrProc.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
@@ -237,24 +316,30 @@ public final class UpdateChecker: NSObject {
             TARGET_DIR="$(dirname "$TARGET")"
             NEW_APP="$TARGET_DIR/FinderRight.new.app"
             OLD_APP="$TARGET_DIR/FinderRight.old.app"
+            ERROR_LOG="$HOME/Library/Application Support/FinderRight/last-update-error.txt"
+
+            /bin/mkdir -p "$(dirname "$ERROR_LOG")"
 
             # 清理历史可能残留的临时文件
             /bin/rm -rf "$NEW_APP" "$OLD_APP"
 
             # 1. 先复制到同目录临时位置
             if ! /bin/cp -R "\(newAppURL.path)" "$NEW_APP"; then
+                echo "复制新版本到临时目录失败" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
                 exit 1
             fi
 
             # 2. 成功后 mv 旧 App 到备份位置
             if ! /bin/mv "$TARGET" "$OLD_APP"; then
+                echo "备份旧版本失败" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
                 exit 1
             fi
 
             # 3. mv 新的到位
             if ! /bin/mv "$NEW_APP" "$TARGET"; then
+                echo "移动新版本到目标目录失败，已回滚旧版本" > "$ERROR_LOG"
                 # 若移动失败则将旧 App 回滚到位
                 /bin/mv "$OLD_APP" "$TARGET"
                 /bin/rm -rf "$NEW_APP"

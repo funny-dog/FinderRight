@@ -80,22 +80,66 @@ final class FinderRightService {
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
         archiveQueue.async { [weak self] in
+            let fileManager = FileManager.default
             let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
             proc.currentDirectoryURL = dir
-            proc.arguments = ["-r", dest.path] + items.map { URL(fileURLWithPath: $0).lastPathComponent }
+
+            var tempStageURL: URL? = nil
+
+            if items.count == 1 {
+                let itemURL = URL(fileURLWithPath: first)
+                var isDir: ObjCBool = false
+                if fileManager.fileExists(atPath: itemURL.path, isDirectory: &isDir), isDir.boolValue {
+                    proc.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", itemURL.lastPathComponent, dest.path]
+                } else {
+                    proc.arguments = ["-c", "-k", "--sequesterRsrc", itemURL.lastPathComponent, dest.path]
+                }
+            } else {
+                // 多选压缩：ditto 不支持直接传多个 source，通过同目录下零拷贝临时 staging 目录打平
+                let stageName = ".finderright-stage-\(UUID().uuidString)"
+                let stageURL = dir.appendingPathComponent(stageName)
+                do {
+                    try fileManager.createDirectory(at: stageURL, withIntermediateDirectories: true)
+                    tempStageURL = stageURL
+                    for item in items {
+                        let srcURL = URL(fileURLWithPath: item)
+                        let targetItemURL = stageURL.appendingPathComponent(srcURL.lastPathComponent)
+                        // 优先 APFS clone（零开销）
+                        let cpProc = Process()
+                        cpProc.executableURL = URL(fileURLWithPath: "/bin/cp")
+                        cpProc.arguments = ["-cR", srcURL.path, targetItemURL.path]
+                        try? cpProc.run()
+                        cpProc.waitUntilExit()
+                        if !fileManager.fileExists(atPath: targetItemURL.path) {
+                            try? fileManager.copyItem(at: srcURL, to: targetItemURL)
+                        }
+                    }
+                    proc.arguments = ["-c", "-k", "--sequesterRsrc", stageURL.path, dest.path]
+                } catch {
+                    self?.serviceLog("compressZip staging failed: \(error.localizedDescription)")
+                }
+            }
+
             do {
                 try proc.run()
                 proc.waitUntilExit()
-                if FileManager.default.fileExists(atPath: dest.path) {
+                if let tempStage = tempStageURL {
+                    try? fileManager.removeItem(at: tempStage)
+                }
+
+                if fileManager.fileExists(atPath: dest.path) {
                     DispatchQueue.main.async {
                         NSWorkspace.shared.activateFileViewerSelecting([dest])
                     }
                     self?.serviceLog("compressZip succeeded: \(dest.path)")
                 } else {
-                    self?.serviceLog("compressZip failed: zip exit=\(proc.terminationStatus)")
+                    self?.serviceLog("compressZip failed: ditto exit=\(proc.terminationStatus)")
                 }
             } catch {
+                if let tempStage = tempStageURL {
+                    try? fileManager.removeItem(at: tempStage)
+                }
                 self?.serviceLog("compressZip error: \(error.localizedDescription)")
             }
         }
@@ -171,7 +215,7 @@ final class FinderRightService {
                     proc.arguments = ["-dc", archive]
                 } else {
                     proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-                    proc.arguments = ["-c", "import lzma, sys; sys.stdout.buffer.write(lzma.open(sys.argv[1]).read())", archive]
+                    proc.arguments = ["-c", "import lzma, sys, shutil; shutil.copyfileobj(lzma.open(sys.argv[1]), sys.stdout.buffer)", archive]
                 }
             }
 
@@ -231,8 +275,8 @@ final class FinderRightService {
         proc.currentDirectoryURL = targetDir
         let ext = url.pathExtension.lowercased()
         if ext == "zip" {
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            proc.arguments = [archive, "-d", targetDir.path]
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            proc.arguments = ["-x", "-k", archive, targetDir.path]
         } else {
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
             proc.arguments = ["-xf", archive, "-C", targetDir.path]
@@ -398,78 +442,51 @@ final class FinderRightService {
         }
     }
 
-    // MARK: - 剪切 / 粘贴（先移到暂存区，再粘贴到目标）
+    // MARK: - 剪切 / 粘贴（Lazy Cut 延迟剪切）
 
-    /// 剪切队列文件路径（存储暂存区内的文件路径）
+    /// 剪切队列文件路径（存储待剪切的源文件完整路径列表）
     private var cutQueueFileURL: URL {
         IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
     }
 
-    /// 暂存目录：文件剪切后先放到这里，粘贴时再移走
-    private var stagingDirectory: URL {
-        IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
-    }
-
-    /// 剪切：立即将源文件移到暂存区，源文件从原位置消失。
-    /// 暂存路径写入 cut-queue.json，供后续粘贴使用。
+    /// 剪切：Lazy Cut（延迟剪切）。只记录待剪切文件路径到 cut-queue.json，
+    /// 不立即移动物理文件，避免跨卷拷贝撑爆磁盘和未粘贴前文件丢失假象。
     private func cutFiles(_ req: IPCRequest) -> IPCResponse {
         guard let paths = req.payload["paths"]?.stringArrayValue, !paths.isEmpty else {
             return IPCResponse(id: req.id, success: false, message: "cutFiles 参数缺失：paths")
         }
 
-        // 收敛到 cutPasteQueue 串行队列，确保 staging 目录与 cut-queue.json 互斥访问
+        // 收敛到 cutPasteQueue 串行队列，确保 cut-queue.json 互斥访问
         return cutPasteQueue.sync {
             let fileManager = FileManager.default
-            let staging = stagingDirectory
 
-            do {
-                try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
-            } catch {
-                return IPCResponse(id: req.id, success: false, message: "无法创建暂存目录: \(error.localizedDescription)")
+            // 过滤出实际存在的源文件路径
+            let validPaths = paths.filter { fileManager.fileExists(atPath: $0) }
+            guard !validPaths.isEmpty else {
+                return IPCResponse(id: req.id, success: false, message: "选中的文件均不存在")
             }
 
-            // 读取现有剪切队列，并过滤掉已不存在的路径以保持队列整洁
+            // 读取现有剪切队列并过滤掉外部已删除的文件
             var queue = (try? Data(contentsOf: cutQueueFileURL))
                 .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] }?
                 .filter { fileManager.fileExists(atPath: $0) } ?? []
 
-            var stagedPaths: [String] = []
-            var firstError: String?
-
-            for sourcePath in paths {
-                let sourceURL = URL(fileURLWithPath: sourcePath)
-                var destURL = staging.appendingPathComponent(sourceURL.lastPathComponent)
-
-                // 避免暂存区内命名冲突
-                if fileManager.fileExists(atPath: destURL.path) {
-                    let base = destURL.deletingPathExtension().lastPathComponent
-                    let ext  = destURL.pathExtension
-                    var counter = 1
-                    repeat {
-                        let numbered = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
-                        destURL = staging.appendingPathComponent(numbered)
-                        counter += 1
-                    } while fileManager.fileExists(atPath: destURL.path)
-                }
-
-                do {
-                    try fileManager.moveItem(at: sourceURL, to: destURL)
-                    stagedPaths.append(destURL.path)
-                } catch {
-                    if firstError == nil { firstError = error.localizedDescription }
+            // 合并并去重
+            for p in validPaths {
+                if !queue.contains(p) {
+                    queue.append(p)
                 }
             }
 
-            // 合并新旧剪切队列并写入队列文件，供粘贴时读取
-            queue.append(contentsOf: stagedPaths)
-            if let data = try? JSONSerialization.data(withJSONObject: queue) {
-                try? data.write(to: cutQueueFileURL, options: .atomic)
+            do {
+                try IPCBridge.ensureDirectory()
+                let data = try JSONSerialization.data(withJSONObject: queue)
+                try data.write(to: cutQueueFileURL, options: .atomic)
+            } catch {
+                return IPCResponse(id: req.id, success: false, message: "写入剪切队列失败: \(error.localizedDescription)")
             }
 
-            if let err = firstError {
-                return IPCResponse(id: req.id, success: false, message: err)
-            }
-            return IPCResponse(id: req.id, success: true, message: "已暂存 \(stagedPaths.count) 个文件")
+            return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
         }
     }
 
@@ -509,8 +526,13 @@ final class FinderRightService {
         for sourcePath in sourcePaths {
             let sourceURL = URL(fileURLWithPath: sourcePath)
 
-            // 若暂存文件已被外部删除或不存在，则跳过且不作为待重试项保留在队列中
+            // 若源文件已被外部删除或不存在，则跳过且不作为待重试项保留在队列中
             guard fileManager.fileExists(atPath: sourceURL.path) else {
+                continue
+            }
+
+            // 粘贴目标目录与源文件所在目录相同 → 跳过该文件（视为无操作），不生成副本，并从队列剔除
+            if sourceURL.deletingLastPathComponent().path == destDir.path {
                 continue
             }
 

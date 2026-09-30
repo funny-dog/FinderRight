@@ -22,6 +22,7 @@ Package.resolved
 # Archives & Installers
 *.zip
 *.dmg
+*.sha256
 
 .workbuddy/
 .workbuddy-ai/
