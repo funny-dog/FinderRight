@@ -49,7 +49,7 @@ public final class SharedConfig {
         static let preferredTerminal = "preferredTerminal"
         static let preferredEditor = "preferredEditor"
         static let customFileTemplates = "customFileTemplates"
-        static let showHiddenFiles = "showHiddenFiles"
+        static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
     }
 
@@ -229,19 +229,22 @@ public final class SharedConfig {
         customFileTemplates = templates
     }
 
-    // MARK: - Show Hidden Files
+    // MARK: - App Language
 
-    /// 是否显示隐藏文件
-    public var showHiddenFiles: Bool {
+    /// 界面语言："system"（默认，跟随系统）/ "zh-Hans" / "en"。
+    ///
+    /// 扩展端在 menu(for:) 里 reload 后读取，运行时即时切换菜单语言；
+    /// 主 App 端由设置界面同步写入 AppleLanguages，重启后生效。
+    public var appLanguage: String {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return store[Keys.showHiddenFiles] as? Bool ?? false
+            return store[Keys.appLanguage] as? String ?? "system"
         }
         set {
             lock.lock()
             defer { lock.unlock() }
-            store[Keys.showHiddenFiles] = newValue
+            store[Keys.appLanguage] = newValue
             save()
         }
     }

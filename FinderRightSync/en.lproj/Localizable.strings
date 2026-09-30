@@ -13,8 +13,7 @@
 "📦 压缩为 ZIP" = "📦 Compress to ZIP";
 "📂 解压到当前目录" = "📂 Extract Here";
 "👁 切换隐藏文件" = "👁 Toggle Hidden Files";
-"👁 显示隐藏文件" = "👁 Show Hidden Files";
-"👁 隐藏隐藏文件" = "👁 Hide Hidden Files";
+"已剪切" = "Cut";
 
 /* New File submenu */
 "📝 文本文件 (.txt)" = "📝 Text File (.txt)";
@@ -40,8 +39,6 @@
 "压缩为 ZIP" = "Compress to ZIP";
 "解压到当前目录" = "Extract Here";
 "切换隐藏文件" = "Toggle Hidden Files";
-"显示隐藏文件" = "Show Hidden Files";
-"隐藏隐藏文件" = "Hide Hidden Files";
 
 "文本文件 (.txt)" = "Text File (.txt)";
 "Markdown (.md)" = "Markdown (.md)";
