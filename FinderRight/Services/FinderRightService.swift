@@ -13,7 +13,7 @@ final class FinderRightService {
     /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O
     private let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
 
-    /// 剪切/粘贴专用串行队列：确保 staging 目录与 cut-queue.json 互斥访问，绝不并发竞态
+    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态
     private let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
     // MARK: - 安全白名单与校验 (B5)
@@ -440,7 +440,6 @@ final class FinderRightService {
               let bundleId = req.payload["bundleId"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "openWithApp 参数缺失")
         }
-        let cliPaths = req.payload["cliFallbackPaths"]?.stringArrayValue ?? []
         let urls = paths.map { URL(fileURLWithPath: $0) }
         let ok = NSWorkspace.shared.open(
             urls,
@@ -449,20 +448,10 @@ final class FinderRightService {
             additionalEventParamDescriptor: nil,
             launchIdentifiers: nil
         )
-        if ok { return IPCResponse(id: req.id, success: true, message: nil) }
-
-        if let cmd = cliPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: cmd)
-            proc.arguments = paths
-            do {
-                try proc.run()
-                return IPCResponse(id: req.id, success: true, message: nil)
-            } catch {
-                return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
-            }
-        }
-        return IPCResponse(id: req.id, success: false, message: "无法打开 \(bundleId)，且无 CLI fallback")
+        // 注：不接收 IPC 传入的可执行路径回退（历史 cliFallbackPaths 已移除）——
+        // 该参数从未被扩展使用，且可被执行任意二进制的伪造请求利用。
+        return IPCResponse(id: req.id, success: ok,
+                           message: ok ? nil : "无法通过 \(bundleId) 打开")
     }
 
     private func toggleHiddenFiles(_ req: IPCRequest) -> IPCResponse {
