@@ -25,6 +25,9 @@ struct FinderRightApp: App {
                 Button(NSLocalizedString("设置...", comment: "menu")) {
                     appDelegate.openSettings()
                 }
+                // replacing: .appSettings 会连同系统自带「设置…」的 ⌘, 一起移除，
+                // 这里必须显式补回，否则应用菜单里设置项没有快捷键
+                .keyboardShortcut(",", modifiers: .command)
             }
         }
     }
@@ -96,15 +99,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 检查旧版 staging/ 目录是否存在遗留文件，仅提醒用户，不自动移动或删除
     private func checkLegacyStagingDirectory() {
+        // 一次性提醒：发送成功后才置位，避免每次冷启动重复弹同一条通知
+        let sentKey = "stagingLegacyWarningSent"
+        guard !UserDefaults.standard.bool(forKey: sentKey) else { return }
+
         let stagingDir = IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
         let fm = FileManager.default
         if let items = try? fm.contentsOfDirectory(atPath: stagingDir.path), !items.isEmpty {
             let content = UNMutableNotificationContent()
-            content.title = "发现暂存区遗留文件"
-            content.body = "暂存区有 \(items.count) 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging"
+            content.title = NSLocalizedString("发现暂存区遗留文件", comment: "notification")
+            content.body = String(
+                format: NSLocalizedString("暂存区有 %d 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging", comment: "notification"),
+                items.count)
             content.sound = .default
             let req = UNNotificationRequest(identifier: "staging-legacy-warning", content: content, trigger: nil)
-            UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+            UNUserNotificationCenter.current().add(req) { _ in
+                UserDefaults.standard.set(true, forKey: sentKey)
+            }
         }
     }
 
@@ -118,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? fm.removeItem(at: errorFileURL)
             DispatchQueue.main.async {
                 let alert = NSAlert()
-                alert.messageText = "自动更新失败"
+                alert.messageText = NSLocalizedString("自动更新失败", comment: "alert")
                 alert.informativeText = content.trimmingCharacters(in: .whitespacesAndNewlines)
                 alert.alertStyle = .warning
                 alert.runModal()

@@ -22,16 +22,6 @@ private func currentCutQueuePaths() -> Set<String> {
     return Set(paths)
 }
 
-/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
-private func hasCutQueue() -> Bool {
-    // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
-          let size = attrs[.size] as? UInt64, size > 2 else {
-        return false
-    }
-    return !currentCutQueuePaths().isEmpty
-}
-
 /// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
@@ -157,8 +147,41 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 文件角标徽章回调
 
+    /// cut-queue.json 的进程内缓存。
+    ///
+    /// Finder 会为每个可见条目回调 requestBadgeIdentifier，每次都 `Data(contentsOf:)` + JSON 解析
+    /// 在大目录下是成百上千次读盘。以文件 mtime 做失效依据：主 App 写入用 `.atomic`（替换式），
+    /// mtime 必然变化，缓存失效可靠；命中缓存时只剩一次 stat 开销。
+    private var cutPathsCache: (mtime: Date?, paths: Set<String>) = (nil, [])
+    private let cutPathsCacheLock = NSLock()
+
+    /// 读取剪切队列路径集合（mtime 缓存版）。慢路径仍是 `currentCutQueuePaths()` 的磁盘读取。
+    private func currentCutQueuePathsCached() -> Set<String> {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path)
+        let mtime = attrs?[.modificationDate] as? Date
+
+        cutPathsCacheLock.lock()
+        defer { cutPathsCacheLock.unlock() }
+
+        guard let mtime else {
+            // 文件不存在 / 不可读：清空缓存
+            cutPathsCache = (nil, [])
+            return []
+        }
+        if cutPathsCache.mtime == mtime { return cutPathsCache.paths }
+
+        let paths = currentCutQueuePaths()   // 原有磁盘读取逻辑保留为慢路径
+        cutPathsCache = (mtime, paths)
+        return paths
+    }
+
+    /// 暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态
+    private func hasCutQueue() -> Bool {
+        !currentCutQueuePathsCached().isEmpty
+    }
+
     override func requestBadgeIdentifier(for url: URL) {
-        let cutPaths = currentCutQueuePaths()
+        let cutPaths = currentCutQueuePathsCached()
         if cutPaths.contains(url.path) {
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
@@ -301,8 +324,8 @@ class FinderSync: FIFinderSync {
         }
 
         // 剪切 / 粘贴
-        let cutPaths = currentCutQueuePaths()
-        let hasCut = !cutPaths.isEmpty
+        let cutPaths = currentCutQueuePathsCached()
+        let hasCut = hasCutQueue()
 
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
             let selectedPaths = Set(selected.map(\.path))
@@ -314,7 +337,11 @@ class FinderSync: FIFinderSync {
             if hasCut || isContainerLike {
                 let pasteTitleKey: String
                 if hasCut {
-                    pasteTitleKey = cutPaths.count == 1 ? "粘贴 (已剪切 1 项)" : "粘贴 (已剪切 \(cutPaths.count) 项)"
+                    // 统一用带 %d 的格式化 key：原实现按 1 / N 分支，而 strings 里只有「1 项」，
+                    // 英文界面下 N>1 会回落成中文。先本地化再格式化；configureMenuItem 对
+                    // 已本地化的字符串二次 L() 会原样返回，无副作用。
+                    let fmt = NSLocalizedString("粘贴 (已剪切 %d 项)", comment: "menu item")
+                    pasteTitleKey = String(format: fmt, cutPaths.count)
                 } else {
                     pasteTitleKey = "粘贴"
                 }
@@ -660,7 +687,7 @@ class FinderSync: FIFinderSync {
         guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
-        let cutPaths = currentCutQueuePaths()
+        let cutPaths = currentCutQueuePathsCached()
         logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent) pendingCutCount=\(cutPaths.count)")
 
         // 立即清除待粘贴源文件的剪切角标

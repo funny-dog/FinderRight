@@ -4,17 +4,26 @@ import CoreGraphics
 import UserNotifications
 import FinderRightKit
 
+/// 通知文案的本地化辅助：中文做 key，主 App 的 en.lproj/Localizable.strings 提供英文。
+/// 放文件级而非实例方法，便于在 [weak self] 闭包内直接调用。
+private func L(_ key: String) -> String { NSLocalizedString(key, comment: "notification") }
+
 /// 主 App 端的 IPC 请求处理器。
 ///
 /// 这个对象由 IPCWatcher 创建，收到 IPCRequest 后路由到对应方法。
 /// 所有方法都在主 App 进程（非沙箱）里执行，借用主 App 的 TCC 权限（包括 Full Disk Access）。
 final class FinderRightService {
 
-    /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O
-    private let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
+    /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O。
+    ///
+    /// 必须为类型级（static）：本类同时被 IPCWatcher 与 ServicesProvider 各实例化一次，
+    /// 若用实例属性则两个实例各持一条队列，排队互斥形同虚设。
+    private static let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
 
-    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态
-    private let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
+    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态。
+    /// 同上，必须类型级共享，否则「云盘 Services 剪切 + 普通目录 IPC 粘贴」并发时
+    /// cut-queue.json 的读-改-写没有互斥保护。
+    private static let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
     // MARK: - 安全白名单与校验 (B5)
 
@@ -165,7 +174,7 @@ final class FinderRightService {
         let dest = uniqueFileURL(baseName: name, ext: "zip", in: dir)
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        archiveQueue.async { [weak self] in
+        Self.archiveQueue.async { [weak self] in
             let fileManager = FileManager.default
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
@@ -222,14 +231,14 @@ final class FinderRightService {
                 } else {
                     let msg = "ditto 退出码: \(proc.terminationStatus)"
                     self?.serviceLog("compressZip failed: \(msg)")
-                    self?.notifyFailure(title: "压缩失败", body: "\(dest.lastPathComponent): \(msg)")
+                    self?.notifyFailure(title: L("压缩失败"), body: "\(dest.lastPathComponent): \(msg)")
                 }
             } catch {
                 if let tempStage = tempStageURL {
                     try? fileManager.removeItem(at: tempStage)
                 }
                 self?.serviceLog("compressZip error: \(error.localizedDescription)")
-                self?.notifyFailure(title: "压缩出错", body: error.localizedDescription)
+                self?.notifyFailure(title: L("压缩出错"), body: error.localizedDescription)
             }
         }
 
@@ -249,11 +258,11 @@ final class FinderRightService {
     private func notifyCutSuccess(count: Int, firstFileName: String) {
         let content = UNMutableNotificationContent()
         if count == 1 {
-            content.title = "已剪切文件"
-            content.body = "「\(firstFileName)」已剪切，前往目标目录右键「粘贴」即可移动"
+            content.title = L("已剪切文件")
+            content.body = String(format: L("「%@」已剪切，前往目标目录右键「粘贴」即可移动"), firstFileName)
         } else {
-            content.title = "已剪切 \(count) 个文件"
-            content.body = "已放入剪切队列，前往目标目录右键「粘贴」即可移动"
+            content.title = String(format: L("已剪切 %d 个文件"), count)
+            content.body = L("已放入剪切队列，前往目标目录右键「粘贴」即可移动")
         }
         content.sound = .default
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
@@ -271,7 +280,7 @@ final class FinderRightService {
         }
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        archiveQueue.async { [weak self] in
+        Self.archiveQueue.async { [weak self] in
             self?.performDecompress(url: url)
         }
 
@@ -351,13 +360,13 @@ final class FinderRightService {
                     let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                     let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     serviceLog("decompress single file failed (exit \(proc.terminationStatus)): \(errStr)")
-                    notifyFailure(title: "解压失败", body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
+                    notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
                 }
             } catch {
                 try? outHandle.close()
                 try? fileManager.removeItem(at: targetFileURL)
                 serviceLog("decompress single file error: \(error.localizedDescription)")
-                notifyFailure(title: "解压出错", body: "\(url.lastPathComponent): \(error.localizedDescription)")
+                notifyFailure(title: L("解压出错"), body: "\(url.lastPathComponent): \(error.localizedDescription)")
             }
             return
         }
@@ -383,7 +392,7 @@ final class FinderRightService {
             try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
         } catch {
             serviceLog("创建解压目录失败: \(error.localizedDescription)")
-            notifyFailure(title: "解压失败", body: "创建解压目录失败: \(error.localizedDescription)")
+            notifyFailure(title: L("解压失败"), body: "创建解压目录失败: \(error.localizedDescription)")
             return
         }
 
@@ -417,12 +426,12 @@ final class FinderRightService {
                 // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
                 // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
                 try? fileManager.removeItem(at: targetDir)
-                notifyFailure(title: "解压失败", body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
+                notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
             try? fileManager.removeItem(at: targetDir)
-            notifyFailure(title: "解压出错", body: "\(url.lastPathComponent): \(error.localizedDescription)")
+            notifyFailure(title: L("解压出错"), body: "\(url.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -575,7 +584,7 @@ final class FinderRightService {
         }
 
         // 收敛到 cutPasteQueue 串行队列，确保 cut-queue.json 互斥访问
-        return cutPasteQueue.sync {
+        return Self.cutPasteQueue.sync {
             let fileManager = FileManager.default
 
             // 过滤出实际存在的源文件路径
@@ -625,7 +634,7 @@ final class FinderRightService {
         }
 
         // 异步派发到 cutPasteQueue 串行队列，XPC 立即返回“已受理”
-        cutPasteQueue.async { [weak self] in
+        Self.cutPasteQueue.async { [weak self] in
             self?.performPaste(destDir: destDir)
         }
 
@@ -701,7 +710,7 @@ final class FinderRightService {
 
         if let err = firstError {
             serviceLog("pasteFiles completed with error: \(err)")
-            notifyFailure(title: "粘贴文件失败", body: err)
+            notifyFailure(title: L("粘贴文件失败"), body: err)
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
         }
