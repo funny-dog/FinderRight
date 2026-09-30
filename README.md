@@ -9,6 +9,13 @@
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
+<br/>
+<br/>
+
+<img src="docs/images/menu-preview.png" alt="FinderRight Menu Preview" height="320" />
+&emsp;
+<img src="docs/images/settings-about.png" alt="FinderRight Settings" height="320" />
+
 </div>
 
 ---
