@@ -131,6 +131,8 @@ final class FinderRightService {
             return cutFiles(req)
         case "pasteFiles":
             return pasteFiles(req)
+        case "cancelCut":
+            return cancelCut(req)
         default:
             return IPCResponse(id: req.id, success: false, message: "未知 action: \(req.action)")
         }
@@ -516,6 +518,11 @@ final class FinderRightService {
             let pid = finder.processIdentifier
             // 不 activate Finder：postToPid 直达进程事件队列，activate 会抢焦点导致菜单栏跳变卡顿
 
+            // 先读切换前的真实状态，发完事件直接写入取反值。
+            // 原实现是 usleep(100ms) 后读回 com.apple.finder 的 AppleShowAllFiles —— Finder
+            // 异步回写该键，读回存在竞态（可能读到旧值），导致菜单文案偶尔与实际状态相反。
+            let before = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
+
             let src = CGEventSource(stateID: .hidSystemState)
             // kVK_ANSI_Period = 0x2F (47)
             let down = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: true)
@@ -526,10 +533,9 @@ final class FinderRightService {
             up?.postToPid(pid)
 
             serviceLog("sent Cmd+Shift+. to Finder pid=\(pid)")
-            // 等待按键事件派发并回写配置
-            usleep(100_000)
-            let actual = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
-            SharedConfig.shared.showHiddenFiles = actual
+            // 已知限制：用户在 Finder 里直接按 Cmd+Shift+. 绕开本 App 时，这里仍会滞后，
+            // 下次冷启动会重新锚定到 Finder 真实状态（见 applicationDidFinishLaunching）
+            SharedConfig.shared.showHiddenFiles = !before
             return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
@@ -617,6 +623,18 @@ final class FinderRightService {
             notifyCutSuccess(count: validPaths.count, firstFileName: firstName)
 
             return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
+        }
+    }
+
+    /// 取消剪切：清空剪切队列。
+    ///
+    /// 连续剪切决策上保留「累加 / 合并」语义（不改成 Windows 的替换语义），
+    /// 因此需要一个显式入口让用户清空队列、让角标消失。
+    private func cancelCut(_ req: IPCRequest) -> IPCResponse {
+        // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
+        Self.cutPasteQueue.sync {
+            try? FileManager.default.removeItem(at: cutQueueFileURL)
+            return IPCResponse(id: req.id, success: true, message: "已取消剪切")
         }
     }
 
