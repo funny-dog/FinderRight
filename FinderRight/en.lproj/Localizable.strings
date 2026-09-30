@@ -172,3 +172,16 @@
 "正在安装并重启..." = "Installing and restarting…";
 "自动下载并安装新版本" = "Automatically download and install the new version";
 
+/* Custom File Templates */
+"自定义文件模板" = "Custom File Templates";
+"暂无自定义模板" = "No custom templates";
+"添加自定义模板..." = "Add Custom Template…";
+"添加的模板将显示在 Finder 右键「新建文件」子菜单底部。" = "Added templates will appear at the bottom of the Finder \"New File\" submenu.";
+"新建文件模板" = "New File Template";
+"模板名称 (例如: 配置文件)" = "Template Name (e.g., Config File)";
+"文件后缀 (例如: conf，无需带点)" = "File Extension (e.g., conf, without dot)";
+"默认内容 (可选):" = "Default Content (Optional):";
+"文件后缀不能为空" = "File extension cannot be empty";
+"取消" = "Cancel";
+"添加" = "Add";
+
