@@ -59,6 +59,12 @@ final class IPCWatcher {
             NSLog("[IPCWatcher] url missing id: \(url)")
             return
         }
+        // id 必须严格是 UUID：它会被直接拼进文件路径，未校验的 id（如 "../"）
+        // 会导致路径穿越——主 App 会读取/删除任意 *.req.json、写出任意 *.resp.json。
+        guard UUID(uuidString: id) != nil else {
+            NSLog("[IPCWatcher] reject non-UUID id: \(id)")
+            return
+        }
         NSLog("[IPCWatcher] received request id=\(id)")
         queue.async { [weak self] in
             self?.processRequest(id: id)
