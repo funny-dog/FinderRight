@@ -11,6 +11,17 @@ private var cutQueueFileURL: URL {
     IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
 }
 
+private let cutBadgeIdentifier = "com.finderright.badge.cut"
+
+/// 获取当前待剪切队列中的所有源文件路径集合
+private func currentCutQueuePaths() -> Set<String> {
+    guard let data = try? Data(contentsOf: cutQueueFileURL),
+          let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
+        return []
+    }
+    return Set(paths)
+}
+
 /// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
 private func hasCutQueue() -> Bool {
     // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
@@ -18,11 +29,31 @@ private func hasCutQueue() -> Bool {
           let size = attrs[.size] as? UInt64, size > 2 else {
         return false
     }
-    if let data = try? Data(contentsOf: cutQueueFileURL),
-       let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
-        return !paths.isEmpty
+    return !currentCutQueuePaths().isEmpty
+}
+
+/// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
+private func createCutBadgeImage() -> NSImage {
+    let size = NSSize(width: 32, height: 32)
+    let img = NSImage(size: size, flipped: false) { rect in
+        let bg = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
+        NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
+        bg.fill()
+
+        bg.lineWidth = 1.5
+        NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+        bg.stroke()
+
+        if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            let scImg = scissors.withSymbolConfiguration(config) ?? scissors
+            let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
+            NSColor.white.setFill()
+            scImg.draw(in: iconRect)
+        }
+        return true
     }
-    return false
+    return img
 }
 
 // MARK: - 日志
@@ -114,11 +145,25 @@ class FinderSync: FIFinderSync {
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
 
+        // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）
+        FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
+
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
 
         let initMs = (ProcessInfo.processInfo.systemUptime - Self.initStartUptime) * 1000
         logToFile("init done: \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.count)")
+    }
+
+    // MARK: - 文件角标徽章回调
+
+    override func requestBadgeIdentifier(for url: URL) {
+        let cutPaths = currentCutQueuePaths()
+        if cutPaths.contains(url.path) {
+            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+        } else {
+            FIFinderSyncController.default().setBadgeIdentifier("", for: url)
+        }
     }
 
     /// 首次菜单构建之后执行的一次性延后初始化（冷启动瘦身的一部分）
@@ -256,13 +301,24 @@ class FinderSync: FIFinderSync {
         }
 
         // 剪切 / 粘贴
+        let cutPaths = currentCutQueuePaths()
+        let hasCut = !cutPaths.isEmpty
+
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
-            menu.addItem(makeItem(titleKey: "剪切", emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
+            let selectedPaths = Set(selected.map(\.path))
+            let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
+            let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
+            menu.addItem(makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
         }
         if featureOn(MenuFeatureCatalog.paste) {
-            let hasCut = hasCutQueue()
             if hasCut || isContainerLike {
-                let pasteItem = makeItem(titleKey: "粘贴", emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
+                let pasteTitleKey: String
+                if hasCut {
+                    pasteTitleKey = cutPaths.count == 1 ? "粘贴 (已剪切 1 项)" : "粘贴 (已剪切 \(cutPaths.count) 项)"
+                } else {
+                    pasteTitleKey = "粘贴"
+                }
+                let pasteItem = makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
                 pasteItem.isEnabled = hasCut
                 menu.addItem(pasteItem)
             }
@@ -585,6 +641,12 @@ class FinderSync: FIFinderSync {
         guard !urls.isEmpty else { logToFile("cutFiles: no items"); return }
         let paths = urls.map { $0.path }
         logToFile("cutFiles ipc (async) → count=\(paths.count)")
+
+        // 立即给选中的文件打上剪切角标，提供即时视觉反馈
+        for url in urls {
+            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+        }
+
         IPCClient.shared.callAsync(action: "cutFiles", payload: [
             "paths": .stringArray(paths)
         ]) { r in
@@ -598,7 +660,15 @@ class FinderSync: FIFinderSync {
         guard let destDir = FIFinderSyncController.default().targetedURL() else {
             logToFile("pasteFiles: no destination directory"); return
         }
-        logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent)")
+        let cutPaths = currentCutQueuePaths()
+        logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent) pendingCutCount=\(cutPaths.count)")
+
+        // 立即清除待粘贴源文件的剪切角标
+        for path in cutPaths {
+            let u = URL(fileURLWithPath: path)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: u)
+        }
+
         IPCClient.shared.callAsync(action: "pasteFiles", payload: [
             "destination": .string(destDir.path)
         ]) { r in
