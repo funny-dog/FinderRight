@@ -15,9 +15,17 @@ struct FinderRightApp: App {
 
     var body: some Scene {
         // 设置窗口改由 AppDelegate 唯一管理（菜单栏与 ⌘, 唤起相同实例），
-        // 此处 Settings 留空以避免产生双设置窗口实例与状态分叉。
+        // 此处 Settings 留空以避免产生双设置窗口实例与状态分叉；
+        // ⌘, 菜单项替换为 AppDelegate.openSettings()，否则 SwiftUI 默认项会打开空白窗口。
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button(NSLocalizedString("设置...", comment: "menu")) {
+                    appDelegate.openSettings()
+                }
+            }
         }
     }
 }
@@ -207,7 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
 
-    @objc private func openSettings() {
+    // 供 Settings scene 的 ⌘, 命令与状态栏菜单共用（@objc 供 #selector 使用）
+    @objc func openSettings() {
         NSApp.setActivationPolicy(.regular)
         // accessory→regular 切换需延一拍，否则窗口创建早于策略生效会不显示
         DispatchQueue.main.async { [weak self] in
