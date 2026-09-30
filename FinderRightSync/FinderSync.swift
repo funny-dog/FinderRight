@@ -42,7 +42,11 @@ private func logToFile(_ message: String) {
     let timestamp = logDateFormatter.string(from: Date())
     logQueue.async {
         let fm = FileManager.default
-        guard let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        // appex 沙箱内 urls(for: .documentDirectory) 会返回空数组（扩展无 Documents 概念），
+        // 用 NSHomeDirectory()（沙箱下指向容器路径）兜底，否则文件日志被静默吞掉
+        let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+                .appendingPathComponent("Documents", isDirectory: true)
         // 沙箱容器内 Documents 目录可能尚不存在，不先创建则写入被静默吞掉
         try? fm.createDirectory(at: docDir, withIntermediateDirectories: true)
         let logFile = docDir.appendingPathComponent("debug.log")
