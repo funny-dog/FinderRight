@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import UserNotifications
 import FinderRightKit
 
 /// 主 App 端的 IPC 请求处理器。
@@ -195,17 +196,30 @@ final class FinderRightService {
                     }
                     self?.serviceLog("compressZip succeeded: \(dest.path)")
                 } else {
-                    self?.serviceLog("compressZip failed: ditto exit=\(proc.terminationStatus)")
+                    let msg = "ditto 退出码: \(proc.terminationStatus)"
+                    self?.serviceLog("compressZip failed: \(msg)")
+                    self?.notifyFailure(title: "压缩失败", body: "\(dest.lastPathComponent): \(msg)")
                 }
             } catch {
                 if let tempStage = tempStageURL {
                     try? fileManager.removeItem(at: tempStage)
                 }
                 self?.serviceLog("compressZip error: \(error.localizedDescription)")
+                self?.notifyFailure(title: "压缩出错", body: error.localizedDescription)
             }
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理压缩任务，正在后台处理")
+    }
+
+    /// 发送本地通知提醒后台操作失败
+    private func notifyFailure(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 
     private func decompress(_ req: IPCRequest) -> IPCResponse {
@@ -299,11 +313,13 @@ final class FinderRightService {
                     let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                     let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     serviceLog("decompress single file failed (exit \(proc.terminationStatus)): \(errStr)")
+                    notifyFailure(title: "解压失败", body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
                 }
             } catch {
                 try? outHandle.close()
                 try? fileManager.removeItem(at: targetFileURL)
                 serviceLog("decompress single file error: \(error.localizedDescription)")
+                notifyFailure(title: "解压出错", body: "\(url.lastPathComponent): \(error.localizedDescription)")
             }
             return
         }
@@ -329,6 +345,7 @@ final class FinderRightService {
             try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
         } catch {
             serviceLog("创建解压目录失败: \(error.localizedDescription)")
+            notifyFailure(title: "解压失败", body: "创建解压目录失败: \(error.localizedDescription)")
             return
         }
 
@@ -358,9 +375,11 @@ final class FinderRightService {
                 let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                 let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 serviceLog("decompress archive failed (exit \(proc.terminationStatus)): \(errStr)")
+                notifyFailure(title: "解压失败", body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
+            notifyFailure(title: "解压出错", body: "\(url.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -466,6 +485,10 @@ final class FinderRightService {
             up?.postToPid(pid)
 
             serviceLog("sent Cmd+Shift+. to Finder pid=\(pid)")
+            // 等待按键事件派发并回写配置
+            usleep(100_000)
+            let actual = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
+            SharedConfig.shared.showHiddenFiles = actual
             return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
@@ -497,6 +520,8 @@ final class FinderRightService {
             try killProc.run()
             killProc.waitUntilExit()
 
+            let actual = (nextVal == "YES")
+            SharedConfig.shared.showHiddenFiles = actual
             return IPCResponse(id: req.id, success: true, message: "set to \(nextVal), restarted Finder")
         } catch {
             return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
@@ -635,6 +660,7 @@ final class FinderRightService {
 
         if let err = firstError {
             serviceLog("pasteFiles completed with error: \(err)")
+            notifyFailure(title: "粘贴文件失败", body: err)
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
         }

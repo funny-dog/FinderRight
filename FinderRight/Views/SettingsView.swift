@@ -536,8 +536,10 @@ struct AboutTab: View {
 struct ShortcutsTab: View {
 
     private let actions: [(id: String, name: String, icon: String)] = [
+        ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
         ("shortcut.copyPath",     "复制路径",       "doc.on.doc"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
+        ("shortcut.openEditor",   "打开编辑器",     "square.and.pencil"),
         ("shortcut.cut",          "剪切",           "scissors"),
         ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
         ("shortcut.compress",     "压缩为 ZIP",     "archivebox"),
@@ -545,24 +547,40 @@ struct ShortcutsTab: View {
         ("shortcut.toggleHidden", "切换隐藏文件",   "eye"),
     ]
 
+    @FRState private var conflictMessage: String?
+
     var body: some View {
         Form {
             Section {
                 ForEach(actions, id: \.id) { action in
                     ShortcutCell(actionId: action.id,
                                  actionName: action.name,
-                                 actionIcon: action.icon)
+                                 actionIcon: action.icon,
+                                 allActions: actions,
+                                 onConflict: { msg in
+                                     conflictMessage = msg
+                                 })
                 }
             } header: {
                 Text("右键菜单快捷键")
             } footer: {
-                Text("需含 ⌘、⌥ 或 ⌃ 之一。点击按钮后按键录制，Delete 清除，ESC 取消。")
+                Text("需含 ⌘、⌥ 或 ⌃ 之一。点击按钮后按键录制，Delete 清除，ESC 取消。\n快捷键仅在 Finder 右键菜单已展开时生效，不是全局热键。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
         .padding()
+        .alert(isPresented: Binding(
+            get: { conflictMessage != nil },
+            set: { if !$0 { conflictMessage = nil } }
+        )) {
+            Alert(
+                title: Text("快捷键冲突"),
+                message: Text(conflictMessage ?? ""),
+                dismissButton: .default(Text("好"))
+            )
+        }
     }
 }
 
@@ -572,6 +590,8 @@ struct ShortcutCell: View {
     let actionId: String
     let actionName: String
     let actionIcon: String
+    let allActions: [(id: String, name: String, icon: String)]
+    let onConflict: (String) -> Void
 
     @FRState private var shortcut: ActionShortcut?
     @FRState private var isRecording = false
@@ -648,6 +668,19 @@ struct ShortcutCell: View {
     private func cancelRecording() { isRecording = false; removeMonitor() }
 
     private func finishRecording(_ newShortcut: ActionShortcut?) {
+        if let candidate = newShortcut {
+            for other in allActions where other.id != actionId {
+                if let existing = SharedConfig.shared.shortcut(forActionId: other.id),
+                   existing.key.lowercased() == candidate.key.lowercased(),
+                   existing.modifiers == candidate.modifiers {
+                    let otherTitle = NSLocalizedString(other.name, comment: "")
+                    let msg = String(format: NSLocalizedString("该快捷键已被「%@」占用", comment: ""), otherTitle)
+                    cancelRecording()
+                    onConflict(msg)
+                    return
+                }
+            }
+        }
         isRecording = false
         shortcut = newShortcut
         SharedConfig.shared.setShortcut(newShortcut, forActionId: actionId)

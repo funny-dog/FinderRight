@@ -74,4 +74,16 @@ final class IPCClient {
         try? FileManager.default.removeItem(at: reqURL)
         return (false, "IPC 超时 (\(timeout)s)")
     }
+
+    /// 异步调用：派发到后台并发队列执行，避免阻塞 Finder 扩展的主交互线程
+    func callAsync(action: String,
+                   payload: [String: AnyJSON],
+                   timeout: TimeInterval = 10,
+                   completion: (((success: Bool, message: String?)) -> Void)? = nil) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let res = self.call(action: action, payload: payload, timeout: timeout)
+            completion?(res)
+        }
+    }
 }
