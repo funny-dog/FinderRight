@@ -379,11 +379,11 @@ struct AboutTab: View {
                         .foregroundColor(.secondary)
 
                     switch updateStatus {
-                    case .updateAvailable(let newVersion, let releaseURL, let downloadURL):
+                    case .updateAvailable(let newVersion, let releaseURL, let downloadURL, let sha256URL):
                         HStack(spacing: 6) {
                             if let downloadURL = downloadURL {
                                 Button {
-                                    UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL) { newStatus in
+                                    UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, sha256URL: sha256URL) { newStatus in
                                         self.updateStatus = newStatus
                                     }
                                 } label: {

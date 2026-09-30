@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import FinderRightKit
 
 @main
@@ -41,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 请求本地通知权限（用于异步失败通知与系统告警）
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
         // 根据偏好动态设定激活策略
         if alwaysShowDockIcon {
             NSApp.setActivationPolicy(.regular)
@@ -58,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 自动注册并启用自身包含的 FinderSync 扩展
         registerFinderSyncPlugin()
 
+        // 检查是否有历史暂存区遗留文件或自动更新错误
+        checkLegacyStagingDirectory()
+        checkLastUpdateError()
+
         // 监听窗口关闭：当所有标准窗口都关闭后，恢复 accessory（隐藏 Dock 图标）
         NotificationCenter.default.addObserver(
             self, selector: #selector(windowWillClose(_:)),
@@ -72,6 +80,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
             openOnboarding()
+        }
+    }
+
+    /// 检查旧版 staging/ 目录是否存在遗留文件，仅提醒用户，不自动移动或删除
+    private func checkLegacyStagingDirectory() {
+        let stagingDir = IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
+        let fm = FileManager.default
+        if let items = try? fm.contentsOfDirectory(atPath: stagingDir.path), !items.isEmpty {
+            let content = UNMutableNotificationContent()
+            content.title = "发现暂存区遗留文件"
+            content.body = "暂存区有 \(items.count) 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging"
+            content.sound = .default
+            let req = UNNotificationRequest(identifier: "staging-legacy-warning", content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+        }
+    }
+
+    /// 检查上次更新是否有失败日志并弹窗提醒
+    private func checkLastUpdateError() {
+        let errorFileURL = IPCBridge.rootDirectory.appendingPathComponent("last-update-error.txt")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: errorFileURL.path),
+           let content = try? String(contentsOf: errorFileURL, encoding: .utf8),
+           !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try? fm.removeItem(at: errorFileURL)
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "自动更新失败"
+                alert.informativeText = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
         }
     }
 

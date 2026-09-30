@@ -112,13 +112,15 @@ ln -shf /Applications "$STAGE_DIR/Applications"
 
 echo "=== 7. 打包 DMG 与 ZIP ==="
 mkdir -p "$PROJECT_DIR/build"
-rm -f "$PROJECT_DIR/build/FinderRight-$VERSION.dmg" "$PROJECT_DIR/FinderRight.dmg" "$PROJECT_DIR/FinderRight-v$VERSION.zip"
+rm -f "$PROJECT_DIR/build/FinderRight-$VERSION.dmg" "$PROJECT_DIR/FinderRight.dmg" "$PROJECT_DIR/FinderRight-v$VERSION.zip" "$PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
 
 hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "$PROJECT_DIR/build/FinderRight-$VERSION.dmg"
 cp "$PROJECT_DIR/build/FinderRight-$VERSION.dmg" "$PROJECT_DIR/FinderRight.dmg"
 
 (cd "$STAGE_DIR" && zip -ry "$PROJECT_DIR/FinderRight-v$VERSION.zip" FinderRight.app)
+(cd "$PROJECT_DIR" && shasum -a 256 "FinderRight-v$VERSION.zip" > "FinderRight-v$VERSION.zip.sha256")
 
 echo "=== 构建完成！==="
 echo "DMG 产物: $PROJECT_DIR/FinderRight.dmg (及 build/FinderRight-$VERSION.dmg)"
 echo "ZIP 产物: $PROJECT_DIR/FinderRight-v$VERSION.zip"
+echo "SHA256:  $PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
