@@ -172,6 +172,20 @@
 "正在安装并重启..." = "Installing and restarting…";
 "自动下载并安装新版本" = "Automatically download and install the new version";
 
+/* Notifications & alerts */
+"压缩失败" = "Compression Failed";
+"压缩出错" = "Compression Error";
+"解压失败" = "Extraction Failed";
+"解压出错" = "Extraction Error";
+"粘贴文件失败" = "Paste Failed";
+"已剪切文件" = "Files Cut";
+"「%@」已剪切，前往目标目录右键「粘贴」即可移动" = "\"%@\" cut. Right-click \"Paste\" in the destination folder to move it";
+"已剪切 %d 个文件" = "%d Files Cut";
+"已放入剪切队列，前往目标目录右键「粘贴」即可移动" = "Added to the cut queue. Right-click \"Paste\" in the destination folder to move them";
+"发现暂存区遗留文件" = "Leftover Files in Staging Area";
+"暂存区有 %d 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging" = "%d leftover files from an older version are in ~/Library/Application Support/FinderRight/staging";
+"自动更新失败" = "Automatic Update Failed";
+
 /* Custom File Templates */
 "自定义文件模板" = "Custom File Templates";
 "暂无自定义模板" = "No custom templates";

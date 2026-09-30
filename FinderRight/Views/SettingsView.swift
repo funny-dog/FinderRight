@@ -362,7 +362,9 @@ struct AddTemplateSheet: View {
             }
 
             if let err = errorMessage {
-                Text(err)
+                // Text(String) 走的是「原样显示」，不会查 Localizable.strings；
+                // 包成 LocalizedStringKey 才能让「文件后缀不能为空」的英文条目生效
+                Text(LocalizedStringKey(err))
                     .font(.caption)
                     .foregroundColor(.red)
             }
