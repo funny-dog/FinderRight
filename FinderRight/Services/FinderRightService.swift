@@ -49,13 +49,29 @@ final class FinderRightService {
 
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
-        // 1. 路径白名单校验
+        // 1. 路径校验：
+        //    - 写入/移动类 action 必须过安全白名单（可写范围仅 真实 home、/Volumes、tmp）
+        //    - 只读类 action 不修改任何文件，只校验路径存在性即可。扩展的监控目录包含启动卷 /，
+        //      因此 /Applications、/opt/homebrew、/etc、/Users/Shared 等系统目录也会出菜单，
+        //      若沿用白名单，在系统目录下点「打开终端 / 打开编辑器」会被静默拦截（只写日志，无反馈）。
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles"]
+        let needsWhitelist = !readOnlyActions.contains(req.action)
+
         let pathKeys = ["directory", "destination", "archive", "testPath"]
         for key in pathKeys {
             if let path = req.payload[key]?.stringValue {
-                guard isPathAllowed(path) else {
-                    serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                    return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                if needsWhitelist {
+                    guard isPathAllowed(path) else {
+                        serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                    }
+                } else {
+                    // 只读路径仅校验存在性（防明显无效请求，不做安全边界，因为不会写入）
+                    let expanded = (path as NSString).expandingTildeInPath
+                    guard FileManager.default.fileExists(atPath: expanded) else {
+                        serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                    }
                 }
             }
         }
@@ -63,9 +79,17 @@ final class FinderRightService {
         for key in arrayKeys {
             if let paths = req.payload[key]?.stringArrayValue {
                 for path in paths {
-                    guard isPathAllowed(path) else {
-                        serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                    if needsWhitelist {
+                        guard isPathAllowed(path) else {
+                            serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                            return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                        }
+                    } else {
+                        let expanded = (path as NSString).expandingTildeInPath
+                        guard FileManager.default.fileExists(atPath: expanded) else {
+                            serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
+                            return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                        }
                     }
                 }
             }
@@ -389,10 +413,15 @@ final class FinderRightService {
                 let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                 let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 serviceLog("decompress archive failed (exit \(proc.terminationStatus)): \(errStr)")
+                // 失败时清掉刚建的目标目录：它与单文件分支行为保持一致，
+                // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
+                // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
+                try? fileManager.removeItem(at: targetDir)
                 notifyFailure(title: "解压失败", body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
+            try? fileManager.removeItem(at: targetDir)
             notifyFailure(title: "解压出错", body: "\(url.lastPathComponent): \(error.localizedDescription)")
         }
     }
