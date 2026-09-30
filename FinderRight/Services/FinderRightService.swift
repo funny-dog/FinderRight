@@ -231,7 +231,7 @@ final class FinderRightService {
                     }
                     self?.serviceLog("compressZip succeeded: \(dest.path)")
                 } else {
-                    let msg = "ditto 退出码: \(proc.terminationStatus)"
+                    let msg = String(format: L("ditto 退出码: %d"), proc.terminationStatus)
                     self?.serviceLog("compressZip failed: \(msg)")
                     self?.notifyFailure(title: L("压缩失败"), body: "\(dest.lastPathComponent): \(msg)")
                 }
@@ -362,7 +362,8 @@ final class FinderRightService {
                     let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                     let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     serviceLog("decompress single file failed (exit \(proc.terminationStatus)): \(errStr)")
-                    notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
+                    let detail = errStr.isEmpty ? String(format: L("退出码 %d"), proc.terminationStatus) : errStr
+                    notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(detail)")
                 }
             } catch {
                 try? outHandle.close()
@@ -394,7 +395,7 @@ final class FinderRightService {
             try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
         } catch {
             serviceLog("创建解压目录失败: \(error.localizedDescription)")
-            notifyFailure(title: L("解压失败"), body: "创建解压目录失败: \(error.localizedDescription)")
+            notifyFailure(title: L("解压失败"), body: String(format: L("创建解压目录失败: %@"), error.localizedDescription))
             return
         }
 
@@ -428,7 +429,8 @@ final class FinderRightService {
                 // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
                 // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
                 try? fileManager.removeItem(at: targetDir)
-                notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(errStr.isEmpty ? "退出码 \(proc.terminationStatus)" : errStr)")
+                let detail = errStr.isEmpty ? String(format: L("退出码 %d"), proc.terminationStatus) : errStr
+                    notifyFailure(title: L("解压失败"), body: "\(url.lastPathComponent): \(detail)")
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")

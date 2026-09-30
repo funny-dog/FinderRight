@@ -121,8 +121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 items.count)
             content.sound = .default
             let req = UNNotificationRequest(identifier: "staging-legacy-warning", content: content, trigger: nil)
-            UNUserNotificationCenter.current().add(req) { _ in
-                UserDefaults.standard.set(true, forKey: sentKey)
+            UNUserNotificationCenter.current().add(req) { error in
+                // 只在真正调度成功后置位：权限被拒等失败场景不要吞掉后续启动的提醒机会
+                if error == nil {
+                    UserDefaults.standard.set(true, forKey: sentKey)
+                }
             }
         }
     }
