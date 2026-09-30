@@ -86,6 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 首次启动：若尚未完成引导，自动弹出引导设置窗口
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
+            // 弹出即视为已完成：用户若用红点直接关窗，OnboardingView 的「开始使用」不会执行，
+            // 标志位会一直是 false，导致此后每次冷启动（含右键 IPC 冷启动、开机自启）
+            // 都重复弹引导并抢焦。用户已看过引导即视为完成。
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             openOnboarding()
         }
     }

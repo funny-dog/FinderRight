@@ -328,6 +328,8 @@ public final class UpdateChecker: NSObject {
             if ! /bin/cp -R "\(newAppURL.path)" "$NEW_APP"; then
                 echo "复制新版本到临时目录失败" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
+                # 主进程此刻已 terminate，不重新拉起用户的 App 就凭空消失；旧版仍在 $TARGET 原位
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
@@ -335,6 +337,7 @@ public final class UpdateChecker: NSObject {
             if ! /bin/mv "$TARGET" "$OLD_APP"; then
                 echo "备份旧版本失败" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
@@ -344,6 +347,7 @@ public final class UpdateChecker: NSObject {
                 # 若移动失败则将旧 App 回滚到位
                 /bin/mv "$OLD_APP" "$TARGET"
                 /bin/rm -rf "$NEW_APP"
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
@@ -355,6 +359,9 @@ public final class UpdateChecker: NSObject {
             /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
 
             # 重新打开新版
+            # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，
+            # 残留的旧扩展进程仍指向已删除的旧包，需由系统按新包重新拉起
+            /usr/bin/killall FinderRightSync 2>/dev/null || true
             /usr/bin/open "$TARGET"
 
             # 清理下载解压临时文件
