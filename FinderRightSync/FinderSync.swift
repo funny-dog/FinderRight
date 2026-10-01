@@ -32,27 +32,49 @@ private func hasCutQueue() -> Bool {
     return !currentCutQueuePaths().isEmpty
 }
 
-/// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
+/// 生成高辨识度剪切状态文件角标（32x32 Retina 实体位图，深黑高对比圆底 + 白色高光边框 + 纯白高亮剪刀）
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
-    let img = NSImage(size: size, flipped: false) { rect in
-        let bg = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
-        NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
-        bg.fill()
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: 32,
+        pixelsHigh: 32,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else { return NSImage(size: size) }
 
-        bg.lineWidth = 1.5
-        NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
-        bg.stroke()
+    NSGraphicsContext.saveGraphicsState()
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current = ctx
 
-        if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            let scImg = scissors.withSymbolConfiguration(config) ?? scissors
-            let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
-            NSColor.white.setFill()
-            scImg.draw(in: iconRect)
-        }
-        return true
+    // 绘制深黑圆底 + 高对比白边
+    let bg = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 28, height: 28))
+    NSColor(calibratedWhite: 0.10, alpha: 0.92).setFill()
+    bg.fill()
+
+    bg.lineWidth = 1.5
+    NSColor.white.setStroke()
+    bg.stroke()
+
+    // 绘制纯白剪刀（显式 paletteColors 避免默认单色黑）
+    if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        let scImg = scissors.withSymbolConfiguration(config) ?? scissors
+        let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
+        scImg.draw(in: iconRect)
     }
+
+    ctx?.flushGraphics()
+    NSGraphicsContext.restoreGraphicsState()
+
+    let img = NSImage(size: size)
+    img.addRepresentation(rep)
     return img
 }
 
@@ -159,7 +181,9 @@ class FinderSync: FIFinderSync {
 
     override func requestBadgeIdentifier(for url: URL) {
         let cutPaths = currentCutQueuePaths()
-        if cutPaths.contains(url.path) {
+        let path = url.standardizedFileURL.path
+        if cutPaths.contains(path) || cutPaths.contains(url.path) {
+            logToFile("requestBadgeIdentifier MATCH: \(url.lastPathComponent)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
@@ -208,6 +232,16 @@ class FinderSync: FIFinderSync {
         let fm = FileManager.default
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
         var dirs: Set<URL> = [home]
+
+        if let desktop = fm.urls(for: .desktopDirectory, in: .userDomainMask).first {
+            dirs.insert(desktop)
+        }
+        if let downloads = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            dirs.insert(downloads)
+        }
+        if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
+            dirs.insert(docs)
+        }
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
         if let volumes = fm.mountedVolumeURLs(
@@ -644,7 +678,9 @@ class FinderSync: FIFinderSync {
 
         // 立即给选中的文件打上剪切角标，提供即时视觉反馈
         for url in urls {
+            logToFile("cutFiles setBadgeIdentifier for: \(url.path)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url.standardizedFileURL)
         }
 
         IPCClient.shared.callAsync(action: "cutFiles", payload: [
@@ -667,6 +703,7 @@ class FinderSync: FIFinderSync {
         for path in cutPaths {
             let u = URL(fileURLWithPath: path)
             FIFinderSyncController.default().setBadgeIdentifier("", for: u)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: u.standardizedFileURL)
         }
 
         IPCClient.shared.callAsync(action: "pasteFiles", payload: [
