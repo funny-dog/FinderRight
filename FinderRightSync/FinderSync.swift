@@ -13,68 +13,58 @@ private var cutQueueFileURL: URL {
 
 private let cutBadgeIdentifier = "com.finderright.badge.cut"
 
+private func normalizePath(_ p: String) -> String {
+    return (p as NSString).standardizingPath.precomposedStringWithCanonicalMapping
+}
+
+private let cutBadgeLock = NSLock()
+private var inMemoryCutPaths: Set<String> = []
+
 /// 获取当前待剪切队列中的所有源文件路径集合
 private func currentCutQueuePaths() -> Set<String> {
-    guard let data = try? Data(contentsOf: cutQueueFileURL),
-          let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
-        return []
+    cutBadgeLock.lock()
+    var result = inMemoryCutPaths
+    cutBadgeLock.unlock()
+
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
+          let size = attrs[.size] as? UInt64, size > 2 else {
+        return result
     }
-    return Set(paths)
+    if let data = try? Data(contentsOf: cutQueueFileURL),
+       let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
+        for p in paths {
+            result.insert(normalizePath(p))
+        }
+    }
+    return result
 }
 
 /// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
 private func hasCutQueue() -> Bool {
-    // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
-          let size = attrs[.size] as? UInt64, size > 2 else {
-        return false
-    }
     return !currentCutQueuePaths().isEmpty
 }
 
-/// 生成高辨识度剪切状态文件角标（32x32 Retina 实体位图，深黑高对比圆底 + 白色高光边框 + 纯白高亮剪刀）
+/// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
-    guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: 32,
-        pixelsHigh: 32,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ) else { return NSImage(size: size) }
+    let img = NSImage(size: size, flipped: false) { rect in
+        let bg = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
+        NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
+        bg.fill()
 
-    NSGraphicsContext.saveGraphicsState()
-    let ctx = NSGraphicsContext(bitmapImageRep: rep)
-    NSGraphicsContext.current = ctx
+        bg.lineWidth = 1.5
+        NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+        bg.stroke()
 
-    // 绘制深黑圆底 + 高对比白边
-    let bg = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 28, height: 28))
-    NSColor(calibratedWhite: 0.10, alpha: 0.92).setFill()
-    bg.fill()
-
-    bg.lineWidth = 1.5
-    NSColor.white.setStroke()
-    bg.stroke()
-
-    // 绘制纯白剪刀（显式 paletteColors 避免默认单色黑）
-    if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
-        let scImg = scissors.withSymbolConfiguration(config) ?? scissors
-        let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
-        scImg.draw(in: iconRect)
+        if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            let scImg = scissors.withSymbolConfiguration(config) ?? scissors
+            let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
+            NSColor.white.setFill()
+            scImg.draw(in: iconRect)
+        }
+        return true
     }
-
-    ctx?.flushGraphics()
-    NSGraphicsContext.restoreGraphicsState()
-
-    let img = NSImage(size: size)
-    img.addRepresentation(rep)
     return img
 }
 
@@ -145,7 +135,7 @@ class FinderSync: FIFinderSync {
     private static func preloadSymbols() {
         let symbols = [
             "doc.badge.plus", "doc.on.doc", "terminal", "curlybraces",
-            "scissors", "doc.on.clipboard", "archivebox", "eye",
+            "scissors", "doc.on.clipboard", "archivebox", "eye", "xmark.circle",
             "doc.text", "doc.richtext", "tablecells", "chevron.left.forwardslash.chevron.right"
         ]
         for s in symbols {
@@ -181,9 +171,8 @@ class FinderSync: FIFinderSync {
 
     override func requestBadgeIdentifier(for url: URL) {
         let cutPaths = currentCutQueuePaths()
-        let path = url.standardizedFileURL.path
-        if cutPaths.contains(path) || cutPaths.contains(url.path) {
-            logToFile("requestBadgeIdentifier MATCH: \(url.lastPathComponent)")
+        let normPath = normalizePath(url.path)
+        if cutPaths.contains(normPath) || cutPaths.contains(url.path) || cutPaths.contains(url.standardizedFileURL.path) {
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
@@ -244,9 +233,16 @@ class FinderSync: FIFinderSync {
         }
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
+        // 关键安全原则：绝不能包含根目录 / (file:///)，否则系统 Finder 会将整个扩展视作整盘监控
+        // 从而为了系统安全与性能静默屏蔽 Badge 角标回调！
         if let volumes = fm.mountedVolumeURLs(
             includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) {
-            dirs.formUnion(volumes)
+            for vol in volumes {
+                let p = vol.path
+                if p != "/" && !p.hasPrefix("/System") && !p.hasPrefix("/private") {
+                    dirs.insert(vol)
+                }
+            }
         }
 
         return dirs
@@ -356,6 +352,9 @@ class FinderSync: FIFinderSync {
                 pasteItem.isEnabled = hasCut
                 menu.addItem(pasteItem)
             }
+        }
+        if featureOn(MenuFeatureCatalog.cut), hasCut {
+            menu.addItem(makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(cancelCut(_:)), shortcutId: nil, style: style))
         }
 
         // 压缩解压
@@ -676,7 +675,14 @@ class FinderSync: FIFinderSync {
         let paths = urls.map { $0.path }
         logToFile("cutFiles ipc (async) → count=\(paths.count)")
 
-        // 立即给选中的文件打上剪切角标，提供即时视觉反馈
+        // 1. 同步更新扩展内部内存集合，彻底消除异步 IPC 写磁盘与 Finder 刷新回调的时序竞争
+        cutBadgeLock.lock()
+        for p in paths {
+            inMemoryCutPaths.insert(normalizePath(p))
+        }
+        cutBadgeLock.unlock()
+
+        // 2. 立即给选中的文件打上剪切角标，提供即时视觉反馈
         for url in urls {
             logToFile("cutFiles setBadgeIdentifier for: \(url.path)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
@@ -690,6 +696,23 @@ class FinderSync: FIFinderSync {
         }
     }
 
+    @objc func cancelCut(_ sender: NSMenuItem) {
+        let cutPaths = currentCutQueuePaths()
+        logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
+
+        // 立即清除内存队列中的待剪切路径
+        cutBadgeLock.lock()
+        inMemoryCutPaths.removeAll()
+        cutBadgeLock.unlock()
+
+        for path in cutPaths {
+            FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+        }
+        IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
+            logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
     @objc func pasteFiles(_ sender: NSMenuItem) {
         // 粘贴目标始终是 Finder 当前正在浏览的目录（targetedURL），
         // 而不是选中的项——否则当用户选中一个子文件夹时会错误地粘贴进去。
@@ -699,7 +722,11 @@ class FinderSync: FIFinderSync {
         let cutPaths = currentCutQueuePaths()
         logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent) pendingCutCount=\(cutPaths.count)")
 
-        // 立即清除待粘贴源文件的剪切角标
+        // 立即清除待粘贴源文件的剪切角标并清空内存队列
+        cutBadgeLock.lock()
+        inMemoryCutPaths.removeAll()
+        cutBadgeLock.unlock()
+
         for path in cutPaths {
             let u = URL(fileURLWithPath: path)
             FIFinderSyncController.default().setBadgeIdentifier("", for: u)

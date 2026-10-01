@@ -69,6 +69,7 @@ struct GeneralTab: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showDockIcon") private var showDockIcon = false
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
+    @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
     @FRState private var launchAtLoginError: String?
     @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
@@ -113,6 +114,26 @@ struct GeneralTab: View {
             }
 
             Section {
+                Picker("语言", selection: Binding(
+                    get: { appLanguage },
+                    set: { newValue in
+                        guard newValue != appLanguage else { return }
+                        appLanguage = newValue
+                        SharedConfig.shared.appLanguage = newValue
+                        if newValue == "system" {
+                            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+                        } else {
+                            UserDefaults.standard.set([newValue], forKey: "AppleLanguages")
+                        }
+                        UserDefaults.standard.synchronize()
+                        relaunchApp()
+                    }
+                )) {
+                    Text("跟随系统").tag("system")
+                    Text("中文").tag("zh-Hans")
+                    Text("English").tag("en")
+                }
+
                 Picker("右键菜单图标", selection: Binding(
                     get: { menuIconStyle },
                     set: { newValue in
@@ -160,10 +181,15 @@ struct GeneralTab: View {
             } header: {
                 Text("显示")
             } footer: {
-                if !showMenuBarIcon && !showDockIcon {
-                    Label("两个图标都关闭后，可通过 Spotlight 搜索「FinderRight」重新打开偏好设置", systemImage: "exclamationmark.triangle.fill")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("切换语言将立即自动重启应用以生效")
                         .font(.caption)
-                        .foregroundColor(.orange)
+                        .foregroundColor(.secondary)
+                    if !showMenuBarIcon && !showDockIcon {
+                        Label("两个图标都关闭后，可通过 Spotlight 搜索「FinderRight」重新打开偏好设置", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
 
@@ -211,10 +237,12 @@ struct GeneralTab: View {
         .onAppear {
             calibrateLaunchAtLoginStatus()
             menuIconStyle = SharedConfig.shared.menuIconStyle
+            appLanguage = SharedConfig.shared.appLanguage
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             calibrateLaunchAtLoginStatus()
             menuIconStyle = SharedConfig.shared.menuIconStyle
+            appLanguage = SharedConfig.shared.appLanguage
         }
     }
 
@@ -240,6 +268,27 @@ struct GeneralTab: View {
         if launchAtLogin != isEnabled {
             NSLog("[SettingsView] 校准开机自启状态: 本地=\(launchAtLogin) -> 系统=\(isEnabled) (系统状态: \(LaunchAtLoginManager.shared.statusDescription(status)))")
             launchAtLogin = isEnabled
+        }
+    }
+
+    private func relaunchApp() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let appPath = Bundle.main.bundleURL.path
+        let script = """
+        while /bin/kill -0 \(pid) 2>/dev/null; do
+            /bin/sleep 0.1
+        done
+        /usr/bin/killall FinderRightSync 2>/dev/null || true
+        /usr/bin/open "\(appPath)"
+        /bin/sleep 0.1
+        /usr/bin/open "finderright://settings"
+        """
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = ["-c", script]
+        try? proc.run()
+        DispatchQueue.main.async {
+            NSApp.terminate(nil)
         }
     }
 }
@@ -362,7 +411,9 @@ struct AddTemplateSheet: View {
             }
 
             if let err = errorMessage {
-                Text(err)
+                // Text(String) 走的是「原样显示」，不会查 Localizable.strings；
+                // 包成 LocalizedStringKey 才能让「文件后缀不能为空」的英文条目生效
+                Text(LocalizedStringKey(err))
                     .font(.caption)
                     .foregroundColor(.red)
             }
