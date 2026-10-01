@@ -20,23 +20,22 @@ private func normalizePath(_ p: String) -> String {
 private let cutBadgeLock = NSLock()
 private var inMemoryCutPaths: Set<String> = []
 
-/// 获取当前待剪切队列中的所有源文件路径集合
+/// 从磁盘读取并标准化 cut-queue.json 中的持久化路径
+private func persistedCutQueuePaths() -> Set<String> {
+    guard let data = try? Data(contentsOf: cutQueueFileURL),
+          let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
+        return []
+    }
+    return Set(paths.map(normalizePath))
+}
+
+/// 获取当前待剪切队列中的所有源文件路径集合（内存乐观队列与持久化队列的并集）
 private func currentCutQueuePaths() -> Set<String> {
     cutBadgeLock.lock()
-    var result = inMemoryCutPaths
+    let memoryPaths = inMemoryCutPaths
     cutBadgeLock.unlock()
 
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
-          let size = attrs[.size] as? UInt64, size > 2 else {
-        return result
-    }
-    if let data = try? Data(contentsOf: cutQueueFileURL),
-       let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
-        for p in paths {
-            result.insert(normalizePath(p))
-        }
-    }
-    return result
+    return memoryPaths.union(persistedCutQueuePaths())
 }
 
 /// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
@@ -715,6 +714,18 @@ class FinderSync: FIFinderSync {
             "paths": .stringArray(paths)
         ]) { r in
             logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+            guard !r.success else { return }
+            let persisted = persistedCutQueuePaths()
+            let staleURLs = urls.filter { !persisted.contains(normalizePath($0.path)) }
+            cutBadgeLock.lock()
+            for url in staleURLs { inMemoryCutPaths.remove(normalizePath(url.path)) }
+            cutBadgeLock.unlock()
+            DispatchQueue.main.async {
+                for url in staleURLs {
+                    FIFinderSyncController.default().setBadgeIdentifier("", for: url)
+                    FIFinderSyncController.default().setBadgeIdentifier("", for: url.standardizedFileURL)
+                }
+            }
         }
     }
 
