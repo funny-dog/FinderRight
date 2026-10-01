@@ -43,6 +43,14 @@ private func assertNil(_ value: Any?, _ message: String = "", file: StaticString
     }
 }
 
+/// 每个用例独立的临时目录（真实文件系统语义，避免共享状态互相干扰）
+private func makeTempDirectory() -> URL {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("finderright-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
 // MARK: - 主测试入口
 
 @main
@@ -181,6 +189,74 @@ struct FinderRightKitTestsRunner {
 
             let waitResult = group.wait(timeout: .now() + 10)
             try assertEqual(waitResult, .success, "并发访问超时，可能发生了死锁！")
+        }
+
+        // 6. CutQueueStore 读写、去重与清空
+        runTest("CutQueueStore 读写与去重合并") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+
+            try assertTrue(store.read().isEmpty, "空目录应读出空队列")
+
+            try store.write(["/tmp/a", "/tmp/b"])
+            try assertEqual(store.read(), ["/tmp/a", "/tmp/b"])
+
+            // 去重合并：重复项忽略，新项追加在尾部
+            let merged = store.appendUnique(["/tmp/b", "/tmp/c"])
+            try assertEqual(merged, ["/tmp/a", "/tmp/b", "/tmp/c"])
+            try assertEqual(store.read(), ["/tmp/a", "/tmp/b", "/tmp/c"])
+
+            // 写入空数组等价于清空（不留空数组文件）
+            try store.write([])
+            try assertTrue(store.read().isEmpty)
+            try assertTrue(!FileManager.default.fileExists(atPath: store.queueURL.path))
+        }
+
+        // 7. CutQueueStore 取走队列 + 崩溃恢复
+        runTest("CutQueueStore 取走队列与崩溃恢复") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+
+            // 造两个真实存在的源文件，用于验证 existingOnly 过滤
+            let alive = dir.appendingPathComponent("alive.txt")
+            FileManager.default.createFile(atPath: alive.path, contents: Data("x".utf8))
+            let gone = dir.appendingPathComponent("gone.txt")
+
+            try store.write([alive.path, gone.path])
+            try assertEqual(store.take(), [alive.path, gone.path], "take 应返回并取走队列")
+            try assertTrue(store.read().isEmpty, "take 后队列应为空")
+            try assertTrue(FileManager.default.fileExists(atPath: store.inflightURL.path), "take 应留下 in-flight 标记")
+            try assertNil(store.take(), "队列已被取走，第二次 take 应返回 nil")
+
+            // 模拟主 App 在移动过程中被杀：in-flight 残留 → 启动时恢复
+            let restored = store.recover(existingOnly: true)
+            try assertEqual(restored, [alive.path], "只应恢复仍存在的源文件")
+            try assertEqual(store.read(), [alive.path])
+            try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path), "恢复后应删除 in-flight 标记")
+
+            // finish() 在没有 in-flight 标记时也必须幂等
+            store.finish()
+            try assertEqual(store.read(), [alive.path])
+
+            // recover 在无 in-flight 残留时不应改动队列
+            try assertEqual(store.recover(), [alive.path])
+        }
+
+        // 8. CutQueueStore：取消剪切必须能作废 in-flight 标记
+        runTest("CutQueueStore 取消剪切作废 in-flight") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+
+            try store.write(["/tmp/x"])
+            _ = store.take()
+            store.clear()
+
+            try assertTrue(store.read().isEmpty)
+            try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path))
+            try assertTrue(store.recover().isEmpty, "取消后不应再恢复出任何路径")
         }
 
         print("\n-----------------------------------------")
