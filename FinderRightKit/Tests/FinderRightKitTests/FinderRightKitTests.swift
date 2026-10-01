@@ -259,6 +259,214 @@ struct FinderRightKitTestsRunner {
             try assertTrue(store.recover().isEmpty, "取消后不应再恢复出任何路径")
         }
 
+        // 9. pluginkit 选举输出解析
+        runTest("FinderSyncElection 解析 pluginkit 输出") {
+            // 真实 `pluginkit -m -p com.apple.FinderSync` 输出样本（2026-10-02 本机）+ 边界行
+            let output = """
+            -    com.google.GeminiMacOS.FinderSync(1.119.02.0)
+            +    com.google.drivefs.finderhelper.findersync(131.0)
+            +    com.alienator88.Pearcleaner.FinderOpen(5.4.3)
+            +    com.aone.keka.KekaFinderIntegration(1.6.4)
+            +    com.finderright.app.sync(1.1.10)
+                 com.example.noelection(2.0)
+            !    com.example.debug(1.0)
+            +    com.aone.keka.KekaFinderIntegration(1.6.3)
+            +    com.tencent.inputmethod.wetype.FinderSync(2.2.3)
+
+            garbage line without id
+            """
+            let entries = FinderSyncElection.parse(output)
+            try assertEqual(entries.count, 9, "空行与无法识别的行应被忽略")
+            try assertEqual(entries[0], FinderSyncElection.Entry(state: "-", bundleId: "com.google.GeminiMacOS.FinderSync", version: "1.119.02.0"))
+            try assertEqual(entries[4].state, "+")
+            try assertEqual(entries[5], FinderSyncElection.Entry(state: " ", bundleId: "com.example.noelection", version: "2.0"))
+            try assertEqual(entries[6].state, "!")
+
+            // 只取启用（+）的、去重、保持出现顺序、排除自身
+            let ids = FinderSyncElection.enabledBundleIds(in: output, excluding: ["com.finderright.app.sync"])
+            try assertEqual(ids, [
+                "com.google.drivefs.finderhelper.findersync",
+                "com.alienator88.Pearcleaner.FinderOpen",
+                "com.aone.keka.KekaFinderIntegration",
+                "com.tencent.inputmethod.wetype.FinderSync"
+            ])
+            try assertTrue(FinderSyncElection.enabledBundleIds(in: "", excluding: []).isEmpty, "空输出应得到空列表")
+        }
+
+        // 10. 抢回恢复标记存储
+        runTest("BadgeReclaimRestoreStore 写入、读取与清除") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = BadgeReclaimRestoreStore(directory: dir)
+
+            try assertTrue(store.load().isEmpty, "无标记时应读出空列表")
+            try store.save(["com.aone.keka.KekaFinderIntegration", "com.alienator88.Pearcleaner.FinderOpen"])
+            try assertEqual(store.load(), ["com.aone.keka.KekaFinderIntegration", "com.alienator88.Pearcleaner.FinderOpen"])
+
+            store.clear()
+            try assertTrue(store.load().isEmpty)
+            try assertTrue(!FileManager.default.fileExists(atPath: store.fileURL.path), "clear 应删除标记文件")
+            store.clear() // 幂等
+
+            // 损坏内容视为无标记，不得崩溃
+            try Data("not json".utf8).write(to: store.fileURL)
+            try assertTrue(store.load().isEmpty, "损坏的标记应视为空")
+        }
+
+        // 11. 抢回限流
+        runTest("BadgeReclaimRateLimiter 限流规则") {
+            var limiter = BadgeReclaimRateLimiter(minInterval: 20, maxPerWindow: 3, window: 3600)
+            let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+            try assertEqual(limiter.evaluate(requester: "100:0", now: t0), .accept)
+            // 同一请求方（扩展进程 + 注册轮次）只受理一次（即使已过最小间隔）
+            if case .accept = limiter.evaluate(requester: "100:0", now: t0.addingTimeInterval(60)) {
+                throw TestFailure(message: "同一 requester 不应被二次受理")
+            }
+            // 同一进程重新注册后进入新一轮，可再受理一次
+            try assertEqual(limiter.evaluate(requester: "100:1", now: t0.addingTimeInterval(80)), .accept)
+            // 不同请求方但未满最小间隔
+            if case .accept = limiter.evaluate(requester: "101:0", now: t0.addingTimeInterval(85)) {
+                throw TestFailure(message: "最小间隔内不应受理")
+            }
+            // 被拒绝不占用名额：101 过了间隔后仍可受理
+            try assertEqual(limiter.evaluate(requester: "101:0", now: t0.addingTimeInterval(105)), .accept)
+            // 滚动窗口内已满 3 次
+            if case .accept = limiter.evaluate(requester: "102:0", now: t0.addingTimeInterval(200)) {
+                throw TestFailure(message: "窗口内超过上限不应受理")
+            }
+            // 窗口滚过第一次之后恢复
+            try assertEqual(limiter.evaluate(requester: "102:0", now: t0.addingTimeInterval(3601)), .accept)
+        }
+
+        // 12. 归属探测状态机：记录与查询
+        runTest("BadgeOwnershipProbe 记录角标请求与归属查询") {
+            var probe = BadgeOwnershipProbe()
+            try assertTrue(!probe.isOwned(directory: "/Users/u/Desktop"))
+
+            probe.recordBadgeRequest(itemPath: "/Users/u/Desktop/a.txt")
+            try assertTrue(probe.isOwned(directory: "/Users/u/Desktop"))
+            try assertTrue(probe.isOwned(directory: "/Users/u/Desktop/"), "目录尾部斜杠应规范化")
+            try assertTrue(!probe.isOwned(directory: "/Users/u"), "只确认父目录本身，不外推")
+
+            // NFD / NFC 混用（Finder 回调与 FileManager 可能给出不同的 Unicode 规范形式）
+            probe.recordBadgeRequest(itemPath: "/Volumes/E/caf\u{0065}\u{0301}/a.txt")
+            try assertTrue(probe.isOwned(directory: "/Volumes/E/caf\u{00E9}"), "NFD 记录应能被 NFC 查询命中")
+        }
+
+        // 13. 归属探测状态机：探测与申请配额
+        runTest("BadgeOwnershipProbe 探测与抢回申请配额") {
+            var probe = BadgeOwnershipProbe()
+            let desktop = "/Users/u/Desktop"
+
+            // 每个目录只探测一次
+            try assertTrue(probe.beginProbe(directory: desktop), "首次观察应探测")
+            try assertTrue(!probe.beginProbe(directory: desktop), "重复观察不应再次探测")
+
+            // 被拒绝（非「无可见项」）消耗一次尝试；满 2 次后不再申请
+            try assertTrue(probe.canRequestReclaim(directory: desktop))
+            probe.noteReclaimAttempt()
+            probe.noteReclaimResponse(directory: desktop, outcome: .rejected)
+            try assertTrue(probe.canRequestReclaim(directory: desktop), "一次被拒后仍有剪切兜底机会")
+            probe.noteReclaimAttempt()
+            probe.noteReclaimResponse(directory: desktop, outcome: .rejected)
+            try assertTrue(!probe.canRequestReclaim(directory: desktop), "尝试满 2 次后不应再申请")
+
+            // 已确认归属的目录不需要申请
+            var owned = BadgeOwnershipProbe()
+            owned.recordBadgeRequest(itemPath: desktop + "/a.txt")
+            try assertTrue(!owned.beginProbe(directory: desktop), "已确认的目录无需探测")
+            try assertTrue(!owned.canRequestReclaim(directory: desktop))
+        }
+
+        // 14. 归属探测状态机：受理与「无可见项」
+        runTest("BadgeOwnershipProbe 受理后停止、无可见项退还配额") {
+            var probe = BadgeOwnershipProbe()
+            let empty = "/Users/u/EmptyDir"
+            let desktop = "/Users/u/Desktop"
+
+            // 无可见项：退还尝试次数，且该目录不再申请
+            probe.noteReclaimAttempt()
+            probe.noteReclaimResponse(directory: empty, outcome: .rejectedNoVisibleItems)
+            try assertEqual(probe.attempts, 0, "无可见项不应消耗尝试次数")
+            try assertTrue(!probe.canRequestReclaim(directory: empty), "无可见项的目录不应再申请")
+            try assertTrue(probe.canRequestReclaim(directory: desktop))
+
+            // 受理后：本进程任何目录都不再申请
+            probe.noteReclaimAttempt()
+            probe.noteReclaimResponse(directory: desktop, outcome: .accepted)
+            try assertTrue(probe.reclaimAccepted)
+            try assertTrue(!probe.canRequestReclaim(directory: desktop))
+            try assertTrue(!probe.canRequestReclaim(directory: "/Volumes/E"))
+
+            // 主 App 响应映射
+            try assertEqual(BadgeReclaimOutcome(success: true, message: nil), .accepted)
+            try assertEqual(BadgeReclaimOutcome(success: false, message: BadgeReclaimRejection.noVisibleItems.message(detail: "/x")), .rejectedNoVisibleItems)
+            try assertEqual(BadgeReclaimOutcome(success: false, message: BadgeReclaimRejection.rateLimited.message(detail: "20s")), .rejected)
+            try assertEqual(BadgeReclaimOutcome(success: false, message: "IPC 超时 (10s)"), .rejected)
+        }
+
+        // 15. 归属探测状态机：同一时刻只允许一个在途请求
+        runTest("BadgeOwnershipProbe 在途请求期间不再申请") {
+            var probe = BadgeOwnershipProbe()
+            let home = "/Users/u"
+            let desktop = "/Users/u/Desktop"
+
+            probe.noteReclaimAttempt()
+            try assertTrue(probe.reclaimInFlight)
+            try assertTrue(!probe.canRequestReclaim(directory: desktop), "在途期间不应并发申请（避免同一进程的请求互相挤占配额）")
+
+            probe.noteReclaimResponse(directory: home, outcome: .rejectedNoVisibleItems)
+            try assertTrue(!probe.reclaimInFlight, "收到响应后应结束在途")
+            try assertTrue(probe.canRequestReclaim(directory: desktop), "上一个请求结束后其他目录可继续申请")
+        }
+
+        // 15b. 归属探测状态机：重新注册后开启新一轮
+        runTest("BadgeOwnershipProbe 重新注册后清空归属并重置配额") {
+            var probe = BadgeOwnershipProbe()
+            let desktop = "/Users/u/Desktop"
+            probe.recordBadgeRequest(itemPath: desktop + "/a.txt")
+            _ = probe.beginProbe(directory: "/Users/u")
+            probe.noteReclaimAttempt()
+            probe.noteReclaimResponse(directory: "/Users/u", outcome: .accepted)
+            try assertEqual(probe.epoch, 0)
+
+            probe.beginNewRegistrationEpoch()
+            try assertEqual(probe.epoch, 1)
+            try assertTrue(!probe.isOwned(directory: desktop), "重新注册可能已丢失归属，旧的确认必须作废")
+            try assertTrue(!probe.reclaimAccepted)
+            try assertEqual(probe.attempts, 0)
+            try assertTrue(probe.beginProbe(directory: "/Users/u"), "新一轮应允许重新探测")
+            try assertTrue(probe.canRequestReclaim(directory: desktop))
+        }
+
+        // 16. 主 App 启动时判断扩展注册是否为当前 bundle（决定是否需要 pluginkit -a）
+        runTest("FinderSyncElection 判断扩展注册是否为当前版本与路径") {
+            let path = "/Applications/FinderRight.app/Contents/PlugIns/FinderRightSync.appex"
+            // 真实 `pluginkit -m -v -i com.finderright.app.sync` 输出（字段以 Tab 分隔）
+            let verbose = "+    com.finderright.app.sync(1.1.10)\t72146EC7-7CFE-4D41-B265-995B6C256615\t2026-10-01 19:43:32 +0000\t\(path)\n (1 plug-in)"
+            try assertTrue(FinderSyncElection.isRegistrationCurrent(verboseOutput: verbose, appexPath: path, version: "1.1.10"))
+            try assertTrue(!FinderSyncElection.isRegistrationCurrent(verboseOutput: verbose, appexPath: path, version: "1.1.11"), "刚升级（版本不一致）需要重新注册")
+            try assertTrue(!FinderSyncElection.isRegistrationCurrent(verboseOutput: verbose, appexPath: "/Users/u/Downloads/FinderRight.app/Contents/PlugIns/FinderRightSync.appex", version: "1.1.10"), "路径变化需要重新注册")
+            try assertTrue(!FinderSyncElection.isRegistrationCurrent(verboseOutput: "", appexPath: path, version: "1.1.10"), "未注册需要注册")
+
+            // 回归：不带 -v 的输出没有路径字段，曾导致每次启动都误判为「路径变化」而重复 pluginkit -a
+            let nonVerbose = "+    com.finderright.app.sync(1.1.10)"
+            try assertTrue(!FinderSyncElection.isRegistrationCurrent(verboseOutput: nonVerbose, appexPath: path, version: "1.1.10"),
+                           "非 -v 输出无法确认路径，调用方必须使用 -m -v")
+        }
+
+        // 17. 设置：角标冲突自动处理默认开启
+        runTest("SharedConfig badgeOwnershipReclaim 默认开启且可持久化") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-badge-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+
+            let config = SharedConfig(fileURL: tempURL)
+            try assertTrue(config.badgeOwnershipReclaim, "默认应开启")
+            config.badgeOwnershipReclaim = false
+            try assertTrue(!SharedConfig(fileURL: tempURL).badgeOwnershipReclaim, "关闭应持久化")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

@@ -135,12 +135,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard FileManager.default.fileExists(atPath: appexURL.path) else { return }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            /// 查询插件注册与选举状态（输出形如 `+ com.finderright.app.sync(1.1.10) <uuid> <日期> <路径>`）
+            /// 查询插件注册与选举状态。必须带 `-v`：输出形如
+            /// `+    com.finderright.app.sync(1.1.10)<Tab><uuid><Tab><日期><Tab><路径>`；
+            /// 不带 -v 时没有路径字段，路径比对永远失败（曾导致每次启动都重复 pluginkit -a）。
             func queryPluginState() -> (status: Int32, output: String) {
                 let proc = Process()
                 let pipe = Pipe()
                 proc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-                proc.arguments = ["-m", "-i", "com.finderright.app.sync"]
+                proc.arguments = ["-m", "-v", "-i", "com.finderright.app.sync"]
                 proc.standardOutput = pipe
                 try? proc.run()
                 proc.waitUntilExit()
@@ -159,9 +161,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 版本号一致即同一份插件，重复注册有害无益；只有版本变化才需要让 PluginKit 更新。
             let appexVersion = (NSDictionary(contentsOf: appexURL.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String) ?? ""
             var (status, output) = queryPluginState()
-            let pathMatches = output.contains(appexURL.path)
-            let versionMatches = appexVersion.isEmpty || output.contains("(\(appexVersion))")
-            if status != 0 || !pathMatches || !versionMatches {
+            let isCurrent = FinderSyncElection.isRegistrationCurrent(
+                verboseOutput: output, appexPath: appexURL.path, version: appexVersion)
+            if status != 0 || !isCurrent {
                 let regProc = Process()
                 regProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
                 regProc.arguments = ["-a", appexURL.path]

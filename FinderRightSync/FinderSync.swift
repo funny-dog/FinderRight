@@ -33,6 +33,23 @@ private func currentCutQueuePaths() -> Set<String> {
     return memoryPaths.union(persistedCutQueuePaths())
 }
 
+// MARK: - 角标归属探测（每个扩展进程一份）
+
+/// Finder 回调线程不固定（日志里 requestBadgeIdentifier 来自多个线程），统一加锁访问
+private let badgeProbeLock = NSLock()
+private var badgeProbe = BadgeOwnershipProbe()
+
+private func withBadgeProbe<T>(_ body: (inout BadgeOwnershipProbe) -> T) -> T {
+    badgeProbeLock.lock()
+    defer { badgeProbeLock.unlock() }
+    return body(&badgeProbe)
+}
+
+/// 观察目录后多久判定「收不到角标请求」：日志中请求总与 beginObserving 在同一秒内到达
+private let badgeProbeDelay: TimeInterval = 1.5
+/// 主 App 受理抢回后多久核验结果：ignore 停留 2s + Finder 重新请求的余量
+private let badgeReclaimVerifyDelay: TimeInterval = 3
+
 /// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
 ///
 /// 角标图要经 XPC 交给 Finder 进程渲染，预渲染位图是最稳妥的形态，保持即可。
@@ -155,7 +172,7 @@ class FinderSync: FIFinderSync {
         super.init()
 
         // init 路径刻意保持极简：只有 directoryURLs 注册是扩展工作的前提。
-        // 符号预热、卷挂载监听等全部延后到首次 menu(for:) 之后（见 deferredSetupIfNeeded），
+        // 符号预热等全部延后到首次 menu(for:) 之后（见 deferredSetupIfNeeded），
         // 让系统回收扩展后的首次右键等待时间降到最低。
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
@@ -187,7 +204,11 @@ class FinderSync: FIFinderSync {
     /// 2026-10-02 实测：Keka 的 MonitoredURLs 与本扩展完全重叠（~/Desktop、~/Documents、
     /// ~/Downloads、/Volumes），是角标时有时无的直接原因；本扩展进程重启（例如重复
     /// `pluginkit -a`）会让我们成为最后注册者，重叠目录全部失去归属。
+    ///
+    /// 应对：收到本回调即证明持有该目录归属（记入 badgeProbe）；观察了目录却收不到时，
+    /// 请主 App 短暂重启其他扩展取回归属（见 requestBadgeReclaimIfNeeded）。
     override func requestBadgeIdentifier(for url: URL) {
+        withBadgeProbe { $0.recordBadgeRequest(itemPath: url.path) }
         let cutPaths = currentCutQueuePaths()
         let normPath = normalizePath(url.path)
         logToFile("requestBadgeIdentifier: \(url.path) cut=\(cutPaths.contains(normPath))")
@@ -206,26 +227,38 @@ class FinderSync: FIFinderSync {
         // SF Symbols 预热（getSymbolImage 本身带懒缓存兜底，这里只是提前摊销）
         Self.preloadSymbols()
 
-        // 卷挂载监听延后注册：init 时的 buildMonitoredDirectories 已包含当前已挂载卷，
-        // 首次菜单前新挂载卷的漏监听窗口极小，可接受
-        let nc = NSWorkspace.shared.notificationCenter
-        nc.addObserver(self, selector: #selector(volumeDidMount(_:)),
-                       name: NSWorkspace.didMountNotification, object: nil)
-        nc.addObserver(self, selector: #selector(volumeDidUnmount(_:)),
-                       name: NSWorkspace.didUnmountNotification, object: nil)
+        // 卷挂载监听延后注册，并补并一次 init 之后、监听注册之前挂载的卷（集合未变化时不会重设）。
+        // 只监听挂载、不监听卸载（见 volumeDidMount）。
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(volumeDidMount(_:)),
+            name: NSWorkspace.didMountNotification, object: nil)
+        mergeMountedVolumes()
         logToFile("deferredSetup done")
     }
 
-    @objc func volumeDidMount(_ n: Notification) { updateMonitoredDirectories() }
-    @objc func volumeDidUnmount(_ n: Notification) { updateMonitoredDirectories() }
+    /// 新卷挂载：把新卷并入监控集合。
+    ///
+    /// 重新设置 directoryURLs 等于重新注册，会让本扩展排到重叠扩展之后、可能丢失角标归属，
+    /// 所以：只并入、不剔除（卸载卷的残留路径无害，不为它重设）；集合未变化时不重设；
+    /// 重设后开启新的探测轮次，由归属探测 / 剪切兜底按需重新抢回。
+    @objc func volumeDidMount(_ n: Notification) {
+        mergeMountedVolumes()
+    }
 
-    private func updateMonitoredDirectories() {
-        let dirs = Self.buildMonitoredDirectories()
-        FIFinderSyncController.default().directoryURLs = dirs
-        logToFile("updateMonitoredDirectories count: \(dirs.count)")
+    private func mergeMountedVolumes() {
+        let current = FIFinderSyncController.default().directoryURLs ?? []
+        let merged = current.union(Self.buildMonitoredDirectories())
+        guard merged != current else { return }
+        FIFinderSyncController.default().directoryURLs = merged
+        withBadgeProbe { $0.beginNewRegistrationEpoch() }
+        logToFile("mergeMountedVolumes: directoryURLs 重新注册 count=\(merged.count)，开启新一轮角标归属探测")
     }
 
     /// 构建需要监控的目录集合：用户主目录 + 桌面/下载/文稿 + 已挂载卷。
+    ///
+    /// ⚠️ 外接卷必须逐个注册：2026-10-02 实测只注册 `/Volumes` 时，Finder 对 `/Volumes/E`
+    /// 等卷内目录**不会**回调 beginObserving / menu(for:)（目录匹配按卷进行，不跨卷继承）。
+    /// 这也是挂载新卷时不得不重新设置 directoryURLs 的原因（见 volumeDidMount）。
     ///
     /// FIFinderSync 只有当 Finder 当前目录在 directoryURLs 集合内（或其子目录内）时，
     /// 才会触发右键菜单与 requestBadgeIdentifier 回调。
@@ -253,9 +286,8 @@ class FinderSync: FIFinderSync {
             home.appendingPathComponent("Documents")
         ]
 
-        // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘；也可能是 ~/OrbStack 这类挂载点）
-        // 关键安全原则：绝不能包含根目录 / (file:///)，否则系统 Finder 会将整个扩展视作整盘监控
-        // 从而为了系统安全与性能静默屏蔽 Badge 角标回调！
+        // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘；也可能是 ~/OrbStack 这类挂载点）。
+        // 不包含启动卷 /：系统目录的右键操作由 Services 覆盖。
         if let volumes = fm.mountedVolumeURLs(
             includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) {
             for vol in volumes {
@@ -289,15 +321,83 @@ class FinderSync: FIFinderSync {
         return target
     }
 
-    // MARK: - Directory Observation (诊断用)
+    // MARK: - Directory Observation
 
-    /// Finder 开始显示某个受监控目录时调用，记录原始 URL 供排查。
+    /// Finder 开始显示某个受监控目录时调用。本进程首次观察该目录时顺带做一次角标归属探测：
+    /// 持有归属的扩展会在同一秒内收到目录内可见项的 requestBadgeIdentifier，收不到则可能已丢失。
     override func beginObservingDirectory(at url: URL) {
         logToFile("beginObserving: \(url.path)")
+        let dir = url.path
+        guard withBadgeProbe({ $0.beginProbe(directory: dir) }) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + badgeProbeDelay) { [weak self] in
+            self?.requestBadgeReclaimIfNeeded(directory: dir, reason: "probe")
+        }
     }
 
     override func endObservingDirectory(at url: URL) {
         logToFile("endObserving: \(url.path)")
+    }
+
+    // MARK: - 角标归属抢回
+
+    /// 目录归属未确认时，请主 App 短暂重启其他 Finder Sync 扩展以取回角标归属。
+    ///
+    /// - reason `probe`：目录观察后的被动探测。主 App 未运行时不发（IPC 会唤醒主 App，
+    ///   不应因被动探测拉起用户主动退出的 App），留给剪切时兜底。
+    /// - reason `cut`：剪切时兜底，剪切本身就会唤醒主 App。
+    ///
+    /// 配额与并发由 BadgeOwnershipProbe 约束：每进程至多受理一次、同一时刻一个在途请求；
+    /// 探测撞上在途请求时稍后重试，确保同时观察的多个目录不会被漏判。
+    private func requestBadgeReclaimIfNeeded(directory: String, reason: String) {
+        let (owned, inFlight, allowed) = withBadgeProbe {
+            ($0.isOwned(directory: directory), $0.reclaimInFlight, $0.canRequestReclaim(directory: directory))
+        }
+        if owned {
+            if reason == "probe" { logToFile("badgeProbe dir=\(directory) owned") }
+            return
+        }
+        if inFlight {
+            if reason == "probe" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + badgeProbeDelay) { [weak self] in
+                    self?.requestBadgeReclaimIfNeeded(directory: directory, reason: reason)
+                }
+            }
+            return
+        }
+        guard allowed else { return }
+
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.badgeOwnershipReclaim else {
+            logToFile("badgeProbe dir=\(directory) lost（自动解决角标冲突已关闭）")
+            return
+        }
+        if reason == "probe",
+           NSRunningApplication.runningApplications(withBundleIdentifier: IPCBridge.mainAppBundleIdentifier).isEmpty {
+            logToFile("badgeProbe dir=\(directory) lost（主 App 未运行，留待剪切时兜底）")
+            return
+        }
+
+        withBadgeProbe { $0.noteReclaimAttempt() }
+        logToFile("badgeReclaim request reason=\(reason) dir=\(directory)")
+        IPCClient.shared.callAsync(action: BadgeReclaimIPC.action, payload: [
+            "directory": .string(directory),
+            "requester": .string(withBadgeProbe { $0.requesterId(pid: getpid()) }),
+            "reason": .string(reason)
+        ], timeout: 5) { r in
+            let outcome = BadgeReclaimOutcome(success: r.success, message: r.message)
+            withBadgeProbe { $0.noteReclaimResponse(directory: directory, outcome: outcome) }
+            guard outcome == .accepted else {
+                logToFile("badgeReclaim rejected dir=\(directory) msg=\(r.message ?? "")")
+                return
+            }
+            logToFile("badgeReclaim accepted dir=\(directory)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + badgeReclaimVerifyDelay) {
+                let regained = withBadgeProbe { $0.isOwned(directory: directory) }
+                logToFile(regained
+                    ? "badgeReclaim verified dir=\(directory)"
+                    : "badgeReclaim still lost dir=\(directory)（可能来自 File Provider 域等无法处理的接管）")
+            }
+        }
     }
 
     // MARK: - Context Menu
@@ -739,6 +839,12 @@ class FinderSync: FIFinderSync {
             logToFile("cutFiles setBadgeIdentifier for: \(url.path)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url.standardizedFileURL)
+        }
+
+        // 3. 剪切时兜底：所在目录尚未确认角标归属（探测没结论或主 App 当时未运行）时立即申请抢回。
+        //    抢回成功后 Finder 会重新请求可见项角标，requestBadgeIdentifier 据内存队列给出剪切角标。
+        if let parent = urls.first?.deletingLastPathComponent().path {
+            requestBadgeReclaimIfNeeded(directory: parent, reason: "cut")
         }
 
         IPCClient.shared.callAsync(action: "cutFiles", payload: [

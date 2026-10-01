@@ -1,7 +1,7 @@
 # 剪切角标归属权自动抢回 设计
 
 日期：2026-10-02
-状态：待审阅
+状态：已实现（2026-10-02，真机验证见 §9）
 
 ## 1. 背景与根因
 
@@ -43,10 +43,10 @@
 |---|---|
 | Finder 重启（全体重新竞争） | 新扩展进程 → 体检 |
 | 本扩展进程重启（更新、被杀、`pluginkit -a`） | 新扩展进程 → 体检 |
-| 本扩展重设 `directoryURLs`（现状：插拔外接卷时） | **消除**：改为静态注册 `/Volumes`（见 §5.3） |
-| 主 App 重启 | 不影响扩展进程，无需处理 |
+| 本扩展重设 `directoryURLs`（挂载新卷时） | 只在集合变化时重设，随后开启新一轮探测（见 §5.3） |
+| 主 App 重启 | 不影响扩展进程，无需处理（前提：启动时不重复 `pluginkit -a`，见 §5.7） |
 
-因此「每个扩展进程最多被受理一次抢回」即可覆盖全部场景，用户频繁进出目录不会触发任何动作。
+因此「每个扩展进程、每个注册轮次最多被受理一次抢回」即可覆盖全部场景，用户频繁进出目录不会触发任何动作。
 
 ## 5. 设计
 
@@ -87,22 +87,24 @@ Kit 内的纯状态机（不依赖 FinderSync / AppKit，时钟通过参数注�
 3. `cutFiles`：若被剪切项父目录满足 `canRequestReclaim`、且设置开启 → 发起抢回，原因 `cut`
    （剪切本身就会唤醒主 App，无需检查运行状态）。
 4. 发起抢回：`noteReclaimAttempt()`，IPC 发送
-   `reclaimBadgeOwnership { directory: D, extPid, reason }`。主 App 立即返回受理结果；
+   `reclaimBadgeOwnership { directory: D, requester: "pid:轮次", reason }`。主 App 立即返回受理结果；
    受理则 `noteReclaimAccepted()`，并在 3 秒后核验 `isOwned(D)`：成功记
    `badgeReclaim verified`；失败记 `badgeReclaim still lost`（不再重试——剩余冲突来自
    File Provider 域或无法处理的情况）。
 5. 抢回成功后，Finder 会对可见项重新回调 `requestBadgeIdentifier`，现有逻辑据剪切队列
    （含内存乐观队列）给出角标，无需额外推送。
 
-### 5.3 消除自身重新注册：静态注册 `/Volumes`
+### 5.3 外接卷：逐卷注册 + 挂载时开启新一轮
 
-`buildMonitoredDirectories()` 改为固定集合：`~`、`~/Desktop`、`~/Downloads`、`~/Documents`、
-`/Volumes`。删除卷挂载 / 卸载监听与 `updateMonitoredDirectories()`，此后 `directoryURLs`
-在进程生命周期内只设置一次。
+最初设想改为静态注册 `/Volumes` 以免挂载时重设 `directoryURLs`，**真机证伪**：只注册
+`/Volumes` 时，Finder 对 `/Volumes/E` 等卷内目录不回调 `beginObserving` / `menu(for:)`
+（目录匹配按卷进行，不跨卷继承）。因此保留逐卷注册，并把重新注册的影响收敛到最小：
 
-- `/Volumes` 覆盖之后挂载的任何外接卷；沙箱已有 `/Volumes/` 读写例外。
-- 仍不包含 `/`（启动卷 `Macintosh HD` 在 Finder 中解析为 `/`，不在 `/Volumes` 下）。
-- 需真机验证：`/Volumes/E` 下右键菜单与角标正常；运行中插入新卷后菜单可用。
+- 只监听挂载，不监听卸载（卸载卷的残留路径无害）；
+- 新集合 = 当前集合 ∪ 当前已挂载卷，未变化则不重设；
+- 重设后调用 `BadgeOwnershipProbe.beginNewRegistrationEpoch()`：作废已确认的归属、允许重新
+  探测、重置抢回配额；主 App 限流以「pid:轮次」为请求方，新一轮可再受理一次；
+- 挂载监听在首次菜单后注册时，补并一次此前挂载的卷。
 
 ### 5.4 主 App 侧：`BadgeOwnershipManager`
 
@@ -114,7 +116,7 @@ IPC 路由新增 `reclaimBadgeOwnership`，归入只读 action（不写用户文
 1. 设置开关开启（`SharedConfig.badgeOwnershipReclaim`）；
 2. 目录内存在可见项（`contentsOfDirectory` 过滤以 `.` 开头的项；读失败视为无法判定，拒绝）
    ——防止空目录 / 纯隐藏目录误判为丢失；
-3. 限流（`BadgeReclaimRateLimiter`，Kit 纯逻辑）：同一 `extPid` 只受理一次；
+3. 限流（`BadgeReclaimRateLimiter`，Kit 纯逻辑）：同一请求方（`pid:注册轮次`）只受理一次；
    两次执行间隔 ≥ 20 秒；滚动 1 小时内最多 5 次（防打开 / 存储面板实例反复触发）。
 
 通过后返回 `success=true`，把执行派发到独立串行队列 `com.finderright.app.badge-reclaim`
@@ -149,9 +151,19 @@ IPC 路由新增 `reclaimBadgeOwnership`，归入只读 action（不写用户文
 
 ### 5.6 日志（排查用）
 
+主 App 侧用 `os_log`（subsystem `com.finderright.app`、category `BadgeOwnership`、`%{public}`）：
+`NSLog` 的内容在统一日志里会被脱敏为 `<private>`，无法排查。
+
 扩展：`badgeProbe dir=… owned|lost`、`badgeReclaim request reason=probe|cut dir=…`、
 `badgeReclaim accepted|rejected msg=…`、`badgeReclaim verified|still lost dir=…`。
 主 App：`serviceLog` 记录受理 / 拒绝原因、重启列表、恢复核验结果、崩溃恢复结果。
+
+### 5.7 修复：主 App 启动时重复注册扩展
+
+1.1.10 的「版本与路径一致时跳过 `pluginkit -a`」从未生效：判断用的 `pluginkit -m -i` 输出不含
+路径字段，路径比对恒为 false，于是每次启动主 App 都重复注册，扩展进程被重建并排到重叠扩展之后。
+改为 `pluginkit -m -v -i`，判断逻辑移入 Kit（`FinderSyncElection.isRegistrationCurrent`）并用
+真实输出样本覆盖。真机验证：修复后重启主 App，扩展进程 pid 不变、无抢回发生。
 
 ## 6. 错误处理汇总
 
@@ -175,7 +187,9 @@ IPC 路由新增 `reclaimBadgeOwnership`，归入只读 action（不写用户文
 - `FinderSyncElectionParser`：解析真实 `pluginkit -m` 输出样本（含 `+`/`-`/空格状态、同 id
   多版本、版本号括号、空输出）；排除指定 id。
 - `BadgeReclaimRestoreStore`：写入 / 读取 / 清除、损坏文件视为空、幂等清除。
-- `BadgeReclaimRateLimiter`：同 extPid 拒绝、最小间隔、滚动小时上限（注入时钟）。
+- `BadgeReclaimRateLimiter`：同请求方（pid:轮次）拒绝、新轮次可再受理、最小间隔、滚动小时上限（注入时钟）。
+- `BadgeOwnershipProbe` 新一轮：作废归属确认、重置配额、允许重新探测；在途期间不并发申请。
+- `FinderSyncElection.isRegistrationCurrent`：版本 / 路径一致与否、未注册、非 `-v` 输出（回归用例）。
 - `BadgeOwnershipProbe`：记录与查询、父目录规范化（NFC、`standardizingPath`）、
   被受理后 `canRequestReclaim` 恒为 false、被拒绝只消耗一次尝试、尝试满 2 次后为 false。
 
@@ -187,7 +201,7 @@ IPC 路由新增 `reclaimBadgeOwnership`，归入只读 action（不写用户文
    `badgeReclaim verified`；且之后 `pluginkit -m` 显示所有原 `+` 扩展仍为 `+`。
 3. 关闭设置后重复 1：不应发生任何重启。
 4. 崩溃恢复：执行中途杀主 App（或手工放置恢复标记后启动）→ 扩展被恢复为启用。
-5. `/Volumes/E` 菜单与角标正常；运行中插入新卷后菜单可用。
+5. 外接卷：`/Volumes/E` 子目录与运行中新挂载卷的子目录均回调 beginObserving 并取得归属。
 6. 剪切兜底：主 App 未运行时触发丢失 → 剪切时抢回，角标约 2~3 秒后出现。
 
 ## 8. 涉及文件
@@ -202,4 +216,20 @@ IPC 路由新增 `reclaimBadgeOwnership`，归入只读 action（不写用户文
 | `FinderRight/Services/FinderRightService.swift` | 路由 `reclaimBadgeOwnership` |
 | `FinderRight/Services/XPCListenerHost.swift` | 启动时调用崩溃恢复 |
 | `FinderRight/Views/SettingsView.swift` + `en.lproj` | 设置开关与文案 |
-| `FinderRightSync/FinderSync.swift` | 接入探测、剪切兜底、静态注册 `/Volumes`、删除卷监听 |
+| `FinderRightSync/FinderSync.swift` | 接入探测、剪切兜底、挂载时并入新卷并开启新一轮 |
+| `FinderRight/FinderRightApp.swift` | 启动注册判断改用 `-m -v` + `isRegistrationCurrent`（§5.7） |
+
+## 9. 真机验证记录（2026-10-02，本机：Keka / Pearcleaner / WeType / Google Drive 均启用）
+
+| 项目 | 结果 |
+|---|---|
+| 强制丢失（ignore/use 本扩展）→ 自动抢回 | ✅ 观察桌面 → 1.6s 判定丢失 → 22ms 受理 → 0.4s 后收到 9 条角标请求 → 2.8s 恢复并核验 4 个扩展 → `verified` |
+| `~/Downloads` 新窗口 | ✅ `lost` → 抢回 → `verified` |
+| 外接卷 `/Volumes/E/brew`、新挂载卷子目录 | ✅ 抢回 → `verified` / `owned` |
+| 关闭设置 | ✅ 仅记录 `lost（自动解决角标冲突已关闭）`，无任何扩展被重启 |
+| 崩溃恢复（手工停用 Keka + 放置标记后启动主 App） | ✅ Keka 恢复为 `+`，标记删除 |
+| 主 App 重启 | ✅ 修复 §5.7 后扩展进程不变、无抢回 |
+| 每次抢回后 | ✅ 全部原启用扩展仍为 `+`，无残留恢复标记 |
+
+未在真机自动化覆盖（需人工右键操作）：运行中挂载新卷后的重新注册路径（依赖首次菜单后注册的挂载监听）、
+主 App 未运行时的剪切兜底。

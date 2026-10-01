@@ -51,6 +51,7 @@ public final class SharedConfig {
         static let customFileTemplates = "customFileTemplates"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
+        static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -246,6 +247,24 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.appLanguage] = newValue
+            save()
+        }
+    }
+
+    // MARK: - Badge Ownership
+
+    /// 自动解决角标冲突（默认开启）：检测到剪切角标的显示权被其他 Finder Sync 扩展占用时，
+    /// 由主 App 短暂重启这些扩展以取回。扩展端用来跳过无谓 IPC，主 App 端作为最终裁决。
+    public var badgeOwnershipReclaim: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.badgeOwnershipReclaim] as? Bool ?? true
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.badgeOwnershipReclaim] = newValue
             save()
         }
     }
