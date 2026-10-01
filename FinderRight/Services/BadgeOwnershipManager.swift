@@ -83,20 +83,26 @@ final class BadgeOwnershipManager {
             return
         }
 
-        // 先落盘再动手：之后任何时刻崩溃，下次启动都能按标记恢复
+        // 先落盘再动手：之后任何时刻崩溃，下次启动都能按标记恢复。
+        // 必须与已有标记合并：上次恢复失败的扩展此刻不是 `+`，不在 ids 里，覆盖写会让它永久停在禁用状态
+        let toRestore: [String]
         do {
-            try restoreStore.save(ids)
+            toRestore = try restoreStore.merge(ids)
         } catch {
             log("恢复标记写入失败，为安全起见放弃抢回: \(error.localizedDescription)")
             return
         }
 
         log("重启其他 Finder Sync 扩展以取回角标归属: \(ids)")
+        let leftover = toRestore.filter { !ids.contains($0) }
+        if !leftover.isEmpty {
+            log("并入上次未能恢复的扩展，本轮一并恢复: \(leftover)")
+        }
         for id in ids {
             _ = Self.pluginKit(["-e", "ignore", "-i", id])
         }
         Thread.sleep(forTimeInterval: Self.ignoreDuration)
-        restore(ids, context: "抢回")
+        restore(toRestore, context: "抢回")
         log("抢回流程结束，耗时 \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
     }
 

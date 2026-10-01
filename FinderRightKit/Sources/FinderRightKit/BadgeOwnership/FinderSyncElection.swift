@@ -101,6 +101,21 @@ public struct BadgeReclaimRestoreStore {
         try data.write(to: fileURL, options: .atomic)
     }
 
+    /// 把 bundleIds 并入已有标记后落盘，返回合并后的完整待恢复列表（保持顺序、去重）。
+    ///
+    /// 抢回前必须用它而不是 `save`：上次恢复失败而保留在标记里的扩展此刻不处于启用（`+`）状态，
+    /// 不会出现在本轮枚举结果里；覆盖写会抹掉它们的记录，本轮恢复成功后标记被清除，
+    /// 那些扩展就永久停留在禁用状态且无据可查。
+    @discardableResult
+    public func merge(_ bundleIds: [String]) throws -> [String] {
+        var merged: [String] = []
+        for id in load() + bundleIds where !merged.contains(id) {
+            merged.append(id)
+        }
+        try save(merged)
+        return merged
+    }
+
     /// 读取待恢复列表；无标记或内容损坏返回 `[]`
     public func load() -> [String] {
         guard let data = try? Data(contentsOf: fileURL),

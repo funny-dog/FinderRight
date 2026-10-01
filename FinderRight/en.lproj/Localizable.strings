@@ -212,3 +212,11 @@
 "取消" = "Cancel";
 "添加" = "Add";
 
+
+/* Phase 1 hardening */
+"文件后缀不能包含 / 或控制字符" = "File extension can't contain “/” or control characters";
+"切换隐藏文件需要重启访达" = "Toggling Hidden Files Requires Restarting Finder";
+"FinderRight 尚未获得「辅助功能」权限，无法无闪烁地切换。改为重启访达会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight doesn't have Accessibility permission, so it can't toggle hidden files seamlessly. Restarting Finder instead closes all Finder windows and may interrupt copies or moves in progress.";
+"重启访达并切换" = "Restart Finder and Toggle";
+"授权辅助功能…" = "Grant Accessibility…";
+"更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载" = "The update has no checksum file, so automatic installation was cancelled. Please download it manually from the release page.";

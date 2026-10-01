@@ -274,11 +274,13 @@ struct GeneralTab: View {
     private func relaunchApp() {
         let pid = ProcessInfo.processInfo.processIdentifier
         let appPath = Bundle.main.bundleURL.path
+        // 不要在这里 killall FinderRightSync：扩展每次构建菜单都实时读取 appLanguage，无需重启；
+        // 而扩展进程重启会使其成为重叠目录的最后注册者、丢失剪切角标归属，
+        // 进而触发一轮对其他访达扩展的重启抢回（见 BadgeOwnershipManager）。
         let script = """
         while /bin/kill -0 \(pid) 2>/dev/null; do
             /bin/sleep 0.1
         done
-        /usr/bin/killall FinderRightSync 2>/dev/null || true
         /usr/bin/open "\(appPath)"
         /bin/sleep 0.1
         /usr/bin/open "finderright://settings"
@@ -454,6 +456,11 @@ struct AddTemplateSheet: View {
                     let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !cleanExt.isEmpty else {
                         errorMessage = "文件后缀不能为空"
+                        return
+                    }
+                    // 与主 App createFile 的校验一致（新建文件名为 untitled.<后缀>），提前在录入时拦下
+                    guard SafeFileName.isValid(baseName: "untitled", ext: cleanExt) else {
+                        errorMessage = "文件后缀不能包含 / 或控制字符"
                         return
                     }
                     let tmpl = FileTemplate(name: cleanName.isEmpty ? cleanExt : cleanName,

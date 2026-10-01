@@ -171,15 +171,28 @@ final class FinderRightService {
               let content = req.payload["content"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "createFile 参数缺失")
         }
-        let dirURL = URL(fileURLWithPath: directory)
-        let fileURL = uniqueFileURL(baseName: baseName, ext: ext, in: dirURL)
-        do {
-            try content.write(to: fileURL, atomically: true, encoding: .utf8)
-            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-            return IPCResponse(id: req.id, success: true, message: fileURL.path)
-        } catch {
-            return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
+        // 白名单只校验了 directory；baseName / ext 会直接拼进路径，含 `/` 或 `..` 时
+        // 可穿越到白名单之外（如 ~/Desktop/../../../../tmp/x.txt），必须单独拦截
+        guard SafeFileName.isValid(baseName: baseName, ext: ext) else {
+            serviceLog("非法文件名被拦截: baseName=\(baseName) ext=\(ext)")
+            return IPCResponse(id: req.id, success: false, message: "非法的文件名")
         }
+        let dirURL = URL(fileURLWithPath: directory)
+        let data = Data(content.utf8)
+        // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
+        for _ in 0..<5 {
+            let fileURL = uniqueFileURL(baseName: baseName, ext: ext, in: dirURL)
+            do {
+                try data.write(to: fileURL, options: .withoutOverwriting)
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                return IPCResponse(id: req.id, success: true, message: fileURL.path)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            } catch {
+                return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
+            }
+        }
+        return IPCResponse(id: req.id, success: false, message: "目标目录同名文件冲突，请重试")
     }
 
     private func compressZip(_ req: IPCRequest) -> IPCResponse {
@@ -314,44 +327,35 @@ final class FinderRightService {
                 return
             }
 
-            let proc = Process()
-            proc.currentDirectoryURL = dir
+            let tool: (executable: String, arguments: [String])
             if isBareGz {
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/gunzip")
-                proc.arguments = ["-kc", archive]
+                tool = ("/usr/bin/gunzip", ["-kc", archive])
             } else if isBareBz2 {
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/bunzip2")
-                proc.arguments = ["-kc", archive]
+                tool = ("/usr/bin/bunzip2", ["-kc", archive])
+            } else if let xzBin = ["/opt/homebrew/bin/xz", "/usr/local/bin/xz", "/usr/bin/xz"]
+                        .first(where: { fileManager.fileExists(atPath: $0) }) {
+                tool = (xzBin, ["-dc", archive])
             } else {
-                let xzCandidates = ["/opt/homebrew/bin/xz", "/usr/local/bin/xz", "/usr/bin/xz"]
-                if let xzBin = xzCandidates.first(where: { fileManager.fileExists(atPath: $0) }) {
-                    proc.executableURL = URL(fileURLWithPath: xzBin)
-                    proc.arguments = ["-dc", archive]
-                } else {
-                    proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-                    proc.arguments = ["-c", "import lzma, sys, shutil; shutil.copyfileobj(lzma.open(sys.argv[1]), sys.stdout.buffer)", archive]
-                }
+                tool = ("/usr/bin/python3", ["-c", "import lzma, sys, shutil; shutil.copyfileobj(lzma.open(sys.argv[1]), sys.stdout.buffer)", archive])
             }
 
-            proc.standardOutput = outHandle
-            let errPipe = Pipe()
-            proc.standardError = errPipe
-
             do {
-                try proc.run()
-                proc.waitUntilExit()
+                // ProcessRunner 先读完 stderr 再等待退出：错误输出超过管道缓冲时不会死锁
+                let result = try ProcessRunner.run(
+                    executableURL: URL(fileURLWithPath: tool.executable),
+                    arguments: tool.arguments,
+                    currentDirectoryURL: dir,
+                    standardOutput: outHandle)
                 try? outHandle.close()
 
-                if proc.terminationStatus == 0 {
+                if result.status == 0 {
                     DispatchQueue.main.async {
                         NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
                     }
                     serviceLog("decompress single file succeeded: \(targetFileURL.path)")
                 } else {
                     try? fileManager.removeItem(at: targetFileURL)
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    serviceLog("decompress single file failed (exit \(proc.terminationStatus)): \(errStr)")
+                    serviceLog("decompress single file failed (exit \(result.status)): \(result.stderr)")
                 }
             } catch {
                 try? outHandle.close()
@@ -385,32 +389,25 @@ final class FinderRightService {
             return
         }
 
-        let proc = Process()
-        proc.currentDirectoryURL = targetDir
-        let ext = url.pathExtension.lowercased()
-        if ext == "zip" {
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-            proc.arguments = ["-x", "-k", archive, targetDir.path]
-        } else {
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-            proc.arguments = ["-xf", archive, "-C", targetDir.path]
-        }
-
-        let errPipe = Pipe()
-        proc.standardError = errPipe
+        let isZip = url.pathExtension.lowercased() == "zip"
+        let tool: (executable: String, arguments: [String]) = isZip
+            ? ("/usr/bin/ditto", ["-x", "-k", archive, targetDir.path])
+            : ("/usr/bin/tar", ["-xf", archive, "-C", targetDir.path])
 
         do {
-            try proc.run()
-            proc.waitUntilExit()
-            if proc.terminationStatus == 0 {
+            // 解压 Linux rootfs / Docker 层这类 tar 时每个设备节点都会报一行错，stderr 轻易超过
+            // 64KB 管道缓冲；ProcessRunner 先读后等，避免死锁卡住整条 archiveQueue
+            let result = try ProcessRunner.run(
+                executableURL: URL(fileURLWithPath: tool.executable),
+                arguments: tool.arguments,
+                currentDirectoryURL: targetDir)
+            if result.status == 0 {
                 DispatchQueue.main.async {
                     NSWorkspace.shared.activateFileViewerSelecting([targetDir])
                 }
                 serviceLog("decompress archive succeeded: \(targetDir.path)")
             } else {
-                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                serviceLog("decompress archive failed (exit \(proc.terminationStatus)): \(errStr)")
+                serviceLog("decompress archive failed (exit \(result.status)): \(result.stderr)")
                 // 失败时清掉刚建的目标目录：它与单文件分支行为保持一致，
                 // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
                 // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
@@ -530,12 +527,47 @@ final class FinderRightService {
             return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
-        // 若尚未授权，主动弹窗提示用户授权辅助功能
-        let promptOpts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(promptOpts)
+        // 未授权辅助功能：降级方案要 killall Finder，会关闭所有访达窗口、可能中断正在进行的拷贝 / 移动，
+        // 不能静默执行。先立即应答扩展（避免它等满 IPC 超时），再到主线程让用户明确选择。
+        DispatchQueue.main.async { [weak self] in
+            self?.confirmHiddenFilesFallback(req)
+        }
+        return IPCResponse(id: req.id, success: true, message: "no accessibility, awaiting user confirmation")
+    }
 
-        // 降级走 defaults 重启方案
-        return toggleHiddenFilesViaDefaults(req, newValue: "toggle")
+    /// 只在主线程访问：防止确认框未关闭时重复右键触发，叠出多层模态框
+    private static var isConfirmingHiddenFilesFallback = false
+
+    /// 未授权辅助功能时的三选一：重启访达并切换 / 去授权 / 取消
+    private func confirmHiddenFilesFallback(_ req: IPCRequest) {
+        guard !Self.isConfirmingHiddenFilesFallback else { return }
+        Self.isConfirmingHiddenFilesFallback = true
+        defer { Self.isConfirmingHiddenFilesFallback = false }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L("切换隐藏文件需要重启访达")
+        alert.informativeText = L("FinderRight 尚未获得「辅助功能」权限，无法无闪烁地切换。改为重启访达会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L("重启访达并切换"))
+        alert.addButton(withTitle: L("授权辅助功能…"))
+        alert.addButton(withTitle: L("取消"))
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            // defaults 读写与 killall 都会同步等待子进程，放到后台，不阻塞主线程
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                let resp = self.toggleHiddenFilesViaDefaults(req, newValue: "toggle")
+                self.serviceLog("toggleHiddenFiles 用户确认重启访达: \(resp.message ?? "")")
+            }
+        case .alertSecondButtonReturn:
+            // 系统授权弹窗会把 FinderRight 加进辅助功能列表，用户只需打开开关
+            let promptOpts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(promptOpts)
+        default:
+            serviceLog("toggleHiddenFiles 用户取消（未授权辅助功能）")
+        }
     }
 
     private func serviceLog(_ message: String) {

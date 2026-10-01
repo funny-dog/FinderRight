@@ -101,17 +101,15 @@ public final class UpdateChecker: NSObject {
                 let fallbackURL = URL(string: "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest")!
                 let releaseURL = URL(string: release.htmlUrl) ?? fallbackURL
 
-                // 寻找用于自动安装的 ZIP 安装包下载链接及可选的 SHA256 校验文件
+                // 自动安装必须成对提供 ZIP 与同名 .sha256：只按文件名精确配对（宽松的后缀匹配
+                // 可能拿到另一个包的校验和）；缺校验和时不提供「立即更新」，界面只保留发布页链接
                 var downloadURL: URL?
                 var sha256URL: URL?
-                if let assets = release.assets {
-                    if let zipAsset = assets.first(where: { $0.name.hasSuffix(".zip") }) {
-                        downloadURL = URL(string: zipAsset.browserDownloadUrl)
-                        let expectedShaName = zipAsset.name + ".sha256"
-                        if let shaAsset = assets.first(where: { $0.name == expectedShaName || $0.name.hasSuffix(".zip.sha256") }) {
-                            sha256URL = URL(string: shaAsset.browserDownloadUrl)
-                        }
-                    }
+                if let assets = release.assets,
+                   let zipAsset = assets.first(where: { $0.name.hasSuffix(".zip") }),
+                   let shaAsset = assets.first(where: { $0.name == zipAsset.name + ".sha256" }) {
+                    downloadURL = URL(string: zipAsset.browserDownloadUrl)
+                    sha256URL = URL(string: shaAsset.browserDownloadUrl)
                 }
 
                 DispatchQueue.main.async {
@@ -175,59 +173,60 @@ public final class UpdateChecker: NSObject {
     }
 
     private func verifyAndInstall(zipLocation: URL, sha256URL: URL?, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
-        if let sha256URL = sha256URL {
-            var shaReq = URLRequest(url: sha256URL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-            shaReq.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
-            URLSession.shared.dataTask(with: shaReq) { [weak self] data, _, error in
-                guard let self = self else { return }
-                if let error = error {
-                    DispatchQueue.main.async {
-                        let failed = UpdateCheckStatus.failed("校验和下载失败: \(error.localizedDescription)")
-                        self.currentStatus = failed
-                        statusHandler(failed)
-                    }
-                    return
-                }
-
-                guard let data = data,
-                      let shaText = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      let expectedHash = shaText.components(separatedBy: .whitespaces).first?.lowercased(),
-                      !expectedHash.isEmpty else {
-                    DispatchQueue.main.async {
-                        let failed = UpdateCheckStatus.failed("无法解析校验和文件")
-                        self.currentStatus = failed
-                        statusHandler(failed)
-                    }
-                    return
-                }
-
-                do {
-                    let zipData = try Data(contentsOf: zipLocation)
-                    let actualHash = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
-                    if actualHash != expectedHash {
-                        DispatchQueue.main.async {
-                            let failed = UpdateCheckStatus.failed("更新包校验失败: SHA256 不匹配")
-                            self.currentStatus = failed
-                            statusHandler(failed)
-                        }
-                        return
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        let failed = UpdateCheckStatus.failed("计算更新包哈希失败: \(error.localizedDescription)")
-                        self.currentStatus = failed
-                        statusHandler(failed)
-                    }
-                    return
-                }
-
-                self.proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
-            }.resume()
-        } else {
-            // TODO: v1.2.0 起强制要求校验和
-            NSLog("[UpdateChecker] 警告: 未找到 .sha256 校验和文件，跳过校验 (向后兼容)")
-            proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
+        // 安装会替换整个 App 并以原有的完全磁盘访问 / 辅助功能权限重启，未经校验的包一律拒装
+        guard let sha256URL = sha256URL else {
+            NSLog("[UpdateChecker] 拒绝安装：发布中缺少 .sha256 校验和文件")
+            let failed = UpdateCheckStatus.failed(NSLocalizedString("更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载", comment: "update error"))
+            currentStatus = failed
+            statusHandler(failed)
+            return
         }
+        var shaReq = URLRequest(url: sha256URL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        shaReq.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: shaReq) { [weak self] data, _, error in
+            guard let self = self else { return }
+            if let error = error {
+                DispatchQueue.main.async {
+                    let failed = UpdateCheckStatus.failed("校验和下载失败: \(error.localizedDescription)")
+                    self.currentStatus = failed
+                    statusHandler(failed)
+                }
+                return
+            }
+
+            guard let data = data,
+                  let shaText = String(data: data, encoding: .utf8),
+                  let expectedHash = UpdateIntegrity.parseChecksum(shaText) else {
+                DispatchQueue.main.async {
+                    let failed = UpdateCheckStatus.failed("无法解析校验和文件")
+                    self.currentStatus = failed
+                    statusHandler(failed)
+                }
+                return
+            }
+
+            do {
+                let zipData = try Data(contentsOf: zipLocation)
+                let actualHash = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
+                if actualHash != expectedHash {
+                    DispatchQueue.main.async {
+                        let failed = UpdateCheckStatus.failed("更新包校验失败: SHA256 不匹配")
+                        self.currentStatus = failed
+                        statusHandler(failed)
+                    }
+                    return
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    let failed = UpdateCheckStatus.failed("计算更新包哈希失败: \(error.localizedDescription)")
+                    self.currentStatus = failed
+                    statusHandler(failed)
+                }
+                return
+            }
+
+            self.proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
+        }.resume()
     }
 
     private func proceedToInstall(zipLocation: URL, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
