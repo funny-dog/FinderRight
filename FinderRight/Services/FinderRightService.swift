@@ -392,6 +392,7 @@ final class FinderRightService {
             } else {
                 let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                 let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                serviceLog("decompress archive failed (exit \(proc.terminationStatus)): \(errStr)")
                 // 失败时清掉刚建的目标目录：它与单文件分支行为保持一致，
                 // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
                 // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
