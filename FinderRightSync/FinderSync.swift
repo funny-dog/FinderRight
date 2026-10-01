@@ -7,9 +7,8 @@ private let log = OSLog(subsystem: "com.finderright.app.sync", category: "Finder
 
 // MARK: - 剪切队列（文件 IPC，跨沙箱共享）
 
-private var cutQueueFileURL: URL {
-    IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
-}
+/// 剪切队列存储：与主 App 共用 CutQueueStore，保证两侧对同一份队列文件的读写规则一致
+private let cutQueueStore = CutQueueStore()
 
 private let cutBadgeIdentifier = "com.finderright.badge.cut"
 
@@ -22,11 +21,7 @@ private var inMemoryCutPaths: Set<String> = []
 
 /// 从磁盘读取并标准化 cut-queue.json 中的持久化路径
 private func persistedCutQueuePaths() -> Set<String> {
-    guard let data = try? Data(contentsOf: cutQueueFileURL),
-          let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
-        return []
-    }
-    return Set(paths.map(normalizePath))
+    return Set(cutQueueStore.read().map(normalizePath))
 }
 
 /// 获取当前待剪切队列中的所有源文件路径集合（内存乐观队列与持久化队列的并集）
@@ -36,11 +31,6 @@ private func currentCutQueuePaths() -> Set<String> {
     cutBadgeLock.unlock()
 
     return memoryPaths.union(persistedCutQueuePaths())
-}
-
-/// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
-private func hasCutQueue() -> Bool {
-    return !currentCutQueuePaths().isEmpty
 }
 
 /// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
@@ -164,8 +154,14 @@ class FinderSync: FIFinderSync {
         let dirs = Self.buildMonitoredDirectories()
         FIFinderSyncController.default().directoryURLs = dirs
 
-        // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）
-        FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
+        // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）。
+        // label 走 L() 跟随设置里的语言；它在 init 时读一次，语言切换需等扩展进程重启才反映
+        // （菜单文案每次右键都会重建，不存在这个问题）。
+        FIFinderSyncController.default().setBadgeImage(
+            createCutBadgeImage(),
+            label: L("已剪切"),
+            forBadgeIdentifier: cutBadgeIdentifier
+        )
 
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
@@ -230,17 +226,15 @@ class FinderSync: FIFinderSync {
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
         var dirs: Set<URL> = [home]
 
-        if let desktop = fm.urls(for: .desktopDirectory, in: .userDomainMask).first {
-            dirs.insert(desktop)
-        }
-        if let downloads = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first {
-            dirs.insert(downloads)
-        }
-        if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
-            dirs.insert(docs)
-        }
+        // 不再单独注册 Desktop / Downloads / Documents：
+        // 沙箱里的 `FileManager.urls(for:in:)` 返回的是**容器内**的私有路径
+        // （实测日志：…/Library/Containers/com.finderright.app.sync/Data/Desktop），
+        // 这些注册毫无意义；真实目录本来就被 home 覆盖（Finder 会为已注册目录的子目录
+        // 触发回调），因此这里只保留 home 与挂载卷。
+        // 系统目录（/Applications、/Users/Shared、/opt/homebrew 等）在 home 之外，
+        // 不会有扩展菜单，其终端 / 编辑器入口由 macOS Services 提供。
 
-        // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
+        // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘；也可能是 ~/OrbStack 这类挂载点）
         // 关键安全原则：绝不能包含根目录 / (file:///)，否则系统 Finder 会将整个扩展视作整盘监控
         // 从而为了系统安全与性能静默屏蔽 Badge 角标回调！
         if let volumes = fm.mountedVolumeURLs(
@@ -371,6 +365,11 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
+            // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），跨进程读
+            // com.apple.finder 偏好又命中 cfprefsd 客户端缓存，**不存在可靠的状态通道** ——
+            // 「显示/隐藏」状态文案曾两轮实测反转（并留下过 settings.plist 里的死值
+            // showHiddenFiles，该键已彻底删除）。固定文案永不撒谎，代价是不显示当前状态。
+            // 因此主 App 启动时也不需要把任何状态锚定到 Finder 真实状态（见 FinderRightApp）。
             menu.addItem(makeItem(
                 titleKey: "切换隐藏文件",
                 emoji: "👁",

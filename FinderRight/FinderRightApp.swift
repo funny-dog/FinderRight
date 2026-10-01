@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 「切换隐藏文件」已改为无状态固定文案（见 FinderSync.menu(for:) 注释），
+        // 「切换隐藏文件」在扩展端是无状态固定文案（见 FinderSync.menu(for:) 里该菜单项的说明），
         // 不再需要在启动时把 SharedConfig 锚定到 Finder 真实状态。
 
         // 根据偏好动态设定激活策略
