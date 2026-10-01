@@ -34,6 +34,10 @@ private func currentCutQueuePaths() -> Set<String> {
 }
 
 /// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
+///
+/// 注意：**不要**改回 `NSImage(size:flipped:drawingHandler:)` 这类惰性绘制写法。
+/// 角标图要经 XPC 交给 Finder 进程渲染，惰性 rep（NSCustomImageRep）是历史上
+/// 「剪切完全不显示角标」的元凶之一；预渲染成 NSBitmapImageRep 是 v1.1.9 实测可用的形态。
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
@@ -155,13 +159,14 @@ class FinderSync: FIFinderSync {
         FIFinderSyncController.default().directoryURLs = dirs
 
         // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）。
-        // label 走 L() 跟随设置里的语言；它在 init 时读一次，语言切换需等扩展进程重启才反映
-        // （菜单文案每次右键都会重建，不存在这个问题）。
-        FIFinderSyncController.default().setBadgeImage(
-            createCutBadgeImage(),
-            label: L("已剪切"),
-            forBadgeIdentifier: cutBadgeIdentifier
-        )
+        //
+        // 这一行刻意与 v1.1.9（实测角标可用的版本）保持逐字一致：label 用字面量而不是 L()。
+        // 理由：label 只是角标的辅助功能描述，用户在界面上看不到它，本地化收益为零；
+        // 而 macOS 27 上角标管线极其脆弱（同一二进制有的会话 0 次 requestBadgeIdentifier、
+        // 有的会话 200+ 次），排查成本远高于收益。菜单文案的本地化不受影响（走 L()）。
+        logToFile("setBadgeImage registering: \(cutBadgeIdentifier)")
+        FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
+        logToFile("setBadgeImage registered for \(cutBadgeIdentifier)")
 
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
@@ -210,10 +215,16 @@ class FinderSync: FIFinderSync {
         logToFile("updateMonitoredDirectories count: \(dirs.count)")
     }
 
-    /// 构建需要监控的目录集合：用户主目录 + 已挂载卷。
+    /// 构建需要监控的目录集合：用户主目录 + 桌面/下载/文稿 + 已挂载卷。
     ///
     /// FIFinderSync 只有当 Finder 当前目录在 directoryURLs 集合内（或其子目录内）时，
-    /// 才会触发右键菜单回调。
+    /// 才会触发右键菜单与 requestBadgeIdentifier 回调。
+    ///
+    /// 这里显式列出 Desktop / Downloads / Documents 的真实路径，而不用
+    /// `FileManager.urls(for:in:)`：沙箱 appex 里后者返回的是容器内私有路径
+    /// （实测：…/Library/Containers/com.finderright.app.sync/Data/Desktop，且该目录并不存在），
+    /// 注册等于没注册。真实目录本已被 home 覆盖，显式再列一次是无害的兜底 ——
+    /// Finder 桌面是特殊顶层视口，历史上角标/回调在桌面视图上表现最不稳定。
     ///
     /// 注意：iCloud Drive、Google Drive 等云盘是 macOS 的 **File Provider 域**，系统把右键
     /// 菜单 / 徽章扩展点保留给域自身的 File Provider 扩展，会**静默忽略**第三方 Finder Sync
@@ -224,15 +235,12 @@ class FinderSync: FIFinderSync {
     private static func buildMonitoredDirectories() -> Set<URL> {
         let fm = FileManager.default
         let home = URL(fileURLWithPath: "/Users/\(NSUserName())")
-        var dirs: Set<URL> = [home]
-
-        // 不再单独注册 Desktop / Downloads / Documents：
-        // 沙箱里的 `FileManager.urls(for:in:)` 返回的是**容器内**的私有路径
-        // （实测日志：…/Library/Containers/com.finderright.app.sync/Data/Desktop），
-        // 这些注册毫无意义；真实目录本来就被 home 覆盖（Finder 会为已注册目录的子目录
-        // 触发回调），因此这里只保留 home 与挂载卷。
-        // 系统目录（/Applications、/Users/Shared、/opt/homebrew 等）在 home 之外，
-        // 不会有扩展菜单，其终端 / 编辑器入口由 macOS Services 提供。
+        var dirs: Set<URL> = [
+            home,
+            home.appendingPathComponent("Desktop"),
+            home.appendingPathComponent("Downloads"),
+            home.appendingPathComponent("Documents")
+        ]
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘；也可能是 ~/OrbStack 这类挂载点）
         // 关键安全原则：绝不能包含根目录 / (file:///)，否则系统 Finder 会将整个扩展视作整盘监控
@@ -335,6 +343,19 @@ class FinderSync: FIFinderSync {
         // 剪切 / 粘贴
         let cutPaths = currentCutQueuePaths()
         let hasCut = !cutPaths.isEmpty
+
+        // 兜底刷新角标：Finder 在 macOS 27 上并不总会回调 requestBadgeIdentifier
+        // （实测同一二进制有的会话 0 次、有的会话 200+ 次），而队列表项的角标只在这两条
+        // 路径上产生。这里在每次构建菜单时，对仍处于剪切队列的选中项再推一次角标标识。
+        // 上限 50 项，避免「全选大目录」时拖慢菜单构建。
+        if hasSelection, hasCut {
+            var pushed = 0
+            for url in selected.prefix(50) where cutPaths.contains(normalizePath(url.path)) {
+                FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+                pushed += 1
+            }
+            if pushed > 0 { logToFile("menu(for:) badge refresh: \(pushed) cut item(s)") }
+        }
 
         if featureOn(MenuFeatureCatalog.cut), hasSelection {
             let selectedPaths = Set(selected.map(\.path))
@@ -713,17 +734,32 @@ class FinderSync: FIFinderSync {
             "paths": .stringArray(paths)
         ]) { r in
             logToFile("cutFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
-            guard !r.success else { return }
-            let persisted = persistedCutQueuePaths()
-            let staleURLs = urls.filter { !persisted.contains(normalizePath($0.path)) }
-            cutBadgeLock.lock()
-            for url in staleURLs { inMemoryCutPaths.remove(normalizePath(url.path)) }
-            cutBadgeLock.unlock()
-            DispatchQueue.main.async {
-                for url in staleURLs {
-                    FIFinderSyncController.default().setBadgeIdentifier("", for: url)
-                    FIFinderSyncController.default().setBadgeIdentifier("", for: url.standardizedFileURL)
+            guard r.success else {
+                let persisted = persistedCutQueuePaths()
+                let staleURLs = urls.filter { !persisted.contains(normalizePath($0.path)) }
+                cutBadgeLock.lock()
+                for url in staleURLs { inMemoryCutPaths.remove(normalizePath(url.path)) }
+                cutBadgeLock.unlock()
+                DispatchQueue.main.async {
+                    for url in staleURLs {
+                        FIFinderSyncController.default().setBadgeIdentifier("", for: url)
+                        FIFinderSyncController.default().setBadgeIdentifier("", for: url.standardizedFileURL)
+                    }
                 }
+                return
+            }
+
+            // 主 App 已落盘：延迟再推一次角标，覆盖「菜单刚关闭、Finder 还没重绘」的时序。
+            // macOS 27 上 Finder 并不总会回调 requestBadgeIdentifier（同一二进制有的会话 0 次、
+            // 有的会话 200+ 次），多推一次是当前唯一可控的兜底手段。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                let stillCut = currentCutQueuePaths()
+                var pushed = 0
+                for url in urls where stillCut.contains(normalizePath(url.path)) {
+                    FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+                    pushed += 1
+                }
+                logToFile("cutFiles badge re-push: \(pushed)/\(urls.count) item(s) still cut")
             }
         }
     }
@@ -738,7 +774,9 @@ class FinderSync: FIFinderSync {
         cutBadgeLock.unlock()
 
         for path in cutPaths {
-            FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+            let u = URL(fileURLWithPath: path)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: u)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: u.standardizedFileURL)
         }
         IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
             logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
