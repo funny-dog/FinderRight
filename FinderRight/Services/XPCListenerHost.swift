@@ -25,6 +25,8 @@ final class IPCWatcher {
             cleanupOrphanFiles()
             // 上次运行若在粘贴移动途中被杀，这里把残留的 in-flight 剪切队列归还给用户
             FinderRightService.recoverInflightCutQueue()
+            // 上次角标归属抢回若在 ignore 与 use 之间被杀，这里把其他扩展恢复为启用
+            BadgeOwnershipManager.shared.recoverIfNeeded()
             NSLog("[IPCWatcher] ready, ipc dir = \(IPCBridge.pendingDir.path)")
         } catch {
             NSLog("[IPCWatcher] failed to create ipc dir: \(error)")

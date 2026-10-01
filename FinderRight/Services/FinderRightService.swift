@@ -78,7 +78,7 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles"]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
         let pathKeys = ["directory", "destination", "archive", "testPath"]
@@ -148,6 +148,8 @@ final class FinderRightService {
             return pasteFiles(req)
         case "cancelCut":
             return cancelCut(req)
+        case BadgeReclaimIPC.action:
+            return BadgeOwnershipManager.shared.handle(req)
         default:
             return IPCResponse(id: req.id, success: false, message: "未知 action: \(req.action)")
         }

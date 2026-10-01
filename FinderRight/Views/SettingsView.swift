@@ -298,6 +298,7 @@ struct GeneralTab: View {
 struct FeaturesTab: View {
     @FRState private var customTemplates: [FileTemplate] = SharedConfig.shared.customFileTemplates
     @FRState private var showingAddSheet = false
+    @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
 
     var body: some View {
         Form {
@@ -309,6 +310,29 @@ struct FeaturesTab: View {
                 Text("右键菜单功能")
             } footer: {
                 Text("关闭的功能不会出现在 Finder 右键菜单中。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                Toggle(isOn: Binding(
+                    get: { badgeOwnershipReclaim },
+                    set: { newValue in
+                        badgeOwnershipReclaim = newValue
+                        SharedConfig.shared.badgeOwnershipReclaim = newValue
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("自动解决角标冲突")
+                        Text("其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，FinderRight 会在需要时短暂重启这些扩展以取回显示权（每次访达启动至多一次）。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } header: {
+                Text("剪切角标")
+            } footer: {
+                Text("注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
