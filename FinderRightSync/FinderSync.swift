@@ -13,46 +13,93 @@ private var cutQueueFileURL: URL {
 
 private let cutBadgeIdentifier = "com.finderright.badge.cut"
 
+private func normalizePath(_ p: String) -> String {
+    return (p as NSString).standardizingPath.precomposedStringWithCanonicalMapping
+}
+
+private let cutBadgeLock = NSLock()
+private var inMemoryCutPaths: Set<String> = []
+
 /// 获取当前待剪切队列中的所有源文件路径集合
 private func currentCutQueuePaths() -> Set<String> {
-    guard let data = try? Data(contentsOf: cutQueueFileURL),
-          let paths = try? JSONSerialization.jsonObject(with: data) as? [String] else {
-        return []
+    cutBadgeLock.lock()
+    var result = inMemoryCutPaths
+    cutBadgeLock.unlock()
+
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
+          let size = attrs[.size] as? UInt64, size > 2 else {
+        return result
     }
-    return Set(paths)
+    if let data = try? Data(contentsOf: cutQueueFileURL),
+       let paths = try? JSONSerialization.jsonObject(with: data) as? [String] {
+        for p in paths {
+            result.insert(normalizePath(p))
+        }
+    }
+    return result
 }
 
 /// 判断暂存区是否有待粘贴的文件，用于控制「粘贴」菜单项的启用状态（带极速空文件判定）
 private func hasCutQueue() -> Bool {
-    // 快速路径：文件不存在或大小 <= 2（空 JSON 数组 "[]" 仅 2 字节）直接返回 false，免去反序列化
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: cutQueueFileURL.path),
-          let size = attrs[.size] as? UInt64, size > 2 else {
-        return false
-    }
     return !currentCutQueuePaths().isEmpty
 }
 
-/// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
-private func createCutBadgeImage() -> NSImage {
-    let size = NSSize(width: 32, height: 32)
-    let img = NSImage(size: size, flipped: false) { rect in
-        let bg = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
-        NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
-        bg.fill()
-
-        bg.lineWidth = 1.5
-        NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
-        bg.stroke()
-
-        if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            let scImg = scissors.withSymbolConfiguration(config) ?? scissors
-            let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
-            NSColor.white.setFill()
-            scImg.draw(in: iconRect)
-        }
-        return true
+/// 加载/生成高辨识度剪切状态文件角标（320x320 Retina 实体位图，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
+private func loadCutBadgeImage() -> NSImage {
+    let bundle = Bundle(for: FinderSync.self)
+    if let img = bundle.image(forResource: "cut-badge") {
+        logToFile("loadCutBadgeImage: loaded from bundle imageForResource")
+        return img
     }
+    if let path = bundle.path(forResource: "cut-badge", ofType: "png"),
+       let img = NSImage(contentsOfFile: path) {
+        logToFile("loadCutBadgeImage: loaded from bundle file path: \(path)")
+        return img
+    }
+    if let bundleURL = bundle.resourceURL?.appendingPathComponent("cut-badge.png"),
+       let img = NSImage(contentsOf: bundleURL) {
+        logToFile("loadCutBadgeImage: loaded from resourceURL: \(bundleURL.path)")
+        return img
+    }
+
+    logToFile("loadCutBadgeImage: bundle resource not found, creating pre-rendered bitmap")
+    let size = NSSize(width: 320, height: 320)
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: Int(size.width),
+        pixelsHigh: Int(size.height),
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else {
+        return NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) ?? NSImage()
+    }
+    NSGraphicsContext.saveGraphicsState()
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current = ctx
+    NSColor.clear.set()
+    NSRect(origin: .zero, size: size).fill()
+    let circleRect = NSRect(x: 10, y: 10, width: 300, height: 300)
+    let circlePath = NSBezierPath(ovalIn: circleRect)
+    NSColor(red: 0.16, green: 0.16, blue: 0.18, alpha: 0.95).setFill()
+    circlePath.fill()
+    circlePath.lineWidth = 16
+    NSColor.white.setStroke()
+    circlePath.stroke()
+    if let symbol = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
+        let config = NSImage.SymbolConfiguration(pointSize: 155, weight: .bold)
+            .applying(.init(paletteColors: [.white]))
+        let tinted = symbol.withSymbolConfiguration(config) ?? symbol
+        let iconRect = NSRect(x: 70, y: 70, width: 180, height: 180)
+        tinted.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1.0)
+    }
+    NSGraphicsContext.restoreGraphicsState()
+    let img = NSImage(size: size)
+    img.addRepresentation(rep)
     return img
 }
 
@@ -146,7 +193,9 @@ class FinderSync: FIFinderSync {
         FIFinderSyncController.default().directoryURLs = dirs
 
         // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）
-        FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
+        let badgeImg = loadCutBadgeImage()
+        FIFinderSyncController.default().setBadgeImage(badgeImg, label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
+        logToFile("setBadgeImage registered for \(cutBadgeIdentifier), size=\(badgeImg.size.width)x\(badgeImg.size.height) reps=\(badgeImg.representations.count)")
 
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
@@ -158,8 +207,11 @@ class FinderSync: FIFinderSync {
     // MARK: - 文件角标徽章回调
 
     override func requestBadgeIdentifier(for url: URL) {
+        let normPath = normalizePath(url.path)
         let cutPaths = currentCutQueuePaths()
-        if cutPaths.contains(url.path) {
+        let isCut = cutPaths.contains(normPath)
+        logToFile("requestBadgeIdentifier: path=\(normPath) isCut=\(isCut)")
+        if isCut {
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
@@ -210,9 +262,16 @@ class FinderSync: FIFinderSync {
         var dirs: Set<URL> = [home]
 
         // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘）
+        // 关键安全原则：绝不能包含根目录 / (file:///)，否则系统 Finder 会将整个扩展视作整盘监控
+        // 从而为了系统安全与性能静默屏蔽 Badge 角标回调！
         if let volumes = fm.mountedVolumeURLs(
             includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) {
-            dirs.formUnion(volumes)
+            for vol in volumes {
+                let p = vol.path
+                if p != "/" && !p.hasPrefix("/System") && !p.hasPrefix("/private") {
+                    dirs.insert(vol)
+                }
+            }
         }
 
         return dirs
@@ -645,8 +704,16 @@ class FinderSync: FIFinderSync {
         let paths = urls.map { $0.path }
         logToFile("cutFiles ipc (async) → count=\(paths.count)")
 
-        // 立即给选中的文件打上剪切角标，提供即时视觉反馈
+        // 1. 同步更新扩展内部内存集合，彻底消除异步 IPC 写磁盘与 Finder 刷新回调的时序竞争
+        cutBadgeLock.lock()
+        for p in paths {
+            inMemoryCutPaths.insert(normalizePath(p))
+        }
+        cutBadgeLock.unlock()
+
+        // 2. 立即给选中的文件打上剪切角标，提供即时视觉反馈
         for url in urls {
+            logToFile("cutFiles setBadgeIdentifier for: \(url.path)")
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         }
 
@@ -660,6 +727,12 @@ class FinderSync: FIFinderSync {
     @objc func cancelCut(_ sender: NSMenuItem) {
         let cutPaths = currentCutQueuePaths()
         logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
+
+        // 立即清除内存队列中的待剪切路径
+        cutBadgeLock.lock()
+        inMemoryCutPaths.removeAll()
+        cutBadgeLock.unlock()
+
         for path in cutPaths {
             FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
         }
@@ -677,7 +750,11 @@ class FinderSync: FIFinderSync {
         let cutPaths = currentCutQueuePaths()
         logToFile("pasteFiles ipc (async) → destDir=\(destDir.lastPathComponent) pendingCutCount=\(cutPaths.count)")
 
-        // 立即清除待粘贴源文件的剪切角标
+        // 立即清除待粘贴源文件的剪切角标并清空内存队列
+        cutBadgeLock.lock()
+        inMemoryCutPaths.removeAll()
+        cutBadgeLock.unlock()
+
         for path in cutPaths {
             let u = URL(fileURLWithPath: path)
             FIFinderSyncController.default().setBadgeIdentifier("", for: u)

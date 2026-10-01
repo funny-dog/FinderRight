@@ -103,6 +103,9 @@ sed \
 echo -n "XPC!????" > "$APPEX_DIR/Contents/PkgInfo"
 mkdir -p "$APPEX_DIR/Contents/Resources/en.lproj"
 cp FinderRightSync/en.lproj/Localizable.strings "$APPEX_DIR/Contents/Resources/en.lproj/"
+if [ -f "FinderRightSync/cut-badge.png" ]; then
+  cp FinderRightSync/cut-badge.png "$APPEX_DIR/Contents/Resources/"
+fi
 
 echo "=== 5. 代码签名 (Ad-hoc) ==="
 # 注意：严禁在对主 App 签名时使用 --deep！
