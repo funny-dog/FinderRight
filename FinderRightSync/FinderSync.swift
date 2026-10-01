@@ -35,12 +35,11 @@ private func currentCutQueuePaths() -> Set<String> {
 
 /// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
 ///
-/// ⚠️ **禁止**改回 `NSImage(size:flipped:drawingHandler:)` 这类惰性绘制写法。
-/// 角标图要经 XPC 交给 Finder 进程渲染，惰性 rep（NSCustomImageRep）会让角标**完全不显示** ——
-/// 这不是推测：2026-10-01 该写法被改回后剪切角标消失，2026-10-02 恢复本写法后真机立即恢复正常
-/// （同机同 Finder，用户实测；日志链路 setBadgeImage registered → requestBadgeIdentifier → badge re-push）。
-/// 注意 `NSKeyedArchiver` 能归档惰性图并解码出位图，**不能用「能否归档」判断可用性**，只能真机右键验证。
-/// 任何涉及本函数 / setBadgeImage / requestBadgeIdentifier 的改动，请先真机验证角标再提交。
+/// 角标图要经 XPC 交给 Finder 进程渲染，预渲染位图是最稳妥的形态，保持即可。
+/// 注意：此前「惰性绘制写法导致角标消失、改回位图后恢复」的结论**不成立** —— 那几轮
+/// 时好时坏实际是角标归属权竞争造成的（见下方「文件角标徽章回调」处的说明），
+/// 与绘制方式无关。验证角标相关改动时，必须先确认本轮会话扩展确实收到了
+/// requestBadgeIdentifier，否则「不显示」无法归因到改动本身。
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
@@ -162,11 +161,7 @@ class FinderSync: FIFinderSync {
         FIFinderSyncController.default().directoryURLs = dirs
 
         // 注册剪切状态文件角标徽章（Finder 文件图标右下角显示）。
-        //
-        // 这一行刻意与 v1.1.9（实测角标可用的版本）保持逐字一致：label 用字面量而不是 L()。
-        // 理由：label 只是角标的辅助功能描述，用户在界面上看不到它，本地化收益为零；
-        // 而 macOS 27 上角标管线极其脆弱（同一二进制有的会话 0 次 requestBadgeIdentifier、
-        // 有的会话 200+ 次），排查成本远高于收益。菜单文案的本地化不受影响（走 L()）。
+        // label 只是角标的辅助功能描述，界面上不可见，用字面量即可；菜单文案的本地化走 L()。
         logToFile("setBadgeImage registering: \(cutBadgeIdentifier)")
         FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
         logToFile("setBadgeImage registered for \(cutBadgeIdentifier)")
@@ -182,6 +177,16 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 文件角标徽章回调
 
+    /// ⚠️ 角标归属权：同一个目录被多个 Finder Sync 扩展注册时，Finder 只把
+    /// requestBadgeIdentifier 交给**最先注册**该目录的扩展（即使它根本不用角标），
+    /// 其余扩展只收到 beginObserving / 菜单回调，setBadgeIdentifier 也不会显示。
+    /// 各扩展随 Finder 启动并发注册，先后顺序不确定，于是表现为「同一二进制有的会话
+    /// 0 次回调、有的会话 200+ 次」。参考：Keka issue #608、FB7711264、Apple DTS 答复
+    /// （Finder Sync 按「一个目录一个后备扩展」设计，重叠时归属不可靠）。
+    ///
+    /// 2026-10-02 实测：Keka 的 MonitoredURLs 与本扩展完全重叠（~/Desktop、~/Documents、
+    /// ~/Downloads、/Volumes），是角标时有时无的直接原因；本扩展进程重启（例如重复
+    /// `pluginkit -a`）会让我们成为最后注册者，重叠目录全部失去归属。
     override func requestBadgeIdentifier(for url: URL) {
         let cutPaths = currentCutQueuePaths()
         let normPath = normalizePath(url.path)
@@ -228,8 +233,9 @@ class FinderSync: FIFinderSync {
     /// 这里显式列出 Desktop / Downloads / Documents 的真实路径，而不用
     /// `FileManager.urls(for:in:)`：沙箱 appex 里后者返回的是容器内私有路径
     /// （实测：…/Library/Containers/com.finderright.app.sync/Data/Desktop，且该目录并不存在），
-    /// 注册等于没注册。真实目录本已被 home 覆盖，显式再列一次是无害的兜底 ——
-    /// Finder 桌面是特殊顶层视口，历史上角标/回调在桌面视图上表现最不稳定。
+    /// 注册等于没注册。真实目录本已被 home 覆盖，显式再列一次是无害的兜底。
+    /// 注意：精确注册这些目录**不能**帮我们赢得角标归属 —— 其他扩展（如 Keka）注册了
+    /// 完全相同的路径时仍是先注册者胜出（见 requestBadgeIdentifier 处的说明）。
     ///
     /// 注意：iCloud Drive、Google Drive 等云盘是 macOS 的 **File Provider 域**，系统把右键
     /// 菜单 / 徽章扩展点保留给域自身的 File Provider 扩展，会**静默忽略**第三方 Finder Sync
@@ -349,9 +355,9 @@ class FinderSync: FIFinderSync {
         let cutPaths = currentCutQueuePaths()
         let hasCut = !cutPaths.isEmpty
 
-        // 兜底刷新角标：Finder 在 macOS 27 上并不总会回调 requestBadgeIdentifier
-        // （实测同一二进制有的会话 0 次、有的会话 200+ 次），而队列表项的角标只在这两条
-        // 路径上产生。这里在每次构建菜单时，对仍处于剪切队列的选中项再推一次角标标识。
+        // 兜底刷新角标：对仍处于剪切队列的选中项再推一次角标标识，覆盖重绘时序问题。
+        // 注意这只在本扩展持有该目录角标归属时有效；归属被其他扩展占走时推多少次都不会显示
+        // （见 requestBadgeIdentifier 处的说明）。
         // 上限 50 项，避免「全选大目录」时拖慢菜单构建。
         if hasSelection, hasCut {
             var pushed = 0
@@ -755,8 +761,7 @@ class FinderSync: FIFinderSync {
             }
 
             // 主 App 已落盘：延迟再推一次角标，覆盖「菜单刚关闭、Finder 还没重绘」的时序。
-            // macOS 27 上 Finder 并不总会回调 requestBadgeIdentifier（同一二进制有的会话 0 次、
-            // 有的会话 200+ 次），多推一次是当前唯一可控的兜底手段。
+            // 同样只在持有角标归属时有效（见 requestBadgeIdentifier 处的说明）。
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 let stillCut = currentCutQueuePaths()
                 var pushed = 0
