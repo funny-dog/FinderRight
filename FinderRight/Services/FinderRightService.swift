@@ -24,6 +24,12 @@ final class FinderRightService {
     /// cut-queue.json 的读-改-写没有互斥保护。
     private static let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
+    /// 粘贴文件移动专用串行工作队列：隔离耗时的物理移动 I/O，避免阻塞 cutPasteQueue 导致 IPC 反压与超时。
+    private static let pasteQueue = DispatchQueue(
+        label: "com.finderright.app.paste",
+        qos: .userInitiated
+    )
+
     // MARK: - 安全白名单与校验 (B5)
 
     // TODO: 未来可通过 NSXPCConnection + audit token 实现进程级双向严格鉴权
@@ -599,11 +605,25 @@ final class FinderRightService {
     ///
     /// 连续剪切决策上保留「累加 / 合并」语义（不改成 Windows 的替换语义），
     /// 因此需要一个显式入口让用户清空队列、让角标消失。
+    /// 注意：仅能清空尚未被粘贴操作取走的队列，无法撤销已经被 takeCutQueue() 取走并正在移动的文件。
     private func cancelCut(_ req: IPCRequest) -> IPCResponse {
         // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
         Self.cutPasteQueue.sync {
             try? FileManager.default.removeItem(at: cutQueueFileURL)
             return IPCResponse(id: req.id, success: true, message: "已取消剪切")
+        }
+    }
+
+    /// 在 cutPasteQueue 短事务中一次性读取并删除当前剪切队列
+    private func takeCutQueue() -> [String]? {
+        Self.cutPasteQueue.sync {
+            guard let data = try? Data(contentsOf: cutQueueFileURL),
+                  let paths = try? JSONSerialization.jsonObject(with: data) as? [String],
+                  !paths.isEmpty else {
+                return nil
+            }
+            try? FileManager.default.removeItem(at: cutQueueFileURL)
+            return paths
         }
     }
 
@@ -613,28 +633,33 @@ final class FinderRightService {
         }
         let destDir = URL(fileURLWithPath: destPath)
 
-        // 从 IPC 共享文件快速前置检查剪切队列
-        guard let data = try? Data(contentsOf: cutQueueFileURL),
-              let sourcePaths = try? JSONSerialization.jsonObject(with: data) as? [String],
-              !sourcePaths.isEmpty else {
+        guard let sourcePaths = takeCutQueue() else {
             return IPCResponse(id: req.id, success: false, message: "剪切队列为空，请先剪切文件")
         }
 
-        // 异步派发到 cutPasteQueue 串行队列，XPC 立即返回“已受理”
-        Self.cutPasteQueue.async { [weak self] in
-            self?.performPaste(destDir: destDir)
+        // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
+        Self.pasteQueue.async { [weak self] in
+            self?.performPaste(sourcePaths: sourcePaths, destDir: destDir)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理粘贴请求，正在后台移动文件")
     }
 
-    private func performPaste(destDir: URL) {
-        guard let data = try? Data(contentsOf: cutQueueFileURL),
-              let sourcePaths = try? JSONSerialization.jsonObject(with: data) as? [String],
-              !sourcePaths.isEmpty else {
-            return
+    /// 在 cutPasteQueue 内将失败路径与粘贴期间新剪切路径去重合并后归还回队列
+    private func restoreFailedCutPaths(_ failedPaths: [String]) {
+        guard !failedPaths.isEmpty else { return }
+        Self.cutPasteQueue.async { [weak self] in
+            guard let self else { return }
+            var paths = (try? Data(contentsOf: self.cutQueueFileURL))
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] } ?? []
+            for path in failedPaths where !paths.contains(path) { paths.append(path) }
+            guard let data = try? JSONSerialization.data(withJSONObject: paths) else { return }
+            try? IPCBridge.ensureDirectory()
+            try? data.write(to: self.cutQueueFileURL, options: .atomic)
         }
+    }
 
+    private func performPaste(sourcePaths: [String], destDir: URL) {
         let fileManager = FileManager.default
         var firstError: String?
         var pastedPaths: [URL] = []
@@ -682,11 +707,9 @@ final class FinderRightService {
             }
         }
 
-        // 更新剪切队列：只保留未能移动成功的路径，防止队列指向已不存在的源文件
-        if failedPaths.isEmpty {
-            try? fileManager.removeItem(at: cutQueueFileURL)
-        } else if let updatedData = try? JSONSerialization.data(withJSONObject: failedPaths) {
-            try? updatedData.write(to: cutQueueFileURL, options: .atomic)
+        // 若有移动失败的路径，归还回剪切队列以便用户重试
+        if !failedPaths.isEmpty {
+            restoreFailedCutPaths(failedPaths)
         }
 
         if !pastedPaths.isEmpty {
