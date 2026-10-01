@@ -23,6 +23,8 @@ final class IPCWatcher {
         do {
             try IPCBridge.ensureDirectory()
             cleanupOrphanFiles()
+            // 上次运行若在粘贴移动途中被杀，这里把残留的 in-flight 剪切队列归还给用户
+            FinderRightService.recoverInflightCutQueue()
             NSLog("[IPCWatcher] ready, ipc dir = \(IPCBridge.pendingDir.path)")
         } catch {
             NSLog("[IPCWatcher] failed to create ipc dir: \(error)")

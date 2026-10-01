@@ -19,16 +19,25 @@ final class FinderRightService {
     /// 若用实例属性则两个实例各持一条队列，排队互斥形同虚设。
     private static let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
 
-    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态。
-    /// 同上，必须类型级共享，否则「云盘 Services 剪切 + 普通目录 IPC 粘贴」并发时
+    /// 剪切队列临界区：只保护 `cut-queue.json` 的读-改-写与取消代次，**绝不承载物理移动**。
+    /// 必须类型级共享，否则「云盘 Services 剪切 + 普通目录 IPC 粘贴」并发时
     /// cut-queue.json 的读-改-写没有互斥保护。
     private static let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
-    /// 粘贴文件移动专用串行工作队列：隔离耗时的物理移动 I/O，避免阻塞 cutPasteQueue 导致 IPC 反压与超时。
+    /// 粘贴文件移动专用串行工作队列：耗时的物理移动 I/O 在这里执行，
+    /// 不再长时间占住 cutPasteQueue（否则后续 cutFiles / cancelCut 的 sync 会队头阻塞整个
+    /// IPC 串行队列，扩展 10s 超时并留下孤儿 resp 文件）。
     private static let pasteQueue = DispatchQueue(
         label: "com.finderright.app.paste",
         qos: .userInitiated
     )
+
+    /// 取消剪切代次：每次 cancelCut 自增，**只能在 cutPasteQueue 上访问**。
+    ///
+    /// 粘贴任务在 `takeCutQueue()` 时记下当时的代次，归还失败路径前比对：代次变了说明
+    /// 用户已经点过「取消剪切」，此时必须放弃归还，否则取消会被异步的失败归还悄悄撤销
+    /// （角标与「粘贴 (已剪切 N 项)」在取消之后又冒出来）。
+    private static var cutCancelGeneration = 0
 
     // MARK: - 安全白名单与校验 (B5)
 
@@ -65,9 +74,10 @@ final class FinderRightService {
     func handle(_ req: IPCRequest) -> IPCResponse {
         // 1. 路径校验：
         //    - 写入/移动类 action 必须过安全白名单（可写范围仅 真实 home、/Volumes、tmp）
-        //    - 只读类 action 不修改任何文件，只校验路径存在性即可。扩展的监控目录包含启动卷 /，
-        //      因此 /Applications、/opt/homebrew、/etc、/Users/Shared 等系统目录也会出菜单，
-        //      若沿用白名单，在系统目录下点「打开终端 / 打开编辑器」会被静默拦截（只写日志，无反馈）。
+        //    - 只读类 action 不修改任何文件，只校验路径存在性即可。扩展的 FinderSync 只注册
+        //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
+        //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
+        //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
         let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
@@ -416,40 +426,38 @@ final class FinderRightService {
             return IPCResponse(id: req.id, success: false, message: "openTerminal 参数缺失")
         }
 
-        // 针对通过命令行参数指定工作目录的终端（如 Ghostty / Alacritty / Kitty）
-        if bundleId == "com.mitchellh.ghostty" {
+        // 只能用命令行参数指定工作目录的终端（Ghostty / Alacritty / Kitty）。
+        //
+        // 关键限制：`open --args` 的参数只在**应用冷启动**时进入 main() 的 argv（见 man open）。
+        // 应用已在运行时，open 只发 reopen 事件、参数被直接丢弃 —— 实测（自建 .app 图标包，
+        // 记录 argv 后长驻）：首次 --args ALPHA 生效；进程存活期间 --args BETA/GAMMA 既不产生
+        // 新进程、argv 也不更新。因此这里先判断终端是否在运行，未运行才走 --args 冷启动；
+        // 已在运行则落到下面的通用目录 URL 路径（至少不会用一个必然被忽略的参数假装成功）。
+        if let args = Self.workingDirectoryArguments(for: bundleId, directory: directory),
+           NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).isEmpty {
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            proc.arguments = ["-b", bundleId, "--args", "--working-directory=\(directory)"]
+            proc.arguments = ["-b", bundleId, "--args"] + args
             do {
                 try proc.run()
+                // 不在这里 waitUntilExit：open 要等应用启动完成才返回（重终端可能上百毫秒），
+                // 而本方法跑在 IPC 串行队列上。退出码只在后台记录。
+                DispatchQueue.global(qos: .utility).async {
+                    proc.waitUntilExit()
+                    if proc.terminationStatus != 0 {
+                        NSLog("[FinderRightService] openTerminal: \(bundleId) --args 退出码 \(proc.terminationStatus)")
+                    } else {
+                        NSLog("[FinderRightService] openTerminal: \(bundleId) 冷启动并携带工作目录参数")
+                    }
+                }
                 return IPCResponse(id: req.id, success: true, message: nil)
             } catch {
-                NSLog("[FinderRightService] open ghostty via cli failed: \(error)")
-            }
-        } else if bundleId == "org.alacritty" {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            proc.arguments = ["-b", bundleId, "--args", "--working-directory", directory]
-            do {
-                try proc.run()
-                return IPCResponse(id: req.id, success: true, message: nil)
-            } catch {
-                NSLog("[FinderRightService] open alacritty via cli failed: \(error)")
-            }
-        } else if bundleId == "net.kovidgoyal.kitty" {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            proc.arguments = ["-b", bundleId, "--args", "--directory", directory]
-            do {
-                try proc.run()
-                return IPCResponse(id: req.id, success: true, message: nil)
-            } catch {
-                NSLog("[FinderRightService] open kitty via cli failed: \(error)")
+                NSLog("[FinderRightService] openTerminal: \(bundleId) --args 启动失败: \(error)，退回目录 URL 路径")
             }
         }
 
-        // 通用方式：NSWorkspace.open 传递目录 URL（Terminal / iTerm2 / Warp 原生支持）
+        // 通用方式：NSWorkspace.open 传递目录 URL（Terminal / iTerm2 / Warp 原生支持；
+        // Ghostty / Kitty 已在运行时也走这里，由各自对「打开文件夹」的处理决定是否换目录）
         let url = URL(fileURLWithPath: directory)
         let success = NSWorkspace.shared.open(
             [url],
@@ -460,6 +468,21 @@ final class FinderRightService {
         )
         return IPCResponse(id: req.id, success: success,
                            message: success ? nil : "NSWorkspace.open 返回 false")
+    }
+
+    /// 终端冷启动时用来指定工作目录的命令行参数；不需要的终端返回 nil（走通用目录 URL 路径）。
+    /// 参数以数组形式直接交给 `/usr/bin/open`，不经 shell，含空格/中文的路径安全。
+    private static func workingDirectoryArguments(for bundleId: String, directory: String) -> [String]? {
+        switch bundleId {
+        case "com.mitchellh.ghostty":
+            return ["--working-directory=\(directory)"]
+        case "org.alacritty":
+            return ["--working-directory", directory]
+        case "net.kovidgoyal.kitty":
+            return ["--directory", directory]
+        default:
+            return nil
+        }
     }
 
     private func openWithApp(_ req: IPCRequest) -> IPCResponse {
@@ -555,10 +578,8 @@ final class FinderRightService {
 
     // MARK: - 剪切 / 粘贴（Lazy Cut 延迟剪切）
 
-    /// 剪切队列文件路径（存储待剪切的源文件完整路径列表）
-    private var cutQueueFileURL: URL {
-        IPCBridge.rootDirectory.appendingPathComponent("cut-queue.json")
-    }
+    /// 剪切队列存储（扩展端读取同一份文件，见 CutQueueStore）
+    private let cutQueue = CutQueueStore()
 
     /// 剪切：Lazy Cut（延迟剪切）。只记录待剪切文件路径到 cut-queue.json，
     /// 不立即移动物理文件，避免跨卷拷贝撑爆磁盘和未粘贴前文件丢失假象。
@@ -578,9 +599,7 @@ final class FinderRightService {
             }
 
             // 读取现有剪切队列并过滤掉外部已删除的文件
-            var queue = (try? Data(contentsOf: cutQueueFileURL))
-                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] }?
-                .filter { fileManager.fileExists(atPath: $0) } ?? []
+            var queue = cutQueue.read().filter { fileManager.fileExists(atPath: $0) }
 
             // 合并并去重
             for p in validPaths {
@@ -590,9 +609,7 @@ final class FinderRightService {
             }
 
             do {
-                try IPCBridge.ensureDirectory()
-                let data = try JSONSerialization.data(withJSONObject: queue)
-                try data.write(to: cutQueueFileURL, options: .atomic)
+                try cutQueue.write(queue)
             } catch {
                 return IPCResponse(id: req.id, success: false, message: "写入剪切队列失败: \(error.localizedDescription)")
             }
@@ -605,25 +622,22 @@ final class FinderRightService {
     ///
     /// 连续剪切决策上保留「累加 / 合并」语义（不改成 Windows 的替换语义），
     /// 因此需要一个显式入口让用户清空队列、让角标消失。
-    /// 注意：仅能清空尚未被粘贴操作取走的队列，无法撤销已经被 takeCutQueue() 取走并正在移动的文件。
+    /// 注意：只能取消尚未被粘贴取走的队列。已经被 takeCutQueue() 取走、正在移动的文件
+    /// 无法撤回，但代次自增会让这批任务结束后不再把失败路径归还回队列（取消必须赢）。
     private func cancelCut(_ req: IPCRequest) -> IPCResponse {
         // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
         Self.cutPasteQueue.sync {
-            try? FileManager.default.removeItem(at: cutQueueFileURL)
+            Self.cutCancelGeneration += 1
+            cutQueue.clear()
             return IPCResponse(id: req.id, success: true, message: "已取消剪切")
         }
     }
 
-    /// 在 cutPasteQueue 短事务中一次性读取并删除当前剪切队列
-    private func takeCutQueue() -> [String]? {
+    /// 在 cutPasteQueue 短事务中一次性取走当前剪切队列，并记录取走时的取消代次
+    private func takeCutQueue() -> (paths: [String], generation: Int)? {
         Self.cutPasteQueue.sync {
-            guard let data = try? Data(contentsOf: cutQueueFileURL),
-                  let paths = try? JSONSerialization.jsonObject(with: data) as? [String],
-                  !paths.isEmpty else {
-                return nil
-            }
-            try? FileManager.default.removeItem(at: cutQueueFileURL)
-            return paths
+            guard let paths = cutQueue.take() else { return nil }
+            return (paths, Self.cutCancelGeneration)
         }
     }
 
@@ -633,33 +647,35 @@ final class FinderRightService {
         }
         let destDir = URL(fileURLWithPath: destPath)
 
-        guard let sourcePaths = takeCutQueue() else {
+        guard let taken = takeCutQueue() else {
             return IPCResponse(id: req.id, success: false, message: "剪切队列为空，请先剪切文件")
         }
 
         // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
         Self.pasteQueue.async { [weak self] in
-            self?.performPaste(sourcePaths: sourcePaths, destDir: destDir)
+            self?.performPaste(sourcePaths: taken.paths, destDir: destDir, generation: taken.generation)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理粘贴请求，正在后台移动文件")
     }
 
-    /// 在 cutPasteQueue 内将失败路径与粘贴期间新剪切路径去重合并后归还回队列
-    private func restoreFailedCutPaths(_ failedPaths: [String]) {
+    /// 在 cutPasteQueue 内将失败路径与粘贴期间新剪切路径去重合并后归还回队列。
+    /// 若期间用户点过「取消剪切」（代次变化），整批丢弃并清掉 in-flight 标记。
+    private func restoreFailedCutPaths(_ failedPaths: [String], generation: Int) {
         guard !failedPaths.isEmpty else { return }
         Self.cutPasteQueue.async { [weak self] in
             guard let self else { return }
-            var paths = (try? Data(contentsOf: self.cutQueueFileURL))
-                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] } ?? []
-            for path in failedPaths where !paths.contains(path) { paths.append(path) }
-            guard let data = try? JSONSerialization.data(withJSONObject: paths) else { return }
-            try? IPCBridge.ensureDirectory()
-            try? data.write(to: self.cutQueueFileURL, options: .atomic)
+            defer { self.cutQueue.finish() }
+            guard generation == Self.cutCancelGeneration else {
+                self.serviceLog("取消剪切已生效，丢弃 \(failedPaths.count) 条失败路径的归还")
+                return
+            }
+            let restored = self.cutQueue.appendUnique(failedPaths)
+            self.serviceLog("粘贴失败路径已归还队列: \(failedPaths.count) 条，当前队列 \(restored.count) 条")
         }
     }
 
-    private func performPaste(sourcePaths: [String], destDir: URL) {
+    private func performPaste(sourcePaths: [String], destDir: URL, generation: Int) {
         let fileManager = FileManager.default
         var firstError: String?
         var pastedPaths: [URL] = []
@@ -707,9 +723,12 @@ final class FinderRightService {
             }
         }
 
-        // 若有移动失败的路径，归还回剪切队列以便用户重试
-        if !failedPaths.isEmpty {
-            restoreFailedCutPaths(failedPaths)
+        // 移动结束：失败路径归还回剪切队列以便用户重试（归还逻辑负责清掉 in-flight 标记）；
+        // 全部成功则直接清掉标记，队列保持为空。
+        if failedPaths.isEmpty {
+            cutQueue.finish()
+        } else {
+            restoreFailedCutPaths(failedPaths, generation: generation)
         }
 
         if !pastedPaths.isEmpty {
@@ -722,6 +741,18 @@ final class FinderRightService {
             serviceLog("pasteFiles completed with error: \(err)")
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
+        }
+    }
+
+    /// 主 App 启动时归还上次崩溃残留的 in-flight 队列。
+    ///
+    /// 粘贴开始时队列会被原子改名为 in-flight 标记；若主 App 在移动过程中被杀（崩溃、强退、
+    /// 断电），标记会残留在磁盘上，这里把其中的源文件并回队列，避免用户丢失剪切状态。
+    /// 只保留仍存在的源文件：已经移动成功的路径不再回到队列。
+    static func recoverInflightCutQueue() {
+        let restored = CutQueueStore().recover(existingOnly: true)
+        if !restored.isEmpty {
+            NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
         }
     }
 
