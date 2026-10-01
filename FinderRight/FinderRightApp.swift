@@ -144,9 +144,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 proc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
                 proc.arguments = ["-m", "-v", "-i", "com.finderright.app.sync"]
                 proc.standardOutput = pipe
-                try? proc.run()
-                proc.waitUntilExit()
+                // 启动失败时管道写端仍在本进程手里，直接读会永远等不到 EOF
+                guard (try? proc.run()) != nil else { return (-1, "") }
+                // 先读到 EOF 再等待退出，避免输出超过管道缓冲时互相等待（同 ProcessRunner）
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                proc.waitUntilExit()
                 let text = (String(data: data, encoding: .utf8) ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 return (proc.terminationStatus, text)

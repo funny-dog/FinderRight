@@ -467,6 +467,85 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!SharedConfig(fileURL: tempURL).badgeOwnershipReclaim, "关闭应持久化")
         }
 
+        // 18. 新建文件名校验：baseName / ext 会直接拼进路径，必须拦住路径穿越
+        runTest("SafeFileName 放行正常文件名") {
+            try assertTrue(SafeFileName.isValid(baseName: "untitled", ext: "txt"))
+            try assertTrue(SafeFileName.isValid(baseName: "未命名", ext: "md"))
+            try assertTrue(SafeFileName.isValid(baseName: "untitled", ext: ""), "无后缀应允许")
+            try assertTrue(SafeFileName.isValid(baseName: "untitled", ext: "tar.gz"), "多段后缀应允许")
+        }
+
+        runTest("SafeFileName 拒绝路径穿越与非法字符") {
+            try assertTrue(!SafeFileName.isValid(baseName: "../../../../tmp/escaped", ext: "txt"), "baseName 含 ../")
+            try assertTrue(!SafeFileName.isValid(baseName: "untitled", ext: "conf/../../x"), "ext 含 /")
+            try assertTrue(!SafeFileName.isValid(baseName: "..", ext: ""), "整体为 ..")
+            try assertTrue(!SafeFileName.isValid(baseName: ".", ext: ""), "整体为 .")
+            try assertTrue(!SafeFileName.isValid(baseName: "", ext: "txt"), "空 baseName")
+            try assertTrue(!SafeFileName.isValid(baseName: "a\u{0}b", ext: "txt"), "NUL")
+            try assertTrue(!SafeFileName.isValid(baseName: "untitled", ext: "t\nxt"), "控制字符")
+            try assertTrue(!SafeFileName.isValid(baseName: String(repeating: "a", count: 300), ext: "txt"), "超过 255 字节")
+        }
+
+        // 19. 子进程执行：stderr 超过管道缓冲（约 64KB）时不得死锁
+        runTest("ProcessRunner 大量 stderr 输出不死锁") {
+            var result: ProcessRunner.Result?
+            var runError: Error?
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                do {
+                    result = try ProcessRunner.run(
+                        executableURL: URL(fileURLWithPath: "/bin/sh"),
+                        arguments: ["-c", "head -c 200000 /dev/zero | tr '\\0' x >&2"])
+                } catch {
+                    runError = error
+                }
+                done.signal()
+            }
+            guard done.wait(timeout: .now() + 10) == .success else {
+                throw TestFailure(message: "10s 内未返回：stderr 写满管道导致死锁")
+            }
+            if let runError { throw runError }
+            try assertEqual(result?.status, 0)
+            let count = result?.stderr.count ?? 0
+            try assertTrue(count > 0 && count <= ProcessRunner.defaultStderrTailLimit,
+                           "stderr 只保留尾部，实际 \(count) 字符")
+        }
+
+        runTest("ProcessRunner 透传退出码与 stderr 内容") {
+            let result = try ProcessRunner.run(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "echo boom >&2; exit 3"])
+            try assertEqual(result.status, 3)
+            try assertEqual(result.stderr, "boom")
+        }
+
+        // 20. 恢复标记合并：上次遗留未恢复的扩展不能被新一轮抢回覆盖掉
+        runTest("BadgeReclaimRestoreStore merge 保留上次遗留的待恢复项") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = BadgeReclaimRestoreStore(directory: dir)
+
+            try assertEqual(try store.merge(["a.ext", "a.ext"]), ["a.ext"], "空标记时合并结果应去重")
+            try store.save(["a.ext", "b.ext"])
+            let merged = try store.merge(["a.ext", "c.ext"])
+            try assertEqual(merged, ["a.ext", "b.ext", "c.ext"], "b.ext 是上次未恢复的，必须保留")
+            try assertEqual(store.load(), ["a.ext", "b.ext", "c.ext"], "合并结果应落盘")
+        }
+
+        // 21. 更新包校验和文件解析：只接受 64 位十六进制 SHA-256
+        runTest("UpdateIntegrity 解析 shasum 输出") {
+            let hash = String(repeating: "ab", count: 32)
+            try assertEqual(UpdateIntegrity.parseChecksum("\(hash)  FinderRight-v1.1.10.zip\n"), hash)
+            try assertEqual(UpdateIntegrity.parseChecksum(hash.uppercased()), hash, "大写应归一为小写")
+        }
+
+        runTest("UpdateIntegrity 拒绝非 SHA-256 内容") {
+            try assertNil(UpdateIntegrity.parseChecksum(""), "空内容")
+            try assertNil(UpdateIntegrity.parseChecksum("<!DOCTYPE html><html>Not Found</html>"), "HTML 错误页")
+            try assertNil(UpdateIntegrity.parseChecksum(String(repeating: "a", count: 63)), "长度不足")
+            try assertNil(UpdateIntegrity.parseChecksum(String(repeating: "g", count: 64)), "非十六进制")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

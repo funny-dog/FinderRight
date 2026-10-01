@@ -30,19 +30,8 @@
         <string>/Library/CloudStorage/</string>
     </array>
 
-    <!-- 允许 fork 子进程执行命令行工具（zip/tar/unzip/defaults/killall 等） -->
-    <key>com.apple.security.temporary-exception.sbpl</key>
-    <string>(allow process-fork) (allow process-exec*)</string>
-
-    <!-- AppleScript 控制以下应用（用于打开终端、控制 Finder） -->
-    <key>com.apple.security.temporary-exception.apple-events</key>
-    <array>
-        <string>com.apple.finder</string>
-        <string>com.apple.Terminal</string>
-        <string>com.apple.systemevents</string>
-        <string>com.googlecode.iterm2</string>
-        <string>dev.warp.Warp-Stable</string>
-        <string>com.mitchellh.ghostty</string>
-    </array>
+    <!-- 刻意不保留 process-fork / process-exec 与 apple-events 临时例外：
+         子进程（zip / tar / defaults / killall）与打开终端都已移到非沙箱主 App 经 IPC 执行，
+         扩展本身不创建进程、不发 AppleEvent。保留它们只会让扩展一旦被攻破即可执行任意程序。 -->
 </dict>
 </plist>

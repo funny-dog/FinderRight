@@ -111,8 +111,21 @@ echo "=== 5. 代码签名 (Ad-hoc) ==="
 # --deep 会递归进入 PlugIns 目录，用主 App 的无沙箱配置覆盖抹除 FinderRightSync 的 app-sandbox 权限，
 # 导致 PluginKit 判定扩展未开启沙箱而静默拒绝加载（pluginkit 输出 no matches，右键菜单彻底消失）。
 # 正确方式：自内向外（Inside-Out）逐层独立签名：
-codesign -s - --force --entitlements FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
-codesign -s - --force --entitlements FinderRight/FinderRight.entitlements "$APP_DIR"
+#
+# -o runtime（Hardened Runtime）必须保留：主 App 持有完全磁盘访问与辅助功能授权，未加固时 dyld 会接受
+# DYLD_INSERT_LIBRARIES，同用户恶意程序用 `open --env` 拉起本 App 即可注入代码并继承这两项授权。
+# Kit 为静态库、主程序只链接系统库，库验证不受影响；主 App 不发 AppleEvent，无需额外 entitlement。
+codesign -s - --force -o runtime --entitlements FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
+codesign -s - --force -o runtime --entitlements FinderRight/FinderRight.entitlements "$APP_DIR"
+
+# 硬校验：签名有效且两者都带 runtime 标志，否则立即构建失败，不让加固静默回退
+codesign --verify --strict "$APP_DIR"
+for bundle in "$APP_DIR" "$APPEX_DIR"; do
+  if ! codesign -dv "$bundle" 2>&1 | grep -q "flags=.*runtime"; then
+    echo "错误：$bundle 未启用 Hardened Runtime" >&2
+    exit 1
+  fi
+done
 
 echo "=== 6. 创建 Applications 软链接 ==="
 ln -shf /Applications "$STAGE_DIR/Applications"
