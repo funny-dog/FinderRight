@@ -351,12 +351,9 @@ class FinderSync: FIFinderSync {
         }
         if featureOn(MenuFeatureCatalog.paste) {
             if hasCut || isContainerLike {
-                let pasteTitleKey: String
-                if hasCut {
-                    pasteTitleKey = cutPaths.count == 1 ? "粘贴 (已剪切 1 项)" : "粘贴 (已剪切 \(cutPaths.count) 项)"
-                } else {
-                    pasteTitleKey = "粘贴"
-                }
+                let pasteTitleKey = hasCut
+                    ? String(format: L("粘贴 (已剪切 %d 项)"), cutPaths.count)
+                    : "粘贴"
                 let pasteItem = makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
                 pasteItem.isEnabled = hasCut
                 menu.addItem(pasteItem)
@@ -375,10 +372,14 @@ class FinderSync: FIFinderSync {
         }
 
         if featureOn(MenuFeatureCatalog.toggleHidden) {
-            let showHidden = SharedConfig.shared.showHiddenFiles
-            let titleKey = showHidden ? "隐藏隐藏文件" : "显示隐藏文件"
-            let icon = showHidden ? "eye.slash" : "eye"
-            menu.addItem(makeItem(titleKey: titleKey, emoji: "👁", systemImage: icon, action: #selector(toggleHiddenFiles(_:)), shortcutId: "shortcut.toggleHidden", style: style))
+            menu.addItem(makeItem(
+                titleKey: "切换隐藏文件",
+                emoji: "👁",
+                systemImage: "eye",
+                action: #selector(toggleHiddenFiles(_:)),
+                shortcutId: "shortcut.toggleHidden",
+                style: style
+            ))
         }
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
@@ -393,9 +394,21 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 菜单构建辅助
 
-    /// 本地化菜单标题（中文做 key，en.lproj 提供英文）
+    private static let englishBundle: Bundle? = {
+        guard let path = Bundle.main.path(forResource: "en", ofType: "lproj") else { return nil }
+        return Bundle(path: path)
+    }()
+
+    /// 本地化菜单标题（按 SharedConfig.appLanguage 选择资源或系统本地化）
     private func L(_ title: String) -> String {
-        NSLocalizedString(title, comment: "menu item")
+        switch SharedConfig.shared.appLanguage {
+        case "en":
+            return Self.englishBundle?.localizedString(forKey: title, value: nil, table: nil) ?? title
+        case "zh-Hans":
+            return title
+        default:
+            return NSLocalizedString(title, comment: "menu item")
+        }
     }
 
     /// 根据配置的图标风格（简洁 / 彩色 Emoji / 无图标）设置菜单项的标题与图标
