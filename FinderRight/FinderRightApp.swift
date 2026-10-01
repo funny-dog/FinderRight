@@ -154,10 +154,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: outputData, encoding: .utf8) ?? ""
             let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard matchProc.terminationStatus == 0 else {
+                NSLog("[AppDelegate] PlugInKit 查询失败 (exit=\(matchProc.terminationStatus))，跳过修改扩展启用状态")
+                return
+            }
 
-            // "+" 表示已处于启用状态（elected to use），无需重复开启
+            // 已启用时不反复注销/注册扩展，避免扰动 Finder 的回调路由。
             if trimmed.hasPrefix("+") {
-                NSLog("[AppDelegate] FinderRightSync appex 已经处于启用状态 (+)，无需重复执行 pluginkit -e use")
+                NSLog("[AppDelegate] FinderRightSync appex 已经处于启用状态 (+)，无需重复注册")
                 return
             }
 
