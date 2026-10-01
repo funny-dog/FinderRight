@@ -34,7 +34,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 - 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**不重启 Finder、窗口不闪烁**（需辅助功能权限）
 - ⌨️ **自定义快捷键** —— 给每个菜单项绑定快捷键
-- 🌗 **中英文双语** —— 跟随系统语言自动切换
+- 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
 
 ### 📥 安装
 
@@ -93,7 +93,14 @@ killall Finder
 
 ### 🛠 从源码构建
 
-需要 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)：
+方式一（推荐，无需 Xcode，仅需 Command Line Tools）：
+
+```bash
+bash scripts/ci.sh      # 编译 Kit + 单元测试 + 主程序/扩展静态类型检查
+bash scripts/build.sh   # 产出 FinderRight.app 与 DMG / ZIP（ad-hoc 签名）
+```
+
+方式二（Xcode 工程，需 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)）：
 
 ```bash
 brew install xcodegen
@@ -101,6 +108,14 @@ xcodegen generate
 xcodebuild -scheme FinderRight -configuration Release \
   -derivedDataPath build/release build
 ```
+
+### ⚠️ 已知行为与取舍
+
+- **后台失败静默**：压缩 / 解压 / 粘贴在提交给主 App 后立即返回「已受理」，之后的失败不再弹通知或对话框（通知体系已整体移除，以避免任何权限弹窗打扰）。失败原因会写入 `~/Library/Application Support/FinderRight/extension-debug.log` 与系统日志（Console.app 搜索 FinderRightService）。
+- **加密 / 分卷压缩包**：系统 bsdtar 能解 `.7z` 与 `.rar`（含 RAR5），但加密或分卷的包会解压失败，且按上面的静默策略不弹提示（解压失败产生的空目录会被自动清理）。
+- **菜单生效范围**：Finder 扩展只注册用户主目录与已挂载卷；`/Applications`、`/Users/Shared` 等系统目录不会出现右键菜单，云盘目录改由「服务」子菜单提供（见下节）。
+- **终端工作目录**：Ghostty / Alacritty / Kitty 只有在**尚未运行**时才能通过命令行参数指定工作目录（`open --args` 的固有限制）；已在运行时退化为目录 URL 方式，能否换目录取决于各终端自身实现。
+- **剪切状态**：粘贴过程中若主 App 被强退/崩溃，下次启动会自动把未移动完的剪切路径恢复回队列（移动成功的不会回来）。
 
 ### 🏗 架构
 
@@ -132,7 +147,7 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 - 📦 **Compress / Extract** — compress to ZIP; extract archives in place
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder or flickering** (needs Accessibility)
 - ⌨️ **Custom Shortcuts** — bind a keyboard shortcut to any menu item
-- 🌗 **Bilingual** — follows your system language (English / 简体中文)
+- 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)
 
 ### 📥 Installation
 
@@ -191,7 +206,14 @@ killall Finder
 
 ### 🛠 Build from Source
 
-Requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen):
+Option 1 (recommended, no Xcode needed — Command Line Tools only):
+
+```bash
+bash scripts/ci.sh      # build the Kit + unit tests + type-check app & extension
+bash scripts/build.sh   # produces FinderRight.app plus DMG / ZIP (ad-hoc signed)
+```
+
+Option 2 (Xcode project; requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen)):
 
 ```bash
 brew install xcodegen
@@ -199,6 +221,14 @@ xcodegen generate
 xcodebuild -scheme FinderRight -configuration Release \
   -derivedDataPath build/release build
 ```
+
+### ⚠️ Known Behavior and Tradeoffs
+
+- **Silent background failures**: compress / extract / paste acknowledge the request immediately ("accepted") and later failures do not raise notifications or dialogs (the notification system was removed entirely to avoid any permission prompt). Reasons are logged to `~/Library/Application Support/FinderRight/extension-debug.log` and to the system log (search `FinderRightService` in Console.app).
+- **Encrypted / multi-volume archives**: the system bsdtar handles `.7z` and `.rar` (including RAR5), but encrypted or split archives will fail — silently, per the policy above (empty output folders are cleaned up automatically).
+- **Menu coverage**: the Finder extension only registers your home folder and mounted volumes, so `/Applications`, `/Users/Shared` and similar system folders show no context menu; cloud folders are covered by the Services submenu (see below).
+- **Terminal working directory**: Ghostty / Alacritty / Kitty can only receive a working directory through command-line arguments while they are **not yet running** (an inherent `open --args` limitation). If they are already running, FinderRight falls back to opening the folder URL, and whether the directory changes depends on the terminal itself.
+- **Cut state**: if the main app is force-quit or crashes mid-paste, the paths that were not moved yet are restored into the cut queue on next launch (already-moved ones are not).
 
 ### 🏗 Architecture
 
