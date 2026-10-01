@@ -152,10 +152,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             // 1. 仅在「未注册」「注册路径变化」或「注册版本与当前 bundle 不一致（刚升级）」时才注册。
             //
-            // ⚠️ 不要改回每次启动都无条件 `pluginkit -a`：实测（2026-10-02 日志）重复注册会让
-            // 插件 UUID 变新并重启扩展进程，而 Finder 之后**不会**重新回调 requestBadgeIdentifier，
-            // 导致「剪切角标」在重启 App（例如切换语言触发的自动重启）后整体失效，
-            // 直到下一次真正更换 bundle（重新安装）+ 重启访达才恢复。
+            // ⚠️ 不要改回每次启动都无条件 `pluginkit -a`：重复注册会让插件 UUID 变新并重启扩展进程，
+            // 重启后的扩展成为与其他 Finder Sync 扩展（如 Keka）重叠目录的**最后注册者**，
+            // 从而失去这些目录的角标归属（Finder 只把 requestBadgeIdentifier 交给最先注册者，
+            // 见 FinderSync.requestBadgeIdentifier 处的说明），表现为重启 App 后剪切角标整体失效。
             // 版本号一致即同一份插件，重复注册有害无益；只有版本变化才需要让 PluginKit 更新。
             let appexVersion = (NSDictionary(contentsOf: appexURL.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String) ?? ""
             var (status, output) = queryPluginState()
