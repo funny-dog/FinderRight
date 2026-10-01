@@ -135,27 +135,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard FileManager.default.fileExists(atPath: appexURL.path) else { return }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            // 1. 注册插件到 PluginKit
-            let regProc = Process()
-            regProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-            regProc.arguments = ["-a", appexURL.path]
-            try? regProc.run()
-            regProc.waitUntilExit()
+            /// 查询插件注册与选举状态（输出形如 `+ com.finderright.app.sync(1.1.10) <uuid> <日期> <路径>`）
+            func queryPluginState() -> (status: Int32, output: String) {
+                let proc = Process()
+                let pipe = Pipe()
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+                proc.arguments = ["-m", "-i", "com.finderright.app.sync"]
+                proc.standardOutput = pipe
+                try? proc.run()
+                proc.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = (String(data: data, encoding: .utf8) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (proc.terminationStatus, text)
+            }
 
-            // 2. 查询插件当前选举状态（避免覆盖用户在系统设置里的显式禁用）
-            let matchProc = Process()
-            let pipe = Pipe()
-            matchProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-            matchProc.arguments = ["-m", "-i", "com.finderright.app.sync"]
-            matchProc.standardOutput = pipe
-            try? matchProc.run()
-            matchProc.waitUntilExit()
+            // 1. 仅在「未注册」「注册路径变化」或「注册版本与当前 bundle 不一致（刚升级）」时才注册。
+            //
+            // ⚠️ 不要改回每次启动都无条件 `pluginkit -a`：实测（2026-10-02 日志）重复注册会让
+            // 插件 UUID 变新并重启扩展进程，而 Finder 之后**不会**重新回调 requestBadgeIdentifier，
+            // 导致「剪切角标」在重启 App（例如切换语言触发的自动重启）后整体失效，
+            // 直到下一次真正更换 bundle（重新安装）+ 重启访达才恢复。
+            // 版本号一致即同一份插件，重复注册有害无益；只有版本变化才需要让 PluginKit 更新。
+            let appexVersion = (NSDictionary(contentsOf: appexURL.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String) ?? ""
+            var (status, output) = queryPluginState()
+            let pathMatches = output.contains(appexURL.path)
+            let versionMatches = appexVersion.isEmpty || output.contains("(\(appexVersion))")
+            if status != 0 || !pathMatches || !versionMatches {
+                let regProc = Process()
+                regProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+                regProc.arguments = ["-a", appexURL.path]
+                try? regProc.run()
+                regProc.waitUntilExit()
+                NSLog("[AppDelegate] 重新注册 FinderSync appex（未注册/路径或版本变化，当前 \(appexVersion)）: \(appexURL.path)")
+                (status, output) = queryPluginState()
+            } else {
+                NSLog("[AppDelegate] FinderSync appex 已注册且版本一致 (\(appexVersion))，跳过 pluginkit -a（避免扰动角标回调）")
+            }
 
-            let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard matchProc.terminationStatus == 0 else {
-                NSLog("[AppDelegate] PlugInKit 查询失败 (exit=\(matchProc.terminationStatus))，跳过修改扩展启用状态")
+            // 2. 读取插件当前选举状态（避免覆盖用户在系统设置里的显式禁用）
+            let trimmed = output
+            guard status == 0 else {
+                NSLog("[AppDelegate] PlugInKit 查询失败 (exit=\(status))，跳过修改扩展启用状态")
                 return
             }
 

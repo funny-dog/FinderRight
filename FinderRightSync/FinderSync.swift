@@ -175,7 +175,9 @@ class FinderSync: FIFinderSync {
         Self.refreshInstalledEditorsAsync()
 
         let initMs = (ProcessInfo.processInfo.systemUptime - Self.initStartUptime) * 1000
-        logToFile("init done: pid=\(getpid()) \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.map(\.path).sorted())")
+        // 版本号写进日志：排查角标/回调问题时必须能区分「装的是哪一版扩展」
+        let extVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        logToFile("init done: pid=\(getpid()) v\(extVersion) \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.map(\.path).sorted())")
     }
 
     // MARK: - 文件角标徽章回调

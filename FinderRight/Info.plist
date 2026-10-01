@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSSupportsAppNap</key>
-	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -17,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.9</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>CFBundleIconName</key>
-	<string>AppIcon</string>
+	<string>1.1.10</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -34,25 +36,11 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>12</string>
-	<key>CFBundleSupportedPlatforms</key>
-	<array>
-		<string>MacOSX</string>
-	</array>
+	<string>13</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
-	<!-- 声明为后台代理应用：菜单栏类 App 的标准做法。
-	     修复：FinderSync 扩展用 NSWorkspace.open 唤醒主 App 时，LaunchServices
-	     会按 Info.plist 声明的类型处理——此前声明为普通应用，LS 在处理 URL 打开时
-	     把 App 提到前台并给出 Dock 图标（activates=false 对已运行 App 无效），
-	     而这条路径没有窗口，windowWillClose 不会触发，图标就一直留着。
-	     声明 LSUIElement 后 LS 不再将其前置；需要开窗时 openSettings()/
-	     openOnboarding() 会临时切 .regular，关窗后 windowWillClose 切回。
-	     showDockIcon=true 的用户不受影响：applicationDidFinishLaunching
-	     仍会把策略设为 .regular。顺带消除冷启动时 Dock 图标的一闪。 -->
 	<key>LSUIElement</key>
 	<true/>
-
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -212,5 +200,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSupportsAppNap</key>
+	<false/>
 </dict>
 </plist>
