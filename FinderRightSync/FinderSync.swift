@@ -44,28 +44,40 @@ private func hasCutQueue() -> Bool {
     return !currentCutQueuePaths().isEmpty
 }
 
-/// 生成高辨识度剪切状态文件角标（32x32 Retina，深灰半透明圆底 + 白色高光边框 + 白色剪刀）
+/// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
-    let img = NSImage(size: size, flipped: false) { rect in
-        let bg = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
-        NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
-        bg.fill()
-
-        bg.lineWidth = 1.5
-        NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
-        bg.stroke()
-
-        if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            let scImg = scissors.withSymbolConfiguration(config) ?? scissors
-            let iconRect = NSRect(x: 7.5, y: 7.5, width: 17, height: 17)
-            NSColor.white.setFill()
-            scImg.draw(in: iconRect)
-        }
-        return true
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB,
+                                   bytesPerRow: 0, bitsPerPixel: 0),
+          let context = NSGraphicsContext(bitmapImageRep: rep) else {
+        return NSImage(size: size)
     }
-    return img
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    context.cgContext.scaleBy(x: 2, y: 2)
+
+    let bg = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 28, height: 28))
+    NSColor(calibratedWhite: 0.15, alpha: 0.88).setFill()
+    bg.fill()
+    bg.lineWidth = 1.5
+    NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+    bg.stroke()
+
+    if let scissors = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil) {
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            .applying(.init(paletteColors: [.white]))
+        (scissors.withSymbolConfiguration(config) ?? scissors)
+            .draw(in: NSRect(x: 7.5, y: 7.5, width: 17, height: 17))
+    }
+    context.flushGraphics()
+    NSGraphicsContext.restoreGraphicsState()
+
+    rep.size = size
+    let image = NSImage(size: size)
+    image.addRepresentation(rep)
+    return image
 }
 
 // MARK: - 日志
@@ -85,15 +97,11 @@ private func logToFile(_ message: String) {
     let timestamp = logDateFormatter.string(from: Date())
     logQueue.async {
         let fm = FileManager.default
-        // appex 沙箱内 urls(for: .documentDirectory) 会返回空数组（扩展无 Documents 概念），
-        // 用 NSHomeDirectory()（沙箱下指向容器路径）兜底，否则文件日志被静默吞掉
-        let docDir = fm.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-                .appendingPathComponent("Documents", isDirectory: true)
-        // 沙箱容器内 Documents 目录可能尚不存在，不先创建则写入被静默吞掉
-        try? fm.createDirectory(at: docDir, withIntermediateDirectories: true)
-        let logFile = docDir.appendingPathComponent("debug.log")
-        let oldLogFile = docDir.appendingPathComponent("debug.log.1")
+        // 与 IPC 共用已授权目录，避免容器 Documents 日志被 TCC 阻止读取。
+        let logDir = IPCBridge.rootDirectory
+        try? fm.createDirectory(at: logDir, withIntermediateDirectories: true)
+        let logFile = logDir.appendingPathComponent("extension-debug.log")
+        let oldLogFile = logDir.appendingPathComponent("extension-debug.log.1")
         let maxBytes: UInt64 = 1024 * 1024 // 1MB
 
         if let attrs = try? fm.attributesOfItem(atPath: logFile.path),
@@ -164,7 +172,7 @@ class FinderSync: FIFinderSync {
         Self.refreshInstalledEditorsAsync()
 
         let initMs = (ProcessInfo.processInfo.systemUptime - Self.initStartUptime) * 1000
-        logToFile("init done: \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.count)")
+        logToFile("init done: pid=\(getpid()) \(String(format: "%.1f", initMs))ms monitoredDirs=\(dirs.map(\.path).sorted())")
     }
 
     // MARK: - 文件角标徽章回调
@@ -172,6 +180,7 @@ class FinderSync: FIFinderSync {
     override func requestBadgeIdentifier(for url: URL) {
         let cutPaths = currentCutQueuePaths()
         let normPath = normalizePath(url.path)
+        logToFile("requestBadgeIdentifier: \(url.path) cut=\(cutPaths.contains(normPath))")
         if cutPaths.contains(normPath) || cutPaths.contains(url.path) || cutPaths.contains(url.standardizedFileURL.path) {
             FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
         } else {
@@ -270,13 +279,13 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Directory Observation (诊断用)
 
-    /// Finder 开始显示某个受监控目录时调用，记录原始 URL 供排查
+    /// Finder 开始显示某个受监控目录时调用，记录原始 URL 供排查。
     override func beginObservingDirectory(at url: URL) {
-        logToFile("beginObserving: \(url.lastPathComponent)")
+        logToFile("beginObserving: \(url.path)")
     }
 
     override func endObservingDirectory(at url: URL) {
-        logToFile("endObserving: \(url.lastPathComponent)")
+        logToFile("endObserving: \(url.path)")
     }
 
     // MARK: - Context Menu

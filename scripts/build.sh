@@ -16,12 +16,11 @@ APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
 KIT_BUILD_DIR="$PROJECT_DIR/FinderRightKit/.build/out/Products/Release"
 
 echo "=== 1. 编译 FinderRightKit (Release) ==="
-swift build -c release --package-path FinderRightKit
+swift build -c release --disable-sandbox --package-path FinderRightKit
 
-# 清空 stage 目录：历史上 Assets.car 靠旧构建残留"碰巧"被带进 DMG，
-# 掩盖了脚本从未编译 asset catalog 的问题（v1.1.5 干净构建后菜单栏图标消失）。
-# 每次从干净目录组装，残留文件不再掩盖缺步骤。
-rm -rf "$STAGE_DIR"
+# 复用唯一 staging App，逐个覆盖编译产物；避免对已有 bundle 做批量删除。
+# 资源是否存在由下方硬校验确认，不依赖历史产物。
+mkdir -p "$STAGE_DIR"
 
 echo "=== 2. 编译主程序 FinderRight (Release) ==="
 mkdir -p "$APP_DIR/Contents/MacOS"
