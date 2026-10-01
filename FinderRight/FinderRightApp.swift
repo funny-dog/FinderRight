@@ -24,6 +24,9 @@ struct FinderRightApp: App {
                 Button(NSLocalizedString("设置...", comment: "menu")) {
                     appDelegate.openSettings()
                 }
+                // replacing: .appSettings 会连同系统自带「设置…」的 ⌘, 一起移除，
+                // 这里必须显式补回，否则应用菜单里设置项没有快捷键
+                .keyboardShortcut(",", modifiers: .command)
             }
         }
     }
@@ -48,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 「切换隐藏文件」已改为无状态固定文案（见 FinderSync.menu(for:) 注释），
+        // 不再需要在启动时把 SharedConfig 锚定到 Finder 真实状态。
+
         // 根据偏好动态设定激活策略
         if alwaysShowDockIcon {
             NSApp.setActivationPolicy(.regular)
@@ -82,16 +88,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 首次启动：若尚未完成引导，自动弹出引导设置窗口
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
+            // 弹出即视为已完成：用户若用红点直接关窗，OnboardingView 的「开始使用」不会执行，
+            // 标志位会一直是 false，导致此后每次冷启动（含右键 IPC 冷启动、开机自启）
+            // 都重复弹引导并抢焦。用户已看过引导即视为完成。
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             openOnboarding()
         }
     }
 
     /// 检查旧版 staging/ 目录是否存在遗留文件，仅记录日志，不自动移动或删除
     private func checkLegacyStagingDirectory() {
+        // 一次性提醒：发送成功后才置位，避免每次冷启动重复弹同一条通知
+        let sentKey = "stagingLegacyWarningSent"
+        guard !UserDefaults.standard.bool(forKey: sentKey) else { return }
+
         let stagingDir = IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
         let fm = FileManager.default
         if let items = try? fm.contentsOfDirectory(atPath: stagingDir.path), !items.isEmpty {
             NSLog("[AppDelegate] 发现暂存区遗留文件: \(items.count) 个，位于 \(stagingDir.path)")
+            UserDefaults.standard.set(true, forKey: sentKey)
         }
     }
 
@@ -105,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? fm.removeItem(at: errorFileURL)
             DispatchQueue.main.async {
                 let alert = NSAlert()
-                alert.messageText = "自动更新失败"
+                alert.messageText = NSLocalizedString("自动更新失败", comment: "alert")
                 alert.informativeText = content.trimmingCharacters(in: .whitespacesAndNewlines)
                 alert.alertStyle = .warning
                 alert.runModal()

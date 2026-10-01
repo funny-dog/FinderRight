@@ -64,6 +64,9 @@
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
 "启动" = "Startup";
 "显示" = "Appearance";
+"语言" = "Language";
+"跟随系统" = "System";
+"切换语言将立即自动重启应用以生效" = "Switching language will immediately restart the app to take effect";
 "右键菜单图标" = "Right-Click Menu Icons";
 "简洁 (SF Symbols)" = "Clean (SF Symbols)";
 "彩色 (Emoji)" = "Color (Emoji)";
@@ -171,6 +174,26 @@
 "立即更新到 %@" = "Update to %@ Now";
 "正在安装并重启..." = "Installing and restarting…";
 "自动下载并安装新版本" = "Automatically download and install the new version";
+
+/* Notifications & alerts */
+"压缩失败" = "Compression Failed";
+"压缩出错" = "Compression Error";
+"解压失败" = "Extraction Failed";
+"解压出错" = "Extraction Error";
+"粘贴文件失败" = "Paste Failed";
+"已剪切文件" = "Files Cut";
+"「%@」已剪切，前往目标目录右键「粘贴」即可移动" = "\"%@\" cut. Right-click \"Paste\" in the destination folder to move it";
+"已剪切 %d 个文件" = "%d Files Cut";
+"已放入剪切队列，前往目标目录右键「粘贴」即可移动" = "Added to the cut queue. Right-click \"Paste\" in the destination folder to move them";
+"发现暂存区遗留文件" = "Leftover Files in Staging Area";
+"暂存区有 %d 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging" = "%d leftover files from an older version are in ~/Library/Application Support/FinderRight/staging";
+"自动更新失败" = "Automatic Update Failed";
+"ditto 退出码: %d" = "ditto exit code: %d";
+"退出码 %d" = "Exit code %d";
+"创建解压目录失败: %@" = "Failed to create the destination folder: %@";
+"复制新版本到临时目录失败" = "Failed to copy the new version to a temporary location";
+"备份旧版本失败" = "Failed to back up the old version";
+"移动新版本到目标目录失败，已回滚旧版本" = "Failed to move the new version into place; the old version was restored";
 
 /* Custom File Templates */
 "自定义文件模板" = "Custom File Templates";

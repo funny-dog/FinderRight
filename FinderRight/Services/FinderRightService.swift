@@ -3,17 +3,26 @@ import AppKit
 import CoreGraphics
 import FinderRightKit
 
+/// 通知文案的本地化辅助：中文做 key，主 App 的 en.lproj/Localizable.strings 提供英文。
+/// 放文件级而非实例方法，便于在 [weak self] 闭包内直接调用。
+private func L(_ key: String) -> String { NSLocalizedString(key, comment: "notification") }
+
 /// 主 App 端的 IPC 请求处理器。
 ///
 /// 这个对象由 IPCWatcher 创建，收到 IPCRequest 后路由到对应方法。
 /// 所有方法都在主 App 进程（非沙箱）里执行，借用主 App 的 TCC 权限（包括 Full Disk Access）。
 final class FinderRightService {
 
-    /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O
-    private let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
+    /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O。
+    ///
+    /// 必须为类型级（static）：本类同时被 IPCWatcher 与 ServicesProvider 各实例化一次，
+    /// 若用实例属性则两个实例各持一条队列，排队互斥形同虚设。
+    private static let archiveQueue = DispatchQueue(label: "com.finderright.app.archive", qos: .utility)
 
-    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态
-    private let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
+    /// 剪切/粘贴专用串行队列：确保 cut-queue.json 与移动操作互斥访问，绝不并发竞态。
+    /// 同上，必须类型级共享，否则「云盘 Services 剪切 + 普通目录 IPC 粘贴」并发时
+    /// cut-queue.json 的读-改-写没有互斥保护。
+    private static let cutPasteQueue = DispatchQueue(label: "com.finderright.app.cutpaste", qos: .userInitiated)
 
     // MARK: - 安全白名单与校验 (B5)
 
@@ -48,13 +57,29 @@ final class FinderRightService {
 
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
-        // 1. 路径白名单校验
+        // 1. 路径校验：
+        //    - 写入/移动类 action 必须过安全白名单（可写范围仅 真实 home、/Volumes、tmp）
+        //    - 只读类 action 不修改任何文件，只校验路径存在性即可。扩展的监控目录包含启动卷 /，
+        //      因此 /Applications、/opt/homebrew、/etc、/Users/Shared 等系统目录也会出菜单，
+        //      若沿用白名单，在系统目录下点「打开终端 / 打开编辑器」会被静默拦截（只写日志，无反馈）。
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles"]
+        let needsWhitelist = !readOnlyActions.contains(req.action)
+
         let pathKeys = ["directory", "destination", "archive", "testPath"]
         for key in pathKeys {
             if let path = req.payload[key]?.stringValue {
-                guard isPathAllowed(path) else {
-                    serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                    return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                if needsWhitelist {
+                    guard isPathAllowed(path) else {
+                        serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                    }
+                } else {
+                    // 只读路径仅校验存在性（防明显无效请求，不做安全边界，因为不会写入）
+                    let expanded = (path as NSString).expandingTildeInPath
+                    guard FileManager.default.fileExists(atPath: expanded) else {
+                        serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                    }
                 }
             }
         }
@@ -62,9 +87,17 @@ final class FinderRightService {
         for key in arrayKeys {
             if let paths = req.payload[key]?.stringArrayValue {
                 for path in paths {
-                    guard isPathAllowed(path) else {
-                        serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                    if needsWhitelist {
+                        guard isPathAllowed(path) else {
+                            serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                            return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                        }
+                    } else {
+                        let expanded = (path as NSString).expandingTildeInPath
+                        guard FileManager.default.fileExists(atPath: expanded) else {
+                            serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
+                            return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                        }
                     }
                 }
             }
@@ -97,6 +130,8 @@ final class FinderRightService {
             return cutFiles(req)
         case "pasteFiles":
             return pasteFiles(req)
+        case "cancelCut":
+            return cancelCut(req)
         default:
             return IPCResponse(id: req.id, success: false, message: "未知 action: \(req.action)")
         }
@@ -140,7 +175,7 @@ final class FinderRightService {
         let dest = uniqueFileURL(baseName: name, ext: "zip", in: dir)
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        archiveQueue.async { [weak self] in
+        Self.archiveQueue.async { [weak self] in
             let fileManager = FileManager.default
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
@@ -208,7 +243,6 @@ final class FinderRightService {
 
         return IPCResponse(id: req.id, success: true, message: "已受理压缩任务，正在后台处理")
     }
-
     private func decompress(_ req: IPCRequest) -> IPCResponse {
         guard let archive = req.payload["archive"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "decompress 参数缺失")
@@ -220,7 +254,7 @@ final class FinderRightService {
         }
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        archiveQueue.async { [weak self] in
+        Self.archiveQueue.async { [weak self] in
             self?.performDecompress(url: url)
         }
 
@@ -358,10 +392,14 @@ final class FinderRightService {
             } else {
                 let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                 let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                serviceLog("decompress archive failed (exit \(proc.terminationStatus)): \(errStr)")
+                // 失败时清掉刚建的目标目录：它与单文件分支行为保持一致，
+                // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
+                // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
+                try? fileManager.removeItem(at: targetDir)
             }
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
+            try? fileManager.removeItem(at: targetDir)
         }
     }
 
@@ -446,6 +484,7 @@ final class FinderRightService {
             let pid = finder.processIdentifier
             // 不 activate Finder：postToPid 直达进程事件队列，activate 会抢焦点导致菜单栏跳变卡顿
 
+            // fire-and-forget：不再跟踪/回写任何状态（菜单文案已改无状态，见 FinderSync）。
             let src = CGEventSource(stateID: .hidSystemState)
             // kVK_ANSI_Period = 0x2F (47)
             let down = CGEvent(keyboardEventSource: src, virtualKey: 0x2F, keyDown: true)
@@ -456,10 +495,6 @@ final class FinderRightService {
             up?.postToPid(pid)
 
             serviceLog("sent Cmd+Shift+. to Finder pid=\(pid)")
-            // 等待按键事件派发并回写配置
-            usleep(100_000)
-            let actual = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
-            SharedConfig.shared.showHiddenFiles = actual
             return IPCResponse(id: req.id, success: true, message: "toggled via CGEvent pid=\(pid)")
         }
 
@@ -476,7 +511,21 @@ final class FinderRightService {
     }
 
     private func toggleHiddenFilesViaDefaults(_ req: IPCRequest, newValue: String) -> IPCResponse {
-        let currentBool = UserDefaults(suiteName: "com.apple.finder")?.bool(forKey: "AppleShowAllFiles") ?? false
+        // 用 defaults CLI 读当前值：子进程每次冷启动读盘，绕开本进程 cfprefsd 客户端缓存
+        // （UserDefaults(suiteName:) 读其他 App 的域可能命中过期缓存，导致取反后写回同值、看似没切换）
+        var currentBool = false
+        let readProc = Process()
+        let readOut = Pipe()
+        readProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        readProc.arguments = ["read", "com.apple.finder", "AppleShowAllFiles"]
+        readProc.standardOutput = readOut
+        readProc.standardError = FileHandle.nullDevice
+        if (try? readProc.run()) != nil {
+            let data = readOut.fileHandleForReading.readDataToEndOfFile()
+            readProc.waitUntilExit()
+            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            currentBool = (s == "1" || s.lowercased() == "true" || s.lowercased() == "yes")
+        }
         let nextVal = !currentBool ? "YES" : "NO"
         let writeProc = Process()
         writeProc.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
@@ -491,8 +540,6 @@ final class FinderRightService {
             try killProc.run()
             killProc.waitUntilExit()
 
-            let actual = (nextVal == "YES")
-            SharedConfig.shared.showHiddenFiles = actual
             return IPCResponse(id: req.id, success: true, message: "set to \(nextVal), restarted Finder")
         } catch {
             return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
@@ -514,7 +561,7 @@ final class FinderRightService {
         }
 
         // 收敛到 cutPasteQueue 串行队列，确保 cut-queue.json 互斥访问
-        return cutPasteQueue.sync {
+        return Self.cutPasteQueue.sync {
             let fileManager = FileManager.default
 
             // 过滤出实际存在的源文件路径
@@ -547,6 +594,18 @@ final class FinderRightService {
         }
     }
 
+    /// 取消剪切：清空剪切队列。
+    ///
+    /// 连续剪切决策上保留「累加 / 合并」语义（不改成 Windows 的替换语义），
+    /// 因此需要一个显式入口让用户清空队列、让角标消失。
+    private func cancelCut(_ req: IPCRequest) -> IPCResponse {
+        // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
+        Self.cutPasteQueue.sync {
+            try? FileManager.default.removeItem(at: cutQueueFileURL)
+            return IPCResponse(id: req.id, success: true, message: "已取消剪切")
+        }
+    }
+
     private func pasteFiles(_ req: IPCRequest) -> IPCResponse {
         guard let destPath = req.payload["destination"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "pasteFiles 参数缺失：destination")
@@ -561,7 +620,7 @@ final class FinderRightService {
         }
 
         // 异步派发到 cutPasteQueue 串行队列，XPC 立即返回“已受理”
-        cutPasteQueue.async { [weak self] in
+        Self.cutPasteQueue.async { [weak self] in
             self?.performPaste(destDir: destDir)
         }
 

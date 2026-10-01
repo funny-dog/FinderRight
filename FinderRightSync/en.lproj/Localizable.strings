@@ -9,13 +9,11 @@
 "✂️ 剪切 (已在剪切队列)" = "✂️ Cut (In Queue)";
 "剪切 (已在剪切队列)" = "Cut (In Queue)";
 "📋 粘贴" = "📋 Paste";
-"📋 粘贴 (已剪切 1 项)" = "📋 Paste (1 Item Cut)";
-"粘贴 (已剪切 1 项)" = "Paste (1 Item Cut)";
+"粘贴 (已剪切 %d 项)" = "Paste (%d Item(s) Cut)";
 "📦 压缩为 ZIP" = "📦 Compress to ZIP";
 "📂 解压到当前目录" = "📂 Extract Here";
 "👁 切换隐藏文件" = "👁 Toggle Hidden Files";
-"👁 显示隐藏文件" = "👁 Show Hidden Files";
-"👁 隐藏隐藏文件" = "👁 Hide Hidden Files";
+"已剪切" = "Cut";
 
 /* New File submenu */
 "📝 文本文件 (.txt)" = "📝 Text File (.txt)";
@@ -36,11 +34,11 @@
 "打开编辑器" = "Open in Editor";
 "剪切" = "Cut";
 "粘贴" = "Paste";
+"取消剪切" = "Cancel Cut";
+"🚫 取消剪切" = "🚫 Cancel Cut";
 "压缩为 ZIP" = "Compress to ZIP";
 "解压到当前目录" = "Extract Here";
 "切换隐藏文件" = "Toggle Hidden Files";
-"显示隐藏文件" = "Show Hidden Files";
-"隐藏隐藏文件" = "Hide Hidden Files";
 
 "文本文件 (.txt)" = "Text File (.txt)";
 "Markdown (.md)" = "Markdown (.md)";

@@ -306,6 +306,13 @@ public final class UpdateChecker: NSObject {
 
             // 5. 编写后台替换与重启脚本
             let pid = ProcessInfo.processInfo.processIdentifier
+            // 失败文案先本地化再注入脚本：relaunch.sh 在 App 退出后独立运行，无法调用
+            // NSLocalizedString，写进 last-update-error.txt 的内容会由下次启动的
+            // checkLastUpdateError 弹窗原样展示，所以这里必须已经本地化。
+            // 注意：这三条译文不能含 " $ ` \ 等 shell 元字符（会破坏脚本）。
+            let errCopyFailed = NSLocalizedString("复制新版本到临时目录失败", comment: "update error")
+            let errBackupFailed = NSLocalizedString("备份旧版本失败", comment: "update error")
+            let errMoveFailed = NSLocalizedString("移动新版本到目标目录失败，已回滚旧版本", comment: "update error")
             let scriptContent = """
             #!/bin/bash
             # 等待原进程退出
@@ -326,24 +333,28 @@ public final class UpdateChecker: NSObject {
 
             # 1. 先复制到同目录临时位置
             if ! /bin/cp -R "\(newAppURL.path)" "$NEW_APP"; then
-                echo "复制新版本到临时目录失败" > "$ERROR_LOG"
+                echo "\(errCopyFailed)" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
+                # 主进程此刻已 terminate，不重新拉起用户的 App 就凭空消失；旧版仍在 $TARGET 原位
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
             # 2. 成功后 mv 旧 App 到备份位置
             if ! /bin/mv "$TARGET" "$OLD_APP"; then
-                echo "备份旧版本失败" > "$ERROR_LOG"
+                echo "\(errBackupFailed)" > "$ERROR_LOG"
                 /bin/rm -rf "$NEW_APP"
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
             # 3. mv 新的到位
             if ! /bin/mv "$NEW_APP" "$TARGET"; then
-                echo "移动新版本到目标目录失败，已回滚旧版本" > "$ERROR_LOG"
+                echo "\(errMoveFailed)" > "$ERROR_LOG"
                 # 若移动失败则将旧 App 回滚到位
                 /bin/mv "$OLD_APP" "$TARGET"
                 /bin/rm -rf "$NEW_APP"
+                /usr/bin/open "$TARGET" 2>/dev/null || true
                 exit 1
             fi
 
@@ -355,6 +366,9 @@ public final class UpdateChecker: NSObject {
             /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
 
             # 重新打开新版
+            # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，
+            # 残留的旧扩展进程仍指向已删除的旧包，需由系统按新包重新拉起
+            /usr/bin/killall FinderRightSync 2>/dev/null || true
             /usr/bin/open "$TARGET"
 
             # 清理下载解压临时文件
