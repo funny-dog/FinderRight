@@ -121,7 +121,9 @@ codesign -s - --force -o runtime --entitlements FinderRight/FinderRight.entitlem
 # 硬校验：签名有效且两者都带 runtime 标志，否则立即构建失败，不让加固静默回退
 codesign --verify --strict "$APP_DIR"
 for bundle in "$APP_DIR" "$APPEX_DIR"; do
-  if ! codesign -dv "$bundle" 2>&1 | grep -q "flags=.*runtime"; then
+  # 先取完整输出再匹配：pipefail 下 `codesign | grep -q` 会因 grep 提前退出、codesign 收到 SIGPIPE 而误判失败
+  sig_info="$(codesign -dv "$bundle" 2>&1)"
+  if [[ "$sig_info" != *"flags="*"runtime"* ]]; then
     echo "错误：$bundle 未启用 Hardened Runtime" >&2
     exit 1
   fi
