@@ -35,9 +35,12 @@ private func currentCutQueuePaths() -> Set<String> {
 
 /// 将角标预先绘制为 2x 位图，避免跨进程传递 NSCustomImageRep 的延迟绘制回调。
 ///
-/// 注意：**不要**改回 `NSImage(size:flipped:drawingHandler:)` 这类惰性绘制写法。
-/// 角标图要经 XPC 交给 Finder 进程渲染，惰性 rep（NSCustomImageRep）是历史上
-/// 「剪切完全不显示角标」的元凶之一；预渲染成 NSBitmapImageRep 是 v1.1.9 实测可用的形态。
+/// ⚠️ **禁止**改回 `NSImage(size:flipped:drawingHandler:)` 这类惰性绘制写法。
+/// 角标图要经 XPC 交给 Finder 进程渲染，惰性 rep（NSCustomImageRep）会让角标**完全不显示** ——
+/// 这不是推测：2026-10-01 该写法被改回后剪切角标消失，2026-10-02 恢复本写法后真机立即恢复正常
+/// （同机同 Finder，用户实测；日志链路 setBadgeImage registered → requestBadgeIdentifier → badge re-push）。
+/// 注意 `NSKeyedArchiver` 能归档惰性图并解码出位图，**不能用「能否归档」判断可用性**，只能真机右键验证。
+/// 任何涉及本函数 / setBadgeImage / requestBadgeIdentifier 的改动，请先真机验证角标再提交。
 private func createCutBadgeImage() -> NSImage {
     let size = NSSize(width: 32, height: 32)
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
