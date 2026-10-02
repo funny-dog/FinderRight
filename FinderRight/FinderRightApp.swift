@@ -299,6 +299,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    // MARK: - 退出前等待后台任务
+
+    /// 菜单退出、自动更新、切换语言重启都会走到这里。有压缩 / 解压 / 粘贴在途时延后退出，
+    /// 最多等 30 秒：粘贴另有 in-flight 崩溃恢复兜底，超时后照常退出
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let jobs = FinderRightService.backgroundJobs
+        guard !jobs.isIdle else { return .terminateNow }
+        NSLog("[AppDelegate] 有后台任务进行中，等待完成后再退出")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let finished = jobs.waitUntilIdle(timeout: 30)
+            NSLog("[AppDelegate] 后台任务\(finished ? "已完成" : "等待超时（30s）")，继续退出")
+            DispatchQueue.main.async {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
+    }
+
     // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复启动时弹出设置的唯一入口）
 
     /// 只在用户主动"重新打开"已运行的 App（双击图标、启动台、Spotlight 回车）时由系统派发；

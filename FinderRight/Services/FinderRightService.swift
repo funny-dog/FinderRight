@@ -32,6 +32,9 @@ final class FinderRightService {
         qos: .userInitiated
     )
 
+    /// 在途的压缩 / 解压 / 粘贴任务。AppDelegate 在退出前等待它们完成（见 applicationShouldTerminate）
+    static let backgroundJobs = BackgroundJobs()
+
     /// 取消剪切代次：每次 cancelCut 自增，**只能在 cutPasteQueue 上访问**。
     ///
     /// 粘贴任务在 `takeCutQueue()` 时记下当时的代次，归还失败路径前比对：代次变了说明
@@ -200,7 +203,7 @@ final class FinderRightService {
 
         // 异步派发到归档专用队列，IPC 立即返回「已受理」。最终文件名在任务完成时才原子确定
         // （见 ZipCompressor），排队中的同名压缩任务不会互相覆盖
-        Self.archiveQueue.async { [weak self] in
+        Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
             do {
                 let zip = try ZipCompressor.compress(items: itemURLs, into: dir, baseName: name)
                 DispatchQueue.main.async {
@@ -225,7 +228,7 @@ final class FinderRightService {
         }
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        Self.archiveQueue.async { [weak self] in
+        Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
             self?.performDecompress(url: url)
         }
 
@@ -636,7 +639,7 @@ final class FinderRightService {
         }
 
         // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
-        Self.pasteQueue.async { [weak self] in
+        Self.backgroundJobs.run(on: Self.pasteQueue) { [weak self] in
             self?.performPaste(sourcePaths: taken.paths, destDir: destDir, generation: taken.generation)
         }
 
@@ -647,7 +650,7 @@ final class FinderRightService {
     /// 若期间用户点过「取消剪切」（代次变化），整批丢弃并清掉 in-flight 标记。
     private func restoreFailedCutPaths(_ failedPaths: [String], generation: Int) {
         guard !failedPaths.isEmpty else { return }
-        Self.cutPasteQueue.async { [weak self] in
+        Self.backgroundJobs.run(on: Self.cutPasteQueue) { [weak self] in
             guard let self else { return }
             defer { self.cutQueue.finish() }
             guard generation == Self.cutCancelGeneration else {
