@@ -196,72 +196,19 @@ final class FinderRightService {
         let name = items.count == 1
             ? URL(fileURLWithPath: first).deletingPathExtension().lastPathComponent
             : "Archive"
-        let dest = uniqueFileURL(baseName: name, ext: "zip", in: dir)
+        let itemURLs = items.map { URL(fileURLWithPath: $0) }
 
-        // 异步派发到归档专用队列，XPC 立即返回“已受理”
+        // 异步派发到归档专用队列，IPC 立即返回「已受理」。最终文件名在任务完成时才原子确定
+        // （见 ZipCompressor），排队中的同名压缩任务不会互相覆盖
         Self.archiveQueue.async { [weak self] in
-            let fileManager = FileManager.default
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-            proc.currentDirectoryURL = dir
-
-            var tempStageURL: URL? = nil
-
-            if items.count == 1 {
-                let itemURL = URL(fileURLWithPath: first)
-                var isDir: ObjCBool = false
-                if fileManager.fileExists(atPath: itemURL.path, isDirectory: &isDir), isDir.boolValue {
-                    proc.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", itemURL.lastPathComponent, dest.path]
-                } else {
-                    proc.arguments = ["-c", "-k", "--sequesterRsrc", itemURL.lastPathComponent, dest.path]
-                }
-            } else {
-                // 多选压缩：ditto 不支持直接传多个 source，通过同目录下零拷贝临时 staging 目录打平
-                let stageName = ".finderright-stage-\(UUID().uuidString)"
-                let stageURL = dir.appendingPathComponent(stageName)
-                do {
-                    try fileManager.createDirectory(at: stageURL, withIntermediateDirectories: true)
-                    tempStageURL = stageURL
-                    for item in items {
-                        let srcURL = URL(fileURLWithPath: item)
-                        let targetItemURL = stageURL.appendingPathComponent(srcURL.lastPathComponent)
-                        // 优先 APFS clone（零开销）
-                        let cpProc = Process()
-                        cpProc.executableURL = URL(fileURLWithPath: "/bin/cp")
-                        cpProc.arguments = ["-cR", srcURL.path, targetItemURL.path]
-                        try? cpProc.run()
-                        cpProc.waitUntilExit()
-                        if !fileManager.fileExists(atPath: targetItemURL.path) {
-                            try? fileManager.copyItem(at: srcURL, to: targetItemURL)
-                        }
-                    }
-                    proc.arguments = ["-c", "-k", "--sequesterRsrc", stageURL.path, dest.path]
-                } catch {
-                    self?.serviceLog("compressZip staging failed: \(error.localizedDescription)")
-                }
-            }
-
             do {
-                try proc.run()
-                proc.waitUntilExit()
-                if let tempStage = tempStageURL {
-                    try? fileManager.removeItem(at: tempStage)
+                let zip = try ZipCompressor.compress(items: itemURLs, into: dir, baseName: name)
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.activateFileViewerSelecting([zip])
                 }
-
-                if fileManager.fileExists(atPath: dest.path) {
-                    DispatchQueue.main.async {
-                        NSWorkspace.shared.activateFileViewerSelecting([dest])
-                    }
-                    self?.serviceLog("compressZip succeeded: \(dest.path)")
-                } else {
-                    let msg = "ditto 退出码: \(proc.terminationStatus)"
-                    self?.serviceLog("compressZip failed: \(dest.lastPathComponent): \(msg)")
-                }
+                self?.serviceLog("compressZip succeeded: \(zip.path)")
             } catch {
-                if let tempStage = tempStageURL {
-                    try? fileManager.removeItem(at: tempStage)
-                }
-                self?.serviceLog("compressZip error: \(error.localizedDescription)")
+                self?.serviceLog("compressZip failed: \(error)")
             }
         }
 
