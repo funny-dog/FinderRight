@@ -15,3 +15,13 @@ public enum UpdateIntegrity {
         return token
     }
 }
+
+extension UpdateIntegrity {
+    /// 新版本主 App 与扩展必须满足的签名规则：与当前运行版本由同一张证书签发，且 bundle 标识不变。
+    ///
+    /// 只有当前版本是证书签名时才能使用（ad-hoc 签名没有证书可比对，见 CodeSignatureCheck.leafCertificateSHA1）。
+    public static func signingRequirements(leafCertificateSHA1 leaf: String) -> (app: String, appex: String) {
+        ("identifier \"\(IPCBridge.mainAppBundleIdentifier)\" and certificate leaf = H\"\(leaf)\"",
+         "identifier \"\(IPCBridge.extensionBundleIdentifier)\" and certificate leaf = H\"\(leaf)\"")
+    }
+}

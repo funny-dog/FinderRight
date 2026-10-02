@@ -276,6 +276,20 @@ public final class UpdateChecker: NSObject {
                 throw NSError(domain: "UpdateChecker", code: 2, userInfo: [NSLocalizedDescriptionKey: "未在更新包中找到有效的 FinderRight.app"])
             }
 
+            // 2.5 验签：新版本（主 App 与扩展）必须与当前运行版本由同一张证书签发、标识不变。
+            //     SHA-256 只能证明下载没损坏；发布渠道本身被冒用时，只有签名能挡住。
+            //     当前版本若是 ad-hoc 签名（过渡期，没有证书可比对），只能依赖前面的 SHA-256 校验。
+            if let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: Bundle.main.bundleURL) {
+                let required = UpdateIntegrity.signingRequirements(leafCertificateSHA1: leaf)
+                let newAppex = newAppURL.appendingPathComponent("Contents/PlugIns/FinderRightSync.appex")
+                guard CodeSignatureCheck.codeAt(newAppURL, satisfies: required.app),
+                      CodeSignatureCheck.codeAt(newAppex, satisfies: required.appex) else {
+                    throw NSError(domain: "UpdateChecker", code: 4, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("更新包的签名与当前版本不一致，已拒绝安装", comment: "update error")])
+                }
+            } else {
+                NSLog("[UpdateChecker] 当前版本为 ad-hoc 签名，无证书可比对，仅依赖 SHA-256 校验")
+            }
+
             // 3. 确定目标路径：优先当前运行路径；若非 /Applications 且 /Applications 存在，则覆盖 /Applications
             var targetAppURL = Bundle.main.bundleURL
             if !targetAppURL.path.hasPrefix("/Applications") && fileManager.fileExists(atPath: "/Applications/FinderRight.app") {

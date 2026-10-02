@@ -220,3 +220,4 @@
 "重启访达并切换" = "Restart Finder and Toggle";
 "授权辅助功能…" = "Grant Accessibility…";
 "更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载" = "The update has no checksum file, so automatic installation was cancelled. Please download it manually from the release page.";
+"更新包的签名与当前版本不一致，已拒绝安装" = "The update's code signature doesn't match the current version, so it was not installed.";
