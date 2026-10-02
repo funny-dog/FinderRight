@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 工具链版本
+        run: swift --version
+      - name: 编译 Kit、单元测试、主 App 与扩展类型检查
+        run: bash scripts/ci.sh

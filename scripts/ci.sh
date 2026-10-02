@@ -5,7 +5,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-KIT_BUILD_DIR="$PROJECT_DIR/FinderRightKit/.build/out/Products/Release"
+# 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
+KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
 
 echo "=== [CI] 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --package-path FinderRightKit
@@ -16,7 +17,7 @@ swift run --package-path FinderRightKit FinderRightKitTests
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   FinderRight/*.swift \
   FinderRight/Services/*.swift \
   FinderRight/Views/*.swift \
@@ -25,7 +26,7 @@ swiftc -typecheck -parse-as-library \
 echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -framework FinderSync -framework AppKit \
   FinderRightSync/*.swift
 
