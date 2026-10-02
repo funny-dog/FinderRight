@@ -323,13 +323,17 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Directory Observation
 
-    /// Finder 开始显示某个受监控目录时调用。本进程首次观察该目录时顺带做一次角标归属探测：
+    /// Finder 开始显示某个受监控目录时调用。目录内有剪切项、且本进程首次观察该目录时，顺带做一次角标归属探测：
     /// 持有归属的扩展会在同一秒内收到目录内可见项的 requestBadgeIdentifier，收不到则可能已丢失。
     override func beginObservingDirectory(at url: URL) {
         logToFile("beginObserving: \(url.path)")
         let dir = url.path
+        // 只为确实含有剪切项的目录探测归属：没有剪切项就不需要角标，不应为此重启其他扩展
+        guard BadgeOwnershipProbe.directory(dir, containsAnyOf: currentCutQueuePaths()) else { return }
         guard withBadgeProbe({ $0.beginProbe(directory: dir) }) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + badgeProbeDelay) { [weak self] in
+            // 等待期间可能已粘贴或取消剪切，届时同样不再需要抢回
+            guard BadgeOwnershipProbe.directory(dir, containsAnyOf: currentCutQueuePaths()) else { return }
             self?.requestBadgeReclaimIfNeeded(directory: dir, reason: "probe")
         }
     }

@@ -326,7 +326,7 @@ struct FeaturesTab: View {
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("自动解决角标冲突")
-                        Text("其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，FinderRight 会在需要时短暂重启这些扩展以取回显示权（每次访达启动至多一次）。")
+                        Text("其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

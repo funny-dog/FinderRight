@@ -594,6 +594,15 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.apple.Finder"), "bundle id 区分大小写，必须精确匹配")
         }
 
+        // 24. 角标探测门控：只有含剪切项的目录才值得探测 / 抢回
+        runTest("BadgeOwnershipProbe 判断目录内是否有剪切项") {
+            try assertTrue(BadgeOwnershipProbe.directory("/Users/t/Desktop", containsAnyOf: ["/Users/t/Desktop/a.txt"]))
+            try assertTrue(BadgeOwnershipProbe.directory("/Users/t/Desktop/", containsAnyOf: ["/Users/t/Desktop/a.txt"]), "目录带尾斜杠")
+            try assertTrue(!BadgeOwnershipProbe.directory("/Users/t/Desktop", containsAnyOf: ["/Users/t/Desktop/sub/a.txt"]), "只看直接子项")
+            try assertTrue(!BadgeOwnershipProbe.directory("/Users/t", containsAnyOf: ["/Users/t/Desktop/a.txt"]), "祖先目录不算")
+            try assertTrue(!BadgeOwnershipProbe.directory("/Users/t/Desktop", containsAnyOf: []), "空队列")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

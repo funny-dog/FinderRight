@@ -56,7 +56,7 @@
 "关闭的功能不会出现在 Finder 右键菜单中。" = "Disabled features won't appear in the Finder right-click menu.";
 "剪切角标" = "Cut Badge";
 "自动解决角标冲突" = "Resolve Badge Conflicts Automatically";
-"其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，FinderRight 会在需要时短暂重启这些扩展以取回显示权（每次访达启动至多一次）。" = "Other Finder extensions (such as Keka or Pearcleaner) may hold the badge slot, so the cut badge doesn't appear. When enabled, FinderRight briefly restarts those extensions when needed to take the slot back (at most once per Finder launch).";
+"其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。" = "Other Finder extensions (such as Keka or Pearcleaner) may hold the badge slot, so the cut badge doesn't appear. When enabled, FinderRight briefly restarts those extensions to take the slot back, but only when the current folder contains cut items (at most once per Finder launch).";
 "注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。" = "Note: this may hide sync status icons from cloud storage extensions in folders FinderRight monitors.";
 
 /* General tab */
