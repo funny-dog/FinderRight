@@ -138,3 +138,14 @@ public struct BadgeOwnershipProbe {
         }
     }
 }
+
+extension BadgeOwnershipProbe {
+    /// 目录里是否有处于剪切队列中的直接子项。
+    ///
+    /// 没有时该目录不需要剪切角标，也就不值得为它探测归属、更不该为此重启其他扩展
+    /// （抢回会让网盘等扩展的同步状态角标消失）。
+    public static func directory(_ directory: String, containsAnyOf cutPaths: Set<String>) -> Bool {
+        let dir = normalize(directory)
+        return cutPaths.contains { (normalize($0) as NSString).deletingLastPathComponent == dir }
+    }
+}
