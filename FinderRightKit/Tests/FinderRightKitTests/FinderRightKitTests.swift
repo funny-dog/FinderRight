@@ -637,6 +637,50 @@ struct FinderRightKitTestsRunner {
             try assertNil(IPCBridge.containingAppURL(forExtensionAt: URL(fileURLWithPath: "/Applications/FinderRight.app", isDirectory: true)), "本身不是 appex")
         }
 
+        // 27. 压缩临时目录登记：正常移除、崩溃残留清扫、防篡改
+        runTest("ScratchDirectoryRegistry 创建、移除与崩溃残留清扫") {
+            let regDir = makeTempDirectory(), work = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: regDir)
+                try? FileManager.default.removeItem(at: work)
+            }
+            let registry = ScratchDirectoryRegistry(registryDirectory: regDir)
+
+            let a = try registry.makeScratchDirectory(in: work)
+            try assertTrue(a.lastPathComponent.hasPrefix(ScratchDirectoryRegistry.namePrefix))
+            try assertTrue(FileManager.default.fileExists(atPath: a.path))
+            registry.remove(a)
+            try assertTrue(!FileManager.default.fileExists(atPath: a.path), "remove 应删除目录")
+
+            // 模拟崩溃：创建后没来得及 remove
+            let b = try registry.makeScratchDirectory(in: work)
+            try Data("x".utf8).write(to: b.appendingPathComponent("leftover.bin"))
+            try assertEqual(ScratchDirectoryRegistry(registryDirectory: regDir).sweep(), 1)
+            try assertTrue(!FileManager.default.fileExists(atPath: b.path), "sweep 应清理崩溃残留")
+            try assertEqual(registry.sweep(), 0, "清扫后登记应已清空")
+        }
+
+        runTest("ScratchDirectoryRegistry 不删除被篡改登记指向的目录") {
+            let regDir = makeTempDirectory(), work = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: regDir)
+                try? FileManager.default.removeItem(at: work)
+            }
+            let victim = work.appendingPathComponent("Documents", isDirectory: true)
+            try FileManager.default.createDirectory(at: victim, withIntermediateDirectories: true)
+            let important = victim.appendingPathComponent("important.txt")
+            try Data("keep".utf8).write(to: important)
+            // 带前缀但实为指向受害目录的符号链接
+            let link = work.appendingPathComponent(ScratchDirectoryRegistry.namePrefix + "evil")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: victim)
+
+            let tampered = try JSONSerialization.data(withJSONObject: [victim.path, link.path])
+            try tampered.write(to: regDir.appendingPathComponent(ScratchDirectoryRegistry.fileName))
+            _ = ScratchDirectoryRegistry(registryDirectory: regDir).sweep()
+
+            try assertTrue(FileManager.default.fileExists(atPath: important.path), "被篡改的登记不得导致删除用户数据")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

@@ -27,6 +27,11 @@ final class IPCWatcher {
             FinderRightService.recoverInflightCutQueue()
             // 上次角标归属抢回若在 ignore 与 use 之间被杀，这里把其他扩展恢复为启用
             BadgeOwnershipManager.shared.recoverIfNeeded()
+            // 上次运行若在压缩途中被杀，清掉遗留在用户目录里的隐藏临时目录
+            let swept = ScratchDirectoryRegistry().sweep()
+            if swept > 0 {
+                NSLog("[IPCWatcher] 清理压缩残留临时目录: \(swept) 个")
+            }
             NSLog("[IPCWatcher] ready, ipc dir = \(IPCBridge.pendingDir.path)")
         } catch {
             NSLog("[IPCWatcher] failed to create ipc dir: \(error)")
