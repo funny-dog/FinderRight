@@ -586,6 +586,14 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!PathAccessPolicy.isAllowed("/Users/testerx/Documents/a", role: .source, home: home, temporaryDirectory: tmp), "前缀相同的其他用户目录")
         }
 
+        // 23. Services 调用方启发式校验
+        runTest("ServiceInvocationPolicy 只信任访达在前台") {
+            try assertTrue(ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.apple.finder"))
+            try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: nil), "无前台应用")
+            try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.example.evil"), "其他应用")
+            try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.apple.Finder"), "bundle id 区分大小写，必须精确匹配")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
