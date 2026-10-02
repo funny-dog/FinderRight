@@ -13,7 +13,8 @@ BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PROJECT_DIR
 STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
-KIT_BUILD_DIR="$PROJECT_DIR/FinderRightKit/.build/out/Products/Release"
+# 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
+KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
 
 echo "=== 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --disable-sandbox --package-path FinderRightKit
@@ -26,7 +27,7 @@ echo "=== 2. 编译主程序 FinderRight (Release) ==="
 mkdir -p "$APP_DIR/Contents/MacOS"
 swiftc -O -parse-as-library \
   -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/*.swift \
   FinderRight/Services/*.swift \
@@ -38,7 +39,7 @@ echo "=== 3. 编译扩展 FinderRightSync (Release) ==="
 mkdir -p "$APPEX_DIR/Contents/MacOS"
 swiftc -O -parse-as-library \
   -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   -framework FinderSync -framework AppKit \
   -Xlinker -e -Xlinker _NSExtensionMain \
