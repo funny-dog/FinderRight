@@ -603,6 +603,32 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!BadgeOwnershipProbe.directory("/Users/t/Desktop", containsAnyOf: []), "空队列")
         }
 
+        // 25. 剪切队列缓存：文件未变化时不重复读盘，变化后必须读到新内容
+        runTest("CutQueueCache 反映队列文件的增删改") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            let cache = CutQueueCache(store: store)
+
+            try assertTrue(cache.normalizedPaths().isEmpty, "无队列文件时为空")
+            try store.write(["/tmp/a/one.txt"])
+            try assertEqual(cache.normalizedPaths(), ["/tmp/a/one.txt"])
+            try assertEqual(cache.normalizedPaths(), ["/tmp/a/one.txt"], "未变化时结果稳定")
+            try store.write(["/tmp/a/one.txt", "/tmp/a/two/"])
+            try assertEqual(cache.normalizedPaths(), ["/tmp/a/one.txt", "/tmp/a/two"], "改写后读到新内容，并去掉尾斜杠")
+            store.clear()
+            try assertTrue(cache.normalizedPaths().isEmpty, "清空后为空")
+        }
+
+        runTest("CutQueueCache 路径统一为 NFC") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/cafe\u{0301}.txt"])   // NFD：e + 组合重音符
+            let path = CutQueueCache(store: store).normalizedPaths().first ?? ""
+            try assertEqual(path.unicodeScalars.count, "/tmp/caf\u{00E9}.txt".unicodeScalars.count, "应为预组合（NFC）形式")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
