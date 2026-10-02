@@ -61,6 +61,23 @@ public enum IPCBridge {
     }
 }
 
+extension IPCBridge {
+    /// 由扩展自身的 bundle 位置推出宿主主 App：`<App>.app/Contents/PlugIns/<Ext>.appex`。
+    /// 结构不符（例如扩展被单独拷出）时返回 nil，调用方应退回普通 URL 唤醒。
+    public static func containingAppURL(forExtensionAt bundleURL: URL) -> URL? {
+        let plugIns = bundleURL.deletingLastPathComponent()
+        let contents = plugIns.deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        guard bundleURL.pathExtension == "appex",
+              plugIns.lastPathComponent == "PlugIns",
+              contents.lastPathComponent == "Contents",
+              app.pathExtension == "app" else {
+            return nil
+        }
+        return app
+    }
+}
+
 // MARK: - 数据结构
 
 /// 一次 IPC 请求的统一信封
