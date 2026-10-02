@@ -42,6 +42,9 @@ public enum IPCBridge {
     /// 主 App bundle identifier
     public static let mainAppBundleIdentifier = "com.finderright.app"
 
+    /// FinderSync 扩展 bundle identifier
+    public static let extensionBundleIdentifier = "com.finderright.app.sync"
+
     /// URL scheme
     public static let urlScheme = "finderright"
 

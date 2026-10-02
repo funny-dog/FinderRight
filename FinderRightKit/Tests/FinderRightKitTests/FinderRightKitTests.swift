@@ -952,6 +952,22 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!CodeSignatureCheck.process(auditToken: Data(count: 32), satisfiesDesignatedRequirementOf: me), "无效的 audit token 应被拒绝")
         }
 
+        // 32. 更新包签名规则：同一证书 + 标识不变
+        runTest("UpdateIntegrity 生成新版本签名规则") {
+            let rules = UpdateIntegrity.signingRequirements(leafCertificateSHA1: "ABCDEF")
+            try assertEqual(rules.app, "identifier \"com.finderright.app\" and certificate leaf = H\"ABCDEF\"")
+            try assertEqual(rules.appex, "identifier \"com.finderright.app.sync\" and certificate leaf = H\"ABCDEF\"")
+        }
+
+        runTest("UpdateIntegrity 签名规则同时约束证书与标识") {
+            let ls = URL(fileURLWithPath: "/bin/ls")
+            let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls) ?? ""
+            // /bin/ls 与规则证书相同但标识不同，必须被拒绝：只比证书会放行同一证书签出的其他程序
+            try assertTrue(!CodeSignatureCheck.codeAt(ls, satisfies: UpdateIntegrity.signingRequirements(leafCertificateSHA1: leaf).app))
+            // 同样写法、换成 /bin/ls 自己的标识则应通过：确认规则模板本身语法有效
+            try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: "identifier \"com.apple.ls\" and certificate leaf = H\"\(leaf)\""))
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
