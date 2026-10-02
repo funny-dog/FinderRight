@@ -12,16 +12,30 @@ private let cutQueueStore = CutQueueStore()
 
 private let cutBadgeIdentifier = "com.finderright.badge.cut"
 
+/// 与 Kit 的 BadgeOwnershipProbe.normalize 共用唯一实现（去尾斜杠 / . / ..，统一 NFC）
 private func normalizePath(_ p: String) -> String {
-    return (p as NSString).standardizingPath.precomposedStringWithCanonicalMapping
+    BadgeOwnershipProbe.normalize(p)
 }
 
 private let cutBadgeLock = NSLock()
 private var inMemoryCutPaths: Set<String> = []
+/// 本进程是否打过剪切角标（受 cutBadgeLock 保护）。从未打过时，角标回调无需逐个发送清除消息
+private var didSetCutBadge = false
 
-/// 从磁盘读取并标准化 cut-queue.json 中的持久化路径
+/// 持久化队列的缓存：文件未变化时只 stat、不读盘（角标回调热路径）
+private let cutQueueCache = CutQueueCache(store: cutQueueStore)
+
+/// 规范化后的持久化剪切路径
 private func persistedCutQueuePaths() -> Set<String> {
-    return Set(cutQueueStore.read().map(normalizePath))
+    cutQueueCache.normalizedPaths()
+}
+
+/// 打剪切角标的唯一入口：同时记下「本进程打过角标」
+private func setCutBadge(for url: URL) {
+    cutBadgeLock.lock()
+    didSetCutBadge = true
+    cutBadgeLock.unlock()
+    FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
 }
 
 /// 获取当前待剪切队列中的所有源文件路径集合（内存乐观队列与持久化队列的并集）
@@ -103,7 +117,8 @@ private let logDateFormatter: DateFormatter = {
 
 private func logToFile(_ message: String) {
     // 1. 系统统一 OSLog（主线程毫秒级开销）
-    os_log("%{public}@", log: log, type: .default, message)
+    // private：统一日志里路径等内容默认脱敏，避免留下可被任意进程读取的浏览记录
+    os_log("%{private}@", log: log, type: .default, message)
 
     // 2. 本地调试文件：异步串行派发到后台队列，避免主线程磁盘 I/O 阻塞
     let timestamp = logDateFormatter.string(from: Date())
@@ -209,12 +224,17 @@ class FinderSync: FIFinderSync {
     /// 请主 App 短暂重启其他扩展取回归属（见 requestBadgeReclaimIfNeeded）。
     override func requestBadgeIdentifier(for url: URL) {
         withBadgeProbe { $0.recordBadgeRequest(itemPath: url.path) }
-        let cutPaths = currentCutQueuePaths()
-        let normPath = normalizePath(url.path)
-        logToFile("requestBadgeIdentifier: \(url.path) cut=\(cutPaths.contains(normPath))")
-        if cutPaths.contains(normPath) || cutPaths.contains(url.path) || cutPaths.contains(url.standardizedFileURL.path) {
-            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
-        } else {
+        // 热路径：大目录会为每个可见文件回调一次。不逐项写日志（性能 + 不留浏览记录）
+        if currentCutQueuePaths().contains(normalizePath(url.path)) {
+            logToFile("requestBadgeIdentifier: 剪切项 \(url.lastPathComponent)")
+            setCutBadge(for: url)
+            return
+        }
+        // 本进程从未打过剪切角标时，Finder 上不可能有我们的旧角标，无需逐个发清除消息
+        cutBadgeLock.lock()
+        let mayHaveStaleBadge = didSetCutBadge
+        cutBadgeLock.unlock()
+        if mayHaveStaleBadge {
             FIFinderSyncController.default().setBadgeIdentifier("", for: url)
         }
     }
@@ -466,7 +486,7 @@ class FinderSync: FIFinderSync {
         if hasSelection, hasCut {
             var pushed = 0
             for url in selected.prefix(50) where cutPaths.contains(normalizePath(url.path)) {
-                FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+                setCutBadge(for: url)
                 pushed += 1
             }
             if pushed > 0 { logToFile("menu(for:) badge refresh: \(pushed) cut item(s)") }
@@ -841,8 +861,8 @@ class FinderSync: FIFinderSync {
         // 2. 立即给选中的文件打上剪切角标，提供即时视觉反馈
         for url in urls {
             logToFile("cutFiles setBadgeIdentifier for: \(url.path)")
-            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
-            FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url.standardizedFileURL)
+            setCutBadge(for: url)
+            setCutBadge(for: url.standardizedFileURL)
         }
 
         // 3. 剪切时兜底：所在目录尚未确认角标归属（探测没结论或主 App 当时未运行）时立即申请抢回。
@@ -876,7 +896,7 @@ class FinderSync: FIFinderSync {
                 let stillCut = currentCutQueuePaths()
                 var pushed = 0
                 for url in urls where stillCut.contains(normalizePath(url.path)) {
-                    FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
+                    setCutBadge(for: url)
                     pushed += 1
                 }
                 logToFile("cutFiles badge re-push: \(pushed)/\(urls.count) item(s) still cut")
