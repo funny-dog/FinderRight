@@ -875,6 +875,25 @@ struct FinderRightKitTestsRunner {
             }
         }
 
+        // 30. 后台任务跟踪：退出前可等待完成
+        runTest("BackgroundJobs 跟踪在途任务并可等待完成") {
+            let jobs = BackgroundJobs()
+            let queue = DispatchQueue(label: "test.jobs")
+            try assertTrue(jobs.isIdle, "初始空闲")
+            jobs.run(on: queue) { Thread.sleep(forTimeInterval: 0.3) }
+            try assertTrue(!jobs.isIdle, "任务进行中不空闲")
+            try assertTrue(jobs.waitUntilIdle(timeout: 5), "应在超时前完成")
+            try assertTrue(jobs.isIdle, "完成后空闲")
+        }
+
+        runTest("BackgroundJobs 等待超时返回 false") {
+            let jobs = BackgroundJobs()
+            let queue = DispatchQueue(label: "test.jobs.timeout")
+            jobs.run(on: queue) { Thread.sleep(forTimeInterval: 1) }
+            try assertTrue(!jobs.waitUntilIdle(timeout: 0.1), "任务未完成时应超时")
+            try assertTrue(jobs.waitUntilIdle(timeout: 5), "最终应完成")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
