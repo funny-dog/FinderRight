@@ -106,7 +106,28 @@ if [ -f "FinderRightSync/cut-badge.png" ]; then
   cp FinderRightSync/cut-badge.png "$APPEX_DIR/Contents/Resources/"
 fi
 
-echo "=== 5. 代码签名 (Ad-hoc) ==="
+echo "=== 5. 代码签名 ==="
+# 优先使用 scripts/setup-signing.sh 生成的自签名证书：签名规则「标识 + 证书指纹」跨版本不变，
+# 用户升级后无需重新授权，自动更新也以它验签。找不到证书时退回 ad-hoc（只适合本地调试）。
+SIGN_IDENTITY_NAME="${FINDERRIGHT_SIGN_IDENTITY:-FinderRight Self-Signed}"
+identities="$(security find-identity -p codesigning ${FINDERRIGHT_KEYCHAIN:+"$FINDERRIGHT_KEYCHAIN"} 2>/dev/null || true)"
+if [[ "$identities" == *"\"$SIGN_IDENTITY_NAME\""* ]]; then
+  SIGN_IDENTITY="$SIGN_IDENTITY_NAME"
+  echo "使用证书签名：$SIGN_IDENTITY"
+else
+  SIGN_IDENTITY="-"
+  echo "警告：未找到签名证书「$SIGN_IDENTITY_NAME」，退回 ad-hoc 签名（升级后用户需重新授权）。发布前请先运行 scripts/setup-signing.sh" >&2
+fi
+
+# $1 = entitlements，$2 = 待签名的 bundle。不用数组拼参数：macOS 自带 bash 3.2 在 set -u 下展开空数组会报错
+sign_bundle() {
+  if [ -n "${FINDERRIGHT_KEYCHAIN:-}" ]; then
+    codesign -s "$SIGN_IDENTITY" --keychain "$FINDERRIGHT_KEYCHAIN" --force -o runtime --entitlements "$1" "$2"
+  else
+    codesign -s "$SIGN_IDENTITY" --force -o runtime --entitlements "$1" "$2"
+  fi
+}
+
 # 注意：严禁在对主 App 签名时使用 --deep！
 # --deep 会递归进入 PlugIns 目录，用主 App 的无沙箱配置覆盖抹除 FinderRightSync 的 app-sandbox 权限，
 # 导致 PluginKit 判定扩展未开启沙箱而静默拒绝加载（pluginkit 输出 no matches，右键菜单彻底消失）。
@@ -115,8 +136,8 @@ echo "=== 5. 代码签名 (Ad-hoc) ==="
 # -o runtime（Hardened Runtime）必须保留：主 App 持有完全磁盘访问与辅助功能授权，未加固时 dyld 会接受
 # DYLD_INSERT_LIBRARIES，同用户恶意程序用 `open --env` 拉起本 App 即可注入代码并继承这两项授权。
 # Kit 为静态库、主程序只链接系统库，库验证不受影响；主 App 不发 AppleEvent，无需额外 entitlement。
-codesign -s - --force -o runtime --entitlements FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
-codesign -s - --force -o runtime --entitlements FinderRight/FinderRight.entitlements "$APP_DIR"
+sign_bundle FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
+sign_bundle FinderRight/FinderRight.entitlements "$APP_DIR"
 
 # 硬校验：签名有效且两者都带 runtime 标志，否则立即构建失败，不让加固静默回退
 codesign --verify --strict "$APP_DIR"
@@ -128,6 +149,7 @@ for bundle in "$APP_DIR" "$APPEX_DIR"; do
     exit 1
   fi
 done
+echo "签名规则：$(codesign -d -r- "$APP_DIR" 2>&1 | sed -n 's/.*designated => //p')"
 
 echo "=== 6. 创建 Applications 软链接 ==="
 ln -shf /Applications "$STAGE_DIR/Applications"

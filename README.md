@@ -52,7 +52,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
    - **授予完全磁盘访问**（在受保护目录使用所有功能）
    - **授予辅助功能**（让"切换隐藏文件"不闪烁）
 
-> ⚠️ 当前为 adhoc 签名版本。若未来提供 Developer ID 公证版，可省去第 3 步。
+> ⚠️ 当前版本使用自签名证书签名，未经 Apple 公证，因此需要第 3 步手动放行。若未来提供 Developer ID 公证版，可省去第 3 步。
 
 ### 🔄 升级说明
 
@@ -63,7 +63,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 >    ```bash
 >    killall Finder
 >    ```
-> 2. **权限重新授权说明（无法避免）**：因本项目目前使用免证书的 Ad-hoc 签名（`codesign -s -`），重新编译后主程序的二进制代码哈希（CDHash）必然改变。macOS 的安全管控机制（TCC）会判定新版本为不同身份的程序，因此**「完全磁盘访问权限」与「辅助功能权限」在每次版本更新后都需要重新确认授权**。虽然系统设置里开关可能看起来仍显示开启，但底层校验实际已失效。
+> 2. **权限重新授权说明**：自改用固定的自签名证书签名起，新旧版本的签名身份相同，**「完全磁盘访问权限」与「辅助功能权限」在升级后会自动保留**。唯一的例外是从早期 Ad-hoc 签名（`codesign -s -`）的版本**首次升级**到证书签名版本：macOS 的安全管控机制（TCC）会判定其为不同身份的程序，需要按下面的方法重新授权一次。此时系统设置里的开关可能看起来仍显示开启，但底层校验实际已失效。
 >    - **完全磁盘访问**：前往「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，将 FinderRight 的开关**关闭再重新开启**（或点 `-` 删除后重新拖入添加）。
 >    - **辅助功能权限**：前往「系统设置 → 隐私与安全性 → 辅助功能」，选中 FinderRight 点击底部的 **`-`（减号）删除**，再重新打开应用添加即可。
 >    - **终端一键重置法（推荐，最省心）**：
@@ -96,8 +96,9 @@ killall Finder
 方式一（推荐，无需 Xcode，仅需 Command Line Tools）：
 
 ```bash
-bash scripts/ci.sh      # 编译 Kit + 单元测试 + 主程序/扩展静态类型检查
-bash scripts/build.sh   # 产出 FinderRight.app 与 DMG / ZIP（ad-hoc 签名）
+bash scripts/setup-signing.sh  # 仅首次：生成自签名证书并导入钥匙串（发布构建必需，请备份私钥）
+bash scripts/ci.sh             # 编译 Kit + 单元测试 + 主程序/扩展静态类型检查
+bash scripts/build.sh          # 产出 FinderRight.app 与 DMG / ZIP（有证书时用证书签名，否则退回 ad-hoc）
 ```
 
 方式二（Xcode 工程，需 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)）：
@@ -165,7 +166,7 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
    - **Grant Full Disk Access** (to use all features in protected folders)
    - **Grant Accessibility** (so "Toggle Hidden Files" doesn't flicker)
 
-> ⚠️ This is an ad-hoc signed build. A Developer ID notarized build would remove step 3.
+> ⚠️ This build is signed with a self-signed certificate and is not notarized by Apple, so step 3 is required. A Developer ID notarized build would remove step 3.
 
 ### 🔄 Upgrading from Older Versions
 
@@ -176,7 +177,7 @@ You can upgrade directly via the built-in auto-updater in the "About" tab, or ma
 >    ```bash
 >    killall Finder
 >    ```
-> 2. **Permission Re-authorization Notice (Expected)**: Because this project currently uses ad-hoc signing (`codesign -s -`) without an Apple Developer ID, the executable's binary hash (CDHash) changes with every build. macOS Transparency, Consent, and Control (TCC) treats the new binary as a different entity. Therefore, **Full Disk Access and Accessibility permissions must be re-granted after every update**, even if the toggle switches in System Settings still appear to be ON.
+> 2. **Permission Re-authorization Notice**: Builds are now signed with a fixed self-signed certificate, so new versions keep the same code signing identity and **Full Disk Access and Accessibility permissions are preserved across updates**. The only exception is the **first update** from an older ad-hoc signed build (`codesign -s -`): macOS Transparency, Consent, and Control (TCC) treats it as a different app, so re-grant the permissions once as described below, even if the toggle switches in System Settings still appear to be ON.
 >    - **Full Disk Access**: Go to System Settings → Privacy & Security → Full Disk Access, toggle FinderRight OFF and back ON (or remove it with `-` and re-add).
 >    - **Accessibility**: Go to System Settings → Privacy & Security → Accessibility, select FinderRight, click the **`-` (minus)** button to remove it, then restart the app to re-add.
 >    - **One-click Terminal reset (Recommended)**:
@@ -209,8 +210,9 @@ killall Finder
 Option 1 (recommended, no Xcode needed — Command Line Tools only):
 
 ```bash
-bash scripts/ci.sh      # build the Kit + unit tests + type-check app & extension
-bash scripts/build.sh   # produces FinderRight.app plus DMG / ZIP (ad-hoc signed)
+bash scripts/setup-signing.sh  # first time only: create the self-signed certificate (required for release builds; back up the private key)
+bash scripts/ci.sh             # build the Kit + unit tests + type-check app & extension
+bash scripts/build.sh          # produces FinderRight.app plus DMG / ZIP (certificate-signed when available, otherwise ad-hoc)
 ```
 
 Option 2 (Xcode project; requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen)):
