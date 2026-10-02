@@ -51,6 +51,27 @@ private func makeTempDirectory() -> URL {
     return url
 }
 
+/// 读取 zip 内的条目名（已排序；忽略 ditto --sequesterRsrc 生成的 __MACOSX 资源分叉）
+private func zipEntries(_ zip: URL) throws -> [String] {
+    let listing = makeTempDirectory().appendingPathComponent("zipinfo.txt")
+    FileManager.default.createFile(atPath: listing.path, contents: nil)
+    let handle = try FileHandle(forWritingTo: listing)
+    let result = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/zipinfo"),
+                                       arguments: ["-1", zip.path],
+                                       standardOutput: handle)
+    try handle.close()
+    guard result.status == 0 else { throw TestFailure(message: "zipinfo 失败: \(result.stderr)") }
+    return try String(contentsOf: listing, encoding: .utf8)
+        .split(separator: "\n").map(String.init)
+        .filter { !$0.hasPrefix("__MACOSX") }
+        .sorted()
+}
+
+/// 目录下的全部条目名（含隐藏项，已排序）
+private func directoryListing(_ dir: URL) throws -> [String] {
+    try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+}
+
 // MARK: - 主测试入口
 
 @main
@@ -679,6 +700,117 @@ struct FinderRightKitTestsRunner {
             _ = ScratchDirectoryRegistry(registryDirectory: regDir).sweep()
 
             try assertTrue(FileManager.default.fileExists(atPath: important.path), "被篡改的登记不得导致删除用户数据")
+        }
+
+        // 28. 压缩：退出码判定成功、失败不留残留、同名不覆盖
+        runTest("ZipCompressor 单文件压缩") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let registry = ScratchDirectoryRegistry(registryDirectory: reg)
+            let foo = work.appendingPathComponent("foo.txt")
+            try Data("hi".utf8).write(to: foo)
+
+            let zip = try ZipCompressor.compress(items: [foo], into: work, baseName: "foo", registry: registry)
+            try assertEqual(zip.lastPathComponent, "foo.zip")
+            try assertEqual(try zipEntries(zip), ["foo.txt"])
+            try assertEqual(try directoryListing(work), ["foo.txt", "foo.zip"], "不得残留临时目录")
+        }
+
+        runTest("ZipCompressor 文件夹压缩保留顶层目录名") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let folder = work.appendingPathComponent("Folder", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data("a".utf8).write(to: folder.appendingPathComponent("a.txt"))
+
+            let zip = try ZipCompressor.compress(items: [folder], into: work, baseName: "Folder",
+                                                 registry: ScratchDirectoryRegistry(registryDirectory: reg))
+            try assertEqual(try zipEntries(zip), ["Folder/", "Folder/a.txt"])
+        }
+
+        runTest("ZipCompressor 多选压缩条目位于根部") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let a = work.appendingPathComponent("a.txt"), b = work.appendingPathComponent("b.txt")
+            try Data("a".utf8).write(to: a)
+            try Data("b".utf8).write(to: b)
+
+            let zip = try ZipCompressor.compress(items: [a, b], into: work, baseName: "Archive",
+                                                 registry: ScratchDirectoryRegistry(registryDirectory: reg))
+            try assertEqual(zip.lastPathComponent, "Archive.zip")
+            try assertEqual(try zipEntries(zip), ["a.txt", "b.txt"])
+            try assertEqual(try directoryListing(work), ["Archive.zip", "a.txt", "b.txt"], "不得残留暂存目录")
+        }
+
+        runTest("ZipCompressor 同名不覆盖：已有文件与先后两次任务") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let registry = ScratchDirectoryRegistry(registryDirectory: reg)
+            let existing = work.appendingPathComponent("foo.zip")
+            try Data("sentinel".utf8).write(to: existing)
+            let txt = work.appendingPathComponent("foo.txt"), md = work.appendingPathComponent("foo.md")
+            try Data("t".utf8).write(to: txt)
+            try Data("m".utf8).write(to: md)
+
+            let first = try ZipCompressor.compress(items: [txt], into: work, baseName: "foo", registry: registry)
+            let second = try ZipCompressor.compress(items: [md], into: work, baseName: "foo", registry: registry)
+            try assertEqual(first.lastPathComponent, "foo 1.zip")
+            try assertEqual(second.lastPathComponent, "foo 2.zip")
+            try assertEqual(try String(contentsOf: existing, encoding: .utf8), "sentinel", "已有文件不得被覆盖")
+            try assertEqual(try zipEntries(first), ["foo.txt"], "前一次任务的产物不得被后一次覆盖")
+            try assertEqual(try zipEntries(second), ["foo.md"])
+        }
+
+        runTest("ZipCompressor 失败时不留残缺 zip 与临时目录") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            let box = work.appendingPathComponent("Box", isDirectory: true)
+            let lockedInBox = box.appendingPathComponent("locked.txt")
+            let lockedLoose = work.appendingPathComponent("locked2.txt")
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: lockedInBox.path)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: lockedLoose.path)
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let registry = ScratchDirectoryRegistry(registryDirectory: reg)
+            try FileManager.default.createDirectory(at: box, withIntermediateDirectories: true)
+            try Data("ok".utf8).write(to: box.appendingPathComponent("ok.txt"))
+            try Data("x".utf8).write(to: lockedInBox)
+            try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lockedInBox.path)
+
+            // 单个文件夹内含不可读文件：ditto 退出码非 0
+            do {
+                _ = try ZipCompressor.compress(items: [box], into: work, baseName: "Box", registry: registry)
+                throw TestFailure(message: "含不可读文件时应当失败")
+            } catch let error as ZipCompressor.Failure {
+                guard case .dittoFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
+            }
+            try assertEqual(try directoryListing(work), ["Box"], "失败后不得留下 zip 或临时目录")
+
+            // 多选中有不可读文件：暂存阶段即失败
+            let plain = work.appendingPathComponent("plain.txt")
+            try Data("p".utf8).write(to: plain)
+            try Data("y".utf8).write(to: lockedLoose)
+            try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lockedLoose.path)
+            do {
+                _ = try ZipCompressor.compress(items: [plain, lockedLoose], into: work, baseName: "Archive", registry: registry)
+                throw TestFailure(message: "暂存失败时应当失败")
+            } catch let error as ZipCompressor.Failure {
+                guard case .stagingFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
+            }
+            try assertEqual(try directoryListing(work), ["Box", "locked2.txt", "plain.txt"], "失败后不得留下 zip 或暂存目录")
         }
 
         print("\n-----------------------------------------")
