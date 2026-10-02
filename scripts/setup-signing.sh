@@ -18,8 +18,9 @@ set -euo pipefail
 IDENTITY_NAME="${FINDERRIGHT_SIGN_IDENTITY:-FinderRight Self-Signed}"
 KEYCHAIN="${FINDERRIGHT_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
 
-if security find-identity -p codesigning "$KEYCHAIN" | grep -qF "\"$IDENTITY_NAME\""; then
-  echo "钥匙串中已有签名证书「$IDENTITY_NAME」，无需重复生成："
+# 不用 grep -q：它命中即退出，security 若仍在输出会收到 SIGPIPE，pipefail 下整条管道判为失败，误以为证书不存在
+if security find-identity -p codesigning "$KEYCHAIN" | grep -F "\"$IDENTITY_NAME\"" >/dev/null; then
+  echo "钥匙串中已有签名证书「${IDENTITY_NAME}」，无需重复生成："
   security find-identity -p codesigning "$KEYCHAIN" | grep -F "\"$IDENTITY_NAME\""
   exit 0
 fi
@@ -44,7 +45,7 @@ openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
 # -T /usr/bin/codesign：允许 codesign 使用该私钥。首次签名时系统仍可能询问一次，选「始终允许」
 security import "$WORK/identity.p12" -k "$KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign >/dev/null
 
-echo "已生成并导入签名证书「$IDENTITY_NAME」："
+echo "已生成并导入签名证书「${IDENTITY_NAME}」："
 security find-identity -p codesigning "$KEYCHAIN" | grep -F "\"$IDENTITY_NAME\""
 echo "（自签名证书显示 CSSMERR_TP_NOT_TRUSTED 属正常：签名规则只认证书指纹，不要求系统信任）"
 echo
