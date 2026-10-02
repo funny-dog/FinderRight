@@ -73,6 +73,19 @@ private func directoryListing(_ dir: URL) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
 }
 
+/// 当前进程的 audit token（测试「按 audit token 校验运行中进程的签名」用）
+private func currentProcessAuditToken() -> Data? {
+    var token = audit_token_t()
+    var count = mach_msg_type_number_t(MemoryLayout<audit_token_t>.size / MemoryLayout<natural_t>.size)
+    let result = withUnsafeMutablePointer(to: &token) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+            task_info(mach_task_self_, task_flavor_t(TASK_AUDIT_TOKEN), $0, &count)
+        }
+    }
+    guard result == KERN_SUCCESS else { return nil }
+    return Data(bytes: &token, count: MemoryLayout<audit_token_t>.size)
+}
+
 // MARK: - 主测试入口
 
 @main
@@ -892,6 +905,51 @@ struct FinderRightKitTestsRunner {
             jobs.run(on: queue) { Thread.sleep(forTimeInterval: 1) }
             try assertTrue(!jobs.waitUntilIdle(timeout: 0.1), "任务未完成时应超时")
             try assertTrue(jobs.waitUntilIdle(timeout: 5), "最终应完成")
+        }
+
+        // 31. 代码签名校验（以系统自带、Apple 签名的 /bin/ls 和测试进程自身为样本）
+        runTest("CodeSignatureCheck 读取签名规则与证书指纹") {
+            let ls = URL(fileURLWithPath: "/bin/ls")
+            let requirement = CodeSignatureCheck.designatedRequirement(ofCodeAt: ls) ?? ""
+            try assertTrue(requirement.contains("com.apple.ls"), "签名规则应包含标识: \(requirement)")
+            let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls) ?? ""
+            try assertEqual(leaf.count, 40, "SHA-1 指纹应为 40 位十六进制")
+            try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: "certificate leaf = H\"\(leaf)\""), "应满足自己的叶子证书规则")
+            try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: requirement), "应满足自己的签名规则")
+        }
+
+        runTest("CodeSignatureCheck 拒绝标识不符、规则无效与内容被改动的代码") {
+            let ls = URL(fileURLWithPath: "/bin/ls")
+            try assertTrue(!CodeSignatureCheck.codeAt(ls, satisfies: "identifier \"com.finderright.app\""), "标识不符")
+            try assertTrue(!CodeSignatureCheck.codeAt(ls, satisfies: "不是合法的规则"), "规则文本无效")
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let modified = work.appendingPathComponent("ls-modified")
+            var bytes = try Data(contentsOf: ls)
+            bytes[bytes.count / 2] ^= 0xFF
+            try bytes.write(to: modified)
+            try assertTrue(!CodeSignatureCheck.codeAt(modified, satisfies: "identifier \"com.apple.ls\" and anchor apple"), "内容被改动后签名应失效")
+        }
+
+        runTest("CodeSignatureCheck 识别 ad-hoc 签名") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let copy = work.appendingPathComponent("ls-adhoc")
+            try FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/ls"), to: copy)
+            let sign = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/codesign"),
+                                             arguments: ["-s", "-", "--force", copy.path])
+            try assertEqual(sign.status, 0, "ad-hoc 签名失败: \(sign.stderr)")
+            try assertNil(CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: copy), "ad-hoc 签名没有证书")
+            try assertTrue(CodeSignatureCheck.designatedRequirement(ofCodeAt: copy)?.hasPrefix("cdhash") == true, "ad-hoc 签名规则应为 cdhash")
+        }
+
+        runTest("CodeSignatureCheck 按 audit token 校验运行中的进程") {
+            guard let token = currentProcessAuditToken(), let me = Bundle.main.executableURL else {
+                throw TestFailure(message: "无法取得当前进程的 audit token 或可执行文件路径")
+            }
+            try assertTrue(CodeSignatureCheck.process(auditToken: token, satisfiesDesignatedRequirementOf: me), "当前进程应满足自身可执行文件的签名规则")
+            try assertTrue(!CodeSignatureCheck.process(auditToken: token, satisfiesDesignatedRequirementOf: URL(fileURLWithPath: "/bin/ls")), "不应满足其他程序的签名规则")
+            try assertTrue(!CodeSignatureCheck.process(auditToken: Data(count: 32), satisfiesDesignatedRequirementOf: me), "无效的 audit token 应被拒绝")
         }
 
         print("\n-----------------------------------------")
