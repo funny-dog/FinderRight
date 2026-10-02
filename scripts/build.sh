@@ -117,7 +117,7 @@ if [[ "$identities" == *"\"$SIGN_IDENTITY_NAME\""* ]]; then
   echo "使用证书签名：$SIGN_IDENTITY"
 else
   SIGN_IDENTITY="-"
-  echo "警告：未找到签名证书「$SIGN_IDENTITY_NAME」，退回 ad-hoc 签名（升级后用户需重新授权）。发布前请先运行 scripts/setup-signing.sh" >&2
+  echo "警告：未找到签名证书「${SIGN_IDENTITY_NAME}」，退回 ad-hoc 签名（升级后用户需重新授权）。发布前请先运行 scripts/setup-signing.sh" >&2
 fi
 
 # $1 = entitlements，$2 = 待签名的 bundle。不用数组拼参数：macOS 自带 bash 3.2 在 set -u 下展开空数组会报错
