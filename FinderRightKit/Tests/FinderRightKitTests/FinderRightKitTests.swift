@@ -1,5 +1,6 @@
 import Foundation
 import FinderRightKit
+import Compression
 
 // MARK: - 测试辅助断言
 
@@ -811,6 +812,67 @@ struct FinderRightKitTestsRunner {
                 guard case .stagingFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
             }
             try assertEqual(try directoryListing(work), ["Box", "locked2.txt", "plain.txt"], "失败后不得留下 zip 或暂存目录")
+        }
+
+        // 29. .xz 进程内解压（替代外部 xz / python3）
+        // 由 Python lzma 以标准 xz 格式生成，内容为 "hello finderright\n"
+        let xzFixtureBase64 = "/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQARaGVsbG8gZmluZGVycmlnaHQKAAAAdqeazgeF0CQAASoSSwhUvB+2830BAAAAAARZWg=="
+
+        runTest("XZDecompressor 解压标准 .xz 文件") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let src = work.appendingPathComponent("hello.txt.xz")
+            try Data(base64Encoded: xzFixtureBase64)!.write(to: src)
+            let out = work.appendingPathComponent("hello.txt")
+            FileManager.default.createFile(atPath: out.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: out)
+            try XZDecompressor.decompress(from: src, to: handle)
+            try handle.close()
+            try assertEqual(try String(contentsOf: out, encoding: .utf8), "hello finderright\n")
+        }
+
+        runTest("XZDecompressor 多块输入往返一致") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let raw = Data((0..<300_000).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ $0 / 7) })
+            var encoded = Data()
+            let encoder = try OutputFilter(.compress, using: .lzma) { if let d = $0 { encoded.append(d) } }
+            try encoder.write(raw)
+            try encoder.finalize()
+            let src = work.appendingPathComponent("big.bin.xz")
+            try encoded.write(to: src)
+            let out = work.appendingPathComponent("big.bin")
+            FileManager.default.createFile(atPath: out.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: out)
+            try XZDecompressor.decompress(from: src, to: handle, chunkSize: 4096)
+            try handle.close()
+            try assertTrue(try Data(contentsOf: out) == raw, "小块读取下内容必须完全一致")
+        }
+
+        runTest("XZDecompressor 拒绝损坏、非 xz 与空输入") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let cases: [(String, Data)] = [
+                ("截断", Data(base64Encoded: xzFixtureBase64)!.prefix(30)),
+                ("非 xz", Data("plain text, not xz".utf8)),
+                ("空文件", Data()),
+            ]
+            for (label, content) in cases {
+                let src = work.appendingPathComponent("bad.xz")
+                try content.write(to: src)
+                let out = work.appendingPathComponent("bad.out")
+                FileManager.default.createFile(atPath: out.path, contents: nil)
+                let handle = try FileHandle(forWritingTo: out)
+                defer { try? handle.close() }
+                do {
+                    try XZDecompressor.decompress(from: src, to: handle)
+                    throw TestFailure(message: "\(label)：应当抛错")
+                } catch is TestFailure {
+                    throw TestFailure(message: "\(label)：应当抛错")
+                } catch {
+                    // 预期：Compression 框架报 invalidData
+                }
+            }
         }
 
         print("\n-----------------------------------------")
