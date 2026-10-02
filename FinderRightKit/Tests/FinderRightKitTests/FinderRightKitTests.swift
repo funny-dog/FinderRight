@@ -629,6 +629,14 @@ struct FinderRightKitTestsRunner {
             try assertEqual(path.unicodeScalars.count, "/tmp/caf\u{00E9}.txt".unicodeScalars.count, "应为预组合（NFC）形式")
         }
 
+        // 26. 由扩展路径推出宿主 App，用于定向 IPC
+        runTest("IPCBridge 由扩展路径推出宿主 App") {
+            let appex = URL(fileURLWithPath: "/Applications/FinderRight.app/Contents/PlugIns/FinderRightSync.appex", isDirectory: true)
+            try assertEqual(IPCBridge.containingAppURL(forExtensionAt: appex)?.path, "/Applications/FinderRight.app")
+            try assertNil(IPCBridge.containingAppURL(forExtensionAt: URL(fileURLWithPath: "/tmp/FinderRightSync.appex", isDirectory: true)), "不在 PlugIns 下")
+            try assertNil(IPCBridge.containingAppURL(forExtensionAt: URL(fileURLWithPath: "/Applications/FinderRight.app", isDirectory: true)), "本身不是 appex")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

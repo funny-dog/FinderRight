@@ -47,7 +47,17 @@ final class IPCClient {
         let openCfg = NSWorkspace.OpenConfiguration()
         openCfg.activates = false
         openCfg.hides = true
-        NSWorkspace.shared.open(url, configuration: openCfg, completionHandler: nil)
+        // 定向投递给「包含本扩展的那个主 App」：直接 open(url) 时由 LaunchServices 自选
+        // finderright:// 的处理者，挂载着的 DMG、下载目录里的旧版本都可能接走请求
+        if let appURL = IPCBridge.containingAppURL(forExtensionAt: Bundle.main.bundleURL) {
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: openCfg) { [log] _, error in
+                guard let error else { return }
+                os_log("定向唤醒主 App 失败，退回 URL 方式: %{public}@", log: log, type: .error, error.localizedDescription)
+                NSWorkspace.shared.open(url, configuration: openCfg, completionHandler: nil)
+            }
+        } else {
+            NSWorkspace.shared.open(url, configuration: openCfg, completionHandler: nil)
+        }
 
         // 3. 轮询等待 response（自适应递增间隔：初始 2ms 瞬时捕获极速请求，后退避至 30ms 保障低开销）
         let deadline = Date().addingTimeInterval(timeout)
