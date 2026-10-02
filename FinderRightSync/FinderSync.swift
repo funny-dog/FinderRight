@@ -426,14 +426,6 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Context Menu
 
-    /// 判断是否为可解压的压缩包（兼容 .tar.gz / .tar.bz2 等复合后缀）
-    private func isArchive(_ url: URL) -> Bool {
-        let name = url.lastPathComponent.lowercased()
-        let suffixes = [".zip", ".tar", ".gz", ".tgz", ".bz2", ".tbz",
-                        ".xz", ".txz", ".7z", ".rar"]
-        return suffixes.contains { name.hasSuffix($0) }
-    }
-
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menuStart = ProcessInfo.processInfo.systemUptime
         // 读取主 App 设置界面最新写入的功能开关 / 终端 / 编辑器偏好
@@ -516,7 +508,7 @@ class FinderSync: FIFinderSync {
         if featureOn(MenuFeatureCatalog.compress), hasSelection {
             menu.addItem(makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
         }
-        if featureOn(MenuFeatureCatalog.decompress), hasSelection, selected.contains(where: isArchive) {
+        if featureOn(MenuFeatureCatalog.decompress), hasSelection, selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }) {
             menu.addItem(makeItem(titleKey: "解压到当前目录", emoji: "📂", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
         }
 

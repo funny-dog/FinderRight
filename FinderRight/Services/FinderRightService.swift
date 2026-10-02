@@ -57,12 +57,6 @@ final class FinderRightService {
     }
 
     /// 校验 Bundle Identifier 字符集（仅限字母、数字、点号和横线）
-    private func isValidBundleId(_ bundleId: String) -> Bool {
-        guard !bundleId.isEmpty, bundleId.count <= 128 else { return false }
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
-        return bundleId.unicodeScalars.allSatisfy { allowed.contains($0) }
-    }
-
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
         // 1. 路径校验：
@@ -117,7 +111,7 @@ final class FinderRightService {
 
         // 2. bundleId 字符集校验（防注入）
         if let bundleId = req.payload["bundleId"]?.stringValue {
-            guard isValidBundleId(bundleId) else {
+            guard BundleIdentifier.isValid(bundleId) else {
                 serviceLog("非法 bundleId 被拦截: \(bundleId)")
                 return IPCResponse(id: req.id, success: false, message: "非法的 bundleId: \(bundleId)")
             }
@@ -177,7 +171,7 @@ final class FinderRightService {
         let data = Data(content.utf8)
         // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
         for _ in 0..<5 {
-            let fileURL = uniqueFileURL(baseName: baseName, ext: ext, in: dirURL)
+            let fileURL = UniqueName.fileURL(baseName: baseName, ext: ext, in: dirURL)
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
@@ -687,19 +681,10 @@ final class FinderRightService {
                 continue
             }
 
-            var destURL = destDir.appendingPathComponent(sourceURL.lastPathComponent)
-
-            // 目标已存在则自动重命名避免冲突
-            if fileManager.fileExists(atPath: destURL.path) {
-                let base = destURL.deletingPathExtension().lastPathComponent
-                let ext  = destURL.pathExtension
-                var counter = 1
-                repeat {
-                    let numbered = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
-                    destURL = destDir.appendingPathComponent(numbered)
-                    counter += 1
-                } while fileManager.fileExists(atPath: destURL.path)
-            }
+            // 目标已存在则自动重命名避免冲突（与新建文件共用 UniqueName 规则：name 1.ext、name 2.ext…）
+            let destURL = UniqueName.fileURL(baseName: sourceURL.deletingPathExtension().lastPathComponent,
+                                             ext: sourceURL.pathExtension,
+                                             in: destDir)
 
             do {
                 try fileManager.moveItem(at: sourceURL, to: destURL)
@@ -743,17 +728,4 @@ final class FinderRightService {
         }
     }
 
-    // MARK: - Helpers
-
-    private func uniqueFileURL(baseName: String, ext: String, in directory: URL) -> URL {
-        let name = ext.isEmpty ? baseName : "\(baseName).\(ext)"
-        var url = directory.appendingPathComponent(name)
-        var counter = 1
-        while FileManager.default.fileExists(atPath: url.path) {
-            let numbered = ext.isEmpty ? "\(baseName) \(counter)" : "\(baseName) \(counter).\(ext)"
-            url = directory.appendingPathComponent(numbered)
-            counter += 1
-        }
-        return url
-    }
 }
