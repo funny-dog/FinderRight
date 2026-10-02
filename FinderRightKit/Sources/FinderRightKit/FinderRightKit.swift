@@ -18,3 +18,7 @@
 // ZipCompressor（压缩：退出码判定 + 原子改名）     — from Services/ZipCompressor.swift
 // XZDecompressor（.xz 进程内解压）                 — from Services/XZDecompressor.swift
 // BackgroundJobs（在途后台任务，退出前等待）        — from Services/BackgroundJobs.swift
+// CodeSignatureCheck（代码签名与进程来源校验）    — from Services/CodeSignatureCheck.swift
+// ArchiveKind（可解压压缩包识别）                  — from ArchiveKind.swift
+// BundleIdentifier（bundleId 字符集校验）          — from BundleIdentifier.swift
+// UniqueName（新建 / 粘贴的重名规则）              — from UniqueName.swift

@@ -60,14 +60,6 @@ final class ServicesProvider: NSObject {
         return (pboard.readObjects(forClasses: [NSURL.self], options: opts) as? [URL]) ?? []
     }
 
-    /// 是否为可解压的压缩包（与扩展 FinderSync.isArchive 保持一致）
-    private func isArchive(_ url: URL) -> Bool {
-        let name = url.lastPathComponent.lowercased()
-        let suffixes = [".zip", ".tar", ".gz", ".tgz", ".bz2", ".tbz",
-                        ".xz", ".txz", ".7z", ".rar"]
-        return suffixes.contains { name.hasSuffix($0) }
-    }
-
     /// 终端工作目录：选中项是文件夹则用它本身，否则用其所在目录
     private func directory(for url: URL) -> URL {
         var isDir: ObjCBool = false
@@ -188,7 +180,7 @@ final class ServicesProvider: NSObject {
         guard isInvokedFromFinder("decompress") else { return }
         // 服务对所有文件可见（受 NSFilenamesPboardType 限制无法只对压缩包显示），
         // 因此在此处过滤：只解压压缩包，普通文件忽略。
-        let archives = fileURLs(from: pboard).filter(isArchive)
+        let archives = fileURLs(from: pboard).filter { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }
         guard !archives.isEmpty else { return }
         let paths = archives.map(\.path)
         workQueue.async { [service] in

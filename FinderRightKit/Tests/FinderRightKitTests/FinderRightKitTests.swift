@@ -992,6 +992,38 @@ struct FinderRightKitTestsRunner {
             try assertNil(IPCBridge.parseExecuteURL(URL(string: "https://execute?id=\(id)&digest=\(digest)")!), "scheme 不符")
         }
 
+        // 34. 下沉到 Kit 的小工具
+        runTest("ArchiveKind 识别可解压文件") {
+            for name in ["a.zip", "A.ZIP", "a.tar.gz", "a.tgz", "a.tar.bz2", "a.xz", "a.7z", "a.rar", "a.tar"] {
+                try assertTrue(ArchiveKind.isArchive(fileName: name), name)
+            }
+            for name in ["a.txt", "zip", "a.zipx", "a.gzip"] {
+                try assertTrue(!ArchiveKind.isArchive(fileName: name), name)
+            }
+        }
+
+        runTest("BundleIdentifier 校验字符集与长度") {
+            try assertTrue(BundleIdentifier.isValid("com.mitchellh.ghostty"))
+            try assertTrue(BundleIdentifier.isValid("dev.warp.Warp-Stable"))
+            try assertTrue(!BundleIdentifier.isValid(""), "空")
+            try assertTrue(!BundleIdentifier.isValid("com.example app"), "含空格")
+            try assertTrue(!BundleIdentifier.isValid("com.example/../x"), "含斜杠")
+            try assertTrue(!BundleIdentifier.isValid(String(repeating: "a", count: 129)), "超长")
+        }
+
+        runTest("UniqueName 依次编号避开已有文件") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            try assertEqual(UniqueName.fileURL(baseName: "untitled", ext: "txt", in: dir).lastPathComponent, "untitled.txt")
+            try Data().write(to: dir.appendingPathComponent("untitled.txt"))
+            try assertEqual(UniqueName.fileURL(baseName: "untitled", ext: "txt", in: dir).lastPathComponent, "untitled 1.txt")
+            try Data().write(to: dir.appendingPathComponent("untitled 1.txt"))
+            try assertEqual(UniqueName.fileURL(baseName: "untitled", ext: "txt", in: dir).lastPathComponent, "untitled 2.txt")
+            try assertEqual(UniqueName.fileURL(baseName: "README", ext: "", in: dir).lastPathComponent, "README", "无后缀")
+            try Data().write(to: dir.appendingPathComponent("README"))
+            try assertEqual(UniqueName.fileURL(baseName: "README", ext: "", in: dir).lastPathComponent, "README 1", "无后缀时同样编号")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
