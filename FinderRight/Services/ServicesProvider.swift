@@ -77,6 +77,17 @@ final class ServicesProvider: NSObject {
         return url.deletingLastPathComponent()
     }
 
+    /// 剪切 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
+    /// 只在访达位于前台（即用户从访达右键「服务」菜单触发）时受理
+    private func isInvokedFromFinder(_ service: String) -> Bool {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost) else {
+            NSLog("[ServicesProvider] 拒绝 \(service)：前台应用为 \(frontmost ?? "nil")，不是访达")
+            return false
+        }
+        return true
+    }
+
     // MARK: - Services（selector：<name>:userData:error:）
 
     @objc func copyPath(_ pboard: NSPasteboard,
@@ -144,6 +155,7 @@ final class ServicesProvider: NSObject {
     @objc func cutFiles(_ pboard: NSPasteboard,
                         userData: String?,
                         error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("cutFiles") else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
         let paths = items.map(\.path)
@@ -158,6 +170,7 @@ final class ServicesProvider: NSObject {
     @objc func compressZip(_ pboard: NSPasteboard,
                            userData: String?,
                            error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("compressZip") else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
         let paths = items.map(\.path)
@@ -172,6 +185,7 @@ final class ServicesProvider: NSObject {
     @objc func decompress(_ pboard: NSPasteboard,
                           userData: String?,
                           error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("decompress") else { return }
         // 服务对所有文件可见（受 NSFilenamesPboardType 限制无法只对压缩包显示），
         // 因此在此处过滤：只解压压缩包，普通文件忽略。
         let archives = fileURLs(from: pboard).filter(isArchive)
