@@ -267,17 +267,27 @@ final class FinderRightService {
                 return
             }
 
-            let tool: (executable: String, arguments: [String])
-            if isBareGz {
-                tool = ("/usr/bin/gunzip", ["-kc", archive])
-            } else if isBareBz2 {
-                tool = ("/usr/bin/bunzip2", ["-kc", archive])
-            } else if let xzBin = ["/opt/homebrew/bin/xz", "/usr/local/bin/xz", "/usr/bin/xz"]
-                        .first(where: { fileManager.fileExists(atPath: $0) }) {
-                tool = (xzBin, ["-dc", archive])
-            } else {
-                tool = ("/usr/bin/python3", ["-c", "import lzma, sys, shutil; shutil.copyfileobj(lzma.open(sys.argv[1]), sys.stdout.buffer)", archive])
+            if isBareXz {
+                // .xz 用系统 Compression 框架进程内解压：macOS 不自带 xz，旧实现会以 FDA 身份执行用户可写的
+                // /opt/homebrew/bin/xz，或调用 /usr/bin/python3 而在未装开发者工具的机器上弹出安装框
+                do {
+                    try XZDecompressor.decompress(from: url, to: outHandle)
+                    try? outHandle.close()
+                    DispatchQueue.main.async {
+                        NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
+                    }
+                    serviceLog("decompress single file succeeded: \(targetFileURL.path)")
+                } catch {
+                    try? outHandle.close()
+                    try? fileManager.removeItem(at: targetFileURL)
+                    serviceLog("decompress .xz failed: \(error)")
+                }
+                return
             }
+
+            let tool: (executable: String, arguments: [String]) = isBareGz
+                ? ("/usr/bin/gunzip", ["-kc", archive])
+                : ("/usr/bin/bunzip2", ["-kc", archive])
 
             do {
                 // ProcessRunner 先读完 stderr 再等待退出：错误输出超过管道缓冲时不会死锁
