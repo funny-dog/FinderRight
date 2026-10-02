@@ -25,7 +25,9 @@ public enum CodeSignatureCheck {
     public static func codeAt(_ url: URL, satisfies requirementText: String) -> Bool {
         guard let code = staticCode(at: url) else { return false }
         var requirement: SecRequirement?
-        guard SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess else {
+        // requirement 为 nil 时 Check 函数只验签名完好、不验是谁签的，必须解包后再用，保证失败即拒绝
+        guard SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess,
+              let requirement else {
             return false
         }
         let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate)
@@ -54,7 +56,8 @@ public enum CodeSignatureCheck {
         guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &guest) == errSecSuccess, let guest,
               let onDisk = staticCode(at: bundleURL) else { return false }
         var requirement: SecRequirement?
-        guard SecCodeCopyDesignatedRequirement(onDisk, [], &requirement) == errSecSuccess else { return false }
+        guard SecCodeCopyDesignatedRequirement(onDisk, [], &requirement) == errSecSuccess,
+              let requirement else { return false }
         return SecCodeCheckValidity(guest, [], requirement) == errSecSuccess
     }
 
