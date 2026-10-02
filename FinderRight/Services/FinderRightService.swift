@@ -56,7 +56,6 @@ final class FinderRightService {
         return PathAccessPolicy.isAllowed(path, role: role, home: home, temporaryDirectory: tmp)
     }
 
-    /// 校验 Bundle Identifier 字符集（仅限字母、数字、点号和横线）
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
         // 1. 路径校验：
@@ -727,5 +726,4 @@ final class FinderRightService {
             NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
         }
     }
-
 }
