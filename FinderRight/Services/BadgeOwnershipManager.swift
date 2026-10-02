@@ -8,7 +8,7 @@ import os.log
 /// 最先注册者。扩展判定自己丢失归属后发来 `reclaimBadgeOwnership`，这里把其他已启用的
 /// Finder Sync 扩展短暂 `pluginkit -e ignore` 再 `-e use`：它们重新注册时排到我们之后，
 /// 归属随即转给本扩展（2026-10-02 真机验证：Finder 不需重启，且会立即重新请求可见项角标）。
-/// 设计详见 docs/superpowers/specs/2026-10-02-badge-ownership-reclaim-design.md。
+/// 设计取舍：重启范围为全部已启用的其他扩展（无法得知谁真正冲突），设置中可关闭。
 ///
 /// 安全约束：动的是别人 App 的扩展配置，任何时刻崩溃都必须可恢复 ——
 /// ignore 之前先落盘恢复标记，全部恢复并核验后才删除；主 App 启动时按标记补恢复。

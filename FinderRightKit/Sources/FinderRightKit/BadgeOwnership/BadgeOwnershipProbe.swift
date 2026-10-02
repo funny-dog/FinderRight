@@ -4,7 +4,7 @@ import Foundation
 ///
 /// 背景：同一目录被多个 Finder Sync 扩展注册时，Finder 只把 requestBadgeIdentifier
 /// 交给最先注册者。扩展判定自己丢失归属后，经 IPC 请主 App 短暂重启其他扩展以取回归属。
-/// 详见 docs/superpowers/specs/2026-10-02-badge-ownership-reclaim-design.md。
+/// 抢回只是重启其他扩展让本扩展成为最先注册者，执行端见主 App 的 BadgeOwnershipManager。
 public enum BadgeReclaimIPC {
     public static let action = "reclaimBadgeOwnership"
 }
