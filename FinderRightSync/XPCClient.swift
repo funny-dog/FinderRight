@@ -31,17 +31,19 @@ final class IPCClient {
         let respURL = IPCBridge.responseFile(id: id)
 
         // 1. 写 request
+        let data: Data
         do {
             try IPCBridge.ensureDirectory()
-            let data = try JSONEncoder().encode(req)
+            data = try JSONEncoder().encode(req)
             try data.write(to: reqURL, options: .atomic)
         } catch {
             os_log("IPC write request failed: %{public}@", log: log, type: .error, error.localizedDescription)
             return (false, "IPC 写请求失败: \(error.localizedDescription)")
         }
 
-        // 2. 唤醒主 App（activates=false：不把 FinderRight 提到前台，Finder 保持焦点）
-        guard let url = URL(string: "\(IPCBridge.urlScheme)://execute?id=\(id)") else {
+        // 2. 唤醒主 App（activates=false：不把 FinderRight 提到前台，Finder 保持焦点）。
+        //    URL 携带请求文件的 SHA-256：主 App 确认来源是本扩展后，据此确认文件内容未被替换
+        guard let url = IPCBridge.executeURL(id: id, requestData: data) else {
             return (false, "IPC URL 构造失败")
         }
         let openCfg = NSWorkspace.OpenConfiguration()

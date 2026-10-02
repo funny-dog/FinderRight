@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// 扩展 ↔ 主 App 的文件型 IPC 桥。
 ///
@@ -78,6 +79,43 @@ extension IPCBridge {
             return nil
         }
         return app
+    }
+}
+
+extension IPCBridge {
+    /// 请求文件内容的 SHA-256（小写十六进制）
+    public static func requestDigest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// 唤醒主 App 的 URL：`finderright://execute?id=<uuid>&digest=<请求文件 SHA-256>`。
+    ///
+    /// 主 App 会确认发出这条 URL 的进程就是内嵌扩展；把请求文件的摘要放进这条已确认来源的 URL，
+    /// 才能保证主 App 读到的文件就是扩展写的那份——请求目录对同用户进程可写，
+    /// 不带摘要时，文件可能在扩展写完、主 App 读取之前被替换。
+    public static func executeURL(id: String, requestData: Data) -> URL? {
+        var components = URLComponents()
+        components.scheme = urlScheme
+        components.host = "execute"
+        components.queryItems = [
+            URLQueryItem(name: "id", value: id),
+            URLQueryItem(name: "digest", value: requestDigest(requestData)),
+        ]
+        return components.url
+    }
+
+    /// 解析并校验 execute URL：id 必须是 UUID（会被拼进文件路径），digest 必须是 64 位十六进制
+    public static func parseExecuteURL(_ url: URL) -> (id: String, digest: String)? {
+        guard url.scheme == urlScheme, url.host == "execute",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              let id = items.first(where: { $0.name == "id" })?.value,
+              UUID(uuidString: id) != nil,
+              let digest = items.first(where: { $0.name == "digest" })?.value?.lowercased(),
+              digest.count == 64,
+              digest.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
+            return nil
+        }
+        return (id, digest)
     }
 }
 
