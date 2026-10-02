@@ -56,37 +56,35 @@ final class IPCWatcher {
         }
     }
 
-    /// 主 App 收到 URL scheme 触发后，调用此方法
-    /// URL 形如：finderright://execute?id=<uuid>
+    /// 处理已确认来源的 execute URL（来源校验在 AppDelegate.handleGetURLEvent）。
+    /// URL 形如：finderright://execute?id=<uuid>&digest=<请求文件 SHA-256>
     func handle(url: URL) {
-        guard url.scheme == IPCBridge.urlScheme else {
-            NSLog("[IPCWatcher] unexpected url scheme: \(url)")
+        // id 必须严格是 UUID：它会被直接拼进文件路径，未校验的 id（如 "../"）会导致路径穿越；
+        // digest 用来确认读到的请求文件就是扩展写的那份（见 IPCBridge.executeURL）
+        guard let parsed = IPCBridge.parseExecuteURL(url) else {
+            NSLog("[IPCWatcher] 拒绝格式不合法的 URL: \(url)")
             return
         }
-        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let id = comps.queryItems?.first(where: { $0.name == "id" })?.value else {
-            NSLog("[IPCWatcher] url missing id: \(url)")
-            return
-        }
-        // id 必须严格是 UUID：它会被直接拼进文件路径，未校验的 id（如 "../"）
-        // 会导致路径穿越——主 App 会读取/删除任意 *.req.json、写出任意 *.resp.json。
-        guard UUID(uuidString: id) != nil else {
-            NSLog("[IPCWatcher] reject non-UUID id: \(id)")
-            return
-        }
-        NSLog("[IPCWatcher] received request id=\(id)")
+        NSLog("[IPCWatcher] received request id=\(parsed.id)")
         queue.async { [weak self] in
-            self?.processRequest(id: id)
+            self?.processRequest(id: parsed.id, expectedDigest: parsed.digest)
         }
     }
 
-    private func processRequest(id: String) {
+    private func processRequest(id: String, expectedDigest: String) {
         let reqURL = IPCBridge.requestFile(id: id)
         let respURL = IPCBridge.responseFile(id: id)
 
         do {
             let data = try Data(contentsOf: reqURL)
+            // 请求目录对同用户进程可写：内容必须与已确认来源的 URL 中的摘要一致
+            guard IPCBridge.requestDigest(data) == expectedDigest else {
+                throw IPCIntegrityError.digestMismatch
+            }
             let request = try JSONDecoder().decode(IPCRequest.self, from: data)
+            guard request.id == id else {
+                throw IPCIntegrityError.idMismatch
+            }
             NSLog("[IPCWatcher] decoded request action=\(request.action)")
 
             let response = service.handle(request)
@@ -104,6 +102,19 @@ final class IPCWatcher {
             if let data = try? JSONEncoder().encode(failed) {
                 try? data.write(to: respURL, options: .atomic)
             }
+        }
+    }
+}
+
+/// 请求文件与已确认来源的 URL 不一致
+private enum IPCIntegrityError: LocalizedError {
+    case digestMismatch
+    case idMismatch
+
+    var errorDescription: String? {
+        switch self {
+        case .digestMismatch: return "请求内容与摘要不符"
+        case .idMismatch: return "请求 id 与 URL 不符"
         }
     }
 }

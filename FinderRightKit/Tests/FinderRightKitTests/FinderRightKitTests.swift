@@ -968,6 +968,30 @@ struct FinderRightKitTestsRunner {
             try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: "identifier \"com.apple.ls\" and certificate leaf = H\"\(leaf)\""))
         }
 
+        // 33. IPC execute URL：携带请求文件摘要
+        runTest("IPCBridge execute URL 携带请求摘要并可往返解析") {
+            let id = UUID().uuidString
+            let data = Data("{\"id\":\"x\"}".utf8)
+            guard let url = IPCBridge.executeURL(id: id, requestData: data) else {
+                throw TestFailure(message: "URL 构造失败")
+            }
+            try assertTrue(url.absoluteString.hasPrefix("finderright://execute?id="), url.absoluteString)
+            let parsed = IPCBridge.parseExecuteURL(url)
+            try assertEqual(parsed?.id, id)
+            try assertEqual(parsed?.digest, IPCBridge.requestDigest(data))
+            try assertEqual(IPCBridge.requestDigest(Data("abc".utf8)),
+                            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 标准测试向量")
+        }
+
+        runTest("IPCBridge 拒绝不合规的 execute URL") {
+            let id = UUID().uuidString, digest = String(repeating: "a", count: 64)
+            try assertNil(IPCBridge.parseExecuteURL(URL(string: "finderright://execute?id=\(id)")!), "旧格式（无摘要）")
+            try assertNil(IPCBridge.parseExecuteURL(URL(string: "finderright://execute?id=not-a-uuid&digest=\(digest)")!), "id 不是 UUID")
+            try assertNil(IPCBridge.parseExecuteURL(URL(string: "finderright://execute?id=\(id)&digest=xyz")!), "摘要格式错误")
+            try assertNil(IPCBridge.parseExecuteURL(URL(string: "finderright://settings?id=\(id)&digest=\(digest)")!), "host 不是 execute")
+            try assertNil(IPCBridge.parseExecuteURL(URL(string: "https://execute?id=\(id)&digest=\(digest)")!), "scheme 不符")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
