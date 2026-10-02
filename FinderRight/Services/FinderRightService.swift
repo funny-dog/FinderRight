@@ -42,25 +42,15 @@ final class FinderRightService {
     // MARK: - 安全白名单与校验 (B5)
 
     // TODO: 未来可通过 NSXPCConnection + audit token 实现进程级双向严格鉴权
-    /// 校验路径是否在允许的安全范围：真实用户 home、/Volumes 或系统临时目录
-    private func isPathAllowed(_ rawPath: String) -> Bool {
+    /// 校验路径是否在允许的安全范围（真实 home、/Volumes、临时目录），且不触碰 FDA 专属数据。
+    /// 规则在 Kit 的 PathAccessPolicy（可单测）；这里负责展开 ~ 与解析符号链接，
+    /// 让 ~/Desktop 下指向 ~/Library/Messages 的链接按真实位置判定。
+    private func isPathAllowed(_ rawPath: String, role: PathAccessPolicy.Role) -> Bool {
         let expanded = (rawPath as NSString).expandingTildeInPath
-        let url = URL(fileURLWithPath: expanded).resolvingSymlinksInPath()
-        let path = url.path
-
+        let path = URL(fileURLWithPath: expanded).resolvingSymlinksInPath().path
         let home = IPCBridge.realUserHomeDirectory.resolvingSymlinksInPath().path
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().path
-
-        if path == home || path.hasPrefix(home + "/") {
-            return true
-        }
-        if path == "/Volumes" || path.hasPrefix("/Volumes/") {
-            return true
-        }
-        if path == tmp || path.hasPrefix(tmp + "/") || path.hasPrefix("/private/tmp/") || path.hasPrefix("/tmp/") {
-            return true
-        }
-        return false
+        return PathAccessPolicy.isAllowed(path, role: role, home: home, temporaryDirectory: tmp)
     }
 
     /// 校验 Bundle Identifier 字符集（仅限字母、数字、点号和横线）
@@ -81,11 +71,14 @@ final class FinderRightService {
         let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
-        let pathKeys = ["directory", "destination", "archive", "testPath"]
-        for key in pathKeys {
+        // directory / destination 是写入目标；archive / items / paths 是会被读取或移动的源
+        let pathKeys: [(key: String, role: PathAccessPolicy.Role)] = [
+            ("directory", .destination), ("destination", .destination), ("archive", .source), ("testPath", .source)
+        ]
+        for (key, role) in pathKeys {
             if let path = req.payload[key]?.stringValue {
                 if needsWhitelist {
-                    guard isPathAllowed(path) else {
+                    guard isPathAllowed(path, role: role) else {
                         serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
                         return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
                     }
@@ -99,12 +92,12 @@ final class FinderRightService {
                 }
             }
         }
-        let arrayKeys = ["items", "paths"]
-        for key in arrayKeys {
+        let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
+        for (key, role) in arrayKeys {
             if let paths = req.payload[key]?.stringArrayValue {
                 for path in paths {
                     if needsWhitelist {
-                        guard isPathAllowed(path) else {
+                        guard isPathAllowed(path, role: role) else {
                             serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
                             return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
                         }
@@ -718,7 +711,7 @@ final class FinderRightService {
         for sourcePath in sourcePaths {
             // 防御性校验：cut-queue.json 是普通文件，可能被其他进程直接改写；
             // 剪切时虽已校验过白名单，粘贴执行前必须对队列内容再校验一次。
-            guard isPathAllowed(sourcePath) else {
+            guard isPathAllowed(sourcePath, role: .source) else {
                 serviceLog("粘贴源路径越界被拦截: \(sourcePath)")
                 continue
             }

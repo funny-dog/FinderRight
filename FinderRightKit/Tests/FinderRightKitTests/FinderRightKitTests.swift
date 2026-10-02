@@ -546,6 +546,46 @@ struct FinderRightKitTestsRunner {
             try assertNil(UpdateIntegrity.parseChecksum(String(repeating: "g", count: 64)), "非十六进制")
         }
 
+        // 22. 路径访问策略：在白名单之上拦截 FDA 专属数据
+        runTest("PathAccessPolicy 放行常规用户目录") {
+            let home = "/Users/tester", tmp = "/private/var/folders/xx/T"
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester/Documents/report.txt", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester/Desktop", role: .destination, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester", role: .destination, home: home, temporaryDirectory: tmp), "home 作为新建 / 粘贴目标应放行")
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester/Library", role: .destination, home: home, temporaryDirectory: tmp), "~/Library 作为目标应放行")
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester/Library/Mobile Documents/com~apple~CloudDocs/a.txt", role: .source, home: home, temporaryDirectory: tmp), "iCloud Drive 是 Services 的正常场景")
+            try assertTrue(PathAccessPolicy.isAllowed("/Volumes/E/data.bin", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/private/tmp/x", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/private/var/folders/xx/T/job/a.txt", role: .source, home: home, temporaryDirectory: tmp))
+        }
+
+        runTest("PathAccessPolicy 拦截 FDA 专属数据") {
+            let home = "/Users/tester", tmp = "/private/var/folders/xx/T"
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Messages/chat.db", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Messages", role: .destination, home: home, temporaryDirectory: tmp), "也不得写入受保护目录")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/LIBRARY/messages/chat.db", role: .source, home: home, temporaryDirectory: tmp), "大小写变体")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Documents/../Library/Mail", role: .source, home: home, temporaryDirectory: tmp), "含 .. 的路径")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Application Support/com.apple.TCC/TCC.db", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Pictures/Photos Library.photoslibrary/database", role: .source, home: home, temporaryDirectory: tmp), "照片图库")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Volumes/.timemachine/ABC/2026-10-01.backup/Users/tester", role: .source, home: home, temporaryDirectory: tmp), "APFS 时间机器快照")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Volumes/TM/Backups.backupdb/mac/Latest", role: .source, home: home, temporaryDirectory: tmp), "HFS+ 时间机器备份")
+        }
+
+        runTest("PathAccessPolicy 源路径不得是受保护目录的祖先") {
+            let home = "/Users/tester", tmp = "/private/var/folders/xx/T"
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library", role: .source, home: home, temporaryDirectory: tmp), "压缩 ~/Library 会带走 Messages")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester", role: .source, home: home, temporaryDirectory: tmp), "压缩整个 home")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Application Support", role: .source, home: home, temporaryDirectory: tmp))
+        }
+
+        runTest("PathAccessPolicy 保留原有白名单边界") {
+            let home = "/Users/tester", tmp = "/private/var/folders/xx/T"
+            try assertTrue(!PathAccessPolicy.isAllowed("/etc/hosts", role: .source, home: home, temporaryDirectory: tmp))
+            try assertTrue(!PathAccessPolicy.isAllowed("/Applications/Foo.app", role: .destination, home: home, temporaryDirectory: tmp))
+            try assertTrue(!PathAccessPolicy.isAllowed("/System/Volumes/Data/Users/tester/Documents/a", role: .source, home: home, temporaryDirectory: tmp), "firmlink 路径不在白名单")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/testerx/Documents/a", role: .source, home: home, temporaryDirectory: tmp), "前缀相同的其他用户目录")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
