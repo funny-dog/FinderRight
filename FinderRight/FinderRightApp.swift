@@ -85,6 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(defaultsChanged),
             name: UserDefaults.didChangeNotification, object: nil)
 
+        // 后台操作有新结果：刷新菜单栏图标的失败提示
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(updateStatusIndicator),
+            name: RecentOperations.didChangeNotification, object: nil)
+
         // 首次启动：若尚未完成引导，自动弹出引导设置窗口
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
@@ -225,11 +230,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        // 每次打开前由 menuNeedsUpdate 重建，「最近操作」区随之更新
+        menu.delegate = self
+        populate(menu)
+        return menu
+    }
 
+    private func populate(_ menu: NSMenu) {
         let status = NSMenuItem(title: L("FinderRight 运行中"), action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
         menu.addItem(.separator())
+
+        let records = RecentOperations.shared.records
+        if !records.isEmpty {
+            let header = NSMenuItem(title: L("最近操作"), action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for record in records {
+                menu.addItem(recentOperationItem(for: record))
+            }
+            let clear = NSMenuItem(title: L("清除记录"), action: #selector(clearRecentOperations), keyEquivalent: "")
+            clear.target = self
+            menu.addItem(clear)
+            menu.addItem(.separator())
+        }
 
         let settings = NSMenuItem(title: L("设置..."), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
@@ -244,11 +269,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quit = NSMenuItem(title: L("退出 FinderRight"), action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
-
-        return menu
     }
 
     private func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
+
+    // MARK: - 最近操作
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private func recentOperationTitle(for record: OperationRecord) -> String {
+        let format: String
+        switch (record.kind, record.succeeded) {
+        case (.compress, true):    format = L("已压缩 %@")
+        case (.compress, false):   format = L("压缩失败：%@")
+        case (.decompress, true):  format = L("已解压 %@")
+        case (.decompress, false): format = L("解压失败：%@")
+        case (.paste, true):       format = L("已粘贴 %@")
+        case (.paste, false):      format = L("粘贴失败：%@")
+        }
+        return String(format: format, record.subject)
+    }
+
+    private func recentOperationItem(for record: OperationRecord) -> NSMenuItem {
+        let time = Self.timeFormatter.string(from: record.date)
+        let item = NSMenuItem(title: "\(recentOperationTitle(for: record))  ·  \(time)",
+                              action: #selector(recentOperationClicked(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = record
+        if record.succeeded {
+            item.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+        } else {
+            item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(paletteColors: [.systemOrange]))
+            item.toolTip = record.failure
+        }
+        return item
+    }
+
+    /// 成功项：在访达中显示产物；失败项：弹窗说明原因
+    @objc private func recentOperationClicked(_ sender: NSMenuItem) {
+        guard let record = sender.representedObject as? OperationRecord else { return }
+        if record.succeeded {
+            let existing = record.results.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if existing.isEmpty {
+                NSSound.beep()
+            } else {
+                NSWorkspace.shared.activateFileViewerSelecting(existing)
+            }
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = recentOperationTitle(for: record)
+        alert.informativeText = (record.failure ?? "") + "\n\n" + L("更多信息可在「控制台」App 中搜索 FinderRightService 查看。")
+        alert.addButton(withTitle: L("好"))
+        alert.runModal()
+    }
+
+    @objc private func clearRecentOperations() {
+        RecentOperations.shared.clear()
+    }
+
+    /// 有未查看的失败时把菜单栏图标染成红色，打开菜单后恢复。
+    /// 用 contentTintColor 而不是自绘红点：模板图保持随明暗菜单栏自动反色
+    @objc private func updateStatusIndicator() {
+        guard let button = statusItem?.button else { return }
+        let hasUnseenFailure = RecentOperations.shared.unseenFailureCount > 0
+        button.contentTintColor = hasUnseenFailure ? .systemRed : nil
+        button.toolTip = hasUnseenFailure ? L("有操作失败，点击查看") : "FinderRight"
+    }
 
     // 供 Settings scene 的 ⌘, 命令与状态栏菜单共用（@objc 供 #selector 使用）
     @objc func openSettings() {
@@ -410,5 +505,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         IPCWatcher.shared.handle(url: url)
+    }
+}
+
+// MARK: - 状态栏菜单刷新
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        populate(menu)
+    }
+
+    /// 用户打开菜单即看到了「最近操作」里的失败项，撤掉图标提示
+    func menuWillOpen(_ menu: NSMenu) {
+        RecentOperations.shared.markFailuresSeen()
     }
 }

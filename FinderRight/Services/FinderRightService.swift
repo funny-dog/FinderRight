@@ -196,6 +196,7 @@ final class FinderRightService {
 
         // 异步派发到归档专用队列，IPC 立即返回「已受理」。最终文件名在任务完成时才原子确定
         // （见 ZipCompressor），排队中的同名压缩任务不会互相覆盖
+        let subject = Self.subject(forPaths: items)
         Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
             do {
                 let zip = try ZipCompressor.compress(items: itemURLs, into: dir, baseName: name)
@@ -203,8 +204,11 @@ final class FinderRightService {
                     NSWorkspace.shared.activateFileViewerSelecting([zip])
                 }
                 self?.serviceLog("compressZip succeeded: \(zip.path)")
+                RecentOperations.shared.record(OperationRecord(kind: .compress, subject: subject, results: [zip]))
             } catch {
                 self?.serviceLog("compressZip failed: \(error)")
+                RecentOperations.shared.record(OperationRecord(
+                    kind: .compress, subject: subject, failure: Self.describe(compressError: error)))
             }
         }
 
@@ -222,13 +226,31 @@ final class FinderRightService {
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
         Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
-            self?.performDecompress(url: url)
+            guard let self else { return }
+            let subject = url.lastPathComponent
+            switch self.performDecompress(url: url) {
+            case .success(let output):
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, results: [output]))
+            case .failure(let failure):
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, failure: failure.message))
+            }
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理解压任务，正在后台处理")
     }
 
-    private func performDecompress(url: URL) {
+    /// 后台操作失败的用户可读原因（进入「最近操作」）
+    private struct OperationFailure: Error {
+        let message: String
+    }
+
+    /// 子进程失败的原因：优先用 stderr 摘要，stderr 为空时退回退出码
+    private static func toolFailure(_ result: ProcessRunner.Result) -> OperationFailure {
+        OperationFailure(message: OperationRecord.summary(of: result.stderr)
+            ?? String(format: L("解压工具退出码 %d"), result.status))
+    }
+
+    private func performDecompress(url: URL) -> Result<URL, OperationFailure> {
         let fileManager = FileManager.default
         let dir = url.deletingLastPathComponent()
         let filename = url.lastPathComponent
@@ -260,7 +282,7 @@ final class FinderRightService {
             fileManager.createFile(atPath: targetFileURL.path, contents: nil)
             guard let outHandle = try? FileHandle(forWritingTo: targetFileURL) else {
                 serviceLog("无法创建解压目标文件: \(targetFileURL.path)")
-                return
+                return .failure(OperationFailure(message: L("无法在当前目录创建文件")))
             }
 
             if isBareXz {
@@ -273,12 +295,13 @@ final class FinderRightService {
                         NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
                     }
                     serviceLog("decompress single file succeeded: \(targetFileURL.path)")
+                    return .success(targetFileURL)
                 } catch {
                     try? outHandle.close()
                     try? fileManager.removeItem(at: targetFileURL)
                     serviceLog("decompress .xz failed: \(error)")
+                    return .failure(OperationFailure(message: L("文件已损坏或不是有效的 xz 格式")))
                 }
-                return
             }
 
             let tool: (executable: String, arguments: [String]) = isBareGz
@@ -299,16 +322,18 @@ final class FinderRightService {
                         NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
                     }
                     serviceLog("decompress single file succeeded: \(targetFileURL.path)")
+                    return .success(targetFileURL)
                 } else {
                     try? fileManager.removeItem(at: targetFileURL)
                     serviceLog("decompress single file failed (exit \(result.status)): \(result.stderr)")
+                    return .failure(Self.toolFailure(result))
                 }
             } catch {
                 try? outHandle.close()
                 try? fileManager.removeItem(at: targetFileURL)
                 serviceLog("decompress single file error: \(error.localizedDescription)")
+                return .failure(OperationFailure(message: error.localizedDescription))
             }
-            return
         }
 
         // 归档压缩包（zip、tar、tar.gz、tar.bz2、tar.xz 等）：解压到同名新文件夹
@@ -321,47 +346,60 @@ final class FinderRightService {
             baseName = (baseName as NSString).deletingPathExtension
         }
 
-        var targetDir = dir.appendingPathComponent(baseName, isDirectory: true)
-        var counter = 2
-        while fileManager.fileExists(atPath: targetDir.path) {
-            targetDir = dir.appendingPathComponent("\(baseName)-\(counter)", isDirectory: true)
-            counter += 1
-        }
-
+        // 先解到压缩包旁边登记过的隐藏暂存目录（同卷才能原子改名），成功后再由 ExtractedOutput 落位：
+        // 顶层只有一项时直接放出该项，避免 foo/foo 双层嵌套。失败时 defer 整体删除暂存目录，
+        // 不留空目录或半截产物；App 中途崩溃则由下次启动的 sweep 清理
+        let registry = ScratchDirectoryRegistry()
+        let scratch: URL
         do {
-            try fileManager.createDirectory(at: targetDir, withIntermediateDirectories: true)
+            scratch = try registry.makeScratchDirectory(in: dir)
+        } catch {
+            serviceLog("创建解压暂存目录失败: \(error.localizedDescription)")
+            return .failure(OperationFailure(message: L("无法在当前目录创建文件")))
+        }
+        defer { registry.remove(scratch) }
+
+        let output = scratch.appendingPathComponent("out", isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: output, withIntermediateDirectories: false)
         } catch {
             serviceLog("创建解压目录失败: \(error.localizedDescription)")
-            return
+            return .failure(OperationFailure(message: L("无法在当前目录创建文件")))
         }
 
         let isZip = url.pathExtension.lowercased() == "zip"
         let tool: (executable: String, arguments: [String]) = isZip
-            ? ("/usr/bin/ditto", ["-x", "-k", archive, targetDir.path])
-            : ("/usr/bin/tar", ["-xf", archive, "-C", targetDir.path])
+            ? ("/usr/bin/ditto", ["-x", "-k", archive, output.path])
+            : ("/usr/bin/tar", ["-xf", archive, "-C", output.path])
 
+        let result: ProcessRunner.Result
         do {
             // 解压 Linux rootfs / Docker 层这类 tar 时每个设备节点都会报一行错，stderr 轻易超过
             // 64KB 管道缓冲；ProcessRunner 先读后等，避免死锁卡住整条 archiveQueue
-            let result = try ProcessRunner.run(
+            result = try ProcessRunner.run(
                 executableURL: URL(fileURLWithPath: tool.executable),
                 arguments: tool.arguments,
-                currentDirectoryURL: targetDir)
-            if result.status == 0 {
-                DispatchQueue.main.async {
-                    NSWorkspace.shared.activateFileViewerSelecting([targetDir])
-                }
-                serviceLog("decompress archive succeeded: \(targetDir.path)")
-            } else {
-                serviceLog("decompress archive failed (exit \(result.status)): \(result.stderr)")
-                // 失败时清掉刚建的目标目录：它与单文件分支行为保持一致，
-                // 否则会留下空目录，且重试解压还会生成 foo-2、foo-3 等递增残留。
-                // 该目录是本函数刚 unique 出来的新目录，必不预先存在，整体删除安全。
-                try? fileManager.removeItem(at: targetDir)
-            }
+                currentDirectoryURL: output)
         } catch {
             serviceLog("decompress archive error: \(error.localizedDescription)")
-            try? fileManager.removeItem(at: targetDir)
+            return .failure(OperationFailure(message: error.localizedDescription))
+        }
+        guard result.status == 0 else {
+            serviceLog("decompress archive failed (exit \(result.status)): \(result.stderr)")
+            return .failure(Self.toolFailure(result))
+        }
+
+        do {
+            let placed = try ExtractedOutput.place(extractedRoot: output, into: dir, folderName: baseName)
+            DispatchQueue.main.async {
+                NSWorkspace.shared.activateFileViewerSelecting([placed])
+            }
+            serviceLog("decompress archive succeeded: \(placed.path)")
+            return .success(placed)
+        } catch {
+            serviceLog("decompress archive finalize failed: \(error)")
+            return .failure(OperationFailure(message: (error as? LocalizedError)?.errorDescription
+                ?? String(describing: error)))
         }
     }
 
@@ -708,10 +746,41 @@ final class FinderRightService {
             }
         }
 
+        let subject = Self.subject(forPaths: sourcePaths)
         if let err = firstError {
             serviceLog("pasteFiles completed with error: \(err)")
+            RecentOperations.shared.record(OperationRecord(
+                kind: .paste, subject: subject,
+                failure: String(format: L("%d 项未能移动：%@"), failedPaths.count, err),
+                results: pastedPaths))
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
+            // 全部被跳过（源已不存在、或粘贴回原目录）时没有可报告的结果
+            if !pastedPaths.isEmpty {
+                RecentOperations.shared.record(OperationRecord(kind: .paste, subject: subject, results: pastedPaths))
+            }
+        }
+    }
+
+    // MARK: - 最近操作文案
+
+    /// 单项显示文件名，多项显示「N 个项目」
+    private static func subject(forPaths paths: [String]) -> String {
+        if paths.count == 1, let only = paths.first {
+            return URL(fileURLWithPath: only).lastPathComponent
+        }
+        return String(format: L("%d 个项目"), paths.count)
+    }
+
+    private static func describe(compressError error: Error) -> String {
+        guard let failure = error as? ZipCompressor.Failure else { return error.localizedDescription }
+        switch failure {
+        case .nothingToCompress:
+            return L("没有可压缩的项目")
+        case .stagingFailed(let message), .finalizeFailed(let message):
+            return message
+        case .dittoFailed(let status, let stderr):
+            return OperationRecord.summary(of: stderr) ?? String(format: L("压缩工具退出码 %d"), status)
         }
     }
 

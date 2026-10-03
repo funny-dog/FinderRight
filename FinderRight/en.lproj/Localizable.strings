@@ -221,3 +221,22 @@
 "授权辅助功能…" = "Grant Accessibility…";
 "更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载" = "The update has no checksum file, so automatic installation was cancelled. Please download it manually from the release page.";
 "更新包的签名与当前版本不一致，已拒绝安装" = "The update's code signature doesn't match the current version, so it was not installed.";
+
+/* Recent activity (menu bar) */
+"最近操作" = "Recent Activity";
+"清除记录" = "Clear History";
+"已压缩 %@" = "Compressed %@";
+"压缩失败：%@" = "Compression failed: %@";
+"已解压 %@" = "Extracted %@";
+"解压失败：%@" = "Extraction failed: %@";
+"已粘贴 %@" = "Pasted %@";
+"粘贴失败：%@" = "Paste failed: %@";
+"更多信息可在「控制台」App 中搜索 FinderRightService 查看。" = "For more details, search for FinderRightService in the Console app.";
+"有操作失败，点击查看" = "An operation failed — click for details";
+"%d 个项目" = "%d items";
+"%d 项未能移动：%@" = "%d item(s) could not be moved: %@";
+"没有可压缩的项目" = "Nothing to compress";
+"压缩工具退出码 %d" = "The compression tool exited with code %d";
+"解压工具退出码 %d" = "The extraction tool exited with code %d";
+"无法在当前目录创建文件" = "Couldn't create files in this folder";
+"文件已损坏或不是有效的 xz 格式" = "The file is damaged or isn't a valid xz archive";

@@ -87,31 +87,14 @@ public enum ZipCompressor {
         return try moveIntoPlace(partial, directory: directory, baseName: baseName)
     }
 
-    /// 以 RENAME_EXCL 原子改名到第一个未被占用的名字：查重与改名之间不存在覆盖窗口
+    /// 原子改名到第一个未被占用的 `<baseName>.zip` / `<baseName> N.zip`
     static func moveIntoPlace(_ partial: URL, directory: URL, baseName: String) throws -> URL {
-        for n in 0..<10_000 {
-            let name = n == 0 ? "\(baseName).zip" : "\(baseName) \(n).zip"
-            let candidate = directory.appendingPathComponent(name)
-            if renamex_np(partial.path, candidate.path, UInt32(RENAME_EXCL)) == 0 {
-                return candidate
+        do {
+            return try ExclusiveRename.move(partial, into: directory) { n in
+                n == 0 ? "\(baseName).zip" : "\(baseName) \(n).zip"
             }
-            let err = errno
-            switch err {
-            case EEXIST:
-                continue
-            case ENOTSUP, EINVAL:
-                // 部分文件系统（exFAT、SMB 等）不支持 RENAME_EXCL：退回「查重 + 不覆盖的移动」
-                guard !FileManager.default.fileExists(atPath: candidate.path) else { continue }
-                do {
-                    try FileManager.default.moveItem(at: partial, to: candidate)
-                    return candidate
-                } catch {
-                    throw Failure.finalizeFailed(error.localizedDescription)
-                }
-            default:
-                throw Failure.finalizeFailed(String(cString: strerror(err)))
-            }
+        } catch let failure as ExclusiveRename.Failure {
+            throw Failure.finalizeFailed(failure.message)
         }
-        throw Failure.finalizeFailed("可用文件名已耗尽")
     }
 }

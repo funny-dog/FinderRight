@@ -1024,6 +1024,128 @@ struct FinderRightKitTestsRunner {
             try assertEqual(UniqueName.fileURL(baseName: "README", ext: "", in: dir).lastPathComponent, "README 1", "无后缀时同样编号")
         }
 
+        // MARK: - ExtractedOutput（解压产物落位）
+
+        /// 在 work 下建一个模拟的解压输出目录，按 names 创建内容（以 / 结尾为目录）
+        func makeExtractedRoot(in work: URL, _ names: [String]) throws -> URL {
+            let root = work.appendingPathComponent(".scratch/out", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            for name in names {
+                let url = root.appendingPathComponent(name)
+                if name.hasSuffix("/") {
+                    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                    try Data("x".utf8).write(to: url.appendingPathComponent("inner.txt"))
+                } else {
+                    try Data("x".utf8).write(to: url)
+                }
+            }
+            return root
+        }
+
+        runTest("ExtractedOutput 顶层唯一文件夹直接放出，忽略 __MACOSX 与 .DS_Store") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let root = try makeExtractedRoot(in: work, ["foo/", "__MACOSX/", ".DS_Store"])
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "foo")
+            try assertEqual(placed.lastPathComponent, "foo")
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("inner.txt").path), "不应出现 foo/foo 嵌套")
+        }
+
+        runTest("ExtractedOutput 唯一文件夹重名时编号为 -2") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("foo"), withIntermediateDirectories: false)
+            let root = try makeExtractedRoot(in: work, ["foo/"])
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "foo")
+            try assertEqual(placed.lastPathComponent, "foo-2")
+        }
+
+        runTest("ExtractedOutput 唯一文件重名时保留扩展名") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try Data().write(to: work.appendingPathComponent("report.pdf"))
+            let root = try makeExtractedRoot(in: work, ["report.pdf"])
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "report")
+            try assertEqual(placed.lastPathComponent, "report-2.pdf")
+        }
+
+        runTest("ExtractedOutput 多项时整体放入同名文件夹") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("bundle"), withIntermediateDirectories: false)
+            let root = try makeExtractedRoot(in: work, ["a.txt", "b/"])
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "bundle")
+            try assertEqual(placed.lastPathComponent, "bundle-2", "已有同名文件夹时编号")
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("a.txt").path))
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("b/inner.txt").path))
+        }
+
+        runTest("ExtractedOutput 唯一项为隐藏文件或空包时仍放入文件夹") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let hidden = try makeExtractedRoot(in: work, [".env"])
+            let placedHidden = try ExtractedOutput.place(extractedRoot: hidden, into: work, folderName: "cfg")
+            try assertEqual(placedHidden.lastPathComponent, "cfg")
+            try assertTrue(FileManager.default.fileExists(atPath: placedHidden.appendingPathComponent(".env").path))
+
+            let empty = try makeExtractedRoot(in: work, [])
+            let placedEmpty = try ExtractedOutput.place(extractedRoot: empty, into: work, folderName: "empty")
+            try assertEqual(placedEmpty.lastPathComponent, "empty")
+        }
+
+        runTest("ExtractedOutput 真实 ditto 往返：foo.zip 解出 foo 而非 foo/foo") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let folder = work.appendingPathComponent("foo", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+            try Data("x".utf8).write(to: folder.appendingPathComponent("a.txt"))
+            let zip = try ZipCompressor.compress(items: [folder], into: work, baseName: "foo",
+                                                 registry: ScratchDirectoryRegistry(registryDirectory: work))
+            try FileManager.default.removeItem(at: folder)
+
+            let root = work.appendingPathComponent(".scratch/out", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let result = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/ditto"),
+                                               arguments: ["-x", "-k", zip.path, root.path])
+            try assertEqual(result.status, 0, result.stderr)
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "foo")
+            try assertEqual(placed.lastPathComponent, "foo")
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("a.txt").path))
+        }
+
+        runTest("ExtractedOutput 候选名编号规则") {
+            try assertEqual(ExtractedOutput.candidateName("foo", keepExtension: false, attempt: 0), "foo")
+            try assertEqual(ExtractedOutput.candidateName("foo", keepExtension: false, attempt: 1), "foo-2")
+            try assertEqual(ExtractedOutput.candidateName("v1.2", keepExtension: false, attempt: 2), "v1.2-3", "普通文件夹不拆扩展名")
+            try assertEqual(ExtractedOutput.candidateName("Foo.app", keepExtension: true, attempt: 1), "Foo-2.app")
+            try assertEqual(ExtractedOutput.candidateName("README", keepExtension: true, attempt: 1), "README-2")
+        }
+
+        // MARK: - RecentOperations（最近操作记录）
+
+        runTest("RecentOperations 新记录在前、超出容量丢弃最旧、统计未查看的失败") {
+            let ops = RecentOperations(capacity: 3)
+            ops.record(OperationRecord(kind: .compress, subject: "a"))
+            ops.record(OperationRecord(kind: .decompress, subject: "b", failure: "坏包"))
+            ops.record(OperationRecord(kind: .paste, subject: "c"))
+            ops.record(OperationRecord(kind: .compress, subject: "d", failure: "磁盘满"))
+            try assertEqual(ops.records.map(\.subject), ["d", "c", "b"])
+            try assertEqual(ops.unseenFailureCount, 2)
+            ops.markFailuresSeen()
+            try assertEqual(ops.unseenFailureCount, 0)
+            try assertEqual(ops.records.count, 3, "标记已查看不删除记录")
+            ops.clear()
+            try assertTrue(ops.records.isEmpty)
+        }
+
+        runTest("OperationRecord.summary 压缩长错误输出") {
+            try assertTrue(OperationRecord.summary(of: "  \n \n") == nil, "全空返回 nil")
+            try assertEqual(OperationRecord.summary(of: "\n  tar: bad header  \n"), "tar: bad header")
+            try assertEqual(OperationRecord.summary(of: "1\n2\n3\n4\n5"), "1\n2\n3\n…", "超过行数时标出省略")
+            let long = String(repeating: "x", count: 400)
+            try assertEqual(OperationRecord.summary(of: long)?.count, 301, "截断到上限并加省略号")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
