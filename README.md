@@ -31,7 +31,7 @@ FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具�
 - 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）
 - ✏️ **打开编辑器** —— 用 VS Code / Cursor / Sublime / Xcode 等打开
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"
-- 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录
+- 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**不重启 Finder、窗口不闪烁**（需辅助功能权限）
 - ⌨️ **自定义快捷键** —— 给每个菜单项绑定快捷键
 - 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
@@ -113,8 +113,8 @@ xcodebuild -scheme FinderRight -configuration Release \
 
 ### ⚠️ 已知行为与取舍
 
-- **后台失败静默**：压缩 / 解压 / 粘贴在提交给主 App 后立即返回「已受理」，之后的失败不再弹通知或对话框（通知体系已整体移除，以避免任何权限弹窗打扰）。失败原因会写入 `~/Library/Application Support/FinderRight/extension-debug.log` 与系统日志（Console.app 搜索 FinderRightService）。
-- **加密 / 分卷压缩包**：系统 bsdtar 能解 `.7z` 与 `.rar`（含 RAR5），但加密或分卷的包会解压失败，且按上面的静默策略不弹提示（解压失败产生的空目录会被自动清理）。
+- **后台操作结果看菜单栏**：压缩 / 解压 / 粘贴在提交给主 App 后立即返回「已受理」，不弹通知（以避免任何权限弹窗打扰）。结果会列在菜单栏图标的「最近操作」里：成功项点击可在访达中定位产物，失败项点击查看原因；有未查看的失败时菜单栏图标会变红。记录只保存在内存中，退出 App 即清空；若在设置中隐藏了菜单栏图标，则看不到这一提示。详细日志仍可在 Console.app 中搜索 FinderRightService。
+- **加密 / 分卷压缩包**：系统 bsdtar 能解 `.7z` 与 `.rar`（含 RAR5），但加密或分卷的包会解压失败，失败原因见菜单栏「最近操作」（解压中途产生的临时文件会被自动清理）。
 - **菜单生效范围**：Finder 扩展只注册用户主目录与已挂载卷；`/Applications`、`/Users/Shared` 等系统目录不会出现右键菜单，云盘目录改由「服务」子菜单提供（见下节）。
 - **终端工作目录**：Ghostty / Alacritty / Kitty 只有在**尚未运行**时才能通过命令行参数指定工作目录（`open --args` 的固有限制）；已在运行时退化为目录 URL 方式，能否换目录取决于各终端自身实现。
 - **剪切状态**：粘贴过程中若主 App 被强退/崩溃，下次启动会自动把未移动完的剪切路径恢复回队列（移动成功的不会回来）。
@@ -146,7 +146,7 @@ FinderRight is a fully local, server-free, open-source macOS tool that adds deve
 - 💻 **Open in Terminal** — open the current folder in your default terminal, or choose Ghostty / Terminal / iTerm2 / Warp, etc.
 - ✏️ **Open in Editor** — open with VS Code / Cursor / Sublime / Xcode, etc.
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively
-- 📦 **Compress / Extract** — compress to ZIP; extract archives in place
+- 📦 **Compress / Extract** — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder or flickering** (needs Accessibility)
 - ⌨️ **Custom Shortcuts** — bind a keyboard shortcut to any menu item
 - 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)
@@ -228,8 +228,8 @@ xcodebuild -scheme FinderRight -configuration Release \
 
 ### ⚠️ Known Behavior and Tradeoffs
 
-- **Silent background failures**: compress / extract / paste acknowledge the request immediately ("accepted") and later failures do not raise notifications or dialogs (the notification system was removed entirely to avoid any permission prompt). Reasons are logged to `~/Library/Application Support/FinderRight/extension-debug.log` and to the system log (search `FinderRightService` in Console.app).
-- **Encrypted / multi-volume archives**: the system bsdtar handles `.7z` and `.rar` (including RAR5), but encrypted or split archives will fail — silently, per the policy above (empty output folders are cleaned up automatically).
+- **Background results live in the menu bar**: compress / extract / paste acknowledge the request immediately ("accepted") and never post notifications (to avoid any permission prompt). Outcomes are listed under **Recent Activity** in the menu bar icon: click a success to reveal the output in Finder, or a failure to see why; the icon turns red while there are failures you haven't seen. The history is kept in memory only and is cleared when the app quits; if you hide the menu bar icon in Settings you won't see this indicator. Detailed logs are still available in Console.app (search `FinderRightService`).
+- **Encrypted / multi-volume archives**: the system bsdtar handles `.7z` and `.rar` (including RAR5), but encrypted or split archives will fail; the reason shows up under Recent Activity in the menu bar (temporary files from the attempt are cleaned up automatically).
 - **Menu coverage**: the Finder extension only registers your home folder and mounted volumes, so `/Applications`, `/Users/Shared` and similar system folders show no context menu; cloud folders are covered by the Services submenu (see below).
 - **Terminal working directory**: Ghostty / Alacritty / Kitty can only receive a working directory through command-line arguments while they are **not yet running** (an inherent `open --args` limitation). If they are already running, FinderRight falls back to opening the folder URL, and whether the directory changes depends on the terminal itself.
 - **Cut state**: if the main app is force-quit or crashes mid-paste, the paths that were not moved yet are restored into the cut queue on next launch (already-moved ones are not).
