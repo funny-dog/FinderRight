@@ -703,14 +703,23 @@ struct AboutTab: View {
                 .font(.body)
                 .padding(.horizontal, 40)
 
-            // GitHub 链接
-            Link(destination: URL(string: "https://github.com/funny-dog/FinderRight")!) {
-                HStack(spacing: 6) {
-                    Image(systemName: "link")
-                    Text("GitHub 仓库")
+            // GitHub 链接与 Star 入口：从 Release 直接下载 dmg 的用户通常不会回到仓库页，这里给一个入口
+            HStack(spacing: 20) {
+                Link(destination: URL(string: "https://github.com/funny-dog/FinderRight")!) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "link")
+                        Text("GitHub 仓库")
+                    }
                 }
-                .font(.callout)
+                Link(destination: URL(string: "https://github.com/funny-dog/FinderRight/stargazers")!) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star")
+                        Text("觉得好用？去 GitHub 点个 Star")
+                    }
+                }
+                .help("在仓库页右上角点击 Star")
             }
+            .font(.callout)
             .buttonStyle(.plain)
             .foregroundColor(.accentColor)
 
