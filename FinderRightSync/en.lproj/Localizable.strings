@@ -56,3 +56,9 @@
 "Word 文档 (.docx)" = "Word Document (.docx)";
 "Excel 表格 (.xlsx)" = "Excel Spreadsheet (.xlsx)";
 "PowerPoint 演示文稿 (.pptx)" = "PowerPoint Presentation (.pptx)";
+
+/* Favorites: move / copy to */
+"移动到" = "Move To";
+"复制到" = "Copy To";
+"尚未添加常用目录" = "No Favorite Folders Yet";
+"管理常用目录…" = "Manage Favorite Folders…";

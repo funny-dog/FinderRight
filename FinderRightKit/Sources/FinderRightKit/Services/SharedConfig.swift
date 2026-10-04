@@ -54,6 +54,7 @@ public final class SharedConfig {
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
         static let copyPathFormat = "copyPathFormat"
         static let menuOrder = "menuOrder"
+        static let favoriteDirectories = "favoriteDirectories"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -309,6 +310,23 @@ public final class SharedConfig {
             } else {
                 store[Keys.menuOrder] = newValue
             }
+            save()
+        }
+    }
+
+    // MARK: - Favorite Directories
+
+    /// 常用目录（绝对路径，按设置里的顺序），用于右键「移动到 / 复制到」
+    public var favoriteDirectories: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.favoriteDirectories] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.favoriteDirectories] = newValue
             save()
         }
     }

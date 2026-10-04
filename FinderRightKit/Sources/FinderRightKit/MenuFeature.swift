@@ -50,6 +50,8 @@ public enum MenuFeatureCatalog {
     public static let openEditor   = "feature.openEditor"
     public static let cut          = "feature.cut"
     public static let paste        = "feature.paste"
+    public static let moveTo       = "feature.moveTo"
+    public static let copyTo       = "feature.copyTo"
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
@@ -61,6 +63,8 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces",     emoji: "✏️"),
         MenuFeature(id: cut,          nameKey: "剪切",           descriptionKey: "剪切选中的文件",           systemImage: "scissors",        emoji: "✂️"),
         MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard", emoji: "📋"),
+        MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "folder.badge.minus", emoji: "📁"),
+        MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "folder.badge.plus", emoji: "📑"),
         MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "archivebox",     emoji: "📦"),
         MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "archivebox",     emoji: "📂"),
         MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye",            emoji: "👁"),

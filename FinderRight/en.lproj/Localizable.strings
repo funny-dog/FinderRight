@@ -266,3 +266,24 @@
 "拖动调整在右键菜单中的顺序" = "Drag to reorder in the right-click menu";
 "恢复默认顺序" = "Restore Default Order";
 "关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。" = "Disabled features won't appear in the Finder right-click menu. Drag the ≡ handle on the left to change their order in the menu.";
+
+/* Favorites: move / copy to */
+"常用目录" = "Favorites";
+"移动到" = "Move To";
+"复制到" = "Copy To";
+"把选中项移动到常用目录" = "Move the selection to a favorite folder";
+"把选中项复制到常用目录" = "Copy the selection to a favorite folder";
+"已移动 %@" = "Moved %@";
+"移动失败：%@" = "Move failed: %@";
+"已复制 %@" = "Copied %@";
+"复制失败：%@" = "Copy failed: %@";
+"常用目录不存在：%@" = "The favorite folder no longer exists: %@";
+"不能放进它自身内部" = "A folder can't be placed inside itself";
+"%d 项未能复制：%@" = "%d item(s) could not be copied: %@";
+"还没有常用目录" = "No favorite folders yet";
+"添加目录…" = "Add Folder…";
+"目录不存在，移动或复制到这里会失败" = "This folder doesn't exist; moving or copying here will fail";
+"拖动调整顺序" = "Drag to reorder";
+"移除" = "Remove";
+"以下目录不在允许范围内，未添加：%@" = "These folders are outside the allowed locations and were not added: %@";
+"添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。" = "Once added, right-click selected files and choose Move To or Copy To. Drag the ≡ handle to reorder. Only folders in your home folder or on external drives can be added.";
