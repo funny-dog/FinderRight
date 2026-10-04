@@ -261,3 +261,8 @@
 "文件 URL" = "File URL";
 "含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。" = "Paths with spaces or other special characters are quoted; multiple items are separated by spaces, ready to paste as command-line arguments.";
 "多选时每行一项。「服务」菜单里的复制路径也使用此格式。" = "One item per line when several are selected. Copy Path in the Services menu uses this format too.";
+
+/* Settings: menu order */
+"拖动调整在右键菜单中的顺序" = "Drag to reorder in the right-click menu";
+"恢复默认顺序" = "Restore Default Order";
+"关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。" = "Disabled features won't appear in the Finder right-click menu. Drag the ≡ handle on the left to change their order in the menu.";

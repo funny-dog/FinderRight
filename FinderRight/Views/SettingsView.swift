@@ -302,6 +302,22 @@ struct FeaturesTab: View {
     @FRState private var showingAddSheet = false
     @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
     @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
+    @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder)
+    @FRState private var dropTargetId: String?
+
+    /// 把拖动的功能放到目标行的位置：下移时落在目标之后，上移时落在目标之前
+    private func moveFeature(_ id: String, to targetId: String) -> Bool {
+        dropTargetId = nil
+        guard id != targetId,
+              let from = featureOrder.firstIndex(where: { $0.id == id }),
+              let to = featureOrder.firstIndex(where: { $0.id == targetId }) else { return false }
+        var order = featureOrder
+        let moved = order.remove(at: from)
+        order.insert(moved, at: to)
+        featureOrder = order
+        SharedConfig.shared.menuOrder = order.map(\.id)
+        return true
+    }
 
     /// 用真实主目录下的示例文件演示当前格式
     private var copyPathExample: String {
@@ -313,13 +329,47 @@ struct FeaturesTab: View {
     var body: some View {
         Form {
             Section {
-                ForEach(MenuFeatureCatalog.all) { feature in
-                    FeatureToggleRow(feature: feature)
+                ForEach(featureOrder) { feature in
+                    HStack(spacing: 8) {
+                        // 只有把手可以拖起，避免与开关的点击手势冲突；整行都是放置目标
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundColor(.secondary)
+                            .frame(width: 18, height: 24)
+                            .contentShape(Rectangle())
+                            .draggable(feature.id)
+                            .help("拖动调整在右键菜单中的顺序")
+                        FeatureToggleRow(feature: feature)
+                    }
+                    .padding(.horizontal, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(dropTargetId == feature.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                    )
+                    .dropDestination(for: String.self) { ids, _ in
+                        guard let id = ids.first else { return false }
+                        return moveFeature(id, to: feature.id)
+                    } isTargeted: { targeted in
+                        if targeted {
+                            dropTargetId = feature.id
+                        } else if dropTargetId == feature.id {
+                            dropTargetId = nil
+                        }
+                    }
                 }
             } header: {
-                Text("右键菜单功能")
+                HStack {
+                    Text("右键菜单功能")
+                    Spacer()
+                    Button("恢复默认顺序") {
+                        SharedConfig.shared.menuOrder = []
+                        featureOrder = MenuFeatureCatalog.ordered(by: [])
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                    .disabled(featureOrder.map(\.id) == MenuFeatureCatalog.all.map(\.id))
+                }
             } footer: {
-                Text("关闭的功能不会出现在 Finder 右键菜单中。")
+                Text("关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
