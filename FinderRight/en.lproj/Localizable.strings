@@ -91,7 +91,7 @@
 /* About tab */
 "版本 %@" = "Version %@";
 "版本 %@ (%@)" = "Version %@ (%@)";
-"增强 macOS Finder 右键菜单的强大工具。\n快速访问开发工具、文件操作和自定义动作。" = "A powerful tool to enhance the macOS Finder right-click menu.\nQuick access to dev tools, file operations, and custom actions.";
+"增强 macOS Finder 右键菜单的轻量工具。\n新建文件、复制路径、打开终端与编辑器、剪切粘贴、压缩解压。" = "A lightweight tool that enhances the macOS Finder right-click menu.\nNew files, copy path, open in terminal or editor, cut & paste, compress & extract.";
 "GitHub 仓库" = "GitHub Repository";
 
 /* Shortcuts tab */
