@@ -1154,6 +1154,55 @@ struct FinderRightKitTestsRunner {
             try assertTrue(OfficeTemplate(rawValue: "../docx") == nil, "路径片段不会被当作模板 id")
         }
 
+        // MARK: - 复制路径格式
+
+        runTest("PathFormatter 各格式输出") {
+            let home = "/Users/me"
+            let file = URL(fileURLWithPath: "/Users/me/Documents/a b.txt")
+            let dir = URL(fileURLWithPath: "/Users/me/项目", isDirectory: true)
+            try assertEqual(PathFormatter.string(for: [file], format: .absolute, home: home), "/Users/me/Documents/a b.txt")
+            try assertEqual(PathFormatter.string(for: [file], format: .tilde, home: home), "~/Documents/a b.txt")
+            try assertEqual(PathFormatter.string(for: [file], format: .name, home: home), "a b.txt")
+            try assertEqual(PathFormatter.string(for: [file], format: .shellEscaped, home: home), "'/Users/me/Documents/a b.txt'")
+            try assertEqual(PathFormatter.string(for: [file], format: .fileURL, home: home), "file:///Users/me/Documents/a%20b.txt")
+            try assertEqual(PathFormatter.string(for: [dir], format: .fileURL, home: home),
+                            "file:///Users/me/%E9%A1%B9%E7%9B%AE/", "目录 URL 以 / 结尾，中文按 UTF-8 编码")
+        }
+
+        runTest("PathFormatter ~ 只替换主目录前缀") {
+            let home = "/Users/me"
+            try assertEqual(PathFormatter.string(for: [URL(fileURLWithPath: "/Users/me")], format: .tilde, home: home), "~")
+            try assertEqual(PathFormatter.string(for: [URL(fileURLWithPath: "/Users/meow/x")], format: .tilde, home: home),
+                            "/Users/meow/x", "同前缀的其他用户目录不能被替换")
+            try assertEqual(PathFormatter.string(for: [URL(fileURLWithPath: "/Volumes/E/x")], format: .tilde, home: home), "/Volumes/E/x")
+            try assertEqual(PathFormatter.string(for: [URL(fileURLWithPath: "/Users/me/x")], format: .tilde, home: "/Users/me/"), "~/x",
+                            "主目录带结尾斜杠也能识别")
+        }
+
+        runTest("PathFormatter 多选的连接方式") {
+            let urls = [URL(fileURLWithPath: "/tmp/a"), URL(fileURLWithPath: "/tmp/b c")]
+            try assertEqual(PathFormatter.string(for: urls, format: .absolute, home: "/Users/me"), "/tmp/a\n/tmp/b c", "默认每行一项")
+            try assertEqual(PathFormatter.string(for: urls, format: .shellEscaped, home: "/Users/me"), "/tmp/a '/tmp/b c'",
+                            "终端格式以空格连接，安全路径不加引号")
+        }
+
+        runTest("PathFormatter.shellQuoted 处理单引号与特殊字符") {
+            try assertEqual(PathFormatter.shellQuoted("/tmp/it's"), "'/tmp/it'\\''s'")
+            try assertEqual(PathFormatter.shellQuoted("/tmp/$HOME"), "'/tmp/$HOME'", "$ 必须被引起来，防止展开")
+            try assertEqual(PathFormatter.shellQuoted("/tmp/中文"), "'/tmp/中文'", "非 ASCII 一律加引号")
+            try assertEqual(PathFormatter.shellQuoted(""), "''")
+        }
+
+        runTest("SharedConfig.copyPathFormat 默认绝对路径并可持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertEqual(config.copyPathFormat, .absolute)
+            config.copyPathFormat = .tilde
+            try assertEqual(SharedConfig(fileURL: url).copyPathFormat, .tilde, "重新读取后保持")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

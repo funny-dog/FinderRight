@@ -87,7 +87,9 @@ final class ServicesProvider: NSObject {
                         error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        let joined = items.map(\.path).joined(separator: "\n")
+        SharedConfig.shared.reload()
+        let joined = PathFormatter.string(for: items, format: SharedConfig.shared.copyPathFormat,
+                                          home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(joined, forType: .string)
         NSLog("[ServicesProvider] copyPath: \(items.count) item(s)")

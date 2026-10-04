@@ -52,6 +52,7 @@ public final class SharedConfig {
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
+        static let copyPathFormat = "copyPathFormat"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -265,6 +266,26 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.badgeOwnershipReclaim] = newValue
+            save()
+        }
+    }
+
+    // MARK: - Copy Path Format
+
+    /// 「复制路径」的格式（默认绝对路径）
+    public var copyPathFormat: CopyPathFormat {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            if let raw = store[Keys.copyPathFormat] as? String, let format = CopyPathFormat(rawValue: raw) {
+                return format
+            }
+            return .absolute
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.copyPathFormat] = newValue.rawValue
             save()
         }
     }
