@@ -1260,6 +1260,14 @@ struct FinderRightKitTestsRunner {
             try assertEqual(FileTransferCheck.check(source: "/u/dir", destinationDirectory: "/u/dir2", mode: .move), .ok, "同前缀的兄弟目录不算内部")
         }
 
+        runTest("常用目录白名单：系统 /Applications 拒绝，主目录下的 ~/Applications 放行") {
+            let home = "/Users/me", tmp = "/private/var/folders/xx/T"
+            try assertTrue(!PathAccessPolicy.isAllowed("/Applications", role: .destination, home: home, temporaryDirectory: tmp))
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/Shared", role: .destination, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/me/Applications", role: .destination, home: home, temporaryDirectory: tmp))
+            try assertTrue(PathAccessPolicy.isAllowed("/Volumes/E/erhu", role: .destination, home: home, temporaryDirectory: tmp))
+        }
+
         runTest("SharedConfig.favoriteDirectories 默认为空并可持久化") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
