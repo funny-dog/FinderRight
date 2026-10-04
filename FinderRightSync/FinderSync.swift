@@ -642,6 +642,18 @@ class FinderSync: FIFinderSync {
             m.addItem(item)
         }
 
+        // Office 文档：tag 从 officeTagBase 起，按 OfficeTemplate.allCases 顺序对应
+        m.addItem(.separator())
+        let officeTypes: [(nameKey: String, emoji: String, symbol: String)] = [
+            ("Word 文档 (.docx)", "📘", "doc.richtext"),
+            ("Excel 表格 (.xlsx)", "📗", "tablecells"),
+            ("PowerPoint 演示文稿 (.pptx)", "📙", "rectangle.on.rectangle"),
+        ]
+        for (index, t) in officeTypes.enumerated() {
+            let item = makeItem(titleKey: t.nameKey, emoji: t.emoji, systemImage: t.symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
+            m.addItem(item)
+        }
+
         // 自定义文件模板（D1）
         let customTemplates = SharedConfig.shared.customFileTemplates
         if !customTemplates.isEmpty {
@@ -659,9 +671,26 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Actions
 
+    /// 新建文件子菜单中 Office 文档项的起始 tag（内置文本类型 0–9，自定义模板 1000 起）
+    private static let officeTagBase = 100
+
     @objc func newFile(_ sender: NSMenuItem) {
         guard let dir = currentContext().directory else {
             logToFile("newFile: no directory"); return
+        }
+        // Office 文档：只发送模板 id，由主 App 从自身内置的空白模板复制
+        let officeIndex = sender.tag - Self.officeTagBase
+        if OfficeTemplate.allCases.indices.contains(officeIndex) {
+            let template = OfficeTemplate.allCases[officeIndex]
+            logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) template=\(template.rawValue)")
+            IPCClient.shared.callAsync(action: "createFile", payload: [
+                "directory": .string(dir.path),
+                "baseName": .string("untitled"),
+                "template": .string(template.rawValue)
+            ]) { r in
+                logToFile("newFile ipc result: success=\(r.success) msg=\(r.message ?? "")")
+            }
+            return
         }
         let (ext, content): (String, String)
         if sender.tag >= 1000 {

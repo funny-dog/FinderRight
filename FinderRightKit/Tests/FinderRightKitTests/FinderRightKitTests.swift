@@ -1146,6 +1146,14 @@ struct FinderRightKitTestsRunner {
             try assertEqual(OperationRecord.summary(of: long)?.count, 301, "截断到上限并加省略号")
         }
 
+        runTest("OfficeTemplate 只接受白名单内的模板 id") {
+            try assertEqual(OfficeTemplate.allCases.map(\.fileExtension), ["docx", "xlsx", "pptx"])
+            try assertEqual(OfficeTemplate(rawValue: "docx"), .docx)
+            try assertTrue(OfficeTemplate(rawValue: "doc") == nil, "旧二进制格式不在白名单")
+            try assertTrue(OfficeTemplate(rawValue: "DOCX") == nil, "大小写必须精确匹配")
+            try assertTrue(OfficeTemplate(rawValue: "../docx") == nil, "路径片段不会被当作模板 id")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

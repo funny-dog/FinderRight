@@ -51,3 +51,8 @@
 "Swift (.swift)" = "Swift (.swift)";
 "JavaScript (.js)" = "JavaScript (.js)";
 
+
+/* New File: Office documents */
+"Word 文档 (.docx)" = "Word Document (.docx)";
+"Excel 表格 (.xlsx)" = "Excel Spreadsheet (.xlsx)";
+"PowerPoint 演示文稿 (.pptx)" = "PowerPoint Presentation (.pptx)";
