@@ -301,6 +301,14 @@ struct FeaturesTab: View {
     @FRState private var customTemplates: [FileTemplate] = SharedConfig.shared.customFileTemplates
     @FRState private var showingAddSheet = false
     @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
+    @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
+
+    /// 用真实主目录下的示例文件演示当前格式
+    private var copyPathExample: String {
+        let home = IPCBridge.realUserHomeDirectory
+        let sample = home.appendingPathComponent("Documents").appendingPathComponent("报告 2026.pdf")
+        return PathFormatter.string(for: [sample], format: copyPathFormat, home: home.path)
+    }
 
     var body: some View {
         Form {
@@ -312,6 +320,38 @@ struct FeaturesTab: View {
                 Text("右键菜单功能")
             } footer: {
                 Text("关闭的功能不会出现在 Finder 右键菜单中。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                Picker("复制格式", selection: Binding(
+                    get: { copyPathFormat },
+                    set: { newValue in
+                        copyPathFormat = newValue
+                        SharedConfig.shared.copyPathFormat = newValue
+                    }
+                )) {
+                    ForEach(CopyPathFormat.allCases) { format in
+                        Text(LocalizedStringKey(format.titleKey)).tag(format)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("示例")
+                        .foregroundColor(.secondary)
+                    Text(verbatim: copyPathExample)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .font(.callout)
+            } header: {
+                Text("复制路径")
+            } footer: {
+                Text(copyPathFormat == .shellEscaped
+                     ? "含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。"
+                     : "多选时每行一项。「服务」菜单里的复制路径也使用此格式。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

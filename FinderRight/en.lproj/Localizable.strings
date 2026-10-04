@@ -250,3 +250,14 @@
 "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。" = "Needed to work in protected folders such as Documents, Desktop and Downloads. You can skip this and grant it later in Settings → General.";
 "授予辅助功能（可选）" = "Grant Accessibility (Optional)";
 "仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。" = "Only used to toggle hidden files without flicker; nothing else needs it. You can skip this and grant it later in Settings → General.";
+
+/* Settings: copy path format */
+"复制格式" = "Format";
+"示例" = "Example";
+"绝对路径" = "Absolute path";
+"以 ~ 开头的路径" = "Path starting with ~";
+"仅文件名" = "File name only";
+"终端转义路径" = "Shell-escaped path";
+"文件 URL" = "File URL";
+"含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。" = "Paths with spaces or other special characters are quoted; multiple items are separated by spaces, ready to paste as command-line arguments.";
+"多选时每行一项。「服务」菜单里的复制路径也使用此格式。" = "One item per line when several are selected. Copy Path in the Services menu uses this format too.";

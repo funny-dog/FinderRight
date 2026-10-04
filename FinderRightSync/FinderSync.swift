@@ -719,10 +719,12 @@ class FinderSync: FIFinderSync {
     @objc func copyPath(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("copyPath: no items"); return }
-        let path = urls.map(\.path).joined(separator: "\n")
+        // 主目录必须用真实路径：沙箱扩展里 NSHomeDirectory() 指向自己的容器目录
+        let format = SharedConfig.shared.copyPathFormat
+        let path = PathFormatter.string(for: urls, format: format, home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
-        logToFile("copyPath ok: count=\(urls.count)")
+        logToFile("copyPath ok: count=\(urls.count) format=\(format.rawValue)")
     }
 
     @objc func openTerminal(_ sender: NSMenuItem) {
