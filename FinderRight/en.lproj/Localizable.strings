@@ -240,3 +240,7 @@
 "解压工具退出码 %d" = "The extraction tool exited with code %d";
 "无法在当前目录创建文件" = "Couldn't create files in this folder";
 "文件已损坏或不是有效的 xz 格式" = "The file is damaged or isn't a valid xz archive";
+
+/* About: star link */
+"觉得好用？去 GitHub 点个 Star" = "Enjoying it? Star it on GitHub";
+"在仓库页右上角点击 Star" = "Click Star at the top right of the repository page";
