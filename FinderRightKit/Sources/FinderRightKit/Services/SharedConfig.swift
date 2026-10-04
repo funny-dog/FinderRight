@@ -53,6 +53,7 @@ public final class SharedConfig {
         static let shortcuts = "shortcuts"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
         static let copyPathFormat = "copyPathFormat"
+        static let menuOrder = "menuOrder"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -286,6 +287,28 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.copyPathFormat] = newValue.rawValue
+            save()
+        }
+    }
+
+    // MARK: - Menu Order
+
+    /// 右键菜单功能的顺序（功能 id 列表）。未设置时为空，表示默认顺序；
+    /// 读取方用 MenuFeatureCatalog.ordered(by:) 归一化，容忍新增或移除的功能
+    public var menuOrder: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.menuOrder] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if newValue.isEmpty {
+                store.removeValue(forKey: Keys.menuOrder)
+            } else {
+                store[Keys.menuOrder] = newValue
+            }
             save()
         }
     }

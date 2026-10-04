@@ -69,4 +69,29 @@ public enum MenuFeatureCatalog {
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }
     }
+
+    /// 按用户保存的顺序排列全部功能（保存的顺序先经 normalizedOrder 归一化）
+    public static func ordered(by savedOrder: [String]) -> [MenuFeature] {
+        normalizedOrder(savedOrder, defaults: all.map(\.id)).compactMap { feature(forId: $0) }
+    }
+
+    /// 把用户保存的顺序归一化为 defaults 的一个排列：
+    /// - 丢弃未知 id 与重复 id（功能被移除、配置被手改）；
+    /// - 缺失的 id（新版本新增的功能）插到它在默认顺序里「最近的前一项」之后，
+    ///   没有前一项时放到最前，使新功能出现在合理位置而不是一律堆到末尾。
+    public static func normalizedOrder(_ saved: [String], defaults: [String]) -> [String] {
+        let known = Set(defaults)
+        var seen = Set<String>()
+        var result = saved.filter { known.contains($0) && seen.insert($0).inserted }
+        for (index, id) in defaults.enumerated() where !seen.contains(id) {
+            let predecessor = defaults[..<index].last { result.contains($0) }
+            if let predecessor, let position = result.firstIndex(of: predecessor) {
+                result.insert(id, at: position + 1)
+            } else {
+                result.insert(id, at: 0)
+            }
+            seen.insert(id)
+        }
+        return result
+    }
 }

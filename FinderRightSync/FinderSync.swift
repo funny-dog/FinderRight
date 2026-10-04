@@ -447,27 +447,7 @@ class FinderSync: FIFinderSync {
             || menuKind == .contextualMenuForSidebar
             || !hasSelection
 
-        // 新建文件 —— 容器/侧边栏/空选中时
-        if featureOn(MenuFeatureCatalog.newFile), isContainerLike {
-            menu.addItem(makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
-        }
-
-        if featureOn(MenuFeatureCatalog.copyPath), hasSelection {
-            menu.addItem(makeItem(titleKey: "复制路径", emoji: "📋", systemImage: "doc.on.doc", action: #selector(copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
-        }
-
-        if featureOn(MenuFeatureCatalog.openTerminal) {
-            menu.addItem(makeItem(titleKey: "打开终端", emoji: "💻", systemImage: "terminal", action: #selector(openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
-        }
-
-        if featureOn(MenuFeatureCatalog.openEditor), hasSelection {
-            let editors = installedEditors()
-            if !editors.isEmpty {
-                menu.addItem(makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
-            }
-        }
-
-        // 剪切 / 粘贴
+        // 剪切队列状态：剪切 / 粘贴 / 取消剪切的显示与文案都依赖它
         let cutPaths = currentCutQueuePaths()
         let hasCut = !cutPaths.isEmpty
 
@@ -484,48 +464,80 @@ class FinderSync: FIFinderSync {
             if pushed > 0 { logToFile("menu(for:) badge refresh: \(pushed) cut item(s)") }
         }
 
-        if featureOn(MenuFeatureCatalog.cut), hasSelection {
-            let selectedPaths = Set(selected.map(\.path))
-            let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
-            let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
-            menu.addItem(makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
-        }
-        if featureOn(MenuFeatureCatalog.paste) {
-            if hasCut || isContainerLike {
-                let pasteTitleKey = hasCut
-                    ? String(format: L("粘贴 (已剪切 %d 项)"), cutPaths.count)
-                    : "粘贴"
-                let pasteItem = makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
-                pasteItem.isEnabled = hasCut
-                menu.addItem(pasteItem)
-            }
-        }
-        if featureOn(MenuFeatureCatalog.cut), hasCut {
-            menu.addItem(makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(cancelCut(_:)), shortcutId: nil, style: style))
-        }
+        let cancelCutItem = { self.makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(self.cancelCut(_:)), shortcutId: nil, style: style) }
 
-        // 压缩解压
-        if featureOn(MenuFeatureCatalog.compress), hasSelection {
-            menu.addItem(makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
-        }
-        if featureOn(MenuFeatureCatalog.decompress), hasSelection, selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }) {
-            menu.addItem(makeItem(titleKey: "解压到当前目录", emoji: "📂", systemImage: "archivebox", action: #selector(archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
-        }
+        // 每个功能一个构建闭包，按用户在设置里拖拽排好的顺序依次添加。
+        // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，跟在粘贴之后（粘贴关闭时跟在剪切之后）
+        let builders: [String: () -> Void] = [
+            MenuFeatureCatalog.newFile: {
+                // 新建文件 —— 容器/侧边栏/空选中时
+                guard isContainerLike else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
+            },
+            MenuFeatureCatalog.copyPath: {
+                guard hasSelection else { return }
+                menu.addItem(self.makeItem(titleKey: "复制路径", emoji: "📋", systemImage: "doc.on.doc", action: #selector(self.copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
+            },
+            MenuFeatureCatalog.openTerminal: {
+                menu.addItem(self.makeItem(titleKey: "打开终端", emoji: "💻", systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
+            },
+            MenuFeatureCatalog.openEditor: {
+                guard hasSelection else { return }
+                let editors = self.installedEditors()
+                guard !editors.isEmpty else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
+            },
+            MenuFeatureCatalog.cut: {
+                if hasSelection {
+                    let selectedPaths = Set(selected.map(\.path))
+                    let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
+                    let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
+                    menu.addItem(self.makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(self.cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
+                }
+                if hasCut, !featureOn(MenuFeatureCatalog.paste) {
+                    menu.addItem(cancelCutItem())
+                }
+            },
+            MenuFeatureCatalog.paste: {
+                if hasCut || isContainerLike {
+                    let pasteTitleKey = hasCut
+                        ? String(format: self.L("粘贴 (已剪切 %d 项)"), cutPaths.count)
+                        : "粘贴"
+                    let pasteItem = self.makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(self.pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
+                    pasteItem.isEnabled = hasCut
+                    menu.addItem(pasteItem)
+                }
+                if hasCut, featureOn(MenuFeatureCatalog.cut) {
+                    menu.addItem(cancelCutItem())
+                }
+            },
+            MenuFeatureCatalog.compress: {
+                guard hasSelection else { return }
+                menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
+            },
+            MenuFeatureCatalog.decompress: {
+                guard hasSelection, selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }) else { return }
+                menu.addItem(self.makeItem(titleKey: "解压到当前目录", emoji: "📂", systemImage: "archivebox", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
+            },
+            MenuFeatureCatalog.toggleHidden: {
+                // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），跨进程读
+                // com.apple.finder 偏好又命中 cfprefsd 客户端缓存，**不存在可靠的状态通道** ——
+                // 「显示/隐藏」状态文案曾两轮实测反转（并留下过 settings.plist 里的死值
+                // showHiddenFiles，该键已彻底删除）。固定文案永不撒谎，代价是不显示当前状态。
+                // 因此主 App 启动时也不需要把任何状态锚定到 Finder 真实状态（见 FinderRightApp）。
+                menu.addItem(self.makeItem(
+                    titleKey: "切换隐藏文件",
+                    emoji: "👁",
+                    systemImage: "eye",
+                    action: #selector(self.toggleHiddenFiles(_:)),
+                    shortcutId: "shortcut.toggleHidden",
+                    style: style
+                ))
+            },
+        ]
 
-        if featureOn(MenuFeatureCatalog.toggleHidden) {
-            // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），跨进程读
-            // com.apple.finder 偏好又命中 cfprefsd 客户端缓存，**不存在可靠的状态通道** ——
-            // 「显示/隐藏」状态文案曾两轮实测反转（并留下过 settings.plist 里的死值
-            // showHiddenFiles，该键已彻底删除）。固定文案永不撒谎，代价是不显示当前状态。
-            // 因此主 App 启动时也不需要把任何状态锚定到 Finder 真实状态（见 FinderRightApp）。
-            menu.addItem(makeItem(
-                titleKey: "切换隐藏文件",
-                emoji: "👁",
-                systemImage: "eye",
-                action: #selector(toggleHiddenFiles(_:)),
-                shortcutId: "shortcut.toggleHidden",
-                style: style
-            ))
+        for feature in MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder) where featureOn(feature.id) {
+            builders[feature.id]?()
         }
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化

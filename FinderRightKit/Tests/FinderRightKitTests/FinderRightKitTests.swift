@@ -1203,6 +1203,35 @@ struct FinderRightKitTestsRunner {
             try assertEqual(SharedConfig(fileURL: url).copyPathFormat, .tilde, "重新读取后保持")
         }
 
+        // MARK: - 菜单顺序
+
+        runTest("normalizedOrder 未保存时等于默认顺序") {
+            try assertEqual(MenuFeatureCatalog.normalizedOrder([], defaults: ["a", "b", "c"]), ["a", "b", "c"])
+            try assertEqual(MenuFeatureCatalog.ordered(by: []).map(\.id), MenuFeatureCatalog.all.map(\.id))
+        }
+
+        runTest("normalizedOrder 保留用户顺序，丢弃未知与重复 id") {
+            try assertEqual(MenuFeatureCatalog.normalizedOrder(["c", "x", "a", "c", "b"], defaults: ["a", "b", "c"]), ["c", "a", "b"])
+        }
+
+        runTest("normalizedOrder 新增功能插在默认顺序中的前一项之后") {
+            // 用户把 c 调到最前；新版本在 a 与 b 之间新增 n、在开头新增 z
+            try assertEqual(MenuFeatureCatalog.normalizedOrder(["c", "a", "b"], defaults: ["z", "a", "n", "b", "c"]),
+                            ["z", "c", "a", "n", "b"])
+        }
+
+        runTest("SharedConfig.menuOrder 默认为空，清空时恢复默认") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertTrue(config.menuOrder.isEmpty)
+            config.menuOrder = ["feature.cut", "feature.copyPath"]
+            try assertEqual(SharedConfig(fileURL: url).menuOrder, ["feature.cut", "feature.copyPath"])
+            config.menuOrder = []
+            try assertTrue(SharedConfig(fileURL: url).menuOrder.isEmpty)
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
