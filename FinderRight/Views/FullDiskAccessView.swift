@@ -60,6 +60,10 @@ struct FullDiskAccessView: View {
         .onAppear {
             hasFDA = FullDiskAccessChecker.check()
         }
+        // 从系统设置授权后切回本 App 时自动刷新，不必再手动点「重新检测」
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFDA = FullDiskAccessChecker.check()
+        }
     }
 
     private func openFullDiskAccessSettings() {

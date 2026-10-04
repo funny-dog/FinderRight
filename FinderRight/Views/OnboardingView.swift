@@ -6,7 +6,7 @@ struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @FRState private var currentStep = 0
 
-    private let totalSteps = 3
+    private let totalSteps = 5
 
     var body: some View {
         ZStack {
@@ -31,8 +31,28 @@ struct OnboardingView: View {
                     EnableExtensionStep()
                         .tag(1)
 
+                    PermissionStep(
+                        icon: "externaldrive.fill.badge.checkmark",
+                        colors: [.blue, .cyan],
+                        title: "授予完全磁盘访问（推荐）",
+                        subtitle: "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。"
+                    ) {
+                        FullDiskAccessView()
+                    }
+                    .tag(2)
+
+                    PermissionStep(
+                        icon: "accessibility",
+                        colors: [.purple, .pink],
+                        title: "授予辅助功能（可选）",
+                        subtitle: "仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
+                    ) {
+                        AccessibilityView()
+                    }
+                    .tag(3)
+
                     CompletionStep()
-                        .tag(2)
+                        .tag(4)
                 }
                 .tabViewStyle(.automatic)
                 .animation(.easeInOut(duration: 0.3), value: currentStep)
@@ -281,7 +301,51 @@ struct StepInstruction: View {
     }
 }
 
-// MARK: - Step 3: 完成
+// MARK: - Step 3/4: 授权（完全磁盘访问、辅助功能）
+
+/// 授权步骤的外壳：标题区 + 设置页同款授权视图（状态、跳转按钮、步骤说明都复用，不另写一套）
+struct PermissionStep<Content: View>: View {
+    let icon: String
+    let colors: [Color]
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        // 展开「授权步骤说明」后内容可能超出 500pt 的窗口高度，放进滚动视图
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .foregroundStyle(
+                        LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(.title)
+                        .fontWeight(.bold)
+
+                    Text(subtitle)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 40)
+
+                content
+            }
+            .padding(.top, 36)
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+// MARK: - Step 5: 完成
 
 struct CompletionStep: View {
     @FRState private var showCheckmark = false

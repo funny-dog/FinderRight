@@ -244,3 +244,9 @@
 /* About: star link */
 "觉得好用？去 GitHub 点个 Star" = "Enjoying it? Star it on GitHub";
 "在仓库页右上角点击 Star" = "Click Star at the top right of the repository page";
+
+/* Onboarding: permission steps */
+"授予完全磁盘访问（推荐）" = "Grant Full Disk Access (Recommended)";
+"用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。" = "Needed to work in protected folders such as Documents, Desktop and Downloads. You can skip this and grant it later in Settings → General.";
+"授予辅助功能（可选）" = "Grant Accessibility (Optional)";
+"仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。" = "Only used to toggle hidden files without flicker; nothing else needs it. You can skip this and grant it later in Settings → General.";
