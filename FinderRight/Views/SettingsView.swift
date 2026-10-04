@@ -683,19 +683,11 @@ struct AboutTab: View {
         VStack(spacing: 20) {
             Spacer()
 
-            // 应用图标
-            Image(systemName: "contextualmenu.and.cursorarrow")
+            // 应用图标：直接取 App 自身图标，与程序坞 / 访达中显示的保持一致（图标自带边距与投影）
+            Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 80, height: 80)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: .blue.opacity(0.3), radius: 10, y: 5)
+                .frame(width: 96, height: 96)
 
             // 名称与版本
             VStack(spacing: 6) {
