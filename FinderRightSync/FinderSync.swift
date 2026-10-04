@@ -467,7 +467,7 @@ class FinderSync: FIFinderSync {
         let cancelCutItem = { self.makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(self.cancelCut(_:)), shortcutId: nil, style: style) }
 
         // 每个功能一个构建闭包，按用户在设置里拖拽排好的顺序依次添加。
-        // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，跟在粘贴之后（粘贴关闭时跟在剪切之后）
+        // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，依附在剪切之后、随剪切一起排序
         let builders: [String: () -> Void] = [
             MenuFeatureCatalog.newFile: {
                 // 新建文件 —— 容器/侧边栏/空选中时
@@ -494,7 +494,7 @@ class FinderSync: FIFinderSync {
                     let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
                     menu.addItem(self.makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(self.cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
                 }
-                if hasCut, !featureOn(MenuFeatureCatalog.paste) {
+                if hasCut {
                     menu.addItem(cancelCutItem())
                 }
             },
@@ -506,9 +506,6 @@ class FinderSync: FIFinderSync {
                     let pasteItem = self.makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(self.pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
                     pasteItem.isEnabled = hasCut
                     menu.addItem(pasteItem)
-                }
-                if hasCut, featureOn(MenuFeatureCatalog.cut) {
-                    menu.addItem(cancelCutItem())
                 }
             },
             MenuFeatureCatalog.moveTo: {
