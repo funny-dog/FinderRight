@@ -1232,6 +1232,44 @@ struct FinderRightKitTestsRunner {
             try assertTrue(SharedConfig(fileURL: url).menuOrder.isEmpty)
         }
 
+        // MARK: - 常用目录：移动到 / 复制到
+
+        runTest("升级前保存的顺序：新增的移动到/复制到出现在粘贴之后") {
+            let oldSaved = ["feature.toggleHidden", "feature.newFile", "feature.copyPath", "feature.openTerminal",
+                            "feature.openEditor", "feature.cut", "feature.paste", "feature.compress", "feature.decompress"]
+            let ids = MenuFeatureCatalog.ordered(by: oldSaved).map(\.id)
+            try assertEqual(ids.first, "feature.toggleHidden", "用户的自定义顺序保持不变")
+            let paste = ids.firstIndex(of: "feature.paste")!
+            try assertEqual(Array(ids[paste...paste + 2]), ["feature.paste", "feature.moveTo", "feature.copyTo"])
+        }
+
+        runTest("FavoriteDirectories 显示名：重名时附上级路径") {
+            let names = FavoriteDirectories.displayNames(
+                for: ["/Users/me/Downloads", "/Volumes/E/Downloads", "/Users/me/项目"], home: "/Users/me")
+            try assertEqual(names, ["Downloads — ~", "Downloads — /Volumes/E", "项目"])
+            try assertEqual(FavoriteDirectories.displayNames(for: ["/"], home: "/Users/me"), ["/"], "根目录显示为 /")
+        }
+
+        runTest("FileTransferCheck 拦截放进自身、移动到原目录") {
+            try assertEqual(FileTransferCheck.check(source: "/u/a.txt", destinationDirectory: "/u/dst", mode: .move), .ok)
+            try assertEqual(FileTransferCheck.check(source: "/u/a.txt", destinationDirectory: "/u", mode: .move), .alreadyInDestination)
+            try assertEqual(FileTransferCheck.check(source: "/u/a.txt", destinationDirectory: "/u/", mode: .move), .alreadyInDestination, "目标带结尾斜杠")
+            try assertEqual(FileTransferCheck.check(source: "/u/a.txt", destinationDirectory: "/u", mode: .copy), .ok, "复制到原目录允许（生成副本）")
+            try assertEqual(FileTransferCheck.check(source: "/u/dir", destinationDirectory: "/u/dir", mode: .copy), .destinationInsideSource)
+            try assertEqual(FileTransferCheck.check(source: "/u/dir", destinationDirectory: "/u/dir/sub", mode: .move), .destinationInsideSource)
+            try assertEqual(FileTransferCheck.check(source: "/u/dir", destinationDirectory: "/u/dir2", mode: .move), .ok, "同前缀的兄弟目录不算内部")
+        }
+
+        runTest("SharedConfig.favoriteDirectories 默认为空并可持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertTrue(config.favoriteDirectories.isEmpty)
+            config.favoriteDirectories = ["/Users/me/Downloads", "/Volumes/E"]
+            try assertEqual(SharedConfig(fileURL: url).favoriteDirectories, ["/Users/me/Downloads", "/Volumes/E"])
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

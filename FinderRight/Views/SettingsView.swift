@@ -7,10 +7,17 @@ import ServiceManagement
 
 // MARK: - SettingsView
 
+/// 设置窗口当前显示的标签页。由 finderright://settings/<页名> 链接驱动（例如右键「管理常用目录…」）
+final class SettingsNavigation: ObservableObject {
+    static let shared = SettingsNavigation()
+    @Published var selectedTab: SettingsView.SettingsTab = .general
+}
+
 struct SettingsView: View {
-    private enum SettingsTab: String, CaseIterable {
+    enum SettingsTab: String, CaseIterable {
         case general = "通用"
         case features = "功能"
+        case favorites = "常用目录"
         case shortcuts = "快捷键"
         case tools = "终端"
         case about = "关于"
@@ -19,15 +26,30 @@ struct SettingsView: View {
             switch self {
             case .general: return "gearshape"
             case .features: return "slider.horizontal.3"
+            case .favorites: return "folder"
             case .shortcuts: return "keyboard"
             case .tools: return "terminal"
             case .about: return "info.circle"
             }
         }
+
+        /// finderright://settings/<urlName> 中使用的页名
+        var urlName: String {
+            switch self {
+            case .general: return "general"
+            case .features: return "features"
+            case .favorites: return "favorites"
+            case .shortcuts: return "shortcuts"
+            case .tools: return "tools"
+            case .about: return "about"
+            }
+        }
     }
 
+    @ObservedObject private var navigation = SettingsNavigation.shared
+
     var body: some View {
-        TabView {
+        TabView(selection: $navigation.selectedTab) {
             GeneralTab()
                 .tabItem {
                     Label(LocalizedStringKey(SettingsTab.general.rawValue), systemImage: SettingsTab.general.icon)
@@ -39,6 +61,12 @@ struct SettingsView: View {
                     Label(LocalizedStringKey(SettingsTab.features.rawValue), systemImage: SettingsTab.features.icon)
                 }
                 .tag(SettingsTab.features)
+
+            FavoritesTab()
+                .tabItem {
+                    Label(LocalizedStringKey(SettingsTab.favorites.rawValue), systemImage: SettingsTab.favorites.icon)
+                }
+                .tag(SettingsTab.favorites)
 
             ShortcutsTab()
                 .tabItem {

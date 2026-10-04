@@ -511,6 +511,14 @@ class FinderSync: FIFinderSync {
                     menu.addItem(cancelCutItem())
                 }
             },
+            MenuFeatureCatalog.moveTo: {
+                guard hasSelection else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "移动到", emoji: "📁", systemImage: "folder.badge.minus", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .move, selected: selected, style: style) }))
+            },
+            MenuFeatureCatalog.copyTo: {
+                guard hasSelection else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "复制到", emoji: "📑", systemImage: "folder.badge.plus", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
+            },
             MenuFeatureCatalog.compress: {
                 guard hasSelection else { return }
                 menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
@@ -982,6 +990,71 @@ class FinderSync: FIFinderSync {
             "destination": .string(destDir.path)
         ]) { r in
             logToFile("pasteFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    // MARK: - 移动到 / 复制到常用目录
+
+    /// 「移动到 / 复制到」子菜单：每个常用目录一项（tag 为其在列表中的下标），末尾是「管理常用目录…」
+    private func buildFavoritesMenu(mode: FileTransferCheck.Mode, selected: [URL], style: MenuIconStyle) -> NSMenu {
+        let m = NSMenu(title: L(mode == .move ? "移动到" : "复制到"))
+        let favorites = SharedConfig.shared.favoriteDirectories
+        let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
+        let action = mode == .move ? #selector(moveToFavorite(_:)) : #selector(copyToFavorite(_:))
+
+        if favorites.isEmpty {
+            let empty = makeItem(titleKey: "尚未添加常用目录", emoji: "", systemImage: nil, style: .none)
+            empty.isEnabled = false
+            m.addItem(empty)
+        }
+        for (index, (path, name)) in zip(favorites, names).enumerated() {
+            let item = makeItem(titleKey: name, emoji: "📁", systemImage: "folder", action: action, tag: index, style: style)
+            // 没有任何一项能放过去时置灰：移动时全部已在该目录，或目标位于选中的文件夹内部
+            item.isEnabled = selected.contains {
+                FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: mode) == .ok
+            }
+            m.addItem(item)
+        }
+
+        m.addItem(.separator())
+        m.addItem(makeItem(titleKey: "管理常用目录…", emoji: "⚙️", systemImage: "gearshape", action: #selector(manageFavorites(_:)), style: style))
+        return m
+    }
+
+    @objc func moveToFavorite(_ sender: NSMenuItem) {
+        transferToFavorite(sender, mode: .move)
+    }
+
+    @objc func copyToFavorite(_ sender: NSMenuItem) {
+        transferToFavorite(sender, mode: .copy)
+    }
+
+    private func transferToFavorite(_ sender: NSMenuItem, mode: FileTransferCheck.Mode) {
+        let urls = currentContext().selectedItems
+        let favorites = SharedConfig.shared.favoriteDirectories
+        guard !urls.isEmpty, favorites.indices.contains(sender.tag) else {
+            logToFile("transferItems: no items or favorite index out of range (\(sender.tag))"); return
+        }
+        let destination = favorites[sender.tag]
+        logToFile("transferItems ipc (async) → mode=\(mode.rawValue) count=\(urls.count) dest=\((destination as NSString).lastPathComponent)")
+        IPCClient.shared.callAsync(action: "transferItems", payload: [
+            "items": .stringArray(urls.map(\.path)),
+            "destination": .string(destination),
+            "mode": .string(mode.rawValue)
+        ]) { r in
+            logToFile("transferItems ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    /// 打开主 App 设置的「常用目录」页。与 IPC 唤醒一样定向投递给内嵌本扩展的主 App
+    @objc func manageFavorites(_ sender: NSMenuItem) {
+        guard let url = URL(string: "\(IPCBridge.urlScheme)://settings/favorites") else { return }
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.activates = true
+        if let appURL = IPCBridge.containingAppURL(forExtensionAt: Bundle.main.bundleURL) {
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg, completionHandler: nil)
+        } else {
+            NSWorkspace.shared.open(url)
         }
     }
 

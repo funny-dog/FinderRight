@@ -291,6 +291,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case (.decompress, false): format = L("解压失败：%@")
         case (.paste, true):       format = L("已粘贴 %@")
         case (.paste, false):      format = L("粘贴失败：%@")
+        case (.move, true):        format = L("已移动 %@")
+        case (.move, false):       format = L("移动失败：%@")
+        case (.copy, true):        format = L("已复制 %@")
+        case (.copy, false):       format = L("复制失败：%@")
         }
         return String(format: format, record.subject)
     }
@@ -492,6 +496,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 打开设置窗口无副作用，任何来源都可以（切换语言后的重启脚本就靠它）
         if url.host == "settings" || url.host == "preferences" {
+            // 可带页名直达某一页，如 finderright://settings/favorites；未知页名忽略，停留在当前页
+            let page = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if let tab = SettingsView.SettingsTab.allCases.first(where: { $0.urlName == page }) {
+                SettingsNavigation.shared.selectedTab = tab
+            }
             openSettings()
             return
         }
