@@ -64,6 +64,16 @@ if [ -f "FinderRight/Resources/AppIcon.icns" ]; then
   cp FinderRight/Resources/AppIcon.icns "$APP_DIR/Contents/Resources/"
 fi
 
+# 新建 Office 文档用的空白模板（主 App 按白名单 id 从这里复制，见 OfficeTemplate）
+mkdir -p "$APP_DIR/Contents/Resources/Templates"
+cp FinderRight/Resources/Templates/Blank.* "$APP_DIR/Contents/Resources/Templates/"
+for ext in docx xlsx pptx; do
+  if [ ! -s "$APP_DIR/Contents/Resources/Templates/Blank.$ext" ]; then
+    echo "错误：缺少新建文件模板 Templates/Blank.$ext" >&2
+    exit 1
+  fi
+done
+
 # 菜单栏图标 MenuBarIcon 只存在于 asset catalog 中，NSImage(named:) 必须在
 # bundle 内找到同名资源，否则返回 nil → 状态栏项零宽不可见（v1.1.5 曾因此回归）。
 # 优先用 actool 编译整个 xcassets（需完整 Xcode）；本仓库支持无 Xcode 构建，

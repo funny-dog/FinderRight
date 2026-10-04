@@ -154,6 +154,9 @@ final class FinderRightService {
     }
 
     private func createFile(_ req: IPCRequest) -> IPCResponse {
+        if let templateId = req.payload["template"]?.stringValue {
+            return createFileFromTemplate(req, templateId: templateId)
+        }
         guard let directory = req.payload["directory"]?.stringValue,
               let baseName = req.payload["baseName"]?.stringValue,
               let ext = req.payload["ext"]?.stringValue,
@@ -171,6 +174,54 @@ final class FinderRightService {
         // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
         for _ in 0..<5 {
             let fileURL = UniqueName.fileURL(baseName: baseName, ext: ext, in: dirURL)
+            do {
+                try data.write(to: fileURL, options: .withoutOverwriting)
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                return IPCResponse(id: req.id, success: true, message: fileURL.path)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            } catch {
+                return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
+            }
+        }
+        return IPCResponse(id: req.id, success: false, message: "目标目录同名文件冲突，请重试")
+    }
+
+    /// 从主 App 内置的空白模板新建 Office 文档。
+    /// 模板 id 必须在 OfficeTemplate 白名单内，扩展名由模板决定，请求里的 ext 不参与拼路径
+    private func createFileFromTemplate(_ req: IPCRequest, templateId: String) -> IPCResponse {
+        guard let template = OfficeTemplate(rawValue: templateId) else {
+            serviceLog("非法模板 id 被拦截: \(templateId)")
+            return IPCResponse(id: req.id, success: false, message: "非法的模板")
+        }
+        guard let directory = req.payload["directory"]?.stringValue,
+              let baseName = req.payload["baseName"]?.stringValue else {
+            return IPCResponse(id: req.id, success: false, message: "createFile 参数缺失")
+        }
+        guard SafeFileName.isValid(baseName: baseName, ext: template.fileExtension) else {
+            serviceLog("非法文件名被拦截: baseName=\(baseName)")
+            return IPCResponse(id: req.id, success: false, message: "非法的文件名")
+        }
+        // build.sh 保留 Templates 子目录；xcodegen 生成的工程会把资源平铺到 Resources 根目录，两处都找
+        guard let source = Bundle.main.url(forResource: OfficeTemplate.resourceName,
+                                           withExtension: template.fileExtension,
+                                           subdirectory: OfficeTemplate.resourceDirectory)
+                ?? Bundle.main.url(forResource: OfficeTemplate.resourceName,
+                                   withExtension: template.fileExtension) else {
+            serviceLog("缺少内置模板: \(template.fileExtension)")
+            return IPCResponse(id: req.id, success: false, message: "缺少内置模板")
+        }
+        // 读出内容再写新文件，而不是 copyItem：后者会沿用模板的修改日期与扩展属性
+        let data: Data
+        do {
+            data = try Data(contentsOf: source)
+        } catch {
+            return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
+        }
+        let dirURL = URL(fileURLWithPath: directory)
+        // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
+        for _ in 0..<5 {
+            let fileURL = UniqueName.fileURL(baseName: baseName, ext: template.fileExtension, in: dirURL)
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
