@@ -12,7 +12,9 @@
 <br/>
 <br/>
 
-<img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" width="393" />
+<img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="320" />
+&emsp;
+<img src="docs/images/settings-about.png" alt="FinderRight Settings — About" height="320" />
 
 </div>
 
