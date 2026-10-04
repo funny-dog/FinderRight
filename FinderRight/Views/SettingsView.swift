@@ -697,7 +697,7 @@ struct AboutTab: View {
             }
 
             // 描述
-            Text("增强 macOS Finder 右键菜单的强大工具。\n快速访问开发工具、文件操作和自定义动作。")
+            Text("增强 macOS Finder 右键菜单的轻量工具。\n新建文件、复制路径、打开终端与编辑器、剪切粘贴、压缩解压。")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .font(.body)
@@ -726,7 +726,7 @@ struct AboutTab: View {
             Spacer()
 
             // 版权信息
-            Text("Copyright © 2026 FinderRight. All rights reserved.")
+            Text(verbatim: "Copyright © 2026 FinderRight · MIT License")
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .padding(.bottom, 16)
