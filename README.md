@@ -4,7 +4,7 @@
 
 **增强 macOS Finder 右键菜单的轻量工具 · A lightweight tool that supercharges the macOS Finder right-click menu**
 
-[English](#english) · [中文](#中文) · [官网 / Website](https://finderright.erhuerhu.dpdns.org/) · [网站维护](website/README.md)
+[English](#english) · [中文](#中文)
 
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
@@ -109,6 +109,8 @@ killall Finder
 ```
 
 ### 🛠 从源码构建
+
+网站源码位于 [`website/`](website/)，预览与部署说明见该目录的 README。
 
 方式一（推荐，无需 Xcode，仅需 Command Line Tools）：
 
@@ -242,6 +244,8 @@ killall Finder
 ```
 
 ### 🛠 Build from Source
+
+Website source lives in [`website/`](website/); see its README for preview and deployment instructions.
 
 Option 1 (recommended, no Xcode needed — Command Line Tools only):
 

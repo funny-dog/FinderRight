@@ -37,6 +37,4 @@ npx --yes wrangler@4.147.0 deploy
 
 凭据不放入仓库。Wrangler OAuth 凭据由 CLI 保存在用户配置目录；如使用 API Token，通过环境变量 `CLOUDFLARE_API_TOKEN` 提供。`.env*`、`.dev.vars*`、`.wrangler/`、本地日志、私钥和 Sites 项目配置均已忽略。
 
-正式网址：https://finderright.erhuerhu.dpdns.org
-
-备用网址：https://finderright.yangzhi0528.workers.dev
+仅通过配置中的自定义域名公开访问；默认托管地址与预览地址均关闭。仓库主页 About 的 Website 字段维护官网入口。

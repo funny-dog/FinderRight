@@ -1,7 +1,8 @@
 {
   "name": "finderright",
   "compatibility_date": "2026-10-07",
-  "workers_dev": true,
+  "workers_dev": false,
+  "preview_urls": false,
   "routes": [
     {
       "pattern": "finderright.erhuerhu.dpdns.org",
