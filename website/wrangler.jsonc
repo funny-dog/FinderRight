@@ -1,0 +1,15 @@
+{
+  "name": "finderright",
+  "compatibility_date": "2026-10-07",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "finderright.erhuerhu.dpdns.org",
+      "zone_name": "erhuerhu.dpdns.org",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./dist"
+  }
+}
