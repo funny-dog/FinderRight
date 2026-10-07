@@ -4,7 +4,7 @@
 
 **增强 macOS Finder 右键菜单的轻量工具 · A lightweight tool that supercharges the macOS Finder right-click menu**
 
-[English](#english) · [中文](#中文)
+[English](#english) · [中文](#中文) · [官网 / Website](https://finderright.erhuerhu.dpdns.org/)
 
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
