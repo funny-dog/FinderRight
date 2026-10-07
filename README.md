@@ -2,7 +2,11 @@
 
 # FinderRight
 
-**增强 macOS Finder 右键菜单的轻量工具 · A lightweight tool that supercharges the macOS Finder right-click menu**
+**给 Finder 加上右键新建文件、打开终端和剪切粘贴。**
+
+**Create files, open a terminal, and cut & paste from Finder’s right-click menu.**
+
+免费开源 · 文件操作在本地完成 / Free & open source · File operations stay on your Mac
 
 [English](#english) · [中文](#中文)
 
@@ -16,13 +20,17 @@
 &emsp;
 <img src="docs/images/settings-about.png" alt="FinderRight Settings — About" height="320" />
 
+如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 点个 Star 支持](https://github.com/funny-dog/FinderRight)，也欢迎反馈使用问题。
+
+If FinderRight makes your daily work easier, [⭐ star the project on GitHub](https://github.com/funny-dog/FinderRight). Feedback is welcome too.
+
 </div>
 
 ---
 
 ## 中文
 
-FinderRight 是一个纯本地、无后台服务、开源免费的 macOS 工具，为 Finder 右键菜单添加开发者常用的快捷操作。
+给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。适合经常管理项目文件的 Mac 开发者。
 
 ### ✨ 功能
 
@@ -155,7 +163,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **Fil
 
 ## English
 
-FinderRight is a fully local, server-free, open-source macOS tool that adds developer-friendly actions to the Finder right-click menu.
+Create files, open a terminal, and cut & paste from Finder’s right-click menu. FinderRight is free and open source, with file operations performed locally on your Mac. Built for Mac developers who work with project files every day.
 
 ### ✨ Features
 

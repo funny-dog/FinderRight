@@ -29,8 +29,8 @@ languageButton.addEventListener('click', () => {
   languageButton.setAttribute('aria-label', english ? '切换到中文' : 'Switch to English');
   document.title = english ? 'FinderRight — A better right-click' : 'FinderRight — 让 Finder 更顺手';
   const description = english
-    ? 'A free, open-source macOS Finder utility. Create files, copy paths, open terminals, and cut and paste — right from the context menu.'
-    : 'FinderRight 是开源免费的 macOS Finder 右键增强工具。新建文件、复制路径、打开终端、剪切粘贴，把顺手的操作放回右键菜单。';
+    ? 'Create files, open a terminal, and cut & paste from Finder’s right-click menu. Free and open source. File operations stay on your Mac.'
+    : '给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。';
   document.querySelector('meta[name="description"]').content = description;
   document.querySelector('meta[property="og:title"]').content = document.title;
   document.querySelector('meta[property="og:description"]').content = description;
