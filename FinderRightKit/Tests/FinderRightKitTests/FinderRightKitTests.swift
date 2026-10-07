@@ -238,7 +238,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(store.read(), ["/tmp/a", "/tmp/b"])
 
             // 去重合并：重复项忽略，新项追加在尾部
-            let merged = store.appendUnique(["/tmp/b", "/tmp/c"])
+            let merged = try store.appendUnique(["/tmp/b", "/tmp/c"])
             try assertEqual(merged, ["/tmp/a", "/tmp/b", "/tmp/c"])
             try assertEqual(store.read(), ["/tmp/a", "/tmp/b", "/tmp/c"])
 
@@ -260,23 +260,24 @@ struct FinderRightKitTestsRunner {
             let gone = dir.appendingPathComponent("gone.txt")
 
             try store.write([alive.path, gone.path])
-            try assertEqual(store.take(), [alive.path, gone.path], "take 应返回并取走队列")
+            let batch = try store.take()!
+            try assertEqual(batch.paths, [alive.path, gone.path], "take 应返回并取走队列")
             try assertTrue(store.read().isEmpty, "take 后队列应为空")
-            try assertTrue(FileManager.default.fileExists(atPath: store.inflightURL.path), "take 应留下 in-flight 标记")
-            try assertNil(store.take(), "队列已被取走，第二次 take 应返回 nil")
+            try assertTrue(FileManager.default.contentsOfDirectory(atPath: dir.path).contains { $0.hasPrefix("cut-queue.inflight.") }, "take 应留下本批恢复记录")
+            try assertNil(try store.take(), "队列已被取走，第二次 take 应返回 nil")
 
             // 模拟主 App 在移动过程中被杀：in-flight 残留 → 启动时恢复
-            let restored = store.recover(existingOnly: true)
+            let restored = try store.recover(existingOnly: true)
             try assertEqual(restored, [alive.path], "只应恢复仍存在的源文件")
             try assertEqual(store.read(), [alive.path])
             try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path), "恢复后应删除 in-flight 标记")
 
             // finish() 在没有 in-flight 标记时也必须幂等
-            store.finish()
+            try store.finish(batch.id)
             try assertEqual(store.read(), [alive.path])
 
             // recover 在无 in-flight 残留时不应改动队列
-            try assertEqual(store.recover(), [alive.path])
+            try assertEqual(try store.recover(), [alive.path])
         }
 
         // 8. CutQueueStore：取消剪切必须能作废 in-flight 标记
@@ -286,12 +287,159 @@ struct FinderRightKitTestsRunner {
             let store = CutQueueStore(directory: dir)
 
             try store.write(["/tmp/x"])
-            _ = store.take()
+            _ = try store.take()
             store.clear()
 
             try assertTrue(store.read().isEmpty)
             try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path))
-            try assertTrue(store.recover().isEmpty, "取消后不应再恢复出任何路径")
+            try assertTrue(try store.recover(existingOnly: false).isEmpty, "取消后不应再恢复出任何路径")
+        }
+
+        runTest("CutQueueStore 两批未完成时都能崩溃恢复") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a"])
+            _ = try store.take()
+            try store.write(["/tmp/b"])
+            _ = try store.take()
+            try assertEqual(Set(try store.recover(existingOnly: false)), Set(["/tmp/a", "/tmp/b"]))
+        }
+
+        runTest("CutQueueStore 空队列写入不作废在途恢复记录") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a"])
+            _ = try store.take()
+            try store.write([])
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/a"])
+        }
+
+        runTest("CutQueueStore 恢复写回失败时保留恢复记录") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            let data = try JSONEncoder().encode(["/tmp/a"])
+            try data.write(to: store.inflightURL)
+            // 用非空目录挡住原子写入，不依赖运行账户的权限。
+            try FileManager.default.createDirectory(at: store.queueURL, withIntermediateDirectories: false)
+            try Data().write(to: store.queueURL.appendingPathComponent("blocker"))
+            var failed = false
+            do { _ = try store.recover(existingOnly: false) } catch { failed = true }
+            try assertTrue(failed, "写回失败须传播错误")
+            try assertTrue(FileManager.default.fileExists(atPath: store.inflightURL.path), "写回失败不能删除唯一的恢复记录")
+            try FileManager.default.removeItem(at: store.queueURL)
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/a"])
+
+        }
+
+        runTest("CutQueueStore 前一批完成不删除后一批恢复记录") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a"])
+            let first = try store.take()!
+            try store.write(["/tmp/b"])
+            _ = try store.take()
+            try store.finish(first.id)
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/b"])
+        }
+
+        runTest("CutQueueStore 部分失败与新剪切项合并且不影响其他批次") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a", "/tmp/failed"])
+            let first = try store.take()!
+            try store.write(["/tmp/b"])
+            _ = try store.take()
+            try store.write(["/tmp/new", "/tmp/failed"])
+            try store.finish(first.id, retrying: ["/tmp/failed"])
+            try assertEqual(store.read(), ["/tmp/new", "/tmp/failed"])
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/new", "/tmp/failed", "/tmp/b"])
+        }
+
+        runTest("CutQueueStore 取消后旧批次完成不干扰新批次") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/old"])
+            let old = try store.take()!
+            try store.write(["/tmp/also-old"])
+            _ = try store.take()
+            store.clear()
+            try assertTrue(try store.recover(existingOnly: false).isEmpty)
+            try store.write(["/tmp/new"])
+            _ = try store.take()
+            try store.finish(old.id, retrying: ["/tmp/old"])
+            try assertTrue(store.read().isEmpty, "旧任务失败不能撤销取消剪切")
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/new"])
+        }
+
+        runTest("CutQueueStore 新旧恢复记录合并去重并过滤已移动项") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            let alive = dir.appendingPathComponent("alive.txt")
+            let pending = dir.appendingPathComponent("pending.txt")
+            try Data().write(to: alive)
+            try Data().write(to: pending)
+            try JSONEncoder().encode([alive.path, "/nonexistent/finderright-moved"]).write(to: store.inflightURL)
+            try store.write([alive.path])
+            _ = try store.take()
+            try store.write([pending.path])
+            try assertEqual(try store.recover(), [pending.path, alive.path])
+            try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path))
+            try assertTrue(!FileManager.default.contentsOfDirectory(atPath: dir.path).contains { $0.hasPrefix("cut-queue.inflight.") })
+        }
+
+        runTest("CutQueueStore 失败项写回受阻时仍能在重启后恢复") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir)
+            let moved = dir.appendingPathComponent("moved.txt")
+            let failed = dir.appendingPathComponent("failed.txt")
+            try Data().write(to: failed)
+            try store.write([moved.path, failed.path])
+            let batch = try store.take()!
+            try FileManager.default.createDirectory(at: store.queueURL, withIntermediateDirectories: false)
+            try Data().write(to: store.queueURL.appendingPathComponent("blocker"))
+            var writeFailed = false
+            do { try store.finish(batch.id, retrying: [failed.path]) } catch { writeFailed = true }
+            try assertTrue(writeFailed)
+            try FileManager.default.removeItem(at: store.queueURL)
+            try assertEqual(try store.recover(), [failed.path])
+        }
+
+        runTest("CutQueueStore 领取失败保留待剪切队列") {
+            let dir = makeTempDirectory()
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+                try? FileManager.default.removeItem(at: dir)
+            }
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a"])
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+            var failed = false
+            do { _ = try store.take() } catch { failed = true }
+            try assertTrue(failed, "无法保存恢复记录时须拒绝移动")
+            try assertEqual(store.read(), ["/tmp/a"])
+        }
+
+        runTest("CutQueueStore 损坏记录不阻塞其他批次恢复") {
+            for name in ["cut-queue.inflight.json", "cut-queue.inflight.00000000-0000-0000-0000-000000000001.json"] {
+                let dir = makeTempDirectory()
+                defer { try? FileManager.default.removeItem(at: dir) }
+                let store = CutQueueStore(directory: dir)
+                try store.write(["/tmp/healthy"])
+                _ = try store.take()
+                let broken = dir.appendingPathComponent(name)
+                try Data("broken".utf8).write(to: broken)
+                try assertEqual(try store.recover(existingOnly: false), ["/tmp/healthy"])
+                try assertTrue(FileManager.default.fileExists(atPath: broken.path), "坏记录保留供排查")
+                try assertEqual(try store.recover(existingOnly: false), ["/tmp/healthy"], "下次恢复仍不受坏记录阻塞")
+            }
         }
 
         // 9. pluginkit 选举输出解析
