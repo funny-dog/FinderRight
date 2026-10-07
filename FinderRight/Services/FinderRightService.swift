@@ -710,10 +710,10 @@ final class FinderRightService {
     }
 
     /// 在 cutPasteQueue 短事务中一次性取走当前剪切队列，并记录取走时的取消代次
-    private func takeCutQueue() -> (paths: [String], generation: Int)? {
-        Self.cutPasteQueue.sync {
-            guard let paths = cutQueue.take() else { return nil }
-            return (paths, Self.cutCancelGeneration)
+    private func takeCutQueue() throws -> (id: UUID, paths: [String], generation: Int)? {
+        try Self.cutPasteQueue.sync {
+            guard let batch = try cutQueue.take() else { return nil }
+            return (batch.id, batch.paths, Self.cutCancelGeneration)
         }
     }
 
@@ -723,35 +723,38 @@ final class FinderRightService {
         }
         let destDir = URL(fileURLWithPath: destPath)
 
-        guard let taken = takeCutQueue() else {
-            return IPCResponse(id: req.id, success: false, message: "剪切队列为空，请先剪切文件")
+        let taken: (id: UUID, paths: [String], generation: Int)
+        do {
+            guard let batch = try takeCutQueue() else {
+                return IPCResponse(id: req.id, success: false, message: "剪切队列为空，请先剪切文件")
+            }
+            taken = batch
+        } catch {
+            return IPCResponse(id: req.id, success: false, message: "保存粘贴恢复记录失败: \(error.localizedDescription)")
         }
 
         // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
         Self.backgroundJobs.run(on: Self.pasteQueue) { [weak self] in
-            self?.performPaste(sourcePaths: taken.paths, destDir: destDir, generation: taken.generation)
+            self?.performPaste(batchID: taken.id, sourcePaths: taken.paths, destDir: destDir, generation: taken.generation)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理粘贴请求，正在后台移动文件")
     }
 
-    /// 在 cutPasteQueue 内将失败路径与粘贴期间新剪切路径去重合并后归还回队列。
-    /// 若期间用户点过「取消剪切」（代次变化），整批丢弃并清掉 in-flight 标记。
-    private func restoreFailedCutPaths(_ failedPaths: [String], generation: Int) {
-        guard !failedPaths.isEmpty else { return }
-        Self.backgroundJobs.run(on: Self.cutPasteQueue) { [weak self] in
-            guard let self else { return }
-            defer { self.cutQueue.finish() }
-            guard generation == Self.cutCancelGeneration else {
-                self.serviceLog("取消剪切已生效，丢弃 \(failedPaths.count) 条失败路径的归还")
-                return
+    /// 结算本批粘贴：归还失败路径和清理记录都在剪切队列的短事务内完成。
+    /// 取消代次变化时只清理本批；写回失败则保留记录，供下次启动恢复。
+    private func finishPaste(batchID: UUID, failedPaths: [String], generation: Int) {
+        Self.cutPasteQueue.sync {
+            do {
+                let retryPaths = generation == Self.cutCancelGeneration ? failedPaths : []
+                try cutQueue.finish(batchID, retrying: retryPaths)
+            } catch {
+                serviceLog("粘贴结算失败，保留本批恢复记录: \(error.localizedDescription)")
             }
-            let restored = self.cutQueue.appendUnique(failedPaths)
-            self.serviceLog("粘贴失败路径已归还队列: \(failedPaths.count) 条，当前队列 \(restored.count) 条")
         }
     }
 
-    private func performPaste(sourcePaths: [String], destDir: URL, generation: Int) {
+    private func performPaste(batchID: UUID, sourcePaths: [String], destDir: URL, generation: Int) {
         let fileManager = FileManager.default
         var firstError: String?
         var pastedPaths: [URL] = []
@@ -790,13 +793,7 @@ final class FinderRightService {
             }
         }
 
-        // 移动结束：失败路径归还回剪切队列以便用户重试（归还逻辑负责清掉 in-flight 标记）；
-        // 全部成功则直接清掉标记，队列保持为空。
-        if failedPaths.isEmpty {
-            cutQueue.finish()
-        } else {
-            restoreFailedCutPaths(failedPaths, generation: generation)
-        }
+        finishPaste(batchID: batchID, failedPaths: failedPaths, generation: generation)
 
         if !pastedPaths.isEmpty {
             DispatchQueue.main.async {
@@ -934,9 +931,13 @@ final class FinderRightService {
     /// 断电），标记会残留在磁盘上，这里把其中的源文件并回队列，避免用户丢失剪切状态。
     /// 只保留仍存在的源文件：已经移动成功的路径不再回到队列。
     static func recoverInflightCutQueue() {
-        let restored = CutQueueStore().recover(existingOnly: true)
-        if !restored.isEmpty {
-            NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
+        do {
+            let restored = try CutQueueStore().recover(existingOnly: true)
+            if !restored.isEmpty {
+                NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
+            }
+        } catch {
+            NSLog("[FinderRightService] 剪切队列恢复失败，保留恢复记录: \(error)")
         }
     }
 }
