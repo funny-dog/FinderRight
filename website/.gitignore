@@ -1,0 +1,13 @@
+.DS_Store
+__pycache__/
+.ruff_cache/
+.sites-runtime/
+.wrangler/
+.openai/
+.env*
+.dev.vars*
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
