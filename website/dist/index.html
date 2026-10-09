@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
-  <meta name="theme-color" content="#f8faff">
+  <meta name="theme-color" content="#f0efea">
   <meta property="og:title" content="FinderRight — 让 Finder 更顺手">
   <meta property="og:description" content="给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
   <meta property="og:type" content="website">
@@ -20,66 +20,123 @@
 </head>
 <body>
   <a class="skip-link" href="#main" data-en="Skip to content">跳到正文</a>
-  <header class="site-header">
-    <nav class="nav wrap" aria-label="Main navigation">
-      <a class="brand" href="#" aria-label="FinderRight"><img src="assets/icon.png" alt="" width="38" height="38"><span>FinderRight</span></a>
+  <header class="wrap">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="FinderRight"><img src="assets/icon.png" alt="" width="40" height="40"><span>FinderRight</span></a>
       <div class="nav-links"><a href="#features" data-en="Features">功能</a><a href="#install" data-en="Installation">安装指南</a><a href="#faq" data-en="FAQ">常见问题</a></div>
-      <div class="nav-actions"><button class="language" id="language" type="button" hidden aria-label="Switch to English">EN <span aria-hidden="true">↔</span></button><a class="button button-small" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg" data-en="Download">免费下载</a></div>
+      <div class="nav-actions"><button class="language mono" id="language" type="button" hidden aria-label="Switch to English">EN <span aria-hidden="true">↔</span></button><a class="btn btn-lime btn-small" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg" data-en="Download">免费下载</a></div>
     </nav>
   </header>
+
   <main id="main">
-    <section class="hero">
-      <div class="hero-grid wrap">
-        <div class="hero-copy">
-          <p class="platform"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span data-en="A little upgrade for your Mac">给你的 Mac，一点顺手的升级</span></p>
-          <h1><span data-en="Finder.">Finder，</span><br><span data-en="A little better.">再顺手一点。</span></h1>
-          <p class="hero-description" data-en="Create files, open a terminal, and cut &amp; paste from Finder’s right-click menu. Free and open source. File operations stay on your Mac.">右键新建文件、打开终端、剪切粘贴。<br>免费开源，文件操作在本地完成。</p>
-          <div class="hero-actions"><a class="button" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg><span data-en="Download for Mac">下载 Mac 版</span></a><a class="source-link" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.64.35-1.08.64-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.26-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.83a9.6 9.6 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.39.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.33 4.69-4.56 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg><span data-en="⭐ Star on GitHub">⭐ 在 GitHub 支持项目</span></a></div>
-          <p class="requirements">macOS 13+ <span>·</span> Apple Silicon <span>·</span> <span data-en="Free & open source">免费开源</span></p>
-          <a class="install-note" href="#install" data-en="First time here? Follow the installation guide.">首次使用？查看安装与权限指南</a>
+    <section class="wrap hero" id="top">
+      <div class="hero-copy">
+        <p class="mono eyebrow" data-en="FOR macOS · FREE &amp; OPEN SOURCE">FOR macOS · 免费开源</p>
+        <h1 class="disp"><span data-en="Finder.">Finder，</span><br><span data-en="A little">再<span class="mark">顺手</span></span><br><span data-en="<span class='mark'>better</span>.">一点。</span></h1>
+        <p class="lede" data-en="Create files, open a terminal, and cut &amp; paste from Finder’s right-click menu. Free and open source. File operations stay on your Mac.">右键新建文件、打开终端、剪切粘贴。免费开源，文件操作在本地完成。</p>
+        <div class="actions">
+          <a class="btn btn-lime" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg><span data-en="Download for Mac">下载 Mac 版</span></a>
+          <a class="btn btn-ghost" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Star on GitHub">在 GitHub 点个 Star</a>
         </div>
-        <div class="hero-art" aria-label="FinderRight actual right-click menu screenshot">
-          <div class="desktop-bar" aria-hidden="true"><span class="desktop-apple">●</span><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span class="desktop-clock">09:41</span></div>
-          <div class="finder-window" aria-hidden="true"><div class="window-toolbar"><div class="traffic"><i></i><i></i><i></i></div><span>My workspace</span><span>⌕</span></div><div class="finder-content"><aside><span>Favorites</span><b>▣ &nbsp; Desktop</b><span>▤ &nbsp; Documents</span><span>↓ &nbsp; Downloads</span></aside><div class="workspace-files"><div><span class="folder-shape"></span><small>Projects</small></div><div><span class="file-shape">MD</span><small>README.md</small></div></div></div></div>
-          <img class="menu-shot" src="assets/menu-new-file.png" width="786" height="650" alt="FinderRight 实际右键菜单，可新建文本、Markdown、Python 和 Office 文件" data-en-alt="The actual FinderRight menu, with text, Markdown, Python and Office file templates">
-          <div class="art-caption"><span class="caption-dot"></span><span data-en="Your everyday tools. One right-click away.">常用操作，右键即达。</span><span class="caption-key">⌃ click</span></div>
+        <p class="mono requirements">macOS 13+ · Apple Silicon · MIT</p>
+      </div>
+      <div class="stage">
+        <img src="assets/menu-new-file.png" width="786" height="650" alt="FinderRight 实际右键菜单，可新建文本、Markdown、Python 和 Office 文件" data-en-alt="The actual FinderRight menu, with text, Markdown, Python and Office file templates">
+        <span class="chip mono">⌃ click</span>
+      </div>
+    </section>
+
+    <div class="band">
+      <div class="wrap band-row mono"><span data-en="Made for macOS">为 macOS 而生</span><span data-en="File operations stay on your Mac">文件操作在本地完成</span><span data-en="Open source, MIT licensed">MIT 开源，免费使用</span><span data-en="Chinese &amp; English">中英文双语</span></div>
+    </div>
+
+    <section class="wrap sec" id="features">
+      <div class="sec-head">
+        <h2 class="disp" data-en="Fewer detours.<br>More flow.">少几次切换，<br>多一点专注。</h2>
+        <p data-en="Small things, done many times a day. Make each one a little easier.">每天重复的小事，值得一个更简单的做法。</p>
+      </div>
+      <div class="grid3">
+        <article class="card"><span class="num disp" aria-hidden="true">01</span><h3 data-en="Start with a new file">灵感来了，直接新建</h3><p data-en="Text, Markdown, code, or a blank Office document. Create it in the folder you’re already in, with your own text templates too.">文本、Markdown、代码，或空白 Office 文档。在当前文件夹直接创建，也支持自己的文本模板。</p><div class="tags mono"><span>.md</span><span>.py</span><span>.json</span><span>.docx</span></div></article>
+        <article class="card card-lime"><span class="num disp" aria-hidden="true">02</span><h3 data-en="Your workspace, ready">开发工具，就地打开</h3><p data-en="Open a terminal or editor in your working folder. Copy a path in the format you need, including shell-escaped paths.">在当前目录打开终端或编辑器。复制完整路径、文件名，或适合终端的转义路径。</p><div class="tags mono"><span>Ghostty</span><span>iTerm2</span><span>VS Code</span><span>Cursor</span></div></article>
+        <article class="card"><span class="num disp" aria-hidden="true">03</span><h3 data-en="Move files with less effort">整理文件，少绕一点</h3><p data-en="Cut and paste, move to a favorite folder, or make a ZIP. Keep the useful file actions together in one menu.">剪切粘贴、移动到常用目录、压缩为 ZIP。把文件整理时常用的动作，放在同一个菜单里。</p><div class="tags mono"><span data-en="Cut">剪切</span><span data-en="Move">移动</span><span data-en="Compress">压缩</span></div></article>
+      </div>
+      <div class="mini">
+        <div><strong data-en="Hidden files, on demand">隐藏文件，随时切换</strong><span data-en="Show or hide without restarting Finder. Requires Accessibility permission.">显示或隐藏，无需重启 Finder。需辅助功能权限。</span></div>
+        <div><strong data-en="A menu that fits you">菜单，按你的习惯来</strong><span data-en="Reorder actions and assign your own keyboard shortcuts.">拖动调整顺序，为常用操作绑定快捷键。</span></div>
+        <div><strong data-en="Updates, built in">更新，应用内完成</strong><span data-en="Check for new releases from the app’s About page.">在「关于」页面检查并安装新版本。</span></div>
+      </div>
+    </section>
+
+    <section class="dark">
+      <div class="wrap">
+        <div class="split">
+          <div><span class="mono lbl" data-en="Cut &amp; paste">剪切与粘贴</span><h3 class="disp" data-en="A familiar action. Finally in the menu.">熟悉的剪切，终于来到右键菜单。</h3><p data-en="A scissors badge marks what you’ve cut. Files move only when you paste, so you can see what’s waiting.">剪切后，文件带上剪刀角标。粘贴时才真正移动，待办一眼可见。</p></div>
+          <div class="pane"><div class="pane-bar" aria-hidden="true"><i></i><i></i><i></i></div><div class="pad"><img src="assets/cut-badge.png" width="772" height="286" alt="文件被剪切后显示剪刀角标" data-en-alt="Scissors badges on files queued for cutting" loading="lazy"></div></div>
+        </div>
+        <div class="split split-flip">
+          <div class="pane"><div class="pane-bar" aria-hidden="true"><i></i><i></i><i></i></div><img src="assets/settings-favorites.png" width="1060" height="736" alt="FinderRight 常用目录设置界面" data-en-alt="FinderRight favorite folders settings" loading="lazy"></div>
+          <div><span class="mono lbl" data-en="Favorite folders">常用目录</span><h3 class="disp" data-en="Your next destination. Already there.">常去的地方，不用再找一遍。</h3><p data-en="Save your favorite folders, then move or copy selected files there straight from the menu.">添加常用目录，右键就能移动或复制。下载、归档、项目文件，各就各位。</p></div>
         </div>
       </div>
-      <div class="benefits wrap"><span><span class="benefit-symbol" aria-hidden="true">⌘</span><span data-en="Made for macOS">为 macOS 而生</span></span><span><span class="benefit-symbol" aria-hidden="true">⌁</span><span data-en="File operations stay on your Mac">文件操作在本地完成</span></span><span><span class="benefit-symbol" aria-hidden="true">{ }</span><span data-en="Open source, MIT licensed">MIT 开源，免费使用</span></span><span><span class="benefit-symbol" aria-hidden="true">文</span><span data-en="Chinese & English">中英文双语</span></span></div>
     </section>
 
-    <section class="section wrap" id="features">
-      <div class="section-intro"><h2 data-en="Fewer detours.<br>More flow.">少几次切换，<br>多一点专注。</h2><p data-en="Small things, done many times a day.<br>Make each one a little easier.">每天重复的小事，<br>值得一个更简单的做法。</p></div>
-      <div class="feature-list">
-        <article><div class="feature-icon blue" aria-hidden="true">＋</div><h3 data-en="Start with a new file">灵感来了，直接新建</h3><p data-en="Text, Markdown, code, or a blank Office document. Create it in the folder you’re already in, with your own text templates too.">文本、Markdown、代码，或空白 Office 文档。在当前文件夹直接创建，也支持自己的文本模板。</p><span class="feature-tag">.md &nbsp; .py &nbsp; .json &nbsp; .docx</span></article>
-        <article><div class="feature-icon violet" aria-hidden="true">&gt;_</div><h3 data-en="Your workspace, ready">开发工具，就地打开</h3><p data-en="Open a terminal or editor in your working folder. Copy a path in the format you need, including shell-escaped paths.">在当前目录打开终端或编辑器。复制完整路径、文件名，或适合终端的转义路径。</p><span class="feature-tag">Ghostty &nbsp; iTerm2 &nbsp; VS Code &nbsp; Cursor</span></article>
-        <article><div class="feature-icon mint" aria-hidden="true">✂</div><h3 data-en="Move files with less effort">整理文件，少绕一点</h3><p data-en="Cut and paste, move to a favorite folder, or make a ZIP. Keep the useful file actions together in one menu.">剪切粘贴、移动到常用目录、压缩为 ZIP。把文件整理时常用的动作，放在同一个菜单里。</p><span class="feature-tag" data-en="Cut · Move · Compress">剪切 · 移动 · 压缩</span></article>
+    <section class="wrap sec">
+      <div class="local">
+        <h2 class="disp" data-en="Your files.<br>Your <span class='mark'>Mac</span>.">你的文件，<br>就在你的 <span class="mark">Mac</span> 上。</h2>
+        <div>
+          <p class="local-copy" data-en="FinderRight performs file operations locally. The source is open for you to read, build, and change. No subscription required.">FinderRight 在本地执行文件操作。源码公开，可以阅读、构建，也可以改成自己喜欢的样子。</p>
+          <div class="ledger mono"><div><span data-en="File operations">文件操作</span><b data-en="Run locally">本地执行</b></div><div><span data-en="Source code">源码</span><b data-en="Open, MIT">MIT 公开</b></div><div><span data-en="Subscription">订阅</span><b data-en="None">无需</b></div></div>
+          <p class="local-link"><a class="text-link" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Explore the source on GitHub ↗">在 GitHub 探索源码 ↗</a></p>
+        </div>
       </div>
-      <div class="showcase-grid">
-        <article class="showcase cut-showcase"><div class="showcase-copy"><span class="small-label" data-en="Cut & paste">剪切与粘贴</span><h3 data-en="A familiar action.<br>Finally in the menu.">熟悉的剪切，<br>终于来到右键菜单。</h3><p data-en="A scissors badge marks what you’ve cut. Files move only when you paste, so you can see what’s waiting.">剪切后，文件带上剪刀角标。<br>粘贴时才真正移动，待办一眼可见。</p></div><div class="cut-image"><div class="image-toolbar"><div class="traffic"><i></i><i></i><i></i></div><span data-en="Ready to move">等待粘贴</span></div><img src="assets/cut-badge.png" width="772" height="286" alt="文件被剪切后显示剪刀角标" data-en-alt="Scissors badges on files queued for cutting" loading="lazy"></div></article>
-        <article class="showcase favorite-showcase"><div class="showcase-copy"><span class="small-label" data-en="Favorite folders">常用目录</span><h3 data-en="Your next destination.<br>Already there.">常去的地方，<br>不用再找一遍。</h3><p data-en="Save your favorite folders, then move or copy selected files there straight from the menu.">添加常用目录，右键就能移动或复制。<br>下载、归档、项目文件，各就各位。</p></div><img class="favorite-image" src="assets/settings-favorites.png" width="1060" height="736" alt="FinderRight 常用目录设置界面" data-en-alt="FinderRight favorite folders settings" loading="lazy"></article>
+    </section>
+
+    <section class="wrap sec" id="install">
+      <div class="sec-head">
+        <h2 class="disp" data-en="A few steps.<br>A smoother Finder.">几步安装，<br>让顺手成为日常。</h2>
+        <p data-en="macOS 13 or later · Apple Silicon. Intel Macs are not currently supported.">适用于 macOS 13 及以上、Apple Silicon。目前暂不支持 Intel Mac。</p>
       </div>
-      <div class="more-features"><div><span aria-hidden="true">◐</span><p><strong data-en="Hidden files, on demand">隐藏文件，随时切换</strong><span data-en="Show or hide without restarting Finder. Requires Accessibility permission.">显示或隐藏，无需重启 Finder。需辅助功能权限。</span></p></div><div><span aria-hidden="true">⌨</span><p><strong data-en="A menu that fits you">菜单，按你的习惯来</strong><span data-en="Reorder actions and assign your own keyboard shortcuts.">拖动调整顺序，为常用操作绑定快捷键。</span></p></div><div><span aria-hidden="true">↻</span><p><strong data-en="Updates, built in">更新，应用内完成</strong><span data-en="Check for new releases from the app’s About page.">在「关于」页面检查并安装新版本。</span></p></div></div>
+      <div class="install">
+        <div>
+          <article class="step"><span class="n">1</span><div><h3 data-en="Download and drag to Applications">下载，拖入应用程序</h3><p data-en="Open FinderRight.dmg and drag FinderRight.app into your Applications folder.">打开 FinderRight.dmg，将 FinderRight.app 拖入 Applications 文件夹。</p><a class="text-link" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg" data-en="Download the latest version ↗">下载最新版本 ↗</a></div></article>
+          <article class="step"><span class="n">2</span><div><h3 data-en="Allow the first launch">允许首次打开</h3><p data-en="The current release is self-signed and not Apple-notarized. If macOS blocks it, run the command on the right for the app you downloaded from the official release.">当前版本使用自签名证书，尚未经过 Apple 公证。若系统拦截，请确认安装包来自官方发布，再执行右侧命令。</p></div></article>
+          <article class="step step-last"><span class="n">3</span><div><h3 data-en="Enable the extension and permissions">启用扩展，完成授权</h3><p data-en="Follow the app’s setup guide to enable the Finder extension. Grant Full Disk Access for protected folders and Accessibility for toggling hidden files without flicker.">按应用引导启用 Finder 扩展。在受保护目录使用功能需完全磁盘访问；无闪烁切换隐藏文件需辅助功能权限。</p></div></article>
+        </div>
+        <aside class="term">
+          <div class="pane-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="term-body"><p class="mono term-comment" data-en="# Allow the first launch"># 允许首次打开</p><code id="launch-command">xattr -dr com.apple.quarantine /Applications/FinderRight.app</code><div class="copy-row"><button class="copy-button mono" id="copy-command" type="button" hidden data-en="Copy command">复制命令</button><span id="copy-status" role="status" aria-live="polite"></span></div></div>
+          <div class="check"><h4 class="mono" data-en="A quick setup checklist">首次配置清单</h4><p><em aria-hidden="true">✓</em><span data-en="Enable the Finder extension">启用 Finder 扩展</span></p><p><em aria-hidden="true">✓</em><span data-en="Full Disk Access for protected folders">受保护目录：完全磁盘访问</span></p><p><em aria-hidden="true">✓</em><span data-en="Accessibility for hidden-file toggling">切换隐藏文件：辅助功能</span></p></div>
+        </aside>
+      </div>
     </section>
 
-    <section class="local-section"><div class="wrap local-grid"><div class="local-mark" aria-hidden="true"><div class="mac-outline"><span>✓</span></div><div class="mac-base"></div></div><div><h2 data-en="Your files.<br>Your Mac.">你的文件，<br>就在你的 Mac 上。</h2><p data-en="FinderRight performs file operations locally. The source is open for you to read, build, and change. No subscription required.">FinderRight 在本地执行文件操作。<br>源码公开，可以阅读、构建，也可以改成自己喜欢的样子。<br>免费使用，无需订阅。</p><a class="text-link" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Explore the source on GitHub ↗">在 GitHub 探索源码 ↗</a></div></div></section>
-
-    <section class="section wrap install-section" id="install"><div class="section-intro"><h2 data-en="A few steps.<br>A smoother Finder.">几步安装，<br>让顺手成为日常。</h2><p data-en="macOS 13 or later · Apple Silicon<br>Intel Macs are not currently supported.">适用于 macOS 13 及以上、Apple Silicon。<br>目前暂不支持 Intel Mac。</p></div>
-      <div class="install-layout"><div class="install-steps"><article><span class="step-number">1</span><div><h3 data-en="Download and drag to Applications">下载，拖入应用程序</h3><p data-en="Open FinderRight.dmg and drag FinderRight.app into your Applications folder.">打开 FinderRight.dmg，将 FinderRight.app 拖入 Applications 文件夹。</p><a class="text-link" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg" data-en="Download the latest version ↗">下载最新版本 ↗</a></div></article><article><span class="step-number">2</span><div><h3 data-en="Allow the first launch">允许首次打开</h3><p data-en="The current release is self-signed and not Apple-notarized. If macOS blocks it, run the command below for the app you downloaded from the official release.">当前版本使用自签名证书，尚未经过 Apple 公证。若系统拦截，请确认安装包来自官方发布，再执行右侧命令。</p></div></article><article><span class="step-number">3</span><div><h3 data-en="Enable the extension and permissions">启用扩展，完成授权</h3><p data-en="Follow the app’s setup guide to enable the Finder extension. Grant Full Disk Access for protected folders and Accessibility for toggling hidden files without flicker.">按应用引导启用 Finder 扩展。在受保护目录使用功能需完全磁盘访问；无闪烁切换隐藏文件需辅助功能权限。</p></div></article></div>
-      <aside class="install-panel"><div class="terminal-title"><div class="traffic"><i></i><i></i><i></i></div><span>Terminal</span></div><div class="terminal-content"><p class="terminal-comment" data-en="# Allow the first launch"># 允许首次打开</p><code id="launch-command">xattr -dr com.apple.quarantine /Applications/FinderRight.app</code><div class="copy-row"><button class="copy-button" id="copy-command" type="button" hidden data-en="Copy command">复制命令</button><span id="copy-status" role="status" aria-live="polite"></span></div></div><div class="permission-list"><h4 data-en="A quick setup checklist">首次配置清单</h4><p><span aria-hidden="true">✓</span><span data-en="Enable the Finder extension">启用 Finder 扩展</span></p><p><span aria-hidden="true">✓</span><span data-en="Full Disk Access for protected folders">受保护目录：完全磁盘访问</span></p><p><span aria-hidden="true">✓</span><span data-en="Accessibility for hidden-file toggling">切换隐藏文件：辅助功能</span></p></div></aside></div>
+    <section class="wrap sec" id="faq">
+      <div class="faq">
+        <div><span class="mono">FAQ</span><h2 class="disp" data-en="A few things<br>to know.">你可能<br>还想知道。</h2><a class="text-link" href="https://github.com/funny-dog/FinderRight/issues" target="_blank" rel="noopener noreferrer" data-en="Ask on GitHub ↗">在 GitHub 提问 ↗</a></div>
+        <div class="faq-list">
+          <details open><summary><span data-en="Is FinderRight free?">FinderRight 是免费的吗？</span><span aria-hidden="true">＋</span></summary><p data-en="Yes. FinderRight is free and open source under the MIT license. You can use it, read the code, and build it yourself.">是的。FinderRight 免费使用，并采用 MIT 协议开源。你可以使用、查看源码，也可以自行构建。</p></details>
+          <details><summary><span data-en="Which Macs are supported?">支持哪些 Mac？</span><span aria-hidden="true">＋</span></summary><p data-en="The current release supports Apple Silicon Macs (M-series chips) running macOS 13 or later. Intel Macs are not currently supported.">当前版本支持搭载 Apple Silicon（M 系列芯片）、运行 macOS 13 及以上系统的 Mac，暂不支持 Intel 架构。</p></details>
+          <details><summary><span data-en="Why does macOS block the first launch?">为什么首次打开会被系统拦截？</span><span aria-hidden="true">＋</span></summary><p data-en="The current release uses a self-signed certificate and has not been notarized by Apple. Download it from the official GitHub Release and follow the installation guide above to allow it to launch.">当前版本使用自签名证书，尚未经过 Apple 公证。请从官方 GitHub Release 下载，并按上方安装指南允许首次打开。</p></details>
+          <details><summary><span data-en="Why is the menu missing in cloud folders?">为什么云盘里没有右键菜单？</span><span aria-hidden="true">＋</span></summary><p data-en="macOS File Provider folders, including iCloud Drive and Google Drive, restrict third-party Finder menus. FinderRight offers these actions in the Services submenu instead. Full Disk Access does not remove this restriction.">iCloud Drive、Google Drive 等 File Provider 云盘目录限制第三方 Finder 扩展菜单。FinderRight 在这些目录通过「服务」子菜单提供操作；完全磁盘访问不能解除这一限制。</p></details>
+          <details><summary><span data-en="What should I do after updating?">更新后菜单没有变化怎么办？</span><span aria-hidden="true">＋</span></summary><p data-en="Finder caches extension processes. After updating, restart Finder to load the new extension. You can run “killall Finder” in Terminal; Finder windows will close and reopen.">Finder 会缓存扩展进程。更新后需要重启访达，才能加载新扩展。可在终端执行「killall Finder」，访达窗口会关闭并重新打开。</p></details>
+          <details><summary><span data-en="Where can I see operation failures?">文件操作失败，在哪里查看原因？</span><span aria-hidden="true">＋</span></summary><p data-en="Open Recent Operations from the FinderRight menu-bar icon. Failed operations include an explanation; successful ones can reveal the result in Finder. Keep the menu-bar icon visible to see these results.">点击 FinderRight 菜单栏图标，在「最近操作」里查看。失败项会显示原因，成功项可在访达中定位结果；保留菜单栏图标才能看到这些提示。</p></details>
+        </div>
+      </div>
     </section>
 
-    <section class="faq-section wrap" id="faq"><div><span class="small-label">FAQ</span><h2 data-en="A few things<br>to know.">你可能<br>还想知道。</h2><a class="text-link" href="https://github.com/funny-dog/FinderRight/issues" target="_blank" rel="noopener noreferrer" data-en="Ask on GitHub ↗">在 GitHub 提问 ↗</a></div><div class="faq-list">
-      <details><summary><span data-en="Is FinderRight free?">FinderRight 是免费的吗？</span><span aria-hidden="true">＋</span></summary><p data-en="Yes. FinderRight is free and open source under the MIT license. You can use it, read the code, and build it yourself.">是的。FinderRight 免费使用，并采用 MIT 协议开源。你可以使用、查看源码，也可以自行构建。</p></details>
-      <details><summary><span data-en="Which Macs are supported?">支持哪些 Mac？</span><span aria-hidden="true">＋</span></summary><p data-en="The current release supports Apple Silicon Macs (M-series chips) running macOS 13 or later. Intel Macs are not currently supported.">当前版本支持搭载 Apple Silicon（M 系列芯片）、运行 macOS 13 及以上系统的 Mac，暂不支持 Intel 架构。</p></details>
-      <details><summary><span data-en="Why does macOS block the first launch?">为什么首次打开会被系统拦截？</span><span aria-hidden="true">＋</span></summary><p data-en="The current release uses a self-signed certificate and has not been notarized by Apple. Download it from the official GitHub Release and follow the installation guide above to allow it to launch.">当前版本使用自签名证书，尚未经过 Apple 公证。请从官方 GitHub Release 下载，并按上方安装指南允许首次打开。</p></details>
-      <details><summary><span data-en="Why is the menu missing in cloud folders?">为什么云盘里没有右键菜单？</span><span aria-hidden="true">＋</span></summary><p data-en="macOS File Provider folders, including iCloud Drive and Google Drive, restrict third-party Finder menus. FinderRight offers these actions in the Services submenu instead. Full Disk Access does not remove this restriction.">iCloud Drive、Google Drive 等 File Provider 云盘目录限制第三方 Finder 扩展菜单。FinderRight 在这些目录通过「服务」子菜单提供操作；完全磁盘访问不能解除这一限制。</p></details>
-      <details><summary><span data-en="What should I do after updating?">更新后菜单没有变化怎么办？</span><span aria-hidden="true">＋</span></summary><p data-en="Finder caches extension processes. After updating, restart Finder to load the new extension. You can run “killall Finder” in Terminal; Finder windows will close and reopen.">Finder 会缓存扩展进程。更新后需要重启访达，才能加载新扩展。可在终端执行「killall Finder」，访达窗口会关闭并重新打开。</p></details>
-      <details><summary><span data-en="Where can I see operation failures?">文件操作失败，在哪里查看原因？</span><span aria-hidden="true">＋</span></summary><p data-en="Open Recent Operations from the FinderRight menu-bar icon. Failed operations include an explanation; successful ones can reveal the result in Finder. Keep the menu-bar icon visible to see these results.">点击 FinderRight 菜单栏图标，在「最近操作」里查看。失败项会显示原因，成功项可在访达中定位结果；保留菜单栏图标才能看到这些提示。</p></details>
-    </div></section>
-
-    <section class="closing wrap"><img src="assets/icon.png" alt="" width="76" height="76" loading="lazy"><h2 data-en="Your next right-click<br>could be a better one.">下一次右键，<br>可以更顺手。</h2><p data-en="If FinderRight makes your daily work easier, a GitHub star helps support the project. Feedback is welcome too.">如果 FinderRight 让你的日常操作更顺手，欢迎点个 Star 支持，也欢迎反馈使用问题。</p><a class="button" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg><span data-en="Download FinderRight">免费下载 FinderRight</span></a><p><a class="text-link" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="⭐ Star on GitHub">⭐ 在 GitHub 支持项目</a></p><p class="requirements">macOS 13+ <span>·</span> Apple Silicon</p></section>
+    <section class="close">
+      <img src="assets/icon.png" alt="" width="84" height="84" loading="lazy">
+      <h2 class="disp" data-en="Your next right-click<br>could be a better one.">下一次右键，<br>可以更顺手。</h2>
+      <p data-en="If FinderRight makes your daily work easier, a GitHub star helps support the project. Feedback is welcome too.">如果 FinderRight 让你的日常操作更顺手，欢迎点个 Star 支持，也欢迎反馈使用问题。</p>
+      <div class="actions"><a class="btn btn-dark" href="https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg" data-en="Download FinderRight">免费下载 FinderRight</a><a class="btn btn-ghost" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Star on GitHub">在 GitHub 点个 Star</a></div>
+      <p class="mono">macOS 13+ · Apple Silicon</p>
+    </section>
   </main>
-  <footer class="footer wrap"><a class="brand" href="#"><img src="assets/icon.png" alt="" width="28" height="28"><span>FinderRight</span></a><p data-en="A little more useful. Every day.">让日常，顺手一点。</p><div><a href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/funny-dog/FinderRight/releases" target="_blank" rel="noopener noreferrer" data-en="Release notes">更新日志</a><a href="https://github.com/funny-dog/FinderRight/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></div></footer>
+
+  <footer class="foot">
+    <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="28" height="28"><span>FinderRight</span></a>
+    <span data-en="A little more useful. Every day.">让日常，顺手一点。</span>
+    <div><a href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/funny-dog/FinderRight/releases" target="_blank" rel="noopener noreferrer" data-en="Release notes">更新日志</a><a href="https://github.com/funny-dog/FinderRight/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></div>
+  </footer>
 </body>
 </html>
