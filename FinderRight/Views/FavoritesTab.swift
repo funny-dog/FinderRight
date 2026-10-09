@@ -13,86 +13,100 @@ struct FavoritesTab: View {
     private var home: String { IPCBridge.realUserHomeDirectory.path }
 
     var body: some View {
-        Form {
-            Section {
-                if paths.isEmpty {
-                    Text("还没有常用目录")
-                        .foregroundColor(.secondary)
+        FRPage(title: "常用目录", subtitle: "右键「移动到 / 复制到」使用的目的地") {
+            FRSection {
+                HStack {
+                    FRCaption("常用目录")
+                    Spacer()
+                    Button {
+                        addDirectories()
+                    } label: {
+                        Label("添加目录…", systemImage: "plus")
+                    }
+                    .buttonStyle(.frPrimary)
                 }
-                let names = FavoriteDirectories.displayNames(for: paths, home: home)
-                ForEach(Array(zip(paths, names)), id: \.0) { path, name in
-                    row(path: path, name: name)
-                }
-
-                Button {
-                    addDirectories()
-                } label: {
-                    Label("添加目录…", systemImage: "plus")
+            } content: {
+                FRCard {
+                    if paths.isEmpty {
+                        emptyState
+                    } else {
+                        let names = FavoriteDirectories.displayNames(for: paths, home: home)
+                        ForEach(Array(zip(paths, names).enumerated()), id: \.element.0) { index, pair in
+                            if index > 0 { FRDivider() }
+                            row(path: pair.0, name: pair.1)
+                        }
+                    }
                 }
 
                 if let message {
                     Text(verbatim: message)
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.warnText)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
                 }
-            } header: {
-                Text("常用目录")
-            } footer: {
-                Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+
+                FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。"))
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             paths = SharedConfig.shared.favoriteDirectories
         }
     }
 
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            FRIconChip(systemName: "folder.badge.plus", size: 40)
+            Text("还没有常用目录")
+                .font(.system(size: 13))
+                .foregroundColor(FRTheme.mute)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+    }
+
     private func row(path: String, name: String) -> some View {
         let exists = FileManager.default.fileExists(atPath: path)
-        return HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundColor(.secondary)
-                .frame(width: 18, height: 24)
-                .contentShape(Rectangle())
+        return HStack(spacing: 10) {
+            FRGrip()
                 .draggable(path)
                 .help("拖动调整顺序")
 
             Image(nsImage: NSWorkspace.shared.icon(forFile: path))
                 .resizable()
-                .frame(width: 20, height: 20)
+                .frame(width: 28, height: 28)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(FRTheme.text)
                 Text(verbatim: PathFormatter.string(for: [URL(fileURLWithPath: path)], format: .tilde, home: home))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(FRTheme.mute)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if !exists {
                     Text("目录不存在，移动或复制到这里会失败")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.warnText)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Button {
                 remove(path)
             } label: {
                 Image(systemName: "minus.circle")
+                    .font(.system(size: 15))
+                    .foregroundColor(FRTheme.mute)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("移除")
         }
-        .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(dropTargetPath == path ? Color.accentColor.opacity(0.15) : Color.clear)
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(dropTargetPath == path ? FRTheme.selection : Color.clear)
         .dropDestination(for: String.self) { dropped, _ in
             guard let moved = dropped.first else { return false }
             return move(moved, to: path)

@@ -5,58 +5,23 @@ import AppKit
 struct FullDiskAccessView: View {
 
     @FRState private var hasFDA: Bool = FullDiskAccessChecker.check()
-    @FRState private var lastCheckedAt: Date = Date()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                Image(systemName: hasFDA ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .foregroundColor(hasFDA ? .green : .orange)
-                    .font(.title)
-                VStack(alignment: .leading) {
-                    Text("完全磁盘访问")
-                        .font(.headline)
-                    Text(LocalizedStringKey(hasFDA ? "已授权" : "未授权 — 在 ~/Pictures、~/Documents 等受保护目录将无法工作"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            if !hasFDA {
-                Text("FinderRight 需要「完全磁盘访问」权限，才能在系统保护目录（Documents、Desktop、Downloads、Pictures、Movies、Music）执行右键菜单功能。")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack {
-                    Button("打开系统设置授权…") {
-                        openFullDiskAccessSettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("重新检测") {
-                        hasFDA = FullDiskAccessChecker.check()
-                        lastCheckedAt = Date()
-                    }
-                }
-
-                DisclosureGroup("授权步骤说明") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("1. 点击上方按钮，会自动跳转到「完全磁盘访问」列表")
-                        Text("2. 点击列表底部 +，添加 FinderRight.app")
-                        Text("3. 打开 FinderRight 旁边的开关")
-                        Text("4. 回到此处点击「重新检测」")
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-                }
-                .font(.caption)
-            }
-        }
-        .padding()
-        .frame(maxWidth: 480, alignment: .leading)
+        PermissionBlock(
+            title: "完全磁盘访问",
+            granted: hasFDA,
+            deniedDetail: "未授权 — 在 ~/Pictures、~/Documents 等受保护目录将无法工作",
+            explanation: "FinderRight 需要「完全磁盘访问」权限，才能在系统保护目录（Documents、Desktop、Downloads、Pictures、Movies、Music）执行右键菜单功能。",
+            openTitle: "打开系统设置授权…",
+            steps: [
+                "1. 点击上方按钮，会自动跳转到「完全磁盘访问」列表",
+                "2. 点击列表底部 +，添加 FinderRight.app",
+                "3. 打开 FinderRight 旁边的开关",
+                "4. 回到此处点击「重新检测」",
+            ],
+            onOpen: openFullDiskAccessSettings,
+            onRecheck: { hasFDA = FullDiskAccessChecker.check() }
+        )
         .onAppear {
             hasFDA = FullDiskAccessChecker.check()
         }
@@ -101,7 +66,3 @@ enum FullDiskAccessChecker {
         return false
     }
 }
-
-// #Preview {
-//     FullDiskAccessView()
-// }

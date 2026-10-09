@@ -287,3 +287,11 @@
 "移除" = "Remove";
 "以下目录不在允许范围内，未添加：%@" = "These folders are outside the allowed locations and were not added: %@";
 "添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。" = "Once added, right-click selected files and choose Move To or Copy To. Drag the ≡ handle to reorder. Only folders in your home folder or on external drives can be added.";
+
+/* Redesigned settings window */
+"启动、显示与系统权限" = "Launch, display and system permissions";
+"选择出现在右键菜单中的功能，拖动调整顺序" = "Choose what appears in the right-click menu, and drag to reorder";
+"右键「移动到 / 复制到」使用的目的地" = "Destinations for the right-click \"Move to / Copy to\"";
+"为右键菜单里的功能绑定快捷键" = "Assign keyboard shortcuts to right-click menu actions";
+"清除" = "Clear";
+"删除" = "Delete";

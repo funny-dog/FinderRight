@@ -9,59 +9,22 @@ struct AccessibilityView: View {
     @FRState private var hasAccess: Bool = AccessibilityChecker.check()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                Image(systemName: hasAccess ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .foregroundColor(hasAccess ? .green : .orange)
-                    .font(.title)
-                VStack(alignment: .leading) {
-                    Text("辅助功能")
-                        .font(.headline)
-                    Text(LocalizedStringKey(hasAccess ? "已授权" : "未授权 — 「切换隐藏文件」会让 Finder 窗口短暂闪烁"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            if !hasAccess {
-                Text("FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，实现 Finder 隐藏文件即时切换（无需重启 Finder）。授权后 Finder 窗口不再闪烁。")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack {
-                    Button("打开辅助功能设置…") {
-                        openAccessibilitySettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("重新检测") {
-                        hasAccess = AccessibilityChecker.check()
-                    }
-                }
-
-                Text("提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                DisclosureGroup("授权步骤说明") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("1. 点击上方按钮，会跳转到「辅助功能」列表")
-                        Text("2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app")
-                        Text("3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加")
-                        Text("4. 回到此处点击「重新检测」")
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-                }
-                .font(.caption)
-            }
-        }
-        .padding()
-        .frame(maxWidth: 480, alignment: .leading)
+        PermissionBlock(
+            title: "辅助功能",
+            granted: hasAccess,
+            deniedDetail: "未授权 — 「切换隐藏文件」会让 Finder 窗口短暂闪烁",
+            explanation: "FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，实现 Finder 隐藏文件即时切换（无需重启 Finder）。授权后 Finder 窗口不再闪烁。",
+            openTitle: "打开辅助功能设置…",
+            tip: "提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。",
+            steps: [
+                "1. 点击上方按钮，会跳转到「辅助功能」列表",
+                "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app",
+                "3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加",
+                "4. 回到此处点击「重新检测」",
+            ],
+            onOpen: openAccessibilitySettings,
+            onRecheck: { hasAccess = AccessibilityChecker.check() }
+        )
         .onAppear {
             hasAccess = AccessibilityChecker.check()
         }
@@ -85,7 +48,3 @@ enum AccessibilityChecker {
         return AXIsProcessTrustedWithOptions(opts)
     }
 }
-
-// #Preview {
-//     AccessibilityView()
-// }

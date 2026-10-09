@@ -10,96 +10,91 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            // 背景渐变
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .controlBackgroundColor),
-                    Color.blue.opacity(0.05),
-                    Color.purple.opacity(0.05),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            FRTheme.window
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 内容区域
-                TabView(selection: $currentStep) {
-                    WelcomeStep()
-                        .tag(0)
-
-                    EnableExtensionStep()
-                        .tag(1)
-
-                    PermissionStep(
-                        icon: "externaldrive.fill.badge.checkmark",
-                        colors: [.blue, .cyan],
-                        title: "授予完全磁盘访问（推荐）",
-                        subtitle: "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。"
-                    ) {
-                        FullDiskAccessView()
+                // 顶部分段进度条（为红绿灯留出位置）
+                HStack(spacing: 6) {
+                    ForEach(0..<totalSteps, id: \.self) { index in
+                        Capsule()
+                            .fill(index <= currentStep ? FRTheme.accent : FRTheme.mute.opacity(0.25))
+                            .frame(height: 4)
                     }
-                    .tag(2)
-
-                    PermissionStep(
-                        icon: "accessibility",
-                        colors: [.purple, .pink],
-                        title: "授予辅助功能（可选）",
-                        subtitle: "仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
-                    ) {
-                        AccessibilityView()
-                    }
-                    .tag(3)
-
-                    CompletionStep()
-                        .tag(4)
                 }
-                .tabViewStyle(.automatic)
-                .animation(.easeInOut(duration: 0.3), value: currentStep)
+                .padding(.horizontal, 40)
+                .padding(.top, 44)
+                .animation(.easeInOut(duration: 0.25), value: currentStep)
+
+                // 内容区域：同一时刻只渲染当前步骤
+                ZStack {
+                    switch currentStep {
+                    case 0:
+                        WelcomeStep()
+                    case 1:
+                        EnableExtensionStep()
+                    case 2:
+                        PermissionStep(
+                            icon: "externaldrive.fill.badge.checkmark",
+                            title: "授予完全磁盘访问（推荐）",
+                            subtitle: "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。"
+                        ) {
+                            FRCard { FullDiskAccessView() }
+                        }
+                    case 3:
+                        PermissionStep(
+                            icon: "accessibility",
+                            title: "授予辅助功能（可选）",
+                            subtitle: "仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
+                        ) {
+                            FRCard { AccessibilityView() }
+                        }
+                    default:
+                        CompletionStep()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+                .id(currentStep)
 
                 // 底部导航
                 HStack {
-                    // 步骤指示器
-                    HStack(spacing: 8) {
-                        ForEach(0..<totalSteps, id: \.self) { index in
-                            Circle()
-                                .fill(index == currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
-                                .frame(width: 8, height: 8)
-                                .animation(.easeInOut(duration: 0.2), value: currentStep)
-                        }
-                    }
+                    Text(verbatim: "\(currentStep + 1) / \(totalSteps)")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(FRTheme.mute)
 
                     Spacer()
 
-                    // 导航按钮
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         if currentStep > 0 {
                             Button("上一步") {
-                                withAnimation(.easeInOut(duration: 0.3)) {
+                                withAnimation(.easeInOut(duration: 0.25)) {
                                     currentStep -= 1
                                 }
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.frSecondary)
                         }
 
                         if currentStep < totalSteps - 1 {
                             Button("下一步") {
-                                withAnimation(.easeInOut(duration: 0.3)) {
+                                withAnimation(.easeInOut(duration: 0.25)) {
                                     currentStep += 1
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                            .buttonStyle(.frPrimary)
                         } else {
                             Button("开始使用") {
                                 hasCompletedOnboarding = true
                                 onClose()
                             }
-                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                            .buttonStyle(.frPrimary)
                         }
                     }
                 }
                 .padding(.horizontal, 40)
-                .padding(.bottom, 30)
+                .padding(.bottom, 28)
             }
         }
         .frame(width: 600, height: 500)
@@ -110,98 +105,74 @@ struct OnboardingView: View {
 
 struct WelcomeStep: View {
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
 
-            // 应用图标
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.blue.opacity(0.2), .purple.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .blur(radius: 20)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 96, height: 96)
 
-                Image(systemName: "contextualmenu.and.cursorarrow")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.blue, .purple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
+            Text("欢迎使用 FinderRight")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(FRTheme.text)
+                .padding(.top, 14)
 
-            // 标题
-            VStack(spacing: 8) {
-                Text("欢迎使用 FinderRight")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+            Text("增强你的 Finder 右键菜单")
+                .font(.system(size: 15))
+                .foregroundColor(FRTheme.mute)
+                .padding(.top, 4)
 
-                Text("增强你的 Finder 右键菜单")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-            }
-
-            // 功能列表
-            VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
                 FeatureHighlight(
-                    icon: "terminal.fill",
-                    color: .blue,
+                    icon: "terminal",
                     title: "快速打开终端",
                     description: "在任意目录一键打开终端或编辑器"
                 )
                 FeatureHighlight(
-                    icon: "doc.on.doc.fill",
-                    color: .orange,
+                    icon: "doc.on.doc",
                     title: "高效文件操作",
                     description: "复制路径、新建文件、压缩等常用操作"
                 )
                 FeatureHighlight(
                     icon: "slider.horizontal.3",
-                    color: .purple,
                     title: "完全可定制",
                     description: "自由选择需要的功能，隐藏不需要的"
                 )
             }
-            .padding(.horizontal, 60)
+            .padding(.horizontal, 40)
+            .padding(.top, 26)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding()
     }
 }
 
 struct FeatureHighlight: View {
     let icon: String
-    let color: Color
     let title: LocalizedStringKey
     let description: LocalizedStringKey
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-                .frame(width: 36, height: 36)
-                .background(color.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+        VStack(alignment: .leading, spacing: 0) {
+            FRIconChip(systemName: icon)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline)
-                Text(description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(FRTheme.text)
+                .padding(.top, 10)
+            Text(description)
+                .font(.system(size: 12))
+                .foregroundColor(FRTheme.mute)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+
+            Spacer(minLength: 0)
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FRTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(FRTheme.border, lineWidth: 1))
     }
 }
 
@@ -209,69 +180,51 @@ struct FeatureHighlight: View {
 
 struct EnableExtensionStep: View {
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
 
-            Image(systemName: "puzzlepiece.extension.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 56, height: 56)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.green, .mint],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+            FRIconChip(systemName: "puzzlepiece.extension.fill", size: 56)
 
-            VStack(spacing: 8) {
-                Text("启用 Finder 扩展")
-                    .font(.title)
-                    .fontWeight(.bold)
+            Text("启用 Finder 扩展")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundColor(FRTheme.text)
+                .padding(.top, 16)
 
-                Text("需要在系统设置中启用 FinderRight 扩展")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text("需要在系统设置中启用 FinderRight 扩展")
+                .font(.system(size: 14))
+                .foregroundColor(FRTheme.mute)
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
 
             // 步骤说明
-            VStack(alignment: .leading, spacing: 16) {
-                StepInstruction(
-                    number: 1,
-                    text: "点击下方按钮打开系统设置"
-                )
-                StepInstruction(
-                    number: 2,
-                    text: "在「扩展」列表中找到 FinderRight"
-                )
-                StepInstruction(
-                    number: 3,
-                    text: "勾选启用 Finder 扩展"
-                )
+            FRCard {
+                StepInstruction(number: 1, text: "点击下方按钮打开系统设置")
+                FRDivider()
+                StepInstruction(number: 2, text: "在「扩展」列表中找到 FinderRight")
+                FRDivider()
+                StepInstruction(number: 3, text: "勾选启用 Finder 扩展")
             }
-            .padding(.horizontal, 80)
+            .frame(width: 360)
+            .padding(.top, 22)
 
             // 打开系统设置按钮
             Button {
                 openExtensionsPreferences()
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "gear")
-                    Text("打开系统设置")
-                }
-                .frame(minWidth: 180)
+                Label("打开系统设置", systemImage: "gearshape")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 3)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.frPrimary)
+            .padding(.top, 20)
 
             Text("完成后点击「下一步」继续")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(FRTheme.mute)
+                .padding(.top, 10)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding()
     }
 
     private func openExtensionsPreferences() {
@@ -287,17 +240,20 @@ struct StepInstruction: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("\(number)")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(width: 24, height: 24)
-                .background(Color.accentColor)
-                .clipShape(Circle())
+            Text(verbatim: "\(number)")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(FRTheme.onAccent)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(FRTheme.accent))
 
             Text(text)
-                .font(.body)
+                .font(.system(size: 13))
+                .foregroundColor(FRTheme.text)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 }
 
@@ -306,40 +262,36 @@ struct StepInstruction: View {
 /// 授权步骤的外壳：标题区 + 设置页同款授权视图（状态、跳转按钮、步骤说明都复用，不另写一套）
 struct PermissionStep<Content: View>: View {
     let icon: String
-    let colors: [Color]
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey
     @ViewBuilder let content: Content
 
     var body: some View {
-        // 展开「授权步骤说明」后内容可能超出 500pt 的窗口高度，放进滚动视图
+        // 展开「授权步骤说明」后内容可能超出窗口高度，放进滚动视图
         ScrollView {
-            VStack(spacing: 20) {
-                Image(systemName: icon)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(
-                        LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
+            VStack(spacing: 0) {
+                FRIconChip(systemName: icon, size: 48)
 
-                VStack(spacing: 8) {
-                    Text(title)
-                        .font(.title)
-                        .fontWeight(.bold)
+                Text(title)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(FRTheme.text)
+                    .padding(.top, 14)
 
-                    Text(subtitle)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 40)
+                Text(subtitle)
+                    .font(.system(size: 13.5))
+                    .foregroundColor(FRTheme.mute)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 50)
+                    .padding(.top, 6)
 
                 content
+                    .frame(maxWidth: 440)
+                    .padding(.top, 20)
             }
-            .padding(.top, 36)
-            .padding(.horizontal)
+            .padding(.top, 26)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 12)
             .frame(maxWidth: .infinity)
         }
     }
@@ -351,62 +303,54 @@ struct CompletionStep: View {
     @FRState private var showCheckmark = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
 
             // 动画勾选
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.1))
-                    .frame(width: 100, height: 100)
+                    .fill(FRTheme.selection)
+                    .frame(width: 96, height: 96)
 
-                Image(systemName: "checkmark.circle.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                    .foregroundColor(.green)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(FRTheme.accentText)
                     .scaleEffect(showCheckmark ? 1.0 : 0.5)
                     .opacity(showCheckmark ? 1.0 : 0.0)
                     .animation(.spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
             }
 
-            VStack(spacing: 8) {
-                Text("一切就绪！")
-                    .font(.title)
-                    .fontWeight(.bold)
+            Text("一切就绪！")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundColor(FRTheme.text)
+                .padding(.top, 16)
 
-                Text("FinderRight 已准备好为你服务")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-            }
+            Text("FinderRight 已准备好为你服务")
+                .font(.system(size: 14))
+                .foregroundColor(FRTheme.mute)
+                .padding(.top, 4)
 
             // 右键菜单预览
-            VStack(spacing: 0) {
+            VStack(spacing: 8) {
                 Text("右键菜单预览")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 8)
+                    .font(.system(size: 12))
+                    .foregroundColor(FRTheme.mute)
 
-                VStack(spacing: 0) {
+                FRCard {
                     MenuPreviewItem(icon: "terminal", text: "在终端中打开")
-                    Divider().padding(.horizontal, 12)
+                    FRDivider()
                     MenuPreviewItem(icon: "curlybraces", text: "在 VS Code 中打开")
-                    Divider().padding(.horizontal, 12)
+                    FRDivider()
                     MenuPreviewItem(icon: "doc.on.doc", text: "复制路径")
-                    Divider().padding(.horizontal, 12)
+                    FRDivider()
                     MenuPreviewItem(icon: "doc.badge.plus", text: "新建文件")
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(.regularMaterial)
-                        .shadow(color: .black.opacity(0.1), radius: 8, y: 2)
-                )
-                .frame(width: 220)
+                .frame(width: 240)
             }
+            .padding(.top, 22)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding()
         .onAppear {
             showCheckmark = true
         }
@@ -420,11 +364,12 @@ struct MenuPreviewItem: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12))
+                .foregroundColor(FRTheme.accentText)
                 .frame(width: 16)
             Text(text)
-                .font(.callout)
+                .font(.system(size: 13))
+                .foregroundColor(FRTheme.text)
             Spacer()
         }
         .padding(.horizontal, 14)
