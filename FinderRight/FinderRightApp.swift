@@ -368,6 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 先确定 SwiftUI 内容尺寸，避免按尚未布局的小窗口居中后再扩展而偏移。
                 win.setContentSize(hosting.view.fittingSize)
                 win.center()
+                win.setFrameAutosaveName("FinderRightSettings")
                 self.settingsWindow = win
             }
             self.settingsWindow?.makeKeyAndOrderFront(nil)
@@ -468,7 +469,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 标准窗口关闭后，如果用户没要求常驻 Dock，且已无可见标准窗口，则切回 accessory
     @objc private func windowWillClose(_ note: Notification) {
         if let closing = note.object as? NSWindow {
-            if closing === settingsWindow { settingsWindow = nil }
+            if closing === settingsWindow {
+                // 关闭后 AppKit 可能仍持有窗口，释放保存名称供下次创建恢复。
+                closing.setFrameAutosaveName("")
+                settingsWindow = nil
+            }
             if closing === onboardingWindow { onboardingWindow = nil }
         }
         guard !alwaysShowDockIcon else { return }
