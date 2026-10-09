@@ -360,11 +360,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let win = NSWindow(contentViewController: hosting)
                 win.title = "FinderRight"
                 // 侧边栏延伸到标题栏下方：隐藏标题文字、标题栏透明，整个窗口背景都可拖动
-                win.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+                win.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
                 win.titlebarAppearsTransparent = true
                 win.titleVisibility = .hidden
                 win.isMovableByWindowBackground = true
                 win.isReleasedWhenClosed = false
+                // 先确定 SwiftUI 内容尺寸，避免按尚未布局的小窗口居中后再扩展而偏移。
+                win.setContentSize(hosting.view.fittingSize)
                 win.center()
                 self.settingsWindow = win
             }
