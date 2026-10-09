@@ -59,7 +59,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(FRTheme.window)
         }
-        .frame(width: 780, height: 620)
+        .frame(minWidth: 680, idealWidth: 780, maxWidth: .infinity,
+               minHeight: 500, idealHeight: 620, maxHeight: .infinity)
         .background(FRTheme.window)
     }
 
