@@ -16,9 +16,9 @@
 <br/>
 <br/>
 
-<img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="320" />
+<img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="360" />
 &emsp;
-<img src="docs/images/settings-about.png" alt="FinderRight Settings — About" height="320" />
+<img src="docs/images/settings-shortcuts.png" alt="FinderRight Settings — Keyboard Shortcuts" height="360" />
 
 如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 点个 Star 支持](https://github.com/funny-dog/FinderRight)，也欢迎反馈使用问题。
 
@@ -48,18 +48,10 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 
 ### 📸 截图
 
-<table>
-  <tr>
-    <td align="center" valign="top" width="50%">
-      <img src="docs/images/cut-badge.png" alt="剪切后的文件带剪刀角标" width="386" /><br/>
-      <sub>剪切后的文件带剪刀角标，粘贴时才真正移动</sub>
-    </td>
-    <td align="center" valign="top" width="50%">
-      <img src="docs/images/settings-favorites.png" alt="常用目录设置" width="386" /><br/>
-      <sub>添加常用目录后，右键即可「移动到 / 复制到」</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/cut-badge.png" alt="剪切后的演示文件带剪刀角标" width="720" /><br/>
+  <sub>剪切后的文件带剪刀角标，粘贴时才真正移动</sub>
+</p>
 
 ### 📥 安装
 
@@ -181,18 +173,10 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 
 ### 📸 Screenshots
 
-<table>
-  <tr>
-    <td align="center" valign="top" width="50%">
-      <img src="docs/images/cut-badge.png" alt="Cut files with a scissors badge" width="386" /><br/>
-      <sub>Cut files get a scissors badge and are only moved when you paste</sub>
-    </td>
-    <td align="center" valign="top" width="50%">
-      <img src="docs/images/settings-favorites.png" alt="Favorite folders settings" width="386" /><br/>
-      <sub>Add favorite folders, then use Move To / Copy To from the right-click menu</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/cut-badge.png" alt="Demo files with scissors badges after cutting" width="720" /><br/>
+  <sub>Cut files get a scissors badge and are only moved when you paste</sub>
+</p>
 
 > The screenshots show the Chinese interface; FinderRight is also fully available in English.
 
