@@ -359,7 +359,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let hosting = NSHostingController(rootView: SettingsView())
                 let win = NSWindow(contentViewController: hosting)
                 win.title = "FinderRight"
-                win.styleMask = [.titled, .closable, .miniaturizable]
+                // 侧边栏延伸到标题栏下方：隐藏标题文字、标题栏透明，整个窗口背景都可拖动
+                win.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+                win.titlebarAppearsTransparent = true
+                win.titleVisibility = .hidden
+                win.isMovableByWindowBackground = true
                 win.isReleasedWhenClosed = false
                 win.center()
                 self.settingsWindow = win
@@ -383,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 win.styleMask = [.titled, .closable, .fullSizeContentView]
                 win.titlebarAppearsTransparent = true
                 win.titleVisibility = .hidden
+                win.isMovableByWindowBackground = true
                 win.isReleasedWhenClosed = false
                 win.setContentSize(NSSize(width: 600, height: 500))
                 win.center()
