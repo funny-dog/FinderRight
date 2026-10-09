@@ -19,7 +19,9 @@ uvx ruff check check.py
 node --check dist/script.js
 ```
 
-中文内容在 `dist/index.html`；对应英文在 `data-en` 属性。`dist/script.js` 处理语言切换和安装命令复制，`dist/style.css` 处理桌面与手机布局。
+中文内容在 `dist/index.html`；对应英文在 `data-en` 属性。`dist/script.js` 处理语言切换、深浅色主题切换和安装命令复制，`dist/style.css` 处理桌面与手机布局。
+
+深浅色主题由 `<html data-theme>` 控制：`dist/index.html` 的内联脚本在首次绘制前按本地记录或系统偏好设置主题，颜色全部定义为 `dist/style.css` 顶部的 CSS 变量，新增颜色时两套主题都要补齐。
 
 下载按钮使用 GitHub 最新 Release 地址，不写死版本号。应用功能、系统要求和安装说明更新时，应同步核实主仓库 README。
 

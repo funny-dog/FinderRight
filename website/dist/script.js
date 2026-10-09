@@ -14,8 +14,30 @@ const translatedImages = [...document.querySelectorAll('[data-en-alt]')].map(ele
   english: element.dataset.enAlt,
 }));
 
+const themeButton = document.querySelector('#theme');
+const themeColor = document.querySelector('meta[name="theme-color"]');
+
+// 主题已由 <head> 中的内联脚本写入 data-theme；这里只负责按钮文案与切换
+function updateThemeButton() {
+  const light = document.documentElement.dataset.theme === 'light';
+  const english = locale === 'en';
+  themeButton.setAttribute('aria-label', english
+    ? (light ? 'Switch to dark theme' : 'Switch to light theme')
+    : (light ? '切换到深色模式' : '切换到浅色模式'));
+  themeColor.content = light ? '#e4ecf6' : '#0b1220';
+}
+
 languageButton.hidden = false;
 copyButton.hidden = false;
+themeButton.hidden = false;
+updateThemeButton();
+themeButton.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  // 隐私模式下 localStorage 可能不可用，失败时仅本次生效
+  try { localStorage.setItem('theme', next); } catch {}
+  updateThemeButton();
+});
 languageButton.addEventListener('click', () => {
   locale = locale === 'zh-CN' ? 'en' : 'zh-CN';
   const english = locale === 'en';
@@ -35,6 +57,7 @@ languageButton.addEventListener('click', () => {
   document.querySelector('meta[property="og:title"]').content = document.title;
   document.querySelector('meta[property="og:description"]').content = description;
   copyStatus.textContent = '';
+  updateThemeButton();
 });
 
 copyButton.addEventListener('click', async () => {
