@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var directoryAlert: NSAlert?
 
     /// 用户是否要求常驻显示 Dock 图标
     private var alwaysShowDockIcon: Bool {
@@ -377,6 +378,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func openGoToDirectory(initialPath: String = "", failure: String? = nil) {
+        NSApp.activate(ignoringOtherApps: true)
+        if let directoryAlert {
+            directoryAlert.window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = L("前往目录…")
+        alert.informativeText = failure ?? L("输入绝对路径或以 ~/ 开头的路径")
+        alert.addButton(withTitle: L("打开"))
+        alert.addButton(withTitle: L("取消"))
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
+        input.stringValue = initialPath
+        input.placeholderString = "/Users/… / ~/Documents"
+        input.setAccessibilityLabel(L("目录路径"))
+        input.cell?.isScrollable = true
+        input.cell?.wraps = false
+        input.cell?.usesSingleLineMode = true
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+        directoryAlert = alert
+        defer { directoryAlert = nil }
+
+        while alert.runModal() == .alertFirstButtonReturn {
+            do {
+                let directory = try DirectoryPath.url(for: input.stringValue, home: IPCBridge.realUserHomeDirectory.path)
+                guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
+                    alert.informativeText = L("无法打开目录，请检查访问权限")
+                    continue
+                }
+                let enteredPath = input.stringValue
+                NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+                    guard let error else { return }
+                    DispatchQueue.main.async {
+                        self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
+                    }
+                }
+                return
+            } catch let error as DirectoryPath.ValidationError {
+                alert.informativeText = L(error.rawValue)
+            } catch {
+                alert.informativeText = error.localizedDescription
+            }
+            alert.window.initialFirstResponder = input
+        }
+    }
+
     @objc private func openOnboarding() {
         NSApp.setActivationPolicy(.regular)
         DispatchQueue.main.async { [weak self] in
@@ -514,6 +563,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SettingsNavigation.shared.selectedTab = tab
             }
             openSettings()
+            return
+        }
+
+        // URL 只打开输入框，路径必须由用户输入，不从外部请求接收。
+        if url.host == "go-to-directory" {
+            DispatchQueue.main.async { [weak self] in self?.openGoToDirectory() }
             return
         }
 

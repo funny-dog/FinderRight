@@ -478,6 +478,13 @@ class FinderSync: FIFinderSync {
                 guard hasSelection else { return }
                 menu.addItem(self.makeItem(titleKey: "复制路径", emoji: "📋", systemImage: "doc.on.doc", action: #selector(self.copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
             },
+            MenuFeatureCatalog.copyFileName: {
+                guard hasSelection else { return }
+                menu.addItem(self.makeItem(titleKey: "复制文件名", emoji: "📋", systemImage: "doc.text", action: #selector(self.copyFileName(_:)), shortcutId: "shortcut.copyFileName", style: style))
+            },
+            MenuFeatureCatalog.goToDirectory: {
+                menu.addItem(self.makeItem(titleKey: "前往目录…", emoji: "📂", systemImage: "folder", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
+            },
             MenuFeatureCatalog.openTerminal: {
                 menu.addItem(self.makeItem(titleKey: "打开终端", emoji: "💻", systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
             },
@@ -742,6 +749,17 @@ class FinderSync: FIFinderSync {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(path, forType: .string)
         logToFile("copyPath ok: count=\(urls.count) format=\(format.rawValue)")
+    }
+
+    @objc func copyFileName(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { logToFile("copyFileName: no items"); return }
+        let names = PathFormatter.string(for: urls, format: .name, home: IPCBridge.realUserHomeDirectory.path)
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(names, forType: .string) else {
+            logToFile("copyFileName: pasteboard write failed"); return
+        }
+        logToFile("copyFileName ok: count=\(urls.count)")
     }
 
     @objc func openTerminal(_ sender: NSMenuItem) {
@@ -1040,6 +1058,19 @@ class FinderSync: FIFinderSync {
             "mode": .string(mode.rawValue)
         ]) { r in
             logToFile("transferItems ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    @objc func goToDirectory(_ sender: NSMenuItem) {
+        guard let url = URL(string: "\(IPCBridge.urlScheme)://go-to-directory") else { return }
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.activates = true
+        if let appURL = IPCBridge.containingAppURL(forExtensionAt: Bundle.main.bundleURL) {
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg) { _, error in
+                if let error { logToFile("goToDirectory: \(error.localizedDescription)") }
+            }
+        } else if !NSWorkspace.shared.open(url) {
+            logToFile("goToDirectory: failed to open main app")
         }
     }
 

@@ -1341,6 +1341,18 @@ struct FinderRightKitTestsRunner {
             try assertEqual(PathFormatter.shellQuoted(""), "''")
         }
 
+        runTest("复制文件名保留完整名称，多选每行一项") {
+            let urls = [
+                URL(fileURLWithPath: "/tmp/中文 报告.tar.gz"),
+                URL(fileURLWithPath: "/tmp/.gitignore"),
+                URL(fileURLWithPath: "/tmp/无扩展名"),
+                URL(fileURLWithPath: "/tmp/项目 文件夹", isDirectory: true),
+            ]
+            try assertEqual(PathFormatter.string(for: urls, format: .name, home: "/Users/me"),
+                            "中文 报告.tar.gz\n.gitignore\n无扩展名\n项目 文件夹")
+            try assertEqual(PathFormatter.string(for: [], format: .name, home: "/Users/me"), "")
+        }
+
         runTest("SharedConfig.copyPathFormat 默认绝对路径并可持久化") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
@@ -1368,6 +1380,24 @@ struct FinderRightKitTestsRunner {
                             ["z", "c", "a", "n", "b"])
         }
 
+        runTest("复制文件名默认开启，升级保留菜单顺序并支持关闭") {
+            let oldSaved = [MenuFeatureCatalog.toggleHidden] + MenuFeatureCatalog.all.map(\.id).filter {
+                $0 != MenuFeatureCatalog.copyFileName && $0 != MenuFeatureCatalog.toggleHidden
+            }
+            let ids = MenuFeatureCatalog.ordered(by: oldSaved).map(\.id)
+            let copyPath = ids.firstIndex(of: MenuFeatureCatalog.copyPath)!
+            try assertEqual(ids[copyPath + 1], MenuFeatureCatalog.copyFileName)
+            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.copyFileName }, oldSaved)
+
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertTrue(config.isActionEnabled(MenuFeatureCatalog.copyFileName))
+            config.setActionEnabled(MenuFeatureCatalog.copyFileName, enabled: false)
+            try assertTrue(!SharedConfig(fileURL: url).isActionEnabled(MenuFeatureCatalog.copyFileName))
+        }
+
         runTest("SharedConfig.menuOrder 默认为空，清空时恢复默认") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
@@ -1378,6 +1408,59 @@ struct FinderRightKitTestsRunner {
             try assertEqual(SharedConfig(fileURL: url).menuOrder, ["feature.cut", "feature.copyPath"])
             config.menuOrder = []
             try assertTrue(SharedConfig(fileURL: url).menuOrder.isEmpty)
+        }
+
+        runTest("前往目录接受绝对路径、主目录与目录符号链接") {
+            let home = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let directory = home.appendingPathComponent("中文 目录", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let spaced = home.appendingPathComponent("目录尾部空格 ", isDirectory: true)
+            try FileManager.default.createDirectory(at: spaced, withIntermediateDirectories: true)
+            let link = home.appendingPathComponent("目录链接")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: directory)
+            try assertEqual(try DirectoryPath.url(for: directory.path, home: home.path).path, directory.path)
+            try assertEqual(try DirectoryPath.url(for: spaced.path, home: home.path).path, spaced.path, "不修剪真实目录名中的空格")
+            try assertEqual(try DirectoryPath.url(for: "~/中文 目录", home: home.path).path, directory.path)
+            try assertEqual(try DirectoryPath.url(for: "~", home: home.path).path, home.path)
+            try assertEqual(try DirectoryPath.url(for: link.path, home: home.path).path, link.path)
+            try assertEqual(try DirectoryPath.url(for: "/", home: home.path).path, "/", "允许前往主目录以外的目录")
+        }
+
+        runTest("前往目录拒绝相对路径、空输入、普通文件和不存在的目录") {
+            let home = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let file = home.appendingPathComponent("报告.txt")
+            try Data().write(to: file)
+            let cases: [(String, DirectoryPath.ValidationError)] = [
+                ("", .invalidPath), ("Documents", .invalidPath), ("~other/Documents", .invalidPath),
+                (home.path + "\0ignored", .invalidPath), (file.path, .notDirectory),
+                (home.appendingPathComponent("missing").path, .unavailable),
+            ]
+            for (input, expected) in cases {
+                do {
+                    _ = try DirectoryPath.url(for: input, home: home.path)
+                    throw TestFailure(message: "应拒绝输入：\(input)")
+                } catch let error as DirectoryPath.ValidationError {
+                    try assertEqual(error, expected)
+                }
+            }
+        }
+
+        runTest("前往目录升级后默认显示并保留原菜单顺序") {
+            let oldSaved = MenuFeatureCatalog.all.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
+            let ids = MenuFeatureCatalog.ordered(by: Array(oldSaved)).map(\.id)
+            let copyName = ids.firstIndex(of: MenuFeatureCatalog.copyFileName)!
+            try assertEqual(ids[copyName + 1], MenuFeatureCatalog.goToDirectory)
+            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory }, Array(oldSaved))
+
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertTrue(config.isActionEnabled(MenuFeatureCatalog.goToDirectory))
+            config.setActionEnabled(MenuFeatureCatalog.goToDirectory, enabled: false)
+            try assertTrue(!SharedConfig(fileURL: url).isActionEnabled(MenuFeatureCatalog.goToDirectory))
         }
 
         // MARK: - 常用目录：移动到 / 复制到
