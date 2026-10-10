@@ -13,6 +13,19 @@ const translatedImages = [...document.querySelectorAll('[data-en-alt]')].map(ele
   chinese: element.alt,
   english: element.dataset.enAlt,
 }));
+const translatedLabels = [...document.querySelectorAll('[data-en-label]')].map(element => ({
+  element,
+  chinese: element.getAttribute('aria-label'),
+  english: element.dataset.enLabel,
+}));
+
+// 系统开启「减少动态效果」时不自动播放演示视频，改为显示控件由用户手动播放
+const demoVideo = document.querySelector('.demo video');
+if (demoVideo && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  demoVideo.removeAttribute('autoplay');
+  demoVideo.pause();
+  demoVideo.controls = true;
+}
 
 const themeButton = document.querySelector('#theme');
 const themeColor = document.querySelector('meta[name="theme-color"]');
@@ -47,6 +60,7 @@ languageButton.addEventListener('click', () => {
     entry.element.innerHTML = english ? entry.english : entry.chinese;
   }
   for (const entry of translatedImages) entry.element.alt = english ? entry.english : entry.chinese;
+  for (const entry of translatedLabels) entry.element.setAttribute('aria-label', english ? entry.english : entry.chinese);
   languageButton.innerHTML = `${english ? '中文' : 'EN'} <span aria-hidden="true">↔</span>`;
   languageButton.setAttribute('aria-label', english ? '切换到中文' : 'Switch to English');
   document.title = english ? 'FinderRight — A better right-click' : 'FinderRight — 让 Finder 更顺手';
