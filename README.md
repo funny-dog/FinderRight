@@ -16,9 +16,7 @@
 <br/>
 <br/>
 
-<img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="360" />
-&emsp;
-<img src="docs/images/settings-shortcuts.png" alt="FinderRight Settings — Keyboard Shortcuts" height="360" />
+<img src="docs/images/demo.gif" alt="FinderRight demo: new file, cut & paste, open terminal from the Finder right-click menu" width="800" />
 
 如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 点个 Star 支持](https://github.com/funny-dog/FinderRight)，也欢迎反馈使用问题。
 
@@ -49,6 +47,12 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - 🔐 **升级免重新授权** —— 自 1.3.0 起使用固定证书签名，之后的版本升级会自动保留「完全磁盘访问」与「辅助功能」授权；自动更新还会校验新版本与当前版本出自同一证书，拒绝被篡改或冒充的更新包
 
 ### 📸 截图
+
+<p align="center">
+  <img src="docs/images/menu-new-file.png" alt="FinderRight 右键菜单" height="360" />
+  &emsp;
+  <img src="docs/images/settings-shortcuts.png" alt="FinderRight 快捷键设置" height="360" />
+</p>
 
 <p align="center">
   <img src="docs/images/cut-badge.png" alt="剪切后的演示文件带剪刀角标" width="720" /><br/>
@@ -176,6 +180,12 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - 🔐 **No Re-authorization on Upgrade** — signed with a fixed certificate since 1.3.0, so later upgrades keep the Full Disk Access and Accessibility permissions; the auto-updater also verifies that a new version is signed with the same certificate and rejects tampered or impostor packages
 
 ### 📸 Screenshots
+
+<p align="center">
+  <img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="360" />
+  &emsp;
+  <img src="docs/images/settings-shortcuts.png" alt="FinderRight Settings — Keyboard Shortcuts" height="360" />
+</p>
 
 <p align="center">
   <img src="docs/images/cut-badge.png" alt="Demo files with scissors badges after cutting" width="720" /><br/>
