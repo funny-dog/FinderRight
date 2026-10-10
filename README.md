@@ -36,6 +36,8 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 
 - 📄 **新建文件** —— 一键新建 txt / Markdown / Python / Shell / JSON / Swift / JS 等十种文件，以及空白的 Word / Excel / PowerPoint 文档；还可在设置中添加自定义文本模板
 - 📋 **复制路径** —— 复制选中文件/文件夹的完整路径；可在设置中改为 `~` 路径、仅文件名、终端转义路径或文件 URL
+- 📋 **复制文件名** —— 独立复制完整文件名（含扩展名），多选时每行一项
+- 📂 **前往目录** —— 输入绝对路径或 `~/` 路径，在 Finder 中打开指定目录
 - 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）
 - ✏️ **打开编辑器** —— 用 VS Code / Cursor / Sublime / Xcode 等打开
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动
@@ -161,6 +163,8 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 
 - 📄 **New File** — create txt / Markdown / Python / Shell / JSON / Swift / JS and more with one click, plus blank Word / Excel / PowerPoint documents; add your own text templates in Settings
 - 📋 **Copy Path** — copy the full path of selected files/folders; switch to a `~` path, file name only, shell-escaped path or file URL in Settings
+- 📋 **Copy File Name** — copy full file names including extensions; multiple selections are copied one per line
+- 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder
 - 💻 **Open in Terminal** — open the current folder in your default terminal, or choose Ghostty / Terminal / iTerm2 / Warp, etc.
 - ✏️ **Open in Editor** — open with VS Code / Cursor / Sublime / Xcode, etc.
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste
