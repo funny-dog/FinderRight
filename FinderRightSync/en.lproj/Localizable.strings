@@ -3,6 +3,8 @@
 /* Top-level menu items */
 "📄 新建文件" = "📄 New File";
 "📋 复制路径" = "📋 Copy Path";
+"📋 复制文件名" = "📋 Copy File Name";
+"📂 前往目录…" = "📂 Go to Folder…";
 "💻 打开终端" = "💻 Open in Terminal";
 "✏️ 打开编辑器" = "✏️ Open in Editor";
 "✂️ 剪切" = "✂️ Cut";
@@ -30,6 +32,8 @@
 /* Modern / Clean style (Without Emoji) */
 "新建文件" = "New File";
 "复制路径" = "Copy Path";
+"复制文件名" = "Copy File Name";
+"前往目录…" = "Go to Folder…";
 "打开终端" = "Open in Terminal";
 "打开编辑器" = "Open in Editor";
 "剪切" = "Cut";

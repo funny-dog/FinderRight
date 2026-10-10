@@ -982,6 +982,8 @@ struct ShortcutsTab: View {
     private let actions: [(id: String, name: String, icon: String)] = [
         ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
         ("shortcut.copyPath",     "复制路径",       "doc.on.doc"),
+        ("shortcut.copyFileName", "复制文件名",     "doc.text"),
+        ("shortcut.goToDirectory", "前往目录…",     "folder"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
         ("shortcut.openEditor",   "打开编辑器",     "square.and.pencil"),
         ("shortcut.cut",          "剪切",           "scissors"),
