@@ -649,20 +649,15 @@ class FinderSync: FIFinderSync {
 
     private func buildNewFileMenu(style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("新建文件"))
-        let types: [(nameKey: String, emoji: String, symbol: String, tag: Int)] = [
-            ("文本文件 (.txt)", "📝", "doc.text", 0),
-            ("Markdown (.md)", "📖", "doc.richtext", 1),
-            ("HTML (.html)", "🌐", "chevron.left.forwardslash.chevron.right", 2),
-            ("Python (.py)", "🐍", "terminal", 3),
-            ("Shell (.sh)", "🔧", "terminal", 4),
-            ("JSON (.json)", "📊", "curlybraces", 5),
-            ("XML (.xml)", "📃", "doc.text", 6),
-            ("CSV (.csv)", "📈", "tablecells", 7),
-            ("Swift (.swift)", "🍎", "curlybraces", 8),
-            ("JavaScript (.js)", "🟨", "curlybraces", 9),
+        let icons = [
+            ("📝", "doc.text"), ("📖", "doc.richtext"),
+            ("🌐", "chevron.left.forwardslash.chevron.right"), ("🐍", "terminal"),
+            ("🔧", "terminal"), ("📊", "curlybraces"), ("📃", "doc.text"),
+            ("📈", "tablecells"), ("🍎", "curlybraces"), ("🟨", "curlybraces"),
         ]
-        for t in types {
-            let item = makeItem(titleKey: t.nameKey, emoji: t.emoji, systemImage: t.symbol, action: #selector(newFile(_:)), tag: t.tag, style: style)
+        for (tag, template) in BuiltInFileTemplates.text.enumerated() {
+            let (emoji, symbol) = icons[tag]
+            let item = makeItem(titleKey: template.name, emoji: emoji, systemImage: symbol, action: #selector(newFile(_:)), tag: tag, style: style)
             m.addItem(item)
         }
 
@@ -1123,18 +1118,8 @@ class FinderSync: FIFinderSync {
     // MARK: - Utility
 
     private func newFileTypeInfo(for tag: Int) -> (ext: String, content: String) {
-        switch tag {
-        case 0: return ("txt", "")
-        case 1: return ("md", "# Untitled\n\n")
-        case 2: return ("html", "<!DOCTYPE html>\n<html lang=\"en\">\n<head><meta charset=\"UTF-8\"><title>Untitled</title></head>\n<body>\n</body>\n</html>\n")
-        case 3: return ("py", "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\n")
-        case 4: return ("sh", "#!/bin/bash\n\n")
-        case 5: return ("json", "{\n    \n}\n")
-        case 6: return ("xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root>\n</root>\n")
-        case 7: return ("csv", "")
-        case 8: return ("swift", "import Foundation\n\n")
-        case 9: return ("js", "\"use strict\";\n\n")
-        default: return ("txt", "")
-        }
+        let templates = BuiltInFileTemplates.text
+        let template = templates.indices.contains(tag) ? templates[tag] : templates[0]
+        return (template.fileExtension, template.content)
     }
 }

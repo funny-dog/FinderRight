@@ -11,13 +11,13 @@ import FinderRightKit
 /// 那是文件权限 / TCC，而这是扩展点路由）。
 ///
 /// ## 解决方案
-/// 改用 **macOS Services**。Services 基于「当前选中项」经响应链派发，与目录归属无关，
-/// 因此在任意文件夹（含云盘）的右键「服务 / Services」子菜单里都能出现。
+/// 改用 **macOS Services**。Services 基于 Finder 提供的文件路径经响应链派发，与目录归属无关，
+/// 因此也可出现在云盘文件夹的右键「服务 / Services」子菜单里。
 /// 主 App 非沙箱，故 Service 处理器可直接复用 `FinderRightService` 的现有逻辑（无需 IPC）。
 ///
 /// ## 局限
-/// Services 必须有「选中项」才会被触发，因此「新建文件」「空白处粘贴」这类无选中项的
-/// 容器操作无法走此路径 —— 它们在普通目录仍由 FinderSync 扩展提供。
+/// 本机 Google Drive 实测：空白处也可能把当前目录作为输入传入，但并非每次右键都显示服务。
+/// 未显示时，可在上一级选中目标文件夹，调用「粘贴到此文件夹」或「在此文件夹新建文件」。
 ///
 /// 方法名（如 `copyPath`）对应 Info.plist 中每个 service 的 `NSMessage`，
 /// 实际 selector 为 `copyPath:userData:error:`。
@@ -28,14 +28,22 @@ final class ServicesProvider: NSObject {
 
     /// 压缩 / 解压等会 fork 子进程并 `waitUntilExit`，放后台串行队列，避免阻塞 Finder 主线程
     private let workQueue = DispatchQueue(label: "com.finderright.app.services", qos: .userInitiated)
+    private var isConfirmingPaste = false
+    private var isShowingFileActionPrompt = false
+    private let showDirectoryPrompt: () -> Void
+
+    private init(showDirectoryPrompt: @escaping () -> Void) {
+        self.showDirectoryPrompt = showDirectoryPrompt
+        super.init()
+    }
 
     /// 强引用，防止被释放（即便 `servicesProvider` 语义变化也安全）
     private static var sharedInstance: ServicesProvider?
 
     /// 注册为应用的 Services 提供器，并刷新系统 Services 缓存。
     /// 在 `applicationDidFinishLaunching` 中调用一次。
-    static func register() {
-        let provider = ServicesProvider()
+    static func register(showDirectoryPrompt: @escaping () -> Void) {
+        let provider = ServicesProvider(showDirectoryPrompt: showDirectoryPrompt)
         NSApp.servicesProvider = provider
         sharedInstance = provider
         // 强制系统重新扫描本 App 的 NSServices，确保安装 / 更新后菜单项立即可见
@@ -69,8 +77,8 @@ final class ServicesProvider: NSObject {
         return url.deletingLastPathComponent()
     }
 
-    /// 剪切 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
-    /// 只在访达位于前台（即用户从访达右键「服务」菜单触发）时受理
+    /// 剪切 / 粘贴 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
+    /// 仅直接受理访达前台调用；粘贴另处理提供程序被系统激活的情况，要求用户确认。
     private func isInvokedFromFinder(_ service: String) -> Bool {
         let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost) else {
@@ -93,6 +101,154 @@ final class ServicesProvider: NSObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(joined, forType: .string)
         NSLog("[ServicesProvider] copyPath: \(items.count) item(s)")
+    }
+
+    @objc func copyFileName(_ pboard: NSPasteboard,
+                            userData: String?,
+                            error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileName) else {
+            error?.pointee = NSLocalizedString("复制文件名功能已关闭，请在设置中启用", comment: "service") as NSString
+            return
+        }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        let names = PathFormatter.string(for: items, format: .name, home: IPCBridge.realUserHomeDirectory.path)
+        NSPasteboard.general.clearContents()
+        if !NSPasteboard.general.setString(names, forType: .string) {
+            error?.pointee = NSLocalizedString("无法写入剪贴板", comment: "service") as NSString
+        }
+    }
+
+    @objc func goToDirectory(_ pboard: NSPasteboard,
+                             userData: String?,
+                             error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.goToDirectory) else {
+            error?.pointee = NSLocalizedString("前往目录功能已关闭，请在设置中启用", comment: "service") as NSString
+            return
+        }
+        DispatchQueue.main.async(execute: showDirectoryPrompt)
+    }
+
+    @objc func newFile(_ pboard: NSPasteboard,
+                       userData: String?,
+                       error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard canStartFileAction(MenuFeatureCatalog.newFile, error: error) else { return }
+        guard let destination = ServiceInvocationPolicy.pasteDestination(for: fileURLs(from: pboard)) else {
+            error?.pointee = NSLocalizedString("请选择一个目标文件夹，再调用新建文件服务", comment: "service") as NSString
+            return
+        }
+        // 同步读取服务剪贴板，返回派发后再显示交互界面，避免占用 Services 的同步超时。
+        DispatchQueue.main.async { [self] in
+            SharedConfig.shared.reload()
+            let customTemplates = SharedConfig.shared.customFileTemplates
+            let textTemplates = BuiltInFileTemplates.text + customTemplates
+            let officeTemplates = OfficeTemplate.allCases
+            let choices = BuiltInFileTemplates.text.map { NSLocalizedString($0.name, comment: "service") }
+                + customTemplates.map { "\($0.name) (.\($0.fileExtension))" }
+                + ["Word 文档 (.docx)", "Excel 表格 (.xlsx)", "PowerPoint 演示文稿 (.pptx)"].map {
+                NSLocalizedString($0, comment: "service")
+            }
+            guard let index = chooseFileAction(title: "在此文件夹新建文件…", details: destination.path,
+                                              choices: choices, button: "创建") else { return }
+            var payload: [String: AnyJSON] = ["directory": .string(destination.path), "baseName": .string("untitled")]
+            if textTemplates.indices.contains(index) {
+                let template = textTemplates[index]
+                payload["ext"] = .string(template.fileExtension)
+                payload["content"] = .string(template.content)
+            } else {
+                payload["template"] = .string(officeTemplates[index - textTemplates.count].rawValue)
+            }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "createFile", payload: payload), feature: MenuFeatureCatalog.newFile)
+        }
+    }
+
+    @objc func moveToFavorite(_ pboard: NSPasteboard,
+                              userData: String?,
+                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        transferToFavorite(pboard, mode: .move, error: error)
+    }
+
+    @objc func copyToFavorite(_ pboard: NSPasteboard,
+                              userData: String?,
+                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        transferToFavorite(pboard, mode: .copy, error: error)
+    }
+
+    private func transferToFavorite(_ pboard: NSPasteboard, mode: FileTransferCheck.Mode,
+                                     error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        let feature = mode == .move ? MenuFeatureCatalog.moveTo : MenuFeatureCatalog.copyTo
+        guard canStartFileAction(feature, error: error) else { return }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else {
+            error?.pointee = NSLocalizedString("请先选中要移动或复制的项目", comment: "service") as NSString
+            return
+        }
+        let favorites = SharedConfig.shared.favoriteDirectories
+        guard !favorites.isEmpty else {
+            error?.pointee = NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service") as NSString
+            return
+        }
+        DispatchQueue.main.async { [self] in
+            let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
+            let choices = zip(names, favorites).map { "\($0) — \($1)" }
+            let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
+                + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
+            guard let index = chooseFileAction(title: mode == .move ? "移动到常用目录…" : "复制到常用目录…",
+                                              details: details, choices: choices, button: mode == .move ? "移动" : "复制") else { return }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "transferItems", payload: [
+                "items": .stringArray(items.map(\.path)), "destination": .string(favorites[index]), "mode": .string(mode.rawValue)
+            ]), feature: feature)
+        }
+    }
+
+    private func canStartFileAction(_ feature: String, error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
+        guard ServiceInvocationPolicy.acceptsInteractiveService(
+            frontmostBundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            providerBundleId: Bundle.main.bundleIdentifier) else {
+            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
+            return false
+        }
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(feature) else {
+            error?.pointee = NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service") as NSString
+            return false
+        }
+        return true
+    }
+
+    private func chooseFileAction(title: String, details: String, choices: [String], button: String) -> Int? {
+        guard !isShowingFileActionPrompt else { return nil }
+        isShowingFileActionPrompt = true
+        defer { isShowingFileActionPrompt = false }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString(title, comment: "service")
+        alert.informativeText = details
+        alert.addButton(withTitle: NSLocalizedString(button, comment: "service"))
+        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
+        let choice = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 480, height: 26))
+        choice.addItems(withTitles: choices)
+        choice.setAccessibilityLabel(NSLocalizedString("模板或目标目录", comment: "service"))
+        alert.accessoryView = choice
+        guard alert.runModal() == .alertFirstButtonReturn, choices.indices.contains(choice.indexOfSelectedItem) else { return nil }
+        return choice.indexOfSelectedItem
+    }
+
+    private func performFileAction(_ request: IPCRequest, feature: String) {
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(feature) else { return }
+        FinderRightService.backgroundJobs.run(on: workQueue) { [service] in
+            let response = service.handle(request)
+            guard !response.success else { return }
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = NSLocalizedString("文件操作失败", comment: "service")
+                alert.informativeText = response.message ?? ""
+                alert.runModal()
+            }
+        }
     }
 
     @objc func openTerminal(_ pboard: NSPasteboard,
@@ -159,6 +315,52 @@ final class ServicesProvider: NSObject {
                 action: "cutFiles",
                 payload: ["paths": .stringArray(paths)]))
         }
+    }
+
+    @objc func pasteFiles(_ pboard: NSPasteboard,
+                          userData: String?,
+                          error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let needsConfirmation = ServiceInvocationPolicy.requiresPasteConfirmation(
+            frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
+        guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost)
+                || needsConfirmation else {
+            error?.pointee = NSLocalizedString("请从访达调用粘贴服务", comment: "service") as NSString
+            return
+        }
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.paste) else {
+            error?.pointee = NSLocalizedString("粘贴功能已关闭，请在设置中启用", comment: "service") as NSString
+            return
+        }
+        guard let destination = ServiceInvocationPolicy.pasteDestination(for: fileURLs(from: pboard)) else {
+            error?.pointee = NSLocalizedString("请选择一个目标文件夹，再调用粘贴服务", comment: "service") as NSString
+            return
+        }
+        if needsConfirmation && !confirmPaste(into: destination) {
+            error?.pointee = NSLocalizedString("粘贴已取消", comment: "service") as NSString
+            return
+        }
+        let response = service.handle(IPCRequest(
+            id: UUID().uuidString,
+            action: "pasteFiles",
+            payload: ["destination": .string(destination.path)]))
+        if !response.success {
+            error?.pointee = (response.message ?? NSLocalizedString("粘贴文件失败", comment: "service")) as NSString
+        }
+    }
+
+    private func confirmPaste(into destination: URL) -> Bool {
+        guard !isConfirmingPaste else { return false }
+        isConfirmingPaste = true
+        defer { isConfirmingPaste = false }
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("粘贴已剪切的文件", comment: "service")
+        alert.informativeText = String(format: NSLocalizedString(
+            "将 FinderRight 剪切队列中的文件移动到：\n%@", comment: "service"), destination.path)
+        alert.addButton(withTitle: NSLocalizedString("粘贴", comment: "service"))
+        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     @objc func compressZip(_ pboard: NSPasteboard,

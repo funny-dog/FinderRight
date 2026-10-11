@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
         // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
-        ServicesProvider.register()
+        ServicesProvider.register { [weak self] in self?.openGoToDirectory() }
 
         // 自动注册并启用自身包含的 FinderSync 扩展
         registerFinderSyncPlugin()
