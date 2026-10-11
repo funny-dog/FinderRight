@@ -778,12 +778,12 @@ struct FinderRightKitTestsRunner {
         }
 
         runTest("Services 激活自身只允许粘贴确认，不直接信任调用方") {
-            try assertTrue(ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.finderright.app", providerBundleId: "com.finderright.app"))
+            try assertTrue(ServiceInvocationPolicy.requiresServiceConfirmation(frontmostBundleId: "com.finderright.app", providerBundleId: "com.finderright.app"))
             try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.finderright.app"))
-            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.apple.mail", providerBundleId: "com.finderright.app"))
-            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.apple.finder", providerBundleId: "com.finderright.app"))
-            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: nil, providerBundleId: nil))
-            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "", providerBundleId: ""))
+            try assertTrue(!ServiceInvocationPolicy.requiresServiceConfirmation(frontmostBundleId: "com.apple.mail", providerBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.requiresServiceConfirmation(frontmostBundleId: "com.apple.finder", providerBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.requiresServiceConfirmation(frontmostBundleId: nil, providerBundleId: nil))
+            try assertTrue(!ServiceInvocationPolicy.requiresServiceConfirmation(frontmostBundleId: "", providerBundleId: ""))
         }
 
         runTest("交互式文件服务只允许访达或自身前台进入确认框") {

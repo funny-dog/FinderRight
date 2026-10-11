@@ -190,6 +190,10 @@
 "前往目录功能已关闭，请在设置中启用" = "Go to Folder is disabled. Enable it in Settings.";
 "无法写入剪贴板" = "Unable to write to the clipboard.";
 "请从访达调用粘贴服务" = "Please invoke the paste service from Finder.";
+"请从访达调用剪切服务" = "Please invoke the cut service from Finder.";
+"剪切功能已关闭，请在设置中启用" = "Cut is disabled. Enable it in Settings.";
+"剪切文件" = "Cut Files";
+"确认后在目标文件夹调用「粘贴」即可移动。" = "After confirming, invoke \"Paste\" in the destination folder to move them.";
 "粘贴功能已关闭，请在设置中启用" = "Paste is disabled. Enable it in Settings.";
 "请选择一个目标文件夹，再调用粘贴服务" = "Select one destination folder, then invoke the paste service.";
 "将 FinderRight 剪切队列中的文件移动到：\n%@" = "Move files from FinderRight's cut queue into:\n%@";
