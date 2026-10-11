@@ -777,6 +777,49 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.apple.Finder"), "bundle id 区分大小写，必须精确匹配")
         }
 
+        runTest("Services 激活自身只允许粘贴确认，不直接信任调用方") {
+            try assertTrue(ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.finderright.app", providerBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.apple.mail", providerBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "com.apple.finder", providerBundleId: "com.finderright.app"))
+            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: nil, providerBundleId: nil))
+            try assertTrue(!ServiceInvocationPolicy.requiresPasteConfirmation(frontmostBundleId: "", providerBundleId: ""))
+        }
+
+        runTest("交互式文件服务只允许访达或自身前台进入确认框") {
+            let provider = "com.finderright.app"
+            try assertTrue(ServiceInvocationPolicy.acceptsInteractiveService(frontmostBundleId: "com.apple.finder", providerBundleId: provider))
+            try assertTrue(ServiceInvocationPolicy.acceptsInteractiveService(frontmostBundleId: provider, providerBundleId: provider))
+            try assertTrue(!ServiceInvocationPolicy.acceptsInteractiveService(frontmostBundleId: "com.apple.mail", providerBundleId: provider))
+            try assertTrue(!ServiceInvocationPolicy.acceptsInteractiveService(frontmostBundleId: nil, providerBundleId: nil))
+            try assertTrue(!ServiceInvocationPolicy.acceptsInteractiveService(frontmostBundleId: "", providerBundleId: ""))
+        }
+
+        runTest("内置文本模板保持原菜单顺序与安全扩展名") {
+            let templates = BuiltInFileTemplates.text
+            try assertEqual(templates.map(\.fileExtension), ["txt", "md", "html", "py", "sh", "json", "xml", "csv", "swift", "js"])
+            try assertEqual(Set(templates.map(\.id)).count, templates.count)
+            try assertTrue(templates.allSatisfy { !$0.name.isEmpty && SafeFileName.isValid(baseName: "untitled", ext: $0.fileExtension) })
+            try assertTrue(templates.first { $0.fileExtension == "py" }!.content.hasPrefix("#!/usr/bin/env python3\n"))
+            try assertEqual(templates.first { $0.fileExtension == "md" }!.content, "# Untitled\n\n")
+        }
+
+        runTest("Services 粘贴只接受一个存在的本地目录") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("file.txt")
+            try Data("test".utf8).write(to: file)
+            let link = root.appendingPathComponent("folder-link")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
+            try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [root]), root, "空白处传来的当前目录")
+            try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [link]), link, "目录符号链接仍由业务层校验真实路径")
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: []))
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [root, link]), "多选不能猜测目标")
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [file]), "文件不能当作目标目录")
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [root.appendingPathComponent("missing")]))
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [URL(string: "https://example.com/folder")!]))
+        }
+
         // 24. 角标探测门控：只有含剪切项的目录才值得探测 / 抢回
         runTest("BadgeOwnershipProbe 判断目录内是否有剪切项") {
             try assertTrue(BadgeOwnershipProbe.directory("/Users/t/Desktop", containsAnyOf: ["/Users/t/Desktop/a.txt"]))

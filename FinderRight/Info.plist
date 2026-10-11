@@ -73,6 +73,58 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Copy File Name</string>
+				<key>en</key>
+				<string>FinderRight: Copy File Name</string>
+				<key>zh-Hans</key>
+				<string>FinderRight：复制文件名</string>
+				<key>zh_CN</key>
+				<string>FinderRight：复制文件名</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>copyFileName</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>FinderRight: Go to Folder…</string>
+				<key>en</key>
+				<string>FinderRight: Go to Folder…</string>
+				<key>zh-Hans</key>
+				<string>FinderRight：前往目录…</string>
+				<key>zh_CN</key>
+				<string>FinderRight：前往目录…</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>goToDirectory</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
 				<string>FinderRight: Open in Terminal</string>
 				<key>en</key>
 				<string>FinderRight: Open in Terminal</string>
@@ -151,6 +203,34 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Paste into This Folder</string>
+				<key>en</key>
+				<string>FinderRight: Paste into This Folder</string>
+				<key>zh-Hans</key>
+				<string>FinderRight：粘贴到此文件夹</string>
+				<key>zh_CN</key>
+				<string>FinderRight：粘贴到此文件夹</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>pasteFiles</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
 				<string>FinderRight: Compress to ZIP</string>
 				<key>en</key>
 				<string>FinderRight: Compress to ZIP</string>
@@ -198,6 +278,51 @@
 			<array>
 				<string>NSFilenamesPboardType</string>
 			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key><string>FinderRight: New File in This Folder…</string>
+				<key>en</key><string>FinderRight: New File in This Folder…</string>
+				<key>zh-Hans</key><string>FinderRight：在此文件夹新建文件…</string>
+				<key>zh_CN</key><string>FinderRight：在此文件夹新建文件…</string>
+			</dict>
+			<key>NSMessage</key><string>newFile</string>
+			<key>NSPortName</key><string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<key>NSSendTypes</key>
+			<array><string>NSFilenamesPboardType</string></array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key><string>FinderRight: Move to Favorite Folder…</string>
+				<key>en</key><string>FinderRight: Move to Favorite Folder…</string>
+				<key>zh-Hans</key><string>FinderRight：移动到常用目录…</string>
+				<key>zh_CN</key><string>FinderRight：移动到常用目录…</string>
+			</dict>
+			<key>NSMessage</key><string>moveToFavorite</string>
+			<key>NSPortName</key><string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<key>NSSendTypes</key>
+			<array><string>NSFilenamesPboardType</string></array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key><string>FinderRight: Copy to Favorite Folder…</string>
+				<key>en</key><string>FinderRight: Copy to Favorite Folder…</string>
+				<key>zh-Hans</key><string>FinderRight：复制到常用目录…</string>
+				<key>zh_CN</key><string>FinderRight：复制到常用目录…</string>
+			</dict>
+			<key>NSMessage</key><string>copyToFavorite</string>
+			<key>NSPortName</key><string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<key>NSSendTypes</key>
+			<array><string>NSFilenamesPboardType</string></array>
 		</dict>
 	</array>
 	<key>NSSupportsAppNap</key>
