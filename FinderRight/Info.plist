@@ -41,6 +41,8 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<!-- NSMenuItem 只认 default 键（英文）；中文标题放在 zh-Hans.lproj/ServicesMenu.strings，
+	     以 default 原文为键。在 NSMenuItem 里写 zh-Hans 等语言键不会生效。 -->
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -48,12 +50,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Copy Path</string>
-				<key>en</key>
-				<string>FinderRight: Copy Path</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：复制路径</string>
-				<key>zh_CN</key>
-				<string>FinderRight：复制路径</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>copyPath</string>
@@ -74,12 +70,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Copy File Name</string>
-				<key>en</key>
-				<string>FinderRight: Copy File Name</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：复制文件名</string>
-				<key>zh_CN</key>
-				<string>FinderRight：复制文件名</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>copyFileName</string>
@@ -100,12 +90,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Go to Folder…</string>
-				<key>en</key>
-				<string>FinderRight: Go to Folder…</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：前往目录…</string>
-				<key>zh_CN</key>
-				<string>FinderRight：前往目录…</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>goToDirectory</string>
@@ -126,12 +110,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Open in Terminal</string>
-				<key>en</key>
-				<string>FinderRight: Open in Terminal</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：打开终端</string>
-				<key>zh_CN</key>
-				<string>FinderRight：打开终端</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>openTerminal</string>
@@ -152,12 +130,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Open in Editor</string>
-				<key>en</key>
-				<string>FinderRight: Open in Editor</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：打开编辑器</string>
-				<key>zh_CN</key>
-				<string>FinderRight：打开编辑器</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>openEditor</string>
@@ -178,12 +150,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Cut</string>
-				<key>en</key>
-				<string>FinderRight: Cut</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：剪切</string>
-				<key>zh_CN</key>
-				<string>FinderRight：剪切</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>cutFiles</string>
@@ -204,12 +170,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Paste into This Folder</string>
-				<key>en</key>
-				<string>FinderRight: Paste into This Folder</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：粘贴到此文件夹</string>
-				<key>zh_CN</key>
-				<string>FinderRight：粘贴到此文件夹</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>pasteFiles</string>
@@ -232,12 +192,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Compress to ZIP</string>
-				<key>en</key>
-				<string>FinderRight: Compress to ZIP</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：压缩为 ZIP</string>
-				<key>zh_CN</key>
-				<string>FinderRight：压缩为 ZIP</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>compressZip</string>
@@ -258,12 +212,6 @@
 			<dict>
 				<key>default</key>
 				<string>FinderRight: Extract Here</string>
-				<key>en</key>
-				<string>FinderRight: Extract Here</string>
-				<key>zh-Hans</key>
-				<string>FinderRight：解压到当前目录</string>
-				<key>zh_CN</key>
-				<string>FinderRight：解压到当前目录</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>decompress</string>
@@ -283,9 +231,6 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key><string>FinderRight: New File in This Folder…</string>
-				<key>en</key><string>FinderRight: New File in This Folder…</string>
-				<key>zh-Hans</key><string>FinderRight：在此文件夹新建文件…</string>
-				<key>zh_CN</key><string>FinderRight：在此文件夹新建文件…</string>
 			</dict>
 			<key>NSMessage</key><string>newFile</string>
 			<key>NSPortName</key><string>FinderRight</string>
@@ -298,9 +243,6 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key><string>FinderRight: Move to Favorite Folder…</string>
-				<key>en</key><string>FinderRight: Move to Favorite Folder…</string>
-				<key>zh-Hans</key><string>FinderRight：移动到常用目录…</string>
-				<key>zh_CN</key><string>FinderRight：移动到常用目录…</string>
 			</dict>
 			<key>NSMessage</key><string>moveToFavorite</string>
 			<key>NSPortName</key><string>FinderRight</string>
@@ -313,9 +255,6 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key><string>FinderRight: Copy to Favorite Folder…</string>
-				<key>en</key><string>FinderRight: Copy to Favorite Folder…</string>
-				<key>zh-Hans</key><string>FinderRight：复制到常用目录…</string>
-				<key>zh_CN</key><string>FinderRight：复制到常用目录…</string>
 			</dict>
 			<key>NSMessage</key><string>copyToFavorite</string>
 			<key>NSPortName</key><string>FinderRight</string>

@@ -273,6 +273,7 @@ struct GeneralTab: View {
             }
 
             FRFootnote(Text("切换语言将立即自动重启应用以生效"))
+            FRFootnote(Text("云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。"))
 
             if !showMenuBarIcon && !showDockIcon {
                 Label {

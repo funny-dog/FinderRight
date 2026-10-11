@@ -663,13 +663,14 @@ class FinderSync: FIFinderSync {
 
         // Office 文档：tag 从 officeTagBase 起，按 OfficeTemplate.allCases 顺序对应
         m.addItem(.separator())
-        let officeTypes: [(nameKey: String, emoji: String, symbol: String)] = [
-            ("Word 文档 (.docx)", "📘", "doc.richtext"),
-            ("Excel 表格 (.xlsx)", "📗", "tablecells"),
-            ("PowerPoint 演示文稿 (.pptx)", "📙", "rectangle.on.rectangle"),
-        ]
-        for (index, t) in officeTypes.enumerated() {
-            let item = makeItem(titleKey: t.nameKey, emoji: t.emoji, systemImage: t.symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
+        for (index, template) in OfficeTemplate.allCases.enumerated() {
+            let (emoji, symbol): (String, String)
+            switch template {
+            case .docx: (emoji, symbol) = ("📘", "doc.richtext")
+            case .xlsx: (emoji, symbol) = ("📗", "tablecells")
+            case .pptx: (emoji, symbol) = ("📙", "rectangle.on.rectangle")
+            }
+            let item = makeItem(titleKey: template.titleKey, emoji: emoji, systemImage: symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
             m.addItem(item)
         }
 

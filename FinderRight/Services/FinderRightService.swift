@@ -81,14 +81,14 @@ final class FinderRightService {
                 if needsWhitelist {
                     guard isPathAllowed(path, role: role) else {
                         serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                        return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                        return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), path))
                     }
                 } else {
                     // 只读路径仅校验存在性（防明显无效请求，不做安全边界，因为不会写入）
                     let expanded = (path as NSString).expandingTildeInPath
                     guard FileManager.default.fileExists(atPath: expanded) else {
                         serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
-                        return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                        return IPCResponse(id: req.id, success: false, message: String(format: L("路径不存在：%@"), path))
                     }
                 }
             }
@@ -100,13 +100,13 @@ final class FinderRightService {
                     if needsWhitelist {
                         guard isPathAllowed(path, role: role) else {
                             serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                            return IPCResponse(id: req.id, success: false, message: "路径越界：安全策略拒绝访问 \(path)")
+                            return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), path))
                         }
                     } else {
                         let expanded = (path as NSString).expandingTildeInPath
                         guard FileManager.default.fileExists(atPath: expanded) else {
                             serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
-                            return IPCResponse(id: req.id, success: false, message: "路径不存在: \(path)")
+                            return IPCResponse(id: req.id, success: false, message: String(format: L("路径不存在：%@"), path))
                         }
                     }
                 }
@@ -174,7 +174,7 @@ final class FinderRightService {
         // 可穿越到白名单之外（如 ~/Desktop/../../../../tmp/x.txt），必须单独拦截
         guard SafeFileName.isValid(baseName: baseName, ext: ext) else {
             serviceLog("非法文件名被拦截: baseName=\(baseName) ext=\(ext)")
-            return IPCResponse(id: req.id, success: false, message: "非法的文件名")
+            return IPCResponse(id: req.id, success: false, message: L("非法的文件名"))
         }
         let dirURL = URL(fileURLWithPath: directory)
         let data = Data(content.utf8)
@@ -191,7 +191,7 @@ final class FinderRightService {
                 return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
             }
         }
-        return IPCResponse(id: req.id, success: false, message: "目标目录同名文件冲突，请重试")
+        return IPCResponse(id: req.id, success: false, message: L("目标目录同名文件冲突，请重试"))
     }
 
     /// 从主 App 内置的空白模板新建 Office 文档。
@@ -199,7 +199,7 @@ final class FinderRightService {
     private func createFileFromTemplate(_ req: IPCRequest, templateId: String) -> IPCResponse {
         guard let template = OfficeTemplate(rawValue: templateId) else {
             serviceLog("非法模板 id 被拦截: \(templateId)")
-            return IPCResponse(id: req.id, success: false, message: "非法的模板")
+            return IPCResponse(id: req.id, success: false, message: L("非法的模板"))
         }
         guard let directory = req.payload["directory"]?.stringValue,
               let baseName = req.payload["baseName"]?.stringValue else {
@@ -207,7 +207,7 @@ final class FinderRightService {
         }
         guard SafeFileName.isValid(baseName: baseName, ext: template.fileExtension) else {
             serviceLog("非法文件名被拦截: baseName=\(baseName)")
-            return IPCResponse(id: req.id, success: false, message: "非法的文件名")
+            return IPCResponse(id: req.id, success: false, message: L("非法的文件名"))
         }
         // build.sh 保留 Templates 子目录；xcodegen 生成的工程会把资源平铺到 Resources 根目录，两处都找
         guard let source = Bundle.main.url(forResource: OfficeTemplate.resourceName,
@@ -216,7 +216,7 @@ final class FinderRightService {
                 ?? Bundle.main.url(forResource: OfficeTemplate.resourceName,
                                    withExtension: template.fileExtension) else {
             serviceLog("缺少内置模板: \(template.fileExtension)")
-            return IPCResponse(id: req.id, success: false, message: "缺少内置模板")
+            return IPCResponse(id: req.id, success: false, message: L("缺少内置模板"))
         }
         // 读出内容再写新文件，而不是 copyItem：后者会沿用模板的修改日期与扩展属性
         let data: Data
@@ -239,7 +239,7 @@ final class FinderRightService {
                 return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
             }
         }
-        return IPCResponse(id: req.id, success: false, message: "目标目录同名文件冲突，请重试")
+        return IPCResponse(id: req.id, success: false, message: L("目标目录同名文件冲突，请重试"))
     }
 
     private func compressZip(_ req: IPCRequest) -> IPCResponse {
@@ -279,7 +279,7 @@ final class FinderRightService {
         let url = URL(fileURLWithPath: archive)
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: url.path) else {
-            return IPCResponse(id: req.id, success: false, message: "压缩文件不存在: \(archive)")
+            return IPCResponse(id: req.id, success: false, message: String(format: L("压缩文件不存在：%@"), archive))
         }
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
@@ -671,7 +671,7 @@ final class FinderRightService {
             // 过滤出实际存在的源文件路径
             let validPaths = paths.filter { fileManager.fileExists(atPath: $0) }
             guard !validPaths.isEmpty else {
-                return IPCResponse(id: req.id, success: false, message: "选中的文件均不存在")
+                return IPCResponse(id: req.id, success: false, message: L("选中的文件均不存在"))
             }
 
             // 读取现有剪切队列并过滤掉外部已删除的文件
@@ -687,7 +687,7 @@ final class FinderRightService {
             do {
                 try cutQueue.write(queue)
             } catch {
-                return IPCResponse(id: req.id, success: false, message: "写入剪切队列失败: \(error.localizedDescription)")
+                return IPCResponse(id: req.id, success: false, message: String(format: L("写入剪切队列失败：%@"), error.localizedDescription))
             }
 
             return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
@@ -726,11 +726,11 @@ final class FinderRightService {
         let taken: (id: UUID, paths: [String], generation: Int)
         do {
             guard let batch = try takeCutQueue() else {
-                return IPCResponse(id: req.id, success: false, message: "剪切队列为空，请先剪切文件")
+                return IPCResponse(id: req.id, success: false, message: L("剪切队列为空，请先剪切文件"))
             }
             taken = batch
         } catch {
-            return IPCResponse(id: req.id, success: false, message: "保存粘贴恢复记录失败: \(error.localizedDescription)")
+            return IPCResponse(id: req.id, success: false, message: String(format: L("保存粘贴恢复记录失败：%@"), error.localizedDescription))
         }
 
         // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
@@ -835,7 +835,7 @@ final class FinderRightService {
         SharedConfig.shared.reload()
         guard SharedConfig.shared.favoriteDirectories.contains(destination) else {
             serviceLog("目标不在常用目录列表中，已拒绝: \(destination)")
-            return IPCResponse(id: req.id, success: false, message: "目标不是常用目录")
+            return IPCResponse(id: req.id, success: false, message: L("目标不是常用目录"))
         }
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: destination, isDirectory: &isDir), isDir.boolValue else {
@@ -843,7 +843,7 @@ final class FinderRightService {
             RecentOperations.shared.record(OperationRecord(
                 kind: mode == .move ? .move : .copy, subject: subject,
                 failure: String(format: L("常用目录不存在：%@"), destination)))
-            return IPCResponse(id: req.id, success: false, message: "常用目录不存在")
+            return IPCResponse(id: req.id, success: false, message: L("常用目录不存在"))
         }
 
         Self.backgroundJobs.run(on: Self.transferQueue) { [weak self] in

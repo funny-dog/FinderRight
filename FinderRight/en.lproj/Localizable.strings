@@ -192,7 +192,6 @@
 "请从访达调用粘贴服务" = "Please invoke the paste service from Finder.";
 "粘贴功能已关闭，请在设置中启用" = "Paste is disabled. Enable it in Settings.";
 "请选择一个目标文件夹，再调用粘贴服务" = "Select one destination folder, then invoke the paste service.";
-"粘贴已取消" = "Paste cancelled.";
 "将 FinderRight 剪切队列中的文件移动到：\n%@" = "Move files from FinderRight's cut queue into:\n%@";
 "已剪切文件" = "Files Cut";
 "「%@」已剪切，前往目标目录右键「粘贴」即可移动" = "\"%@\" cut. Right-click \"Paste\" in the destination folder to move it";
@@ -286,7 +285,7 @@
 "关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。" = "Disabled features won't appear in the Finder right-click menu. Drag the ≡ handle on the left to change their order in the menu.";
 
 /* Favorites: move / copy to */
-"常用目录" = "Favorites";
+"常用目录" = "Favorite Folders";
 "移动到" = "Move To";
 "复制到" = "Copy To";
 "把选中项移动到常用目录" = "Move the selection to a favorite folder";
@@ -341,3 +340,18 @@
 "Word 文档 (.docx)" = "Word Document (.docx)";
 "Excel 表格 (.xlsx)" = "Excel Spreadsheet (.xlsx)";
 "PowerPoint 演示文稿 (.pptx)" = "PowerPoint Presentation (.pptx)";
+
+"路径越界：安全策略拒绝访问 %@" = "Access denied by security policy: %@";
+"路径不存在：%@" = "Path does not exist: %@";
+"非法的文件名" = "Invalid file name";
+"目标目录同名文件冲突，请重试" = "A file with the same name already exists in the destination. Please try again.";
+"非法的模板" = "Invalid template";
+"缺少内置模板" = "The built-in template is missing";
+"压缩文件不存在：%@" = "Archive does not exist: %@";
+"选中的文件均不存在" = "None of the selected files exist";
+"写入剪切队列失败：%@" = "Failed to save the cut queue: %@";
+"剪切队列为空，请先剪切文件" = "Nothing has been cut. Cut files first.";
+"保存粘贴恢复记录失败：%@" = "Failed to save the paste recovery record: %@";
+"目标不是常用目录" = "The destination is not a favorite folder";
+"常用目录不存在" = "The favorite folder no longer exists";
+"云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。" = "The Services menu used in cloud folders is shown by macOS in the system language and is not affected by this setting.";

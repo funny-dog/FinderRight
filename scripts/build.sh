@@ -60,6 +60,19 @@ echo -n "APPL????" > "$APP_DIR/Contents/PkgInfo"
 # 主 App Resources (Localizable.strings & AppIcon)
 mkdir -p "$APP_DIR/Contents/Resources/en.lproj"
 cp FinderRight/en.lproj/Localizable.strings "$APP_DIR/Contents/Resources/en.lproj/"
+# 访达「服务」菜单标题的中文翻译（系统按 NSMenuItem.default 原文查表）
+mkdir -p "$APP_DIR/Contents/Resources/zh-Hans.lproj"
+cp FinderRight/zh-Hans.lproj/ServicesMenu.strings "$APP_DIR/Contents/Resources/zh-Hans.lproj/"
+
+# 硬校验：每个服务标题都必须有中文翻译，否则中文系统会显示英文
+services_count=$(/usr/libexec/PlistBuddy -c "Print :NSServices" FinderRight/Info.plist | grep -c "NSMessage = ")
+for ((i = 0; i < services_count; i++)); do
+  title=$(/usr/libexec/PlistBuddy -c "Print :NSServices:$i:NSMenuItem:default" FinderRight/Info.plist)
+  if ! grep -qF "\"$title\" = " FinderRight/zh-Hans.lproj/ServicesMenu.strings; then
+    echo "错误：服务「${title}」缺少中文翻译（zh-Hans.lproj/ServicesMenu.strings）" >&2
+    exit 1
+  fi
+done
 if [ -f "FinderRight/Resources/AppIcon.icns" ]; then
   cp FinderRight/Resources/AppIcon.icns "$APP_DIR/Contents/Resources/"
 fi
