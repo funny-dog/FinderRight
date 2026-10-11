@@ -11,6 +11,15 @@ public enum OfficeTemplate: String, CaseIterable {
     /// 文件扩展名，同时也是 IPC 中的模板 id
     public var fileExtension: String { rawValue }
 
+    /// 菜单 / 服务确认框里显示的名称（本地化键），与枚举成员绑定，避免各处按顺序手写对应
+    public var titleKey: String {
+        switch self {
+        case .docx: return "Word 文档 (.docx)"
+        case .xlsx: return "Excel 表格 (.xlsx)"
+        case .pptx: return "PowerPoint 演示文稿 (.pptx)"
+        }
+    }
+
     /// 主 App 包内的资源路径：Resources/Templates/Blank.<ext>
     public static let resourceName = "Blank"
     public static let resourceDirectory = "Templates"

@@ -1339,6 +1339,7 @@ struct FinderRightKitTestsRunner {
 
         runTest("OfficeTemplate 只接受白名单内的模板 id") {
             try assertEqual(OfficeTemplate.allCases.map(\.fileExtension), ["docx", "xlsx", "pptx"])
+            try assertTrue(OfficeTemplate.allCases.allSatisfy { $0.titleKey.hasSuffix("(.\($0.fileExtension))") }, "显示名须与扩展名一致")
             try assertEqual(OfficeTemplate(rawValue: "docx"), .docx)
             try assertTrue(OfficeTemplate(rawValue: "doc") == nil, "旧二进制格式不在白名单")
             try assertTrue(OfficeTemplate(rawValue: "DOCX") == nil, "大小写必须精确匹配")

@@ -108,7 +108,7 @@ final class ServicesProvider: NSObject {
                             error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileName) else {
-            error?.pointee = NSLocalizedString("复制文件名功能已关闭，请在设置中启用", comment: "service") as NSString
+            showAlert(NSLocalizedString("复制文件名功能已关闭，请在设置中启用", comment: "service"))
             return
         }
         let items = fileURLs(from: pboard)
@@ -116,7 +116,7 @@ final class ServicesProvider: NSObject {
         let names = PathFormatter.string(for: items, format: .name, home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
         if !NSPasteboard.general.setString(names, forType: .string) {
-            error?.pointee = NSLocalizedString("无法写入剪贴板", comment: "service") as NSString
+            showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
         }
     }
 
@@ -125,7 +125,7 @@ final class ServicesProvider: NSObject {
                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.goToDirectory) else {
-            error?.pointee = NSLocalizedString("前往目录功能已关闭，请在设置中启用", comment: "service") as NSString
+            showAlert(NSLocalizedString("前往目录功能已关闭，请在设置中启用", comment: "service"))
             return
         }
         DispatchQueue.main.async(execute: showDirectoryPrompt)
@@ -136,7 +136,7 @@ final class ServicesProvider: NSObject {
                        error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         guard canStartFileAction(MenuFeatureCatalog.newFile, error: error) else { return }
         guard let destination = ServiceInvocationPolicy.pasteDestination(for: fileURLs(from: pboard)) else {
-            error?.pointee = NSLocalizedString("请选择一个目标文件夹，再调用新建文件服务", comment: "service") as NSString
+            showAlert(NSLocalizedString("请选择一个目标文件夹，再调用新建文件服务", comment: "service"))
             return
         }
         // 同步读取服务剪贴板，返回派发后再显示交互界面，避免占用 Services 的同步超时。
@@ -146,10 +146,8 @@ final class ServicesProvider: NSObject {
             let textTemplates = BuiltInFileTemplates.text + customTemplates
             let officeTemplates = OfficeTemplate.allCases
             let choices = BuiltInFileTemplates.text.map { NSLocalizedString($0.name, comment: "service") }
-                + customTemplates.map { "\($0.name) (.\($0.fileExtension))" }
-                + ["Word 文档 (.docx)", "Excel 表格 (.xlsx)", "PowerPoint 演示文稿 (.pptx)"].map {
-                NSLocalizedString($0, comment: "service")
-            }
+                + customTemplates.map { $0.name.isEmpty ? ".\($0.fileExtension)" : "\($0.name) (.\($0.fileExtension))" }
+                + officeTemplates.map { NSLocalizedString($0.titleKey, comment: "service") }
             guard let index = chooseFileAction(title: "在此文件夹新建文件…", details: destination.path,
                                               choices: choices, button: "创建") else { return }
             var payload: [String: AnyJSON] = ["directory": .string(destination.path), "baseName": .string("untitled")]
@@ -182,12 +180,12 @@ final class ServicesProvider: NSObject {
         guard canStartFileAction(feature, error: error) else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else {
-            error?.pointee = NSLocalizedString("请先选中要移动或复制的项目", comment: "service") as NSString
+            showAlert(NSLocalizedString("请先选中要移动或复制的项目", comment: "service"))
             return
         }
         let favorites = SharedConfig.shared.favoriteDirectories
         guard !favorites.isEmpty else {
-            error?.pointee = NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service") as NSString
+            showAlert(NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service"))
             return
         }
         DispatchQueue.main.async { [self] in
@@ -212,7 +210,7 @@ final class ServicesProvider: NSObject {
         }
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(feature) else {
-            error?.pointee = NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service") as NSString
+            showAlert(NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service"))
             return false
         }
         return true
@@ -229,7 +227,8 @@ final class ServicesProvider: NSObject {
         alert.addButton(withTitle: NSLocalizedString(button, comment: "service"))
         alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
         let choice = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 480, height: 26))
-        choice.addItems(withTitles: choices)
+        // 逐项添加：addItems(withTitles:) 会合并同名项，自定义模板与内置模板重名时下标会错位
+        choices.forEach { choice.menu?.addItem(NSMenuItem(title: $0, action: nil, keyEquivalent: "")) }
         choice.setAccessibilityLabel(NSLocalizedString("模板或目标目录", comment: "service"))
         alert.accessoryView = choice
         guard alert.runModal() == .alertFirstButtonReturn, choices.indices.contains(choice.indexOfSelectedItem) else { return nil }
@@ -242,12 +241,19 @@ final class ServicesProvider: NSObject {
         FinderRightService.backgroundJobs.run(on: workQueue) { [service] in
             let response = service.handle(request)
             guard !response.success else { return }
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("文件操作失败", comment: "service")
-                alert.informativeText = response.message ?? ""
-                alert.runModal()
-            }
+            self.showAlert(NSLocalizedString("文件操作失败", comment: "service"), message: response.message ?? "")
+        }
+    }
+
+    /// 访达不展示服务返回的 error，面向用户的提示由本 App 弹窗给出。
+    /// 调用方校验失败（非访达调用）仍只写 error，避免其他 App 借服务反复弹窗。
+    private func showAlert(_ title: String, message: String = "") {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.runModal()
         }
     }
 
@@ -330,23 +336,20 @@ final class ServicesProvider: NSObject {
         }
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.paste) else {
-            error?.pointee = NSLocalizedString("粘贴功能已关闭，请在设置中启用", comment: "service") as NSString
+            showAlert(NSLocalizedString("粘贴功能已关闭，请在设置中启用", comment: "service"))
             return
         }
         guard let destination = ServiceInvocationPolicy.pasteDestination(for: fileURLs(from: pboard)) else {
-            error?.pointee = NSLocalizedString("请选择一个目标文件夹，再调用粘贴服务", comment: "service") as NSString
+            showAlert(NSLocalizedString("请选择一个目标文件夹，再调用粘贴服务", comment: "service"))
             return
         }
-        if needsConfirmation && !confirmPaste(into: destination) {
-            error?.pointee = NSLocalizedString("粘贴已取消", comment: "service") as NSString
-            return
-        }
-        let response = service.handle(IPCRequest(
-            id: UUID().uuidString,
-            action: "pasteFiles",
-            payload: ["destination": .string(destination.path)]))
-        if !response.success {
-            error?.pointee = (response.message ?? NSLocalizedString("粘贴文件失败", comment: "service")) as NSString
+        // 确认框与移动都放到服务返回之后：模态等待和云盘大文件移动不能占用 Services 的同步超时。
+        DispatchQueue.main.async { [self] in
+            if needsConfirmation && !confirmPaste(into: destination) { return }
+            performFileAction(IPCRequest(
+                id: UUID().uuidString,
+                action: "pasteFiles",
+                payload: ["destination": .string(destination.path)]), feature: MenuFeatureCatalog.paste)
         }
     }
 
