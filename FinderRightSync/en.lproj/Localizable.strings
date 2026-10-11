@@ -1,35 +1,11 @@
 /* FinderRight Finder extension — right-click menu (English) */
 
 /* Top-level menu items */
-"📄 新建文件" = "📄 New File";
-"📋 复制路径" = "📋 Copy Path";
-"📋 复制文件名" = "📋 Copy File Name";
-"📂 前往目录…" = "📂 Go to Folder…";
-"💻 打开终端" = "💻 Open in Terminal";
-"✏️ 打开编辑器" = "✏️ Open in Editor";
-"✂️ 剪切" = "✂️ Cut";
-"✂️ 剪切 (已在剪切队列)" = "✂️ Cut (In Queue)";
 "剪切 (已在剪切队列)" = "Cut (In Queue)";
-"📋 粘贴" = "📋 Paste";
 "粘贴 (已剪切 %d 项)" = "Paste (%d Item(s) Cut)";
-"📦 压缩为 ZIP" = "📦 Compress to ZIP";
-"📂 解压到当前目录" = "📂 Extract Here";
-"👁 切换隐藏文件" = "👁 Toggle Hidden Files";
 "已剪切" = "Cut";
 
-/* New File submenu */
-"📝 文本文件 (.txt)" = "📝 Text File (.txt)";
-"📖 Markdown (.md)" = "📖 Markdown (.md)";
-"🌐 HTML (.html)" = "🌐 HTML (.html)";
-"🐍 Python (.py)" = "🐍 Python (.py)";
-"🔧 Shell (.sh)" = "🔧 Shell (.sh)";
-"📊 JSON (.json)" = "📊 JSON (.json)";
-"📃 XML (.xml)" = "📃 XML (.xml)";
-"📈 CSV (.csv)" = "📈 CSV (.csv)";
-"🍎 Swift (.swift)" = "🍎 Swift (.swift)";
-"🟨 JavaScript (.js)" = "🟨 JavaScript (.js)";
-
-/* Modern / Clean style (Without Emoji) */
+/* Menu item titles */
 "新建文件" = "New File";
 "复制路径" = "Copy Path";
 "复制文件名" = "Copy File Name";
@@ -39,7 +15,6 @@
 "剪切" = "Cut";
 "粘贴" = "Paste";
 "取消剪切" = "Cancel Cut";
-"🚫 取消剪切" = "🚫 Cancel Cut";
 "压缩为 ZIP" = "Compress to ZIP";
 "解压到当前目录" = "Extract Here";
 "切换隐藏文件" = "Toggle Hidden Files";

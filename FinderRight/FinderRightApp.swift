@@ -63,6 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSLog("[AppDelegate] activation policy = \(alwaysShowDockIcon ? "regular" : "accessory")")
 
+        // 在任何窗口创建前应用用户选择的浅色 / 深色外观
+        FRAppearanceMode.stored.apply()
+
         setupStatusItem()
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider

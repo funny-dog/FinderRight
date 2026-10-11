@@ -1,50 +1,228 @@
 import SwiftUI
 import AppKit
 
-// MARK: - 主题：午夜蓝 + 薄荷
+// MARK: - 主题色
 
-/// 界面主题。颜色按系统外观动态取值，深色 / 浅色自动切换，不需要在设置里另做开关。
+/// 用户可选的主题色，存于 UserDefaults 的 `appTheme`，默认午夜薄荷
+enum FRThemeID: String, CaseIterable, Identifiable {
+    case midnight
+    case sky
+    case lavender
+    case sunset
+    case sakura
+    case graphite
+
+    static let storageKey = "appTheme"
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .midnight: return "午夜薄荷"
+        case .sky: return "晴空蓝"
+        case .lavender: return "薰衣草紫"
+        case .sunset: return "落日橙"
+        case .sakura: return "樱花粉"
+        case .graphite: return "石墨"
+        }
+    }
+
+    /// 当前生效的主题。动态颜色在每次绘制时读取它，切换后让视图重绘即可生效
+    static var current: FRThemeID = FRThemeID(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .midnight
+
+    var palette: FRPalette {
+        switch self {
+        case .midnight: return .midnight
+        case .sky: return .sky
+        case .lavender: return .lavender
+        case .sunset: return .sunset
+        case .sakura: return .sakura
+        case .graphite: return .graphite
+        }
+    }
+}
+
+/// 界面明暗：跟随系统或固定浅色 / 深色，存于 UserDefaults 的 `appAppearance`
+enum FRAppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appAppearance"
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+
+    static var stored: FRAppearanceMode {
+        FRAppearanceMode(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .system
+    }
+
+    /// 设置整个 App 的外观。动态颜色按窗口的实际外观取值，AppKit 会自动重绘，无需重建视图
+    func apply() {
+        switch self {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+/// 一组浅色 / 深色外观下的颜色
+struct FRColorPair {
+    let light: NSColor
+    let dark: NSColor
+
+    init(_ light: NSColor, _ dark: NSColor) {
+        self.light = light
+        self.dark = dark
+    }
+
+    init(_ light: UInt32, _ dark: UInt32) {
+        self.init(NSColor(hex: light), NSColor(hex: dark))
+    }
+}
+
+/// 一套主题的全部界面色。描边、悬停、输入框等中性色由主文字色统一推导，各主题只需给出差异部分
+struct FRPalette {
+    let window, sidebar, card, border, text, mute: FRColorPair
+    let accent, accentText, onAccent, selection, hover, field, fieldBorder: FRColorPair
+
+    init(
+        window: FRColorPair, sidebar: FRColorPair, card: FRColorPair, text: FRColorPair, mute: FRColorPair,
+        accent: FRColorPair, accentText: FRColorPair, onAccent: FRColorPair,
+        selectionAlpha: (light: CGFloat, dark: CGFloat)
+    ) {
+        self.window = window
+        self.sidebar = sidebar
+        self.card = card
+        self.text = text
+        self.mute = mute
+        self.accent = accent
+        self.accentText = accentText
+        self.onAccent = onAccent
+        selection = FRColorPair(accent.light.withAlphaComponent(selectionAlpha.light),
+                                accent.dark.withAlphaComponent(selectionAlpha.dark))
+        let ink = text.light
+        let white = NSColor(hex: 0xFFFFFF)
+        border = FRColorPair(ink.withAlphaComponent(0.09), white.withAlphaComponent(0.08))
+        hover = FRColorPair(ink.withAlphaComponent(0.05), white.withAlphaComponent(0.06))
+        field = FRColorPair(white, white.withAlphaComponent(0.06))
+        fieldBorder = FRColorPair(ink.withAlphaComponent(0.16), white.withAlphaComponent(0.14))
+    }
+
+    /// 午夜蓝 + 薄荷（默认）
+    static let midnight = FRPalette(
+        window: .init(0xF5F7FB, 0x0F1626), sidebar: .init(0xE8EDF5, 0x0B1220), card: .init(0xFFFFFF, 0x17223A),
+        text: .init(0x0B1220, 0xEAF0FA), mute: .init(0x596680, 0x97A4BD),
+        accent: .init(0x2BD4A0, 0x4FE3B1), accentText: .init(0x0B7A5A, 0x4FE3B1), onAccent: .init(0x04251B, 0x062B20),
+        selectionAlpha: (0.20, 0.16)
+    )
+
+    /// 石板灰 + 蓝，接近系统原生观感
+    static let sky = FRPalette(
+        window: .init(0xF5F7FA, 0x0F141C), sidebar: .init(0xEAEEF3, 0x0A0E14), card: .init(0xFFFFFF, 0x18202C),
+        text: .init(0x0F172A, 0xE8EDF5), mute: .init(0x5B6779, 0x98A3B3),
+        accent: .init(0x2F74E8, 0x60A5FA), accentText: .init(0x1D5FD6, 0x7AB4FF), onAccent: .init(0xFFFFFF, 0x0A1B33),
+        selectionAlpha: (0.14, 0.16)
+    )
+
+    /// 冷灰偏紫 + 紫
+    static let lavender = FRPalette(
+        window: .init(0xF7F6FB, 0x13111C), sidebar: .init(0xEEEBF6, 0x0E0C16), card: .init(0xFFFFFF, 0x1D1A2B),
+        text: .init(0x1A1530, 0xEEEAF8), mute: .init(0x676080, 0xA39DB8),
+        accent: .init(0x8B5CF6, 0xA78BFA), accentText: .init(0x6D3FD9, 0xB9A2FF), onAccent: .init(0xFFFFFF, 0x1B1035),
+        selectionAlpha: (0.14, 0.16)
+    )
+
+    /// 暖灰 + 橙。橙色上白字对比度不足，两种外观都用深色字
+    static let sunset = FRPalette(
+        window: .init(0xFAF7F4, 0x17130F), sidebar: .init(0xF2ECE5, 0x110E0B), card: .init(0xFFFFFF, 0x221C17),
+        text: .init(0x231A12, 0xF3ECE4), mute: .init(0x7A6A5C, 0xB0A293),
+        accent: .init(0xF97316, 0xFB923C), accentText: .init(0xC2550A, 0xFFA868), onAccent: .init(0x2B1405, 0x2B1405),
+        selectionAlpha: (0.14, 0.16)
+    )
+
+    /// 暖灰偏粉 + 玫瑰粉
+    static let sakura = FRPalette(
+        window: .init(0xFBF6F7, 0x171114), sidebar: .init(0xF4EAED, 0x110C0E), card: .init(0xFFFFFF, 0x22191D),
+        text: .init(0x2A1419, 0xF5EAED), mute: .init(0x806670, 0xB8A0A8),
+        accent: .init(0xE64A72, 0xFB7196), accentText: .init(0xC22D55, 0xFF8FAB), onAccent: .init(0xFFFFFF, 0x33081A),
+        selectionAlpha: (0.13, 0.16)
+    )
+
+    /// 纯中性灰，无彩色强调
+    static let graphite = FRPalette(
+        window: .init(0xF6F6F7, 0x141416), sidebar: .init(0xECECEE, 0x0E0E10), card: .init(0xFFFFFF, 0x1E1E21),
+        text: .init(0x18181B, 0xEDEDF0), mute: .init(0x6B6B73, 0xA1A1AA),
+        accent: .init(0x2A2A2E, 0xE8E8EC), accentText: .init(0x18181B, 0xF4F4F5), onAccent: .init(0xFFFFFF, 0x18181B),
+        selectionAlpha: (0.08, 0.10)
+    )
+}
+
+/// 界面主题。颜色按系统外观动态取值，深色 / 浅色自动切换；主题色由 FRThemeID.current 决定
 enum FRTheme {
     /// 窗口内容区背景
-    static let window = dynamic(light: NSColor(hex: 0xF5F7FB), dark: NSColor(hex: 0x0F1626))
+    static let window = themed(\.window)
     /// 侧边栏背景
-    static let sidebar = dynamic(light: NSColor(hex: 0xE8EDF5), dark: NSColor(hex: 0x0B1220))
+    static let sidebar = themed(\.sidebar)
     /// 卡片背景
-    static let card = dynamic(light: NSColor(hex: 0xFFFFFF), dark: NSColor(hex: 0x17223A))
+    static let card = themed(\.card)
     /// 卡片 / 分隔线描边
-    static let border = dynamic(light: NSColor(hex: 0x0B1220, alpha: 0.09), dark: NSColor(hex: 0xFFFFFF, alpha: 0.08))
+    static let border = themed(\.border)
 
     /// 主文字
-    static let text = dynamic(light: NSColor(hex: 0x0B1220), dark: NSColor(hex: 0xEAF0FA))
+    static let text = themed(\.text)
     /// 次要文字
-    static let mute = dynamic(light: NSColor(hex: 0x596680), dark: NSColor(hex: 0x97A4BD))
+    static let mute = themed(\.mute)
 
-    /// 强调色（填充用）：薄荷绿
-    static let accent = dynamic(light: NSColor(hex: 0x2BD4A0), dark: NSColor(hex: 0x4FE3B1))
+    /// 强调色（填充用）
+    static let accent = themed(\.accent)
     /// 强调色（文字 / 图标用）：浅色下加深，保证在浅底上的对比度
-    static let accentText = dynamic(light: NSColor(hex: 0x0B7A5A), dark: NSColor(hex: 0x4FE3B1))
+    static let accentText = themed(\.accentText)
     /// 压在强调色填充上的文字
-    static let onAccent = dynamic(light: NSColor(hex: 0x04251B), dark: NSColor(hex: 0x062B20))
+    static let onAccent = themed(\.onAccent)
     /// 选中 / 图标底色：强调色的淡化版
-    static let selection = dynamic(light: NSColor(hex: 0x2BD4A0, alpha: 0.20), dark: NSColor(hex: 0x4FE3B1, alpha: 0.16))
+    static let selection = themed(\.selection)
     /// 悬停底色
-    static let hover = dynamic(light: NSColor(hex: 0x0B1220, alpha: 0.05), dark: NSColor(hex: 0xFFFFFF, alpha: 0.06))
+    static let hover = themed(\.hover)
 
     /// 按钮 / 选择器 / 输入框底色与描边
-    static let field = dynamic(light: NSColor(hex: 0xFFFFFF), dark: NSColor(hex: 0xFFFFFF, alpha: 0.06))
-    static let fieldBorder = dynamic(light: NSColor(hex: 0x0B1220, alpha: 0.16), dark: NSColor(hex: 0xFFFFFF, alpha: 0.14))
+    static let field = themed(\.field)
+    static let fieldBorder = themed(\.fieldBorder)
 
-    /// 状态色
-    static let okBackground = dynamic(light: NSColor(hex: 0x109664, alpha: 0.12), dark: NSColor(hex: 0x50DCA0, alpha: 0.16))
-    static let okText = dynamic(light: NSColor(hex: 0x0B7A5A), dark: NSColor(hex: 0x6EE7B7))
-    static let warnBackground = dynamic(light: NSColor(hex: 0xDC7800, alpha: 0.14), dark: NSColor(hex: 0xFFAA3C, alpha: 0.16))
-    static let warnText = dynamic(light: NSColor(hex: 0x9A5200), dark: NSColor(hex: 0xFFB84D))
-    static let danger = dynamic(light: NSColor(hex: 0xC62828), dark: NSColor(hex: 0xFF7A7A))
+    /// 状态色：表达含义，不随主题变化
+    static let okBackground = dynamic(FRColorPair(NSColor(hex: 0x109664, alpha: 0.12), NSColor(hex: 0x50DCA0, alpha: 0.16)))
+    static let okText = dynamic(FRColorPair(0x0B7A5A, 0x6EE7B7))
+    static let warnBackground = dynamic(FRColorPair(NSColor(hex: 0xDC7800, alpha: 0.14), NSColor(hex: 0xFFAA3C, alpha: 0.16)))
+    static let warnText = dynamic(FRColorPair(0x9A5200, 0xFFB84D))
+    static let danger = dynamic(FRColorPair(0xC62828, 0xFF7A7A))
 
-    private static func dynamic(light: NSColor, dark: NSColor) -> Color {
+    /// 指定主题的强调色，供主题色块预览使用（不受当前主题影响）
+    static func accent(of theme: FRThemeID) -> Color {
+        dynamic(theme.palette.accent)
+    }
+
+    private static func themed(_ key: KeyPath<FRPalette, FRColorPair>) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+            resolve(FRThemeID.current.palette[keyPath: key], for: appearance)
         })
+    }
+
+    private static func dynamic(_ pair: FRColorPair) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            resolve(pair, for: appearance)
+        })
+    }
+
+    private static func resolve(_ pair: FRColorPair, for appearance: NSAppearance) -> NSColor {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? pair.dark : pair.light
     }
 }
 
@@ -231,6 +409,36 @@ struct FRPicker<Selection: Hashable, Content: View>: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .fixedSize()
+    }
+}
+
+/// 主题色选择：一排可直接点选的色块，选中项外加一圈描边
+struct FRThemeSwatches: View {
+    @Binding var selection: FRThemeID
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(FRThemeID.allCases) { theme in
+                let isSelected = selection == theme
+                Button {
+                    selection = theme
+                } label: {
+                    Circle()
+                        .fill(FRTheme.accent(of: theme))
+                        .overlay(Circle().strokeBorder(FRTheme.border, lineWidth: 1))
+                        .frame(width: 18, height: 18)
+                        .padding(3)
+                        .overlay(
+                            Circle().strokeBorder(isSelected ? FRTheme.text.opacity(0.6) : Color.clear, lineWidth: 1.5)
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(Text(LocalizedStringKey(theme.titleKey)))
+                .accessibilityLabel(Text(LocalizedStringKey(theme.titleKey)))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
     }
 }
 

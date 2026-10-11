@@ -13,31 +13,39 @@ public struct MenuFeature: Identifiable, Equatable {
     public let descriptionKey: String
     /// SF Symbol 名
     public let systemImage: String
-    /// 经典 Emoji 图标
-    public let emoji: String
 
-    public init(id: String, nameKey: String, descriptionKey: String, systemImage: String, emoji: String = "") {
+    public init(id: String, nameKey: String, descriptionKey: String, systemImage: String) {
         self.id = id
         self.nameKey = nameKey
         self.descriptionKey = descriptionKey
         self.systemImage = systemImage
-        self.emoji = emoji
     }
 }
 
 /// 右键菜单图标风格
 public enum MenuIconStyle: String, Codable, CaseIterable, Identifiable {
-    case modern = "modern"     // 简洁 (SF Symbols 原生图标)
-    case classic = "classic"   // 经典 (Emoji 彩色图标)
+    case modern = "modern"     // 单色线条：SF Symbols 模板图，随菜单明暗自动反色
+    case tinted = "tinted"     // 彩色线条：按功能分组着色的 SF Symbols
+    case tile = "tile"         // 彩色方块：圆角色块 + 白色 SF Symbols
     case none = "none"         // 纯文本 (无图标)
 
     public var id: String { rawValue }
 
     public var titleKey: String {
         switch self {
-        case .modern: return "简洁 (SF Symbols)"
-        case .classic: return "彩色 (Emoji)"
+        case .modern: return "单色线条"
+        case .tinted: return "彩色线条"
+        case .tile: return "彩色方块"
         case .none: return "无图标"
+        }
+    }
+
+    /// 解析存储值。旧版的「彩色 (Emoji)」(classic) 已移除，迁移为同属彩色的彩色方块
+    public init?(storedValue: String) {
+        if storedValue == "classic" {
+            self = .tile
+        } else {
+            self.init(rawValue: storedValue)
         }
     }
 }
@@ -59,19 +67,19 @@ public enum MenuFeatureCatalog {
     public static let toggleHidden = "feature.toggleHidden"
 
     public static let all: [MenuFeature] = [
-        MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus", emoji: "📄"),
-        MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "doc.on.doc",     emoji: "📋"),
-        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制完整文件名（含扩展名），多选时每行一项", systemImage: "doc.text", emoji: "📋"),
-        MenuFeature(id: goToDirectory, nameKey: "前往目录…",     descriptionKey: "输入路径，在访达中打开指定目录", systemImage: "folder", emoji: "📂"),
-        MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal",       emoji: "💻"),
-        MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces",     emoji: "✏️"),
-        MenuFeature(id: cut,          nameKey: "剪切",           descriptionKey: "剪切选中的文件",           systemImage: "scissors",        emoji: "✂️"),
-        MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard", emoji: "📋"),
-        MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "folder.badge.minus", emoji: "📁"),
-        MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "folder.badge.plus", emoji: "📑"),
-        MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "archivebox",     emoji: "📦"),
-        MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "archivebox",     emoji: "📂"),
-        MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye",            emoji: "👁"),
+        MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus"),
+        MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link"),
+        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制完整文件名（含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam"),
+        MenuFeature(id: goToDirectory, nameKey: "前往目录…",     descriptionKey: "输入路径，在访达中打开指定目录", systemImage: "arrow.right.circle"),
+        MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal"),
+        MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces"),
+        MenuFeature(id: cut,          nameKey: "剪切",           descriptionKey: "剪切选中的文件",           systemImage: "scissors"),
+        MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard"),
+        MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "arrowshape.turn.up.right"),
+        MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square"),
+        MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "doc.zipper"),
+        MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "shippingbox.and.arrow.backward"),
+        MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye"),
     ]
 
     public static func feature(forId id: String) -> MenuFeature? {

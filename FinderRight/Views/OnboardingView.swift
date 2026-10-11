@@ -5,6 +5,7 @@ struct OnboardingView: View {
     var onClose: () -> Void = {}
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @FRState private var currentStep = 0
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     private let totalSteps = 5
 
@@ -97,6 +98,8 @@ struct OnboardingView: View {
                 .padding(.bottom, 28)
             }
         }
+        // 设置窗口里切换主题色时同步重绘（步骤状态在本视图上，不受重建影响）
+        .id(themeRaw)
         .frame(width: 600, height: 500)
     }
 }

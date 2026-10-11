@@ -145,7 +145,7 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             if let raw = store[Keys.menuIconStyle] as? String,
-               let style = MenuIconStyle(rawValue: raw) {
+               let style = MenuIconStyle(storedValue: raw) {
                 return style
             }
             return .modern

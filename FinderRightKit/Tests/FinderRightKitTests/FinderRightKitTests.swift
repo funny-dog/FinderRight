@@ -173,7 +173,7 @@ struct FinderRightKitTestsRunner {
 
             // 写入并验证
             config.preferredTerminal = "com.googlecode.iterm2"
-            config.menuIconStyle = .classic
+            config.menuIconStyle = .tile
             let shortcut = ActionShortcut(key: "x", modifiers: 1048576) // Cmd
             config.setShortcut(shortcut, forActionId: "shortcut.cut")
 
@@ -181,7 +181,7 @@ struct FinderRightKitTestsRunner {
             config.addFileTemplate(tmpl)
 
             try assertEqual(config.preferredTerminal, "com.googlecode.iterm2")
-            try assertEqual(config.menuIconStyle, .classic)
+            try assertEqual(config.menuIconStyle, .tile)
             try assertEqual(config.shortcut(forActionId: "shortcut.cut")?.key, "x")
             try assertEqual(config.customFileTemplates.count, 1)
             try assertEqual(config.customFileTemplates.first?.fileExtension, "log")
@@ -189,7 +189,7 @@ struct FinderRightKitTestsRunner {
             // 重新从磁盘创建实例加载，验证持久化
             let reloadedConfig = SharedConfig(fileURL: tempURL)
             try assertEqual(reloadedConfig.preferredTerminal, "com.googlecode.iterm2")
-            try assertEqual(reloadedConfig.menuIconStyle, .classic)
+            try assertEqual(reloadedConfig.menuIconStyle, .tile)
             try assertEqual(reloadedConfig.shortcut(forActionId: "shortcut.cut")?.key, "x")
             try assertEqual(reloadedConfig.customFileTemplates.count, 1)
 
@@ -199,6 +199,13 @@ struct FinderRightKitTestsRunner {
         }
 
         // 5. SharedConfig 多线程并发压测
+        runTest("MenuIconStyle 旧存储值迁移") {
+            try assertEqual(MenuIconStyle(storedValue: "classic"), .tile)
+            try assertEqual(MenuIconStyle(storedValue: "modern"), .modern)
+            try assertEqual(MenuIconStyle(storedValue: "tinted"), .tinted)
+            try assertNil(MenuIconStyle(storedValue: "unknown"))
+        }
+
         runTest("SharedConfig 多线程并发压测") {
             let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-concurrent-\(UUID().uuidString).plist")
             defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -212,7 +219,7 @@ struct FinderRightKitTestsRunner {
                 group.enter()
                 queue.async {
                     config.preferredTerminal = "terminal-\(i)"
-                    config.menuIconStyle = (i % 2 == 0) ? .modern : .classic
+                    config.menuIconStyle = (i % 2 == 0) ? .modern : .tile
                     _ = config.preferredTerminal
                     _ = config.menuIconStyle
                     let s = ActionShortcut(key: "k\(i % 10)", modifiers: i)
