@@ -28,7 +28,7 @@ final class ServicesProvider: NSObject {
 
     /// 压缩 / 解压等会 fork 子进程并 `waitUntilExit`，放后台串行队列，避免阻塞 Finder 主线程
     private let workQueue = DispatchQueue(label: "com.finderright.app.services", qos: .userInitiated)
-    private var isConfirmingPaste = false
+    private var isConfirmingCutPaste = false
     private var isShowingFileActionPrompt = false
     private let showDirectoryPrompt: () -> Void
 
@@ -78,7 +78,7 @@ final class ServicesProvider: NSObject {
     }
 
     /// 剪切 / 粘贴 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
-    /// 仅直接受理访达前台调用；粘贴另处理提供程序被系统激活的情况，要求用户确认。
+    /// 仅直接受理访达前台调用；剪切 / 粘贴另处理提供程序被系统激活的情况，要求用户确认。
     private func isInvokedFromFinder(_ service: String) -> Bool {
         let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost) else {
@@ -311,23 +311,59 @@ final class ServicesProvider: NSObject {
     @objc func cutFiles(_ pboard: NSPasteboard,
                         userData: String?,
                         error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("cutFiles") else { return }
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        // 云盘目录里系统会先激活本 App 再派发服务，此时访达不在前台，需用户确认后才写入剪切队列
+        let needsConfirmation = ServiceInvocationPolicy.requiresServiceConfirmation(
+            frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
+        guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost)
+                || needsConfirmation else {
+            error?.pointee = NSLocalizedString("请从访达调用剪切服务", comment: "service") as NSString
+            return
+        }
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.cut) else {
+            showAlert(NSLocalizedString("剪切功能已关闭，请在设置中启用", comment: "service"))
+            return
+        }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        let paths = items.map(\.path)
-        workQueue.async { [service] in
-            _ = service.handle(IPCRequest(
-                id: UUID().uuidString,
-                action: "cutFiles",
-                payload: ["paths": .stringArray(paths)]))
+        let request = IPCRequest(
+            id: UUID().uuidString,
+            action: "cutFiles",
+            payload: ["paths": .stringArray(items.map(\.path))])
+        guard needsConfirmation else {
+            performFileAction(request, feature: MenuFeatureCatalog.cut)
+            return
         }
+        // 确认框放到服务返回之后，避免模态等待占用 Services 的同步超时
+        DispatchQueue.main.async { [self] in
+            if confirmCut(items) {
+                performFileAction(request, feature: MenuFeatureCatalog.cut)
+            }
+        }
+    }
+
+    /// 云盘目录没有剪切角标，确认框同时充当「剪切了哪些文件」的反馈
+    private func confirmCut(_ items: [URL]) -> Bool {
+        guard !isConfirmingCutPaste else { return false }
+        isConfirmingCutPaste = true
+        defer { isConfirmingCutPaste = false }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("剪切文件", comment: "service")
+        alert.informativeText = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
+            + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
+            + "\n\n" + NSLocalizedString("确认后在目标文件夹调用「粘贴」即可移动。", comment: "service")
+        alert.addButton(withTitle: NSLocalizedString("剪切", comment: "service"))
+        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     @objc func pasteFiles(_ pboard: NSPasteboard,
                           userData: String?,
                           error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let needsConfirmation = ServiceInvocationPolicy.requiresPasteConfirmation(
+        let needsConfirmation = ServiceInvocationPolicy.requiresServiceConfirmation(
             frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
         guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost)
                 || needsConfirmation else {
@@ -354,9 +390,9 @@ final class ServicesProvider: NSObject {
     }
 
     private func confirmPaste(into destination: URL) -> Bool {
-        guard !isConfirmingPaste else { return false }
-        isConfirmingPaste = true
-        defer { isConfirmingPaste = false }
+        guard !isConfirmingCutPaste else { return false }
+        isConfirmingCutPaste = true
+        defer { isConfirmingCutPaste = false }
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("粘贴已剪切的文件", comment: "service")
         alert.informativeText = String(format: NSLocalizedString(
