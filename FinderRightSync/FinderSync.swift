@@ -106,6 +106,143 @@ private func createCutBadgeImage() -> NSImage {
     return image
 }
 
+// MARK: - 彩色菜单图标
+
+/// 彩色图标的配色。按功能分组着色（剪切/粘贴同为橙色、移动到/复制到同为绿色……），长菜单里便于扫视定位
+struct MenuTint {
+    /// 缓存键
+    let name: String
+    /// 彩色方块的底色（浅色 / 深色菜单）
+    let tile: (light: UInt32, dark: UInt32)
+    /// 彩色线条的颜色：浅色菜单下略加深，保证细线条在浅底上的对比度
+    let line: (light: UInt32, dark: UInt32)
+    /// 底色过浅时，方块里的符号改用深色
+    var darkGlyph = false
+
+    static let blue = MenuTint(name: "blue", tile: (0x007AFF, 0x0A84FF), line: (0x007AFF, 0x0A84FF))
+    static let indigo = MenuTint(name: "indigo", tile: (0x5856D6, 0x5E5CE6), line: (0x5856D6, 0x7D7AFF))
+    static let teal = MenuTint(name: "teal", tile: (0x30B0C7, 0x40C8E0), line: (0x1A9CB3, 0x40C8E0))
+    static let cyan = MenuTint(name: "cyan", tile: (0x32ADE6, 0x48B8EC), line: (0x1E9BD7, 0x64D2FF))
+    static let graphite = MenuTint(name: "graphite", tile: (0x48484A, 0x6C6C70), line: (0x48484A, 0xAEAEB2))
+    static let purple = MenuTint(name: "purple", tile: (0xAF52DE, 0xBF5AF2), line: (0xA447D6, 0xBF5AF2))
+    static let orange = MenuTint(name: "orange", tile: (0xFF9500, 0xFF9F0A), line: (0xF08A00, 0xFF9F0A))
+    static let green = MenuTint(name: "green", tile: (0x34C759, 0x30D158), line: (0x28A745, 0x30D158))
+    static let brown = MenuTint(name: "brown", tile: (0xA2845E, 0xAC8E68), line: (0x8F714B, 0xAC8E68))
+    static let pink = MenuTint(name: "pink", tile: (0xFF2D55, 0xFF375F), line: (0xF0244B, 0xFF375F))
+    static let red = MenuTint(name: "red", tile: (0xFF3B30, 0xFF453A), line: (0xE5332A, 0xFF453A))
+    static let gray = MenuTint(name: "gray", tile: (0x8E8E93, 0x7C7C80), line: (0x7C7C80, 0x98989D))
+    static let yellow = MenuTint(name: "yellow", tile: (0xFFCC00, 0xFFD60A), line: (0xD4A000, 0xFFD60A), darkGlyph: true)
+}
+
+/// 彩色菜单图标渲染：预渲染为 2x 位图并按「风格 + 符号 + 颜色 + 明暗」缓存。
+///
+/// 菜单要跨进程交给 Finder 绘制，图片在构建菜单时就得定型 —— 不能依赖延迟绘制或动态颜色，
+/// 所以按当前系统明暗各画一份。代价是悬停高亮时彩色线条不会反白（模板图才会）。
+enum MenuIconRenderer {
+    private static var cache: [String: NSImage] = [:]
+    private static let lock = NSLock()
+    private static let side: CGFloat = 16
+
+    static func image(symbol: String, tint: MenuTint, style: MenuIconStyle) -> NSImage? {
+        let dark = NSApplication.shared.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let key = "\(style.rawValue)|\(symbol)|\(tint.name)|\(dark ? "dark" : "light")"
+        lock.lock()
+        if let cached = cache[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        guard let image = render(symbol: symbol, tint: tint, asTile: style == .tile, dark: dark) else { return nil }
+        lock.lock()
+        cache[key] = image
+        lock.unlock()
+        return image
+    }
+
+    private static func render(symbol: String, tint: MenuTint, asTile: Bool, dark: Bool) -> NSImage? {
+        guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: nil),
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side * 2), pixelsHigh: Int(side * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                         isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else {
+            return nil
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.cgContext.scaleBy(x: 2, y: 2)
+
+        let glyphColor: NSColor
+        let box: NSRect
+        let config: NSImage.SymbolConfiguration
+        if asTile {
+            srgb(dark ? tint.tile.dark : tint.tile.light).setFill()
+            NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: side, height: side), xRadius: 4, yRadius: 4).fill()
+            glyphColor = tint.darkGlyph ? srgb(0x2B2200) : .white
+            box = NSRect(x: 2, y: 2, width: 12, height: 12)
+            config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold)
+        } else {
+            glyphColor = srgb(dark ? tint.line.dark : tint.line.light)
+            box = NSRect(x: 0, y: 0, width: side, height: side)
+            config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        }
+        if asTile, let letter = tileLetter(for: symbol) {
+            // 方块本身就是框：字母类符号（p.square 等）去掉外框，直接画字母，避免框套框
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11, weight: .bold),
+                .foregroundColor: glyphColor,
+            ]
+            let size = (letter as NSString).size(withAttributes: attrs)
+            (letter as NSString).draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2), withAttributes: attrs)
+        } else {
+            let source = asTile ? tileSymbol(for: symbol).flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) } ?? base : base
+            let glyph = source.withSymbolConfiguration(config.applying(.init(paletteColors: [glyphColor]))) ?? source
+            glyph.draw(in: fitted(glyph.size, in: box))
+        }
+
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        rep.size = NSSize(width: side, height: side)
+        let image = NSImage(size: rep.size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    /// 单字母方框符号（如 p.square）在方块风格下改画的字母
+    private static func tileLetter(for symbol: String) -> String? {
+        guard symbol.hasSuffix(".square") else { return nil }
+        let inner = symbol.dropLast(".square".count)
+        return inner.count == 1 ? inner.uppercased() : nil
+    }
+
+    /// 自带外框的符号在方块风格下换成无框版本（如 dollarsign.square → dollarsign）
+    private static func tileSymbol(for symbol: String) -> String? {
+        switch symbol {
+        case "dollarsign.square": return "dollarsign"
+        case "play.rectangle": return "play.fill"
+        default: return nil
+        }
+    }
+
+    /// 等比缩小并居中，宽符号（如 </>）不会被拉伸或溢出
+    private static func fitted(_ size: NSSize, in box: NSRect) -> NSRect {
+        guard size.width > 0, size.height > 0 else { return box }
+        let scale = min(1, box.width / size.width, box.height / size.height)
+        let width = size.width * scale
+        let height = size.height * scale
+        return NSRect(x: box.midX - width / 2, y: box.midY - height / 2, width: width, height: height)
+    }
+
+    private static func srgb(_ hex: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1)
+    }
+}
+
 // MARK: - 日志
 
 private let logQueue = DispatchQueue(label: "com.finderright.app.sync.log", qos: .utility)
@@ -169,9 +306,10 @@ class FinderSync: FIFinderSync {
 
     private static func preloadSymbols() {
         let symbols = [
-            "doc.badge.plus", "doc.on.doc", "terminal", "curlybraces",
-            "scissors", "doc.on.clipboard", "archivebox", "eye", "xmark.circle",
-            "doc.text", "doc.richtext", "tablecells", "chevron.left.forwardslash.chevron.right"
+            "doc.badge.plus", "link", "character.cursor.ibeam", "arrow.right.circle",
+            "terminal", "curlybraces", "scissors", "doc.on.clipboard", "xmark.circle",
+            "arrowshape.turn.up.right", "plus.square.on.square", "doc.zipper",
+            "shippingbox.and.arrow.backward", "eye"
         ]
         for s in symbols {
             _ = getSymbolImage(named: s)
@@ -464,7 +602,7 @@ class FinderSync: FIFinderSync {
             if pushed > 0 { logToFile("menu(for:) badge refresh: \(pushed) cut item(s)") }
         }
 
-        let cancelCutItem = { self.makeItem(titleKey: "取消剪切", emoji: "🚫", systemImage: "xmark.circle", action: #selector(self.cancelCut(_:)), shortcutId: nil, style: style) }
+        let cancelCutItem = { self.makeItem(titleKey: "取消剪切", tint: .red, systemImage: "xmark.circle", action: #selector(self.cancelCut(_:)), shortcutId: nil, style: style) }
 
         // 每个功能一个构建闭包，按用户在设置里拖拽排好的顺序依次添加。
         // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，依附在剪切之后、随剪切一起排序
@@ -472,34 +610,34 @@ class FinderSync: FIFinderSync {
             MenuFeatureCatalog.newFile: {
                 // 新建文件 —— 容器/侧边栏/空选中时
                 guard isContainerLike else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "新建文件", emoji: "📄", systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
+                menu.addItem(self.makeSubmenuItem(titleKey: "新建文件", tint: .blue, systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
             },
             MenuFeatureCatalog.copyPath: {
                 guard hasSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "复制路径", emoji: "📋", systemImage: "doc.on.doc", action: #selector(self.copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
+                menu.addItem(self.makeItem(titleKey: "复制路径", tint: .indigo, systemImage: "link", action: #selector(self.copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
             },
             MenuFeatureCatalog.copyFileName: {
                 guard hasSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "复制文件名", emoji: "📋", systemImage: "doc.text", action: #selector(self.copyFileName(_:)), shortcutId: "shortcut.copyFileName", style: style))
+                menu.addItem(self.makeItem(titleKey: "复制文件名", tint: .indigo, systemImage: "character.cursor.ibeam", action: #selector(self.copyFileName(_:)), shortcutId: "shortcut.copyFileName", style: style))
             },
             MenuFeatureCatalog.goToDirectory: {
-                menu.addItem(self.makeItem(titleKey: "前往目录…", emoji: "📂", systemImage: "folder", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
+                menu.addItem(self.makeItem(titleKey: "前往目录…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
             },
             MenuFeatureCatalog.openTerminal: {
-                menu.addItem(self.makeItem(titleKey: "打开终端", emoji: "💻", systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
+                menu.addItem(self.makeItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
             },
             MenuFeatureCatalog.openEditor: {
                 guard hasSelection else { return }
                 let editors = self.installedEditors()
                 guard !editors.isEmpty else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "打开编辑器", emoji: "✏️", systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
+                menu.addItem(self.makeSubmenuItem(titleKey: "打开编辑器", tint: .purple, systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
             },
             MenuFeatureCatalog.cut: {
                 if hasSelection {
                     let selectedPaths = Set(selected.map(\.path))
                     let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
                     let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
-                    menu.addItem(self.makeItem(titleKey: cutTitleKey, emoji: "✂️", systemImage: "scissors", action: #selector(self.cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
+                    menu.addItem(self.makeItem(titleKey: cutTitleKey, tint: .orange, systemImage: "scissors", action: #selector(self.cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
                 }
                 if hasCut {
                     menu.addItem(cancelCutItem())
@@ -510,26 +648,26 @@ class FinderSync: FIFinderSync {
                     let pasteTitleKey = hasCut
                         ? String(format: self.L("粘贴 (已剪切 %d 项)"), cutPaths.count)
                         : "粘贴"
-                    let pasteItem = self.makeItem(titleKey: pasteTitleKey, emoji: "📋", systemImage: "doc.on.clipboard", action: #selector(self.pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
+                    let pasteItem = self.makeItem(titleKey: pasteTitleKey, tint: .orange, systemImage: "doc.on.clipboard", action: #selector(self.pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
                     pasteItem.isEnabled = hasCut
                     menu.addItem(pasteItem)
                 }
             },
             MenuFeatureCatalog.moveTo: {
                 guard hasSelection else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "移动到", emoji: "📁", systemImage: "folder.badge.minus", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .move, selected: selected, style: style) }))
+                menu.addItem(self.makeSubmenuItem(titleKey: "移动到", tint: .green, systemImage: "arrowshape.turn.up.right", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .move, selected: selected, style: style) }))
             },
             MenuFeatureCatalog.copyTo: {
                 guard hasSelection else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "复制到", emoji: "📑", systemImage: "folder.badge.plus", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
+                menu.addItem(self.makeSubmenuItem(titleKey: "复制到", tint: .green, systemImage: "plus.square.on.square", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
             },
             MenuFeatureCatalog.compress: {
                 guard hasSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", emoji: "📦", systemImage: "archivebox", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
+                menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", tint: .brown, systemImage: "doc.zipper", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
             },
             MenuFeatureCatalog.decompress: {
                 guard hasSelection, selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }) else { return }
-                menu.addItem(self.makeItem(titleKey: "解压到当前目录", emoji: "📂", systemImage: "archivebox", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
+                menu.addItem(self.makeItem(titleKey: "解压到当前目录", tint: .brown, systemImage: "shippingbox.and.arrow.backward", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
             },
             MenuFeatureCatalog.toggleHidden: {
                 // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），跨进程读
@@ -539,7 +677,7 @@ class FinderSync: FIFinderSync {
                 // 因此主 App 启动时也不需要把任何状态锚定到 Finder 真实状态（见 FinderRightApp）。
                 menu.addItem(self.makeItem(
                     titleKey: "切换隐藏文件",
-                    emoji: "👁",
+                    tint: .pink,
                     systemImage: "eye",
                     action: #selector(self.toggleHiddenFiles(_:)),
                     shortcutId: "shortcut.toggleHidden",
@@ -581,33 +719,25 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    /// 根据配置的图标风格（简洁 / 彩色 Emoji / 无图标）设置菜单项的标题与图标
+    /// 根据配置的图标风格（单色线条 / 彩色线条 / 彩色方块 / 无图标）设置菜单项的标题与图标
     private func configureMenuItem(
         _ item: NSMenuItem,
         titleKey: String,
-        emoji: String,
+        tint: MenuTint,
         systemImage: String?,
         style: MenuIconStyle
     ) {
+        item.title = L(titleKey)
+        guard let systemImage else {
+            item.image = nil
+            return
+        }
         switch style {
         case .modern:
-            item.title = L(titleKey)
-            if let systemImage = systemImage {
-                item.image = Self.getSymbolImage(named: systemImage)
-            } else {
-                item.image = nil
-            }
-        case .classic:
-            let prefix = emoji.isEmpty ? "" : "\(emoji) "
-            let localizedWithEmoji = NSLocalizedString("\(prefix)\(titleKey)", comment: "")
-            if localizedWithEmoji != "\(prefix)\(titleKey)" {
-                item.title = localizedWithEmoji
-            } else {
-                item.title = "\(prefix)\(L(titleKey))"
-            }
-            item.image = nil
+            item.image = Self.getSymbolImage(named: systemImage)
+        case .tinted, .tile:
+            item.image = MenuIconRenderer.image(symbol: systemImage, tint: tint, style: style)
         case .none:
-            item.title = L(titleKey)
             item.image = nil
         }
     }
@@ -615,7 +745,7 @@ class FinderSync: FIFinderSync {
     /// 构建通用菜单项（支持快捷键、tag 与图标风格自适应）
     private func makeItem(
         titleKey: String,
-        emoji: String,
+        tint: MenuTint,
         systemImage: String?,
         action: Selector? = nil,
         shortcutId: String? = nil,
@@ -630,47 +760,48 @@ class FinderSync: FIFinderSync {
         if let sc = sc, !key.isEmpty {
             i.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: UInt(sc.modifiers))
         }
-        configureMenuItem(i, titleKey: titleKey, emoji: emoji, systemImage: systemImage, style: style)
+        configureMenuItem(i, titleKey: titleKey, tint: tint, systemImage: systemImage, style: style)
         return i
     }
 
     private func makeSubmenuItem(
         titleKey: String,
-        emoji: String,
+        tint: MenuTint,
         systemImage: String?,
         shortcutId: String? = nil,
         style: MenuIconStyle,
         build: () -> NSMenu
     ) -> NSMenuItem {
-        let i = makeItem(titleKey: titleKey, emoji: emoji, systemImage: systemImage, shortcutId: shortcutId, style: style)
+        let i = makeItem(titleKey: titleKey, tint: tint, systemImage: systemImage, shortcutId: shortcutId, style: style)
         i.submenu = build()
         return i
     }
 
     private func buildNewFileMenu(style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("新建文件"))
-        let icons = [
-            ("📝", "doc.text"), ("📖", "doc.richtext"),
-            ("🌐", "chevron.left.forwardslash.chevron.right"), ("🐍", "terminal"),
-            ("🔧", "terminal"), ("📊", "curlybraces"), ("📃", "doc.text"),
-            ("📈", "tablecells"), ("🍎", "curlybraces"), ("🟨", "curlybraces"),
+        // 与 BuiltInFileTemplates.text 顺序一一对应：txt md html py sh json xml csv swift js
+        let icons: [(MenuTint, String)] = [
+            (.gray, "doc.plaintext"), (.indigo, "number"),
+            (.orange, "chevron.left.forwardslash.chevron.right"), (.blue, "p.square"),
+            (.graphite, "dollarsign.square"), (.yellow, "curlybraces"), (.brown, "doc.text"),
+            (.green, "tablecells"), (.red, "swift"), (.yellow, "j.square"),
         ]
         for (tag, template) in BuiltInFileTemplates.text.enumerated() {
-            let (emoji, symbol) = icons[tag]
-            let item = makeItem(titleKey: template.name, emoji: emoji, systemImage: symbol, action: #selector(newFile(_:)), tag: tag, style: style)
+            let (tint, symbol) = icons[tag]
+            let item = makeItem(titleKey: template.name, tint: tint, systemImage: symbol, action: #selector(newFile(_:)), tag: tag, style: style)
             m.addItem(item)
         }
 
         // Office 文档：tag 从 officeTagBase 起，按 OfficeTemplate.allCases 顺序对应
         m.addItem(.separator())
         for (index, template) in OfficeTemplate.allCases.enumerated() {
-            let (emoji, symbol): (String, String)
+            let (tint, symbol): (MenuTint, String)
             switch template {
-            case .docx: (emoji, symbol) = ("📘", "doc.richtext")
-            case .xlsx: (emoji, symbol) = ("📗", "tablecells")
-            case .pptx: (emoji, symbol) = ("📙", "rectangle.on.rectangle")
+            case .docx: (tint, symbol) = (.blue, "doc.richtext")
+            case .xlsx: (tint, symbol) = (.green, "tablecells")
+            case .pptx: (tint, symbol) = (.orange, "play.rectangle")
             }
-            let item = makeItem(titleKey: template.titleKey, emoji: emoji, systemImage: symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
+            let item = makeItem(titleKey: template.titleKey, tint: tint, systemImage: symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
             m.addItem(item)
         }
 
@@ -681,7 +812,7 @@ class FinderSync: FIFinderSync {
             for (index, tmpl) in customTemplates.enumerated() {
                 let tag = 1000 + index
                 let title = tmpl.name.isEmpty ? ".\(tmpl.fileExtension)" : "\(tmpl.name) (.\(tmpl.fileExtension))"
-                let item = makeItem(titleKey: title, emoji: "📄", systemImage: "doc.badge.plus", action: #selector(newFile(_:)), tag: tag, style: style)
+                let item = makeItem(titleKey: title, tint: .gray, systemImage: "doc", action: #selector(newFile(_:)), tag: tag, style: style)
                 m.addItem(item)
             }
         }
@@ -867,12 +998,12 @@ class FinderSync: FIFinderSync {
     /// 携带数据 —— 这里 tag = 编辑器在 EditorCatalog.all 中的下标。
     private func buildEditorMenu(_ editors: [(name: String, catalogIndex: Int)], style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("打开编辑器"))
-        let icons = style == .modern ? Self.editorSnapshot().icons : [:]
+        let icons = style != .none ? Self.editorSnapshot().icons : [:]
         for ed in editors {
             let item = NSMenuItem(title: ed.name, action: #selector(openEditorWith(_:)), keyEquivalent: "")
             item.target = self
             item.tag = ed.catalogIndex
-            if style == .modern {
+            if style != .none {
                 let bundleId = EditorCatalog.all[ed.catalogIndex].id
                 item.image = icons[bundleId]
             }
@@ -1014,12 +1145,12 @@ class FinderSync: FIFinderSync {
         let action = mode == .move ? #selector(moveToFavorite(_:)) : #selector(copyToFavorite(_:))
 
         if favorites.isEmpty {
-            let empty = makeItem(titleKey: "尚未添加常用目录", emoji: "", systemImage: nil, style: .none)
+            let empty = makeItem(titleKey: "尚未添加常用目录", tint: .gray, systemImage: nil, style: .none)
             empty.isEnabled = false
             m.addItem(empty)
         }
         for (index, (path, name)) in zip(favorites, names).enumerated() {
-            let item = makeItem(titleKey: name, emoji: "📁", systemImage: "folder", action: action, tag: index, style: style)
+            let item = makeItem(titleKey: name, tint: .cyan, systemImage: "folder", action: action, tag: index, style: style)
             // 没有任何一项能放过去时置灰：移动时全部已在该目录，或目标位于选中的文件夹内部
             item.isEnabled = selected.contains {
                 FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: mode) == .ok
@@ -1028,7 +1159,7 @@ class FinderSync: FIFinderSync {
         }
 
         m.addItem(.separator())
-        m.addItem(makeItem(titleKey: "管理常用目录…", emoji: "⚙️", systemImage: "gearshape", action: #selector(manageFavorites(_:)), style: style))
+        m.addItem(makeItem(titleKey: "管理常用目录…", tint: .gray, systemImage: "gearshape", action: #selector(manageFavorites(_:)), style: style))
         return m
     }
 

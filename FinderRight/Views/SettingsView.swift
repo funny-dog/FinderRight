@@ -46,6 +46,7 @@ struct SettingsView: View {
     }
 
     @ObservedObject private var navigation = SettingsNavigation.shared
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         HStack(spacing: 0) {
@@ -59,6 +60,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(FRTheme.window)
         }
+        // 主题色变化时整棵视图重建，让所有动态颜色按新主题重新取值
+        .id(themeRaw)
         .frame(minWidth: 680, idealWidth: 780, maxWidth: .infinity,
                minHeight: 500, idealHeight: 620, maxHeight: .infinity)
         .background(FRTheme.window)
@@ -161,6 +164,8 @@ struct GeneralTab: View {
     @AppStorage("showDockIcon") private var showDockIcon = false
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
     @FRState private var launchAtLoginError: String?
     @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
@@ -229,6 +234,36 @@ struct GeneralTab: View {
     private var displaySection: some View {
         FRSection("显示") {
             FRCard {
+                let theme = FRThemeID(rawValue: themeRaw) ?? .midnight
+                FRRow(title: Text("主题色"), subtitle: Text(LocalizedStringKey(theme.titleKey))) {
+                    FRThemeSwatches(selection: Binding(
+                        get: { theme },
+                        set: { newValue in
+                            // 先更新动态颜色读取的当前主题，再写存储触发重建
+                            FRThemeID.current = newValue
+                            themeRaw = newValue.rawValue
+                        }
+                    ))
+                }
+
+                FRDivider()
+
+                FRRow(title: Text("深色模式")) {
+                    FRPicker(label: "深色模式", selection: Binding(
+                        get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
+                        set: { newValue in
+                            appearanceRaw = newValue.rawValue
+                            newValue.apply()
+                        }
+                    )) {
+                        ForEach(FRAppearanceMode.allCases) { mode in
+                            Text(LocalizedStringKey(mode.titleKey)).tag(mode)
+                        }
+                    }
+                }
+
+                FRDivider()
+
                 FRRow(title: Text("语言")) {
                     FRPicker(label: "语言", selection: Binding(
                         get: { appLanguage },
@@ -982,15 +1017,15 @@ struct ShortcutsTab: View {
 
     private let actions: [(id: String, name: String, icon: String)] = [
         ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
-        ("shortcut.copyPath",     "复制路径",       "doc.on.doc"),
-        ("shortcut.copyFileName", "复制文件名",     "doc.text"),
-        ("shortcut.goToDirectory", "前往目录…",     "folder"),
+        ("shortcut.copyPath",     "复制路径",       "link"),
+        ("shortcut.copyFileName", "复制文件名",     "character.cursor.ibeam"),
+        ("shortcut.goToDirectory", "前往目录…",     "arrow.right.circle"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
-        ("shortcut.openEditor",   "打开编辑器",     "square.and.pencil"),
+        ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
         ("shortcut.cut",          "剪切",           "scissors"),
         ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
-        ("shortcut.compress",     "压缩为 ZIP",     "archivebox"),
-        ("shortcut.decompress",   "解压到当前目录", "archivebox.circle"),
+        ("shortcut.compress",     "压缩为 ZIP",     "doc.zipper"),
+        ("shortcut.decompress",   "解压到当前目录", "shippingbox.and.arrow.backward"),
         ("shortcut.toggleHidden", "切换隐藏文件",   "eye"),
     ]
 
