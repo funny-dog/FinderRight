@@ -1358,6 +1358,18 @@ struct FinderRightKitTestsRunner {
             try assertEqual(OperationRecord.summary(of: long)?.count, 301, "截断到上限并加省略号")
         }
 
+        runTest("OperationRecord.truncatedSubject 按显示宽度从中间截断") {
+            try assertEqual(OperationRecord.truncatedSubject("report.pdf"), "report.pdf", "未超宽原样返回")
+            try assertEqual(OperationRecord.truncatedSubject("3 个项目"), "3 个项目")
+            let latin = OperationRecord.truncatedSubject("quarterly-business-review-final-version-3.pptx", maxWidth: 20)
+            try assertEqual(latin, "quarterly-bu…-3.pptx", "开头多、结尾少，保留扩展名")
+            let cjk = OperationRecord.truncatedSubject("2026年第三季度项目汇报材料-最终版-v3.pptx", maxWidth: 32)
+            try assertTrue(cjk.hasPrefix("2026年第三季度") && cjk.hasSuffix("-v3.pptx"), "全角字符按 2 计宽：\(cjk)")
+            try assertTrue(cjk.contains("…"))
+            let widthOf: (String) -> Int = { $0.reduce(0) { $0 + (($1.unicodeScalars.first!.value >= 0x2E80) ? 2 : 1) } }
+            try assertTrue(widthOf(cjk) <= 32, "截断后不超过上限：\(widthOf(cjk))")
+        }
+
         runTest("OfficeTemplate 只接受白名单内的模板 id") {
             try assertEqual(OfficeTemplate.allCases.map(\.fileExtension), ["docx", "xlsx", "pptx"])
             try assertTrue(OfficeTemplate.allCases.allSatisfy { $0.titleKey.hasSuffix("(.\($0.fileExtension))") }, "显示名须与扩展名一致")

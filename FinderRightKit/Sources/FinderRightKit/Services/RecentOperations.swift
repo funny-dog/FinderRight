@@ -41,6 +41,35 @@ public struct OperationRecord: Equatable {
         }
         return joined
     }
+
+    /// 菜单里显示的操作对象名：过长时从中间截断，保留开头与结尾（含扩展名）。
+    /// 菜单宽度由最长一项决定，长文件名会把整个菜单撑宽，完整名称由调用方放进 toolTip。
+    /// 宽度按显示宽度计：中日韩等全角字符算 2，其余算 1。
+    public static func truncatedSubject(_ subject: String, maxWidth: Int = 32) -> String {
+        let chars = Array(subject)
+        let widths = chars.map(displayWidth)
+        guard widths.reduce(0, +) > maxWidth else { return subject }
+
+        // 省略号占 1，剩余宽度前多后少地分给开头和结尾
+        let budget = max(2, maxWidth - 1)
+        let tailBudget = budget * 2 / 5
+        let headBudget = budget - tailBudget
+
+        var head = 0, used = 0
+        while head < chars.count, used + widths[head] <= headBudget {
+            used += widths[head]; head += 1
+        }
+        var tail = chars.count, tailUsed = 0
+        while tail > head, tailUsed + widths[tail - 1] <= tailBudget {
+            tailUsed += widths[tail - 1]; tail -= 1
+        }
+        return String(chars[..<head]) + "…" + String(chars[tail...])
+    }
+
+    /// 粗略的显示宽度：U+2E80 之后（中日韩部首、假名、汉字、谚文、全角符号、emoji）按全角算
+    private static func displayWidth(_ char: Character) -> Int {
+        (char.unicodeScalars.first?.value ?? 0) >= 0x2E80 ? 2 : 1
+    }
 }
 
 /// 最近的后台操作记录（仅内存，主 App 退出即清空）。

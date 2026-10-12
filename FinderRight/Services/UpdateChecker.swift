@@ -11,6 +11,14 @@ public enum UpdateCheckStatus: Equatable {
     case downloading(progress: Double)
     case installing
     case failed(String)
+
+    /// 检查、下载或安装正在进行
+    public var isInProgress: Bool {
+        switch self {
+        case .checking, .downloading, .installing: return true
+        default: return false
+        }
+    }
 }
 
 public final class UpdateChecker: NSObject {
@@ -18,7 +26,18 @@ public final class UpdateChecker: NSObject {
 
     private let repoOwner = "funny-dog"
     private let repoName = "FinderRight"
-    private(set) public var currentStatus: UpdateCheckStatus = .idle
+    /// 状态变化后在主线程发出：菜单栏和关于页可能各自发起检查或更新，靠它保持显示一致
+    public static let statusDidChangeNotification = Notification.Name("com.finderright.updateStatusDidChange")
+
+    private(set) public var currentStatus: UpdateCheckStatus = .idle {
+        didSet {
+            guard currentStatus != oldValue else { return }
+            // 部分状态在后台线程写入，通知统一回到主线程发出
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: Self.statusDidChangeNotification, object: self)
+            }
+        }
+    }
     private var lastCheckedDate: Date?
 
     private var activeDownloadSession: URLSession?
@@ -43,6 +62,11 @@ public final class UpdateChecker: NSObject {
     ///   - force: 是否强制刷新（默认若 10 分钟内检查过，则复用结果）
     ///   - completion: 检查完成后的主线程回调
     public func check(force: Bool = false, completion: @escaping (UpdateCheckStatus) -> Void) {
+        // 已有检查、下载或安装在进行时不再发起：避免重复请求，也避免把下载进度覆盖成「检查中」
+        if currentStatus.isInProgress {
+            completion(currentStatus)
+            return
+        }
         if !force, let last = lastCheckedDate, Date().timeIntervalSince(last) < 600, currentStatus != .idle {
             completion(currentStatus)
             return
