@@ -377,3 +377,19 @@
 "目标不是常用目录" = "The destination is not a favorite folder";
 "常用目录不存在" = "The favorite folder no longer exists";
 "云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。" = "The Services menu used in cloud folders is shown by macOS in the system language and is not affected by this setting.";
+
+/* 编辑器设置 */
+"右键「打开编辑器」与服务菜单使用的编辑器" = "Editors used by \"Open in Editor\" and the Services menu";
+"通过服务菜单或快捷键「打开编辑器」时直接使用" = "Used when opening from the Services menu or a keyboard shortcut";
+"右键菜单中显示" = "Show in Context Menu";
+"添加编辑器…" = "Add Editor…";
+"默认" = "Default";
+"手动添加" = "Added Manually";
+"常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。" = "Common editors are detected automatically. Use \"Add Editor…\" to add any other editor or app. Editors that are switched off won't appear in the context submenu.";
+"添加编辑器" = "Add Editor";
+"这些应用声明可以编辑代码文件，但不在自动识别清单中" = "These apps can edit code files but aren't detected automatically";
+"正在查找…" = "Searching…";
+"没有发现其他编辑器" = "No other editors found";
+"从应用程序中选择…" = "Choose from Applications…";
+"完成" = "Done";
+"无法添加以下应用：%@" = "Couldn't add these apps: %@";

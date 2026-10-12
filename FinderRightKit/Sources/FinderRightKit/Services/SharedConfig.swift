@@ -48,6 +48,8 @@ public final class SharedConfig {
         static let menuIconStyle = "menuIconStyle"
         static let preferredTerminal = "preferredTerminal"
         static let preferredEditor = "preferredEditor"
+        static let customEditors = "customEditors"
+        static let hiddenEditors = "hiddenEditors"
         static let customFileTemplates = "customFileTemplates"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
@@ -178,19 +180,58 @@ public final class SharedConfig {
         }
     }
 
-    // MARK: - Preferred Editor
+    // MARK: - Editors
 
-    /// 首选编辑器应用 bundle identifier
-    public var preferredEditor: String {
+    /// 用户选定的默认编辑器 bundle identifier（服务菜单 / 快捷键使用）。
+    /// nil 表示未选择，由 EditorCatalog.resolvedDefault 自动取右键菜单中的第一个
+    public var preferredEditor: String? {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return store[Keys.preferredEditor] as? String ?? "com.microsoft.VSCode"
+            guard let saved = store[Keys.preferredEditor] as? String, !saved.isEmpty else { return nil }
+            return saved
         }
         set {
             lock.lock()
             defer { lock.unlock() }
-            store[Keys.preferredEditor] = newValue
+            if let newValue, !newValue.isEmpty {
+                store[Keys.preferredEditor] = newValue
+            } else {
+                store.removeValue(forKey: Keys.preferredEditor)
+            }
+            save()
+        }
+    }
+
+    /// 用户手动添加的编辑器（预置清单之外的应用），按添加顺序
+    public var customEditors: [KnownEditor] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let data = store[Keys.customEditors] as? Data else { return [] }
+            return (try? JSONDecoder().decode([KnownEditor].self, from: data)) ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if let data = try? JSONEncoder().encode(newValue) {
+                store[Keys.customEditors] = data
+                save()
+            }
+        }
+    }
+
+    /// 在右键「打开编辑器」子菜单中隐藏的编辑器 bundle identifier
+    public var hiddenEditors: Set<String> {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return Set(store[Keys.hiddenEditors] as? [String] ?? [])
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.hiddenEditors] = newValue.sorted()
             save()
         }
     }

@@ -1595,6 +1595,88 @@ struct FinderRightKitTestsRunner {
             try assertEqual(SharedConfig(fileURL: url).favoriteDirectories, ["/Users/me/Downloads", "/Volumes/E"])
         }
 
+        runTest("EditorCatalog 清单无重复且以文本编辑兜底") {
+            let ids = EditorCatalog.all.map(\.id)
+            try assertEqual(Set(ids).count, ids.count, "bundle id 不应重复")
+            try assertEqual(ids.last, EditorCatalog.textEditBundleId)
+        }
+
+        runTest("EditorCatalog 合并：清单在前、手动项在后、去重、隐藏") {
+            let installedIds: Set<String> = ["com.microsoft.VSCode", "dev.zed.Zed", "com.example.Foo", "com.apple.TextEdit"]
+            let custom = [KnownEditor(id: "com.example.Foo", name: "Foo"),
+                          KnownEditor(id: "dev.zed.Zed", name: "重复的 Zed"),
+                          KnownEditor(id: "com.example.Gone", name: "已卸载")]
+            let all = EditorCatalog.installed(custom: custom, isInstalled: installedIds.contains)
+            try assertEqual(all.map(\.id), ["dev.zed.Zed", "com.microsoft.VSCode", "com.apple.TextEdit", "com.example.Foo"])
+            try assertEqual(all.first?.name, "Zed", "与清单重复的手动项以清单为准")
+
+            let menu = EditorCatalog.menuEditors(custom: custom, hidden: ["dev.zed.Zed", "com.apple.TextEdit"],
+                                                 isInstalled: installedIds.contains)
+            try assertEqual(menu.map(\.id), ["com.microsoft.VSCode", "com.example.Foo"])
+        }
+
+        runTest("EditorCatalog 默认编辑器解析顺序") {
+            let installedIds: Set<String> = ["com.microsoft.VSCode", "dev.zed.Zed"]
+            func resolve(_ preferred: String?, hidden: Set<String> = [], installed: Set<String> = installedIds) -> String {
+                EditorCatalog.resolvedDefault(preferred: preferred, custom: [], hidden: hidden, isInstalled: installed.contains)
+            }
+            try assertEqual(resolve("com.microsoft.VSCode"), "com.microsoft.VSCode", "选定且已安装")
+            try assertEqual(resolve("com.microsoft.VSCode", hidden: ["com.microsoft.VSCode"]), "com.microsoft.VSCode", "选定的默认项即使在菜单中隐藏也生效")
+            try assertEqual(resolve(nil), "dev.zed.Zed", "未选定时取菜单第一个")
+            try assertEqual(resolve("com.example.Gone"), "dev.zed.Zed", "选定项已卸载时回退")
+            try assertEqual(resolve(nil, hidden: ["dev.zed.Zed"]), "com.microsoft.VSCode", "跳过隐藏项")
+            try assertEqual(resolve(nil, hidden: installedIds), "dev.zed.Zed", "全部隐藏时仍取任一已安装项")
+            try assertEqual(resolve(nil, installed: []), EditorCatalog.textEditBundleId, "全都没装时兜底文本编辑")
+        }
+
+        runTest("EditorDiscovery 只认显式声明代码文件的 Editor") {
+            let codeUTIs: Set<String> = ["public.swift-source"]
+            func doc(_ role: String?, exts: [String] = [], types: [String] = []) -> [String: Any] {
+                var d: [String: Any] = ["CFBundleTypeExtensions": exts, "LSItemContentTypes": types]
+                if let role { d["CFBundleTypeRole"] = role }
+                return d
+            }
+            func check(_ docs: [[String: Any]]) -> Bool {
+                EditorDiscovery.declaresCodeEditing(infoDictionary: ["CFBundleDocumentTypes": docs], codeTypeIdentifiers: codeUTIs)
+            }
+            try assertTrue(check([doc("Editor", exts: ["PY"])]), "扩展名大小写不敏感")
+            try assertTrue(check([doc(nil, types: ["public.swift-source"])]), "缺省角色视为 Editor")
+            try assertTrue(!check([doc("Viewer", exts: ["js"])]), "浏览器类 Viewer 不算")
+            try assertTrue(!check([doc("Editor", types: ["public.plain-text", "public.folder"])]), "只声明通用文本类型的不算")
+            try assertTrue(!EditorDiscovery.declaresCodeEditing(infoDictionary: [:], codeTypeIdentifiers: codeUTIs), "不声明文档类型")
+        }
+
+        runTest("EditorDiscovery 只推荐常规安装位置") {
+            let home = "/Users/me"
+            try assertTrue(EditorDiscovery.isStandardInstallLocation("/Applications/Zed.app", home: home))
+            try assertTrue(EditorDiscovery.isStandardInstallLocation("/Applications/Utilities/X.app", home: home))
+            try assertTrue(EditorDiscovery.isStandardInstallLocation("/Users/me/Applications/JetBrains Toolbox/PyCharm.app", home: home))
+            try assertTrue(!EditorDiscovery.isStandardInstallLocation("/Applications/Doubao.app/Contents/Helpers/Browser.app", home: home), "内嵌 Helper")
+            try assertTrue(!EditorDiscovery.isStandardInstallLocation("/Volumes/MarkEdit/MarkEdit.app", home: home), "挂载的 DMG")
+            try assertTrue(!EditorDiscovery.isStandardInstallLocation("/Users/me/.cache/x/Chromium.app", home: home))
+        }
+
+        runTest("SharedConfig 编辑器偏好：默认未选定、手动项与隐藏项可持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertNil(config.preferredEditor)
+            try assertTrue(config.customEditors.isEmpty)
+            try assertTrue(config.hiddenEditors.isEmpty)
+
+            config.preferredEditor = "dev.zed.Zed"
+            config.customEditors = [KnownEditor(id: "com.example.Foo", name: "Foo")]
+            config.hiddenEditors = ["com.apple.dt.Xcode"]
+            let reloaded = SharedConfig(fileURL: url)
+            try assertEqual(reloaded.preferredEditor, "dev.zed.Zed")
+            try assertEqual(reloaded.customEditors, [KnownEditor(id: "com.example.Foo", name: "Foo")])
+            try assertEqual(reloaded.hiddenEditors, ["com.apple.dt.Xcode"])
+
+            reloaded.preferredEditor = ""
+            try assertNil(SharedConfig(fileURL: url).preferredEditor, "空串视为未选定")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
