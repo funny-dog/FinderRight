@@ -2,12 +2,20 @@ import SwiftUI
 
 struct OnboardingView: View {
     /// 由 AppKit 宿主（NSWindow）注入的关闭回调
-    var onClose: () -> Void = {}
+    let onClose: () -> Void
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @FRState private var currentStep = 0
+    @FRState private var currentStep: Int
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     private let totalSteps = 5
+
+    /// 「启用 Finder 扩展」所在步骤：菜单栏检测到扩展未启用时直接从这一步打开
+    static let extensionStep = 1
+
+    init(initialStep: Int = 0, onClose: @escaping () -> Void = {}) {
+        self.onClose = onClose
+        _currentStep = FRState(initialValue: initialStep)
+    }
 
     var body: some View {
         ZStack {
@@ -32,8 +40,14 @@ struct OnboardingView: View {
                     switch currentStep {
                     case 0:
                         WelcomeStep()
-                    case 1:
-                        EnableExtensionStep()
+                    case Self.extensionStep:
+                        PermissionStep(
+                            icon: "puzzlepiece.extension.fill",
+                            title: "启用 Finder 扩展",
+                            subtitle: "FinderRight 的右键菜单由访达扩展提供，启用后才会出现在访达中。"
+                        ) {
+                            FRCard { FinderExtensionView() }
+                        }
                     case 2:
                         PermissionStep(
                             icon: "externaldrive.fill.badge.checkmark",
@@ -179,90 +193,9 @@ struct FeatureHighlight: View {
     }
 }
 
-// MARK: - Step 2: 启用扩展
+// MARK: - Step 2/3/4: 启用扩展与授权
 
-struct EnableExtensionStep: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-
-            FRIconChip(systemName: "puzzlepiece.extension.fill", size: 56)
-
-            Text("启用 Finder 扩展")
-                .font(.system(size: 26, weight: .bold))
-                .foregroundColor(FRTheme.text)
-                .padding(.top, 16)
-
-            Text("需要在系统设置中启用 FinderRight 扩展")
-                .font(.system(size: 14))
-                .foregroundColor(FRTheme.mute)
-                .multilineTextAlignment(.center)
-                .padding(.top, 4)
-
-            // 步骤说明
-            FRCard {
-                StepInstruction(number: 1, text: "点击下方按钮打开系统设置")
-                FRDivider()
-                StepInstruction(number: 2, text: "在「扩展」列表中找到 FinderRight")
-                FRDivider()
-                StepInstruction(number: 3, text: "勾选启用 Finder 扩展")
-            }
-            .frame(width: 360)
-            .padding(.top, 22)
-
-            // 打开系统设置按钮
-            Button {
-                openExtensionsPreferences()
-            } label: {
-                Label("打开系统设置", systemImage: "gearshape")
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 3)
-            }
-            .buttonStyle(.frPrimary)
-            .padding(.top, 20)
-
-            Text("完成后点击「下一步」继续")
-                .font(.system(size: 12))
-                .foregroundColor(FRTheme.mute)
-                .padding(.top, 10)
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func openExtensionsPreferences() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-}
-
-struct StepInstruction: View {
-    let number: Int
-    let text: LocalizedStringKey
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(verbatim: "\(number)")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(FRTheme.onAccent)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(FRTheme.accent))
-
-            Text(text)
-                .font(.system(size: 13))
-                .foregroundColor(FRTheme.text)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-    }
-}
-
-// MARK: - Step 3/4: 授权（完全磁盘访问、辅助功能）
-
-/// 授权步骤的外壳：标题区 + 设置页同款授权视图（状态、跳转按钮、步骤说明都复用，不另写一套）
+/// 扩展与授权步骤的外壳：标题区 + 设置页同款状态视图（状态、跳转按钮、步骤说明都复用，不另写一套）
 struct PermissionStep<Content: View>: View {
     let icon: String
     let title: LocalizedStringKey
@@ -304,6 +237,8 @@ struct PermissionStep<Content: View>: View {
 
 struct CompletionStep: View {
     @FRState private var showCheckmark = false
+    /// 扩展未启用时不说「一切就绪」，提示右键菜单暂不可用
+    @FRState private var extensionEnabled = FinderExtensionChecker.check()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -323,14 +258,18 @@ struct CompletionStep: View {
                     .animation(.spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
             }
 
-            Text("一切就绪！")
+            Text(extensionEnabled ? "一切就绪！" : "差一步就好")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundColor(FRTheme.text)
                 .padding(.top, 16)
 
-            Text("FinderRight 已准备好为你服务")
+            Text(extensionEnabled
+                 ? "FinderRight 已准备好为你服务"
+                 : "Finder 扩展尚未启用，右键菜单暂不会出现。可点「上一步」返回启用")
                 .font(.system(size: 14))
-                .foregroundColor(FRTheme.mute)
+                .foregroundColor(extensionEnabled ? FRTheme.mute : FRTheme.warnText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
                 .padding(.top, 4)
 
             // 右键菜单预览
@@ -356,6 +295,10 @@ struct CompletionStep: View {
         }
         .onAppear {
             showCheckmark = true
+            extensionEnabled = FinderExtensionChecker.check()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            extensionEnabled = FinderExtensionChecker.check()
         }
     }
 }

@@ -339,13 +339,26 @@ struct GeneralTab: View {
     // MARK: 权限与扩展
 
     private var permissionSection: some View {
-        FRSection("权限与扩展") {
+        FRSection {
+            HStack {
+                FRCaption("权限与扩展")
+                Spacer()
+                // 引导已不在菜单栏常驻，想重看的用户从这里进入
+                Button("重新查看引导") {
+                    NotificationCenter.default.post(name: .openOnboarding, object: nil)
+                }
+                .buttonStyle(.frLink)
+                .padding(.trailing, 4)
+            }
+        } content: {
             FRCard {
+                FinderExtensionView()
+                FRDivider()
                 FullDiskAccessView()
                 FRDivider()
                 AccessibilityView()
                 FRDivider()
-                FRRow(title: Text("访达右键扩展"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
+                FRRow(title: Text("右键菜单排查"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
                     HStack(spacing: 8) {
                         Button("重启访达") {
                             let proc = Process()
@@ -356,9 +369,7 @@ struct GeneralTab: View {
                         .buttonStyle(.frSecondary)
 
                         Button("扩展设置...") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences") {
-                                NSWorkspace.shared.open(url)
-                            }
+                            FinderExtensionChecker.openSettings()
                         }
                         .buttonStyle(.frSecondary)
                     }
