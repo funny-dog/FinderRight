@@ -272,25 +272,15 @@ final class ServicesProvider: NSObject {
         }
     }
 
-    /// 解析首选编辑器：若未安装则顺次回退到首个已安装的编辑器，最后回退到系统文本编辑
+    /// 解析默认编辑器：与设置页「默认编辑器」同一套规则（见 EditorCatalog.resolvedDefault）
     private func resolvedEditorBundleId() -> String {
-        let preferred = SharedConfig.shared.preferredEditor
-        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: preferred) != nil {
-            return preferred
-        }
-
-        // 未安装 preferredEditor，回退到 EditorCatalog.all 中首个已安装的编辑器
-        if let fallback = EditorCatalog.all.first(where: {
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.id) != nil
-        }) {
-            NSLog("[ServicesProvider] preferredEditor '\(preferred)' not installed, falling back to '\(fallback.id)' (\(fallback.name))")
-            return fallback.id
-        }
-
-        // 一个都没安装，回退到系统「文本编辑」
-        let textEditId = "com.apple.TextEdit"
-        NSLog("[ServicesProvider] preferredEditor '\(preferred)' and all catalog editors not installed, falling back to '\(textEditId)'")
-        return textEditId
+        let config = SharedConfig.shared
+        config.reload()
+        return EditorCatalog.resolvedDefault(
+            preferred: config.preferredEditor,
+            custom: config.customEditors,
+            hidden: config.hiddenEditors,
+            isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
     }
 
     @objc func openEditor(_ pboard: NSPasteboard,

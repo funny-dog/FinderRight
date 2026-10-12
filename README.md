@@ -37,7 +37,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - 📋 **复制文件名** —— 独立复制完整文件名（含扩展名），多选时每行一项
 - 📂 **前往目录** —— 输入绝对路径或 `~/` 路径，在 Finder 中打开指定目录
 - 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）
-- ✏️ **打开编辑器** —— 用 VS Code / Cursor / Sublime / Xcode 等打开
+- ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
 - 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
@@ -172,7 +172,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - 📋 **Copy File Name** — copy full file names including extensions; multiple selections are copied one per line
 - 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder
 - 💻 **Open in Terminal** — open the current folder in your default terminal, or choose Ghostty / Terminal / iTerm2 / Warp, etc.
-- ✏️ **Open in Editor** — open with VS Code / Cursor / Sublime / Xcode, etc.
+- ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
 - 📦 **Compress / Extract** — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)

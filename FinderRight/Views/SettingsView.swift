@@ -19,6 +19,7 @@ struct SettingsView: View {
         case favorites = "常用目录"
         case shortcuts = "快捷键"
         case tools = "终端"
+        case editors = "编辑器"
         case about = "关于"
 
         var icon: String {
@@ -28,6 +29,7 @@ struct SettingsView: View {
             case .favorites: return "folder"
             case .shortcuts: return "keyboard"
             case .tools: return "terminal"
+            case .editors: return "curlybraces"
             case .about: return "info.circle"
             }
         }
@@ -40,6 +42,7 @@ struct SettingsView: View {
             case .favorites: return "favorites"
             case .shortcuts: return "shortcuts"
             case .tools: return "tools"
+            case .editors: return "editors"
             case .about: return "about"
             }
         }
@@ -75,6 +78,7 @@ struct SettingsView: View {
         case .favorites: FavoritesTab()
         case .shortcuts: ShortcutsTab()
         case .tools: ToolsTab()
+        case .editors: EditorsTab()
         case .about: AboutTab()
         }
     }
