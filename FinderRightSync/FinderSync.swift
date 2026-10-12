@@ -585,6 +585,11 @@ class FinderSync: FIFinderSync {
             || menuKind == .contextualMenuForSidebar
             || !hasSelection
 
+        // 在窗口空白处右键（容器菜单）时，Finder 会把当前目录本身放进 selectedItemURLs()，
+        // hasSelection 因此为真。复制路径、打开编辑器作用于当前目录无害且有用，照常显示；
+        // 但剪切 / 移动到 / 复制到 / 压缩会改动当前目录本身，必须是用户真正选中了条目才显示
+        let hasExplicitSelection = hasSelection && menuKind != .contextualMenuForContainer
+
         // 剪切队列状态：剪切 / 粘贴 / 取消剪切的显示与文案都依赖它
         let cutPaths = currentCutQueuePaths()
         let hasCut = !cutPaths.isEmpty
@@ -633,7 +638,7 @@ class FinderSync: FIFinderSync {
                 menu.addItem(self.makeSubmenuItem(titleKey: "打开编辑器", tint: .purple, systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
             },
             MenuFeatureCatalog.cut: {
-                if hasSelection {
+                if hasExplicitSelection {
                     let selectedPaths = Set(selected.map(\.path))
                     let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
                     let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
@@ -654,15 +659,15 @@ class FinderSync: FIFinderSync {
                 }
             },
             MenuFeatureCatalog.moveTo: {
-                guard hasSelection else { return }
+                guard hasExplicitSelection else { return }
                 menu.addItem(self.makeSubmenuItem(titleKey: "移动到", tint: .green, systemImage: "arrowshape.turn.up.right", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .move, selected: selected, style: style) }))
             },
             MenuFeatureCatalog.copyTo: {
-                guard hasSelection else { return }
+                guard hasExplicitSelection else { return }
                 menu.addItem(self.makeSubmenuItem(titleKey: "复制到", tint: .green, systemImage: "plus.square.on.square", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
             },
             MenuFeatureCatalog.compress: {
-                guard hasSelection else { return }
+                guard hasExplicitSelection else { return }
                 menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", tint: .brown, systemImage: "doc.zipper", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
             },
             MenuFeatureCatalog.decompress: {
