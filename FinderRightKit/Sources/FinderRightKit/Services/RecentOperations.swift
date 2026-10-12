@@ -48,9 +48,11 @@ public struct OperationRecord: Equatable {
 /// 压缩 / 解压 / 粘贴在 IPC 受理后异步执行，之前失败只写日志、用户无从得知。
 /// 这里集中记录结果，菜单栏据此列出「最近操作」，并在有未查看的失败时提示。
 /// 不走系统通知：避免任何通知权限弹窗。
+/// 该功能为可选项，默认关闭；关闭时不记录任何结果。
 public final class RecentOperations {
 
-    public static let shared = RecentOperations()
+    /// 默认关闭，由主 App 启动时按用户设置开启
+    public static let shared = RecentOperations(isEnabled: false)
 
     /// 记录变化后在主线程发出
     public static let didChangeNotification = Notification.Name("com.finderright.recentOperationsDidChange")
@@ -60,9 +62,31 @@ public final class RecentOperations {
     private let lock = NSLock()
     private var storage: [OperationRecord] = []
     private var unseenFailures = 0
+    private var enabled: Bool
 
-    public init(capacity: Int = 5) {
+    public init(capacity: Int = 5, isEnabled: Bool = true) {
         self.capacity = max(1, capacity)
+        self.enabled = isEnabled
+    }
+
+    /// 关闭后丢弃已有记录与失败提示，此后的 record 调用直接忽略
+    public var isEnabled: Bool {
+        get {
+            lock.lock(); defer { lock.unlock() }
+            return enabled
+        }
+        set {
+            lock.lock()
+            let changed = enabled != newValue
+            enabled = newValue
+            let hadContent = !storage.isEmpty || unseenFailures != 0
+            if !newValue {
+                storage.removeAll()
+                unseenFailures = 0
+            }
+            lock.unlock()
+            if changed && hadContent { notifyChange() }
+        }
     }
 
     /// 最新的在前
@@ -80,6 +104,7 @@ public final class RecentOperations {
     /// 可在任意线程调用
     public func record(_ record: OperationRecord) {
         lock.lock()
+        guard enabled else { lock.unlock(); return }
         storage.insert(record, at: 0)
         if storage.count > capacity { storage.removeLast(storage.count - capacity) }
         if !record.succeeded { unseenFailures += 1 }

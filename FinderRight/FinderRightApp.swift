@@ -51,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.object(forKey: "showMenuBarIcon") as? Bool ?? true
     }
 
+    /// 用户是否开启「最近操作」（可选功能，默认关闭）
+    private var showRecentActivity: Bool {
+        UserDefaults.standard.bool(forKey: "showRecentActivity")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 「切换隐藏文件」在扩展端是无状态固定文案（见 FinderSync.menu(for:) 里该菜单项的说明），
         // 不再需要在启动时把 SharedConfig 锚定到 Finder 真实状态。
@@ -66,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 在任何窗口创建前应用用户选择的浅色 / 深色外观
         FRAppearanceMode.stored.apply()
 
+        RecentOperations.shared.isEnabled = showRecentActivity
         setupStatusItem()
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
@@ -500,6 +506,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isUpdatingStatusItemVisibility = false
 
     @objc private func defaultsChanged() {
+        // 「最近操作」开关：关闭时 RecentOperations 自行清空记录并通知刷新图标提示
+        let wantRecent = showRecentActivity
+        if RecentOperations.shared.isEnabled != wantRecent {
+            RecentOperations.shared.isEnabled = wantRecent
+        }
+
         // 实时同步菜单栏图标显隐（设置里 showMenuBarIcon 改变时）
         guard !isUpdatingStatusItemVisibility else { return }
         let want = showMenuBarIcon
