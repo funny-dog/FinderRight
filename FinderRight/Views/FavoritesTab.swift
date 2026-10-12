@@ -9,6 +9,7 @@ struct FavoritesTab: View {
     @FRState private var paths: [String] = SharedConfig.shared.favoriteDirectories
     @FRState private var message: String?
     @FRState private var dropTargetPath: String?
+    @FRState private var pathInput = ""
 
     private var home: String { IPCBridge.realUserHomeDirectory.path }
 
@@ -26,6 +27,8 @@ struct FavoritesTab: View {
                     .buttonStyle(.frPrimary)
                 }
             } content: {
+                pathInputRow
+
                 FRCard {
                     if paths.isEmpty {
                         emptyState
@@ -46,11 +49,25 @@ struct FavoritesTab: View {
                         .padding(.horizontal, 4)
                 }
 
-                FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。"))
+                FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
             }
         }
         .onAppear {
             paths = SharedConfig.shared.favoriteDirectories
+        }
+    }
+
+    /// 手动输入 / 粘贴路径：回车或点「添加」提交，Option-回车换行
+    private var pathInputRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            TextField("粘贴或输入目录路径，如 ~/Downloads", text: $pathInput, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, design: .monospaced))
+                .lineLimit(1...4)
+                .onSubmit(addTypedPaths)
+            Button("添加", action: addTypedPaths)
+                .buttonStyle(.frSecondary)
+                .disabled(pathInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 
@@ -154,19 +171,61 @@ struct FavoritesTab: View {
         var updated = paths
         var rejected: [String] = []
         for url in panel.urls {
-            let path = url.standardizedFileURL.path
-            guard !updated.contains(path) else { continue }
-            // 与执行移动 / 复制时相同的白名单：只放行真实主目录与 /Volumes 下、且非完全磁盘访问专属数据的目录
-            guard FinderRightService.isPathAllowed(path, role: .destination) else {
-                rejected.append(url.lastPathComponent)
-                continue
+            switch Self.append(url, to: &updated) {
+            case .added, .duplicate: break
+            case .notAllowed: rejected.append(url.lastPathComponent)
             }
-            updated.append(path)
         }
         save(updated)
         if !rejected.isEmpty {
             message = String(format: NSLocalizedString("以下目录不在允许范围内，未添加：%@", comment: ""),
                              rejected.joined(separator: "、"))
         }
+    }
+
+    /// 解析输入框内容（兼容「复制路径」的各种格式），逐个校验后加入列表；失败的保留在输入框里方便修改
+    private func addTypedPaths() {
+        message = nil
+        let candidates = FavoriteDirectories.candidatePaths(fromInput: pathInput)
+        guard !candidates.isEmpty else { return }
+
+        var updated = paths
+        var failedInputs: [String] = []
+        var failures: [String] = []
+        for raw in candidates {
+            let reason: String
+            do {
+                let url = try DirectoryPath.url(for: raw, home: home)
+                switch Self.append(url, to: &updated) {
+                case .added: continue
+                case .duplicate: reason = "已在列表中"
+                case .notAllowed: reason = "不在允许范围内"
+                }
+            } catch let error as DirectoryPath.ValidationError {
+                reason = error.rawValue
+            } catch {
+                reason = error.localizedDescription
+            }
+            failedInputs.append(raw)
+            failures.append(String(format: NSLocalizedString("%@（%@）", comment: ""),
+                                   raw, NSLocalizedString(reason, comment: "")))
+        }
+        save(updated)
+        pathInput = failedInputs.joined(separator: "\n")
+        if !failures.isEmpty {
+            message = String(format: NSLocalizedString("以下路径未添加：%@", comment: ""),
+                             failures.joined(separator: "、"))
+        }
+    }
+
+    private enum AppendResult { case added, duplicate, notAllowed }
+
+    private static func append(_ url: URL, to list: inout [String]) -> AppendResult {
+        let path = url.standardizedFileURL.path
+        guard !list.contains(path) else { return .duplicate }
+        // 与执行移动 / 复制时相同的白名单：只放行真实主目录与 /Volumes 下、且非完全磁盘访问专属数据的目录
+        guard FinderRightService.isPathAllowed(path, role: .destination) else { return .notAllowed }
+        list.append(path)
+        return .added
     }
 }

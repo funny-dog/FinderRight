@@ -1336,6 +1336,20 @@ struct FinderRightKitTestsRunner {
             try assertTrue(ops.records.isEmpty)
         }
 
+        runTest("RecentOperations 关闭时不记录，关闭即清空已有记录") {
+            try assertTrue(!RecentOperations.shared.isEnabled, "共享实例默认关闭")
+            let ops = RecentOperations(capacity: 3, isEnabled: false)
+            ops.record(OperationRecord(kind: .compress, subject: "a", failure: "坏包"))
+            try assertTrue(ops.records.isEmpty)
+            try assertEqual(ops.unseenFailureCount, 0)
+            ops.isEnabled = true
+            ops.record(OperationRecord(kind: .compress, subject: "b", failure: "坏包"))
+            try assertEqual(ops.records.map(\.subject), ["b"])
+            ops.isEnabled = false
+            try assertTrue(ops.records.isEmpty, "关闭时丢弃已有记录")
+            try assertEqual(ops.unseenFailureCount, 0, "关闭时撤掉失败提示")
+        }
+
         runTest("OperationRecord.summary 压缩长错误输出") {
             try assertTrue(OperationRecord.summary(of: "  \n \n") == nil, "全空返回 nil")
             try assertEqual(OperationRecord.summary(of: "\n  tar: bad header  \n"), "tar: bad header")
@@ -1530,6 +1544,27 @@ struct FinderRightKitTestsRunner {
                 for: ["/Users/me/Downloads", "/Volumes/E/Downloads", "/Users/me/项目"], home: "/Users/me")
             try assertEqual(names, ["Downloads — ~", "Downloads — /Volumes/E", "项目"])
             try assertEqual(FavoriteDirectories.displayNames(for: ["/"], home: "/Users/me"), ["/"], "根目录显示为 /")
+        }
+
+        runTest("常用目录输入框：兼容复制路径的各种格式") {
+            let home = "/Users/me"
+            let a = URL(fileURLWithPath: "/Users/me/a b"), b = URL(fileURLWithPath: "/Users/me/it's")
+            for format in CopyPathFormat.allCases where format != .name {
+                let copied = PathFormatter.string(for: [a, b], format: format, home: home)
+                let parsed = FavoriteDirectories.candidatePaths(fromInput: copied)
+                let expected = format == .tilde ? ["~/a b", "~/it's"] : [a.path, b.path]
+                try assertEqual(parsed, expected, "格式 \(format.rawValue) 应能还原")
+            }
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "file:///Users/me/%E9%A1%B9%E7%9B%AE/"), ["/Users/me/项目"])
+        }
+
+        runTest("常用目录输入框：反斜杠、双引号、空行与不配对引号") {
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "/Users/me/a\\ b"), ["/Users/me/a b"], "终端拖入的反斜杠转义")
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "\"/Users/me/a b\""), ["/Users/me/a b"])
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "  /Users/me/x\r\n\n ~/y \n"), ["/Users/me/x", "~/y "], "去行首空白与空行，保留行尾空格")
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "/Users/me/Bob's"), ["/Users/me/Bob's"], "引号不配对按普通路径处理")
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "/Users/me/a b"), ["/Users/me/a b"], "无引号的空格属于路径本身")
+            try assertEqual(FavoriteDirectories.candidatePaths(fromInput: "   \n"), [])
         }
 
         runTest("FileTransferCheck 拦截放进自身、移动到原目录") {
