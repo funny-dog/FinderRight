@@ -104,7 +104,7 @@
 "无图标" = "No Icons";
 "两个图标都关闭后，可通过 Spotlight 搜索「FinderRight」重新打开偏好设置" = "With both icons off, search \"FinderRight\" in Spotlight to reopen Settings";
 "权限" = "Permissions";
-"「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」时 Finder 窗口不闪烁。" = "\"Full Disk Access\" lets all features work in protected folders like ~/Documents, ~/Desktop, ~/Pictures. \"Accessibility\" keeps the Finder window from flickering when toggling hidden files.";
+"「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。" = "\"Full Disk Access\" lets all features work in protected folders like ~/Documents, ~/Desktop, ~/Pictures. \"Accessibility\" lets \"Toggle Hidden Files\" work without restarting Finder, so Finder windows stay open and copies aren't interrupted.";
 
 /* Tools tab */
 "默认终端" = "Default Terminal";
@@ -184,8 +184,8 @@
 
 /* Accessibility */
 "辅助功能" = "Accessibility";
-"未授权 — 「切换隐藏文件」会让 Finder 窗口短暂闪烁" = "Not granted — \"Toggle Hidden Files\" will briefly flicker the Finder window";
-"FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，实现 Finder 隐藏文件即时切换（无需重启 Finder）。授权后 Finder 窗口不再闪烁。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut for instant hidden-file toggling (without restarting Finder). Once granted, the Finder window stops flickering.";
+"未授权 — 「切换隐藏文件」需重启访达，会关闭所有访达窗口" = "Not granted — \"Toggle Hidden Files\" must restart Finder, closing all Finder windows";
+"FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut, toggling hidden files without restarting Finder. Without it, Finder has to restart, which closes all Finder windows and may interrupt copies or moves in progress.";
 "打开辅助功能设置…" = "Open Accessibility Settings…";
 "提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。" = "Note: If authorization fails after an update, remove the old entry with \"-\" in System Settings and re-add it with \"+\".";
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";
@@ -263,7 +263,7 @@
 /* Phase 1 hardening */
 "文件后缀不能包含 / 或控制字符" = "File extension can't contain “/” or control characters";
 "切换隐藏文件需要重启访达" = "Toggling Hidden Files Requires Restarting Finder";
-"FinderRight 尚未获得「辅助功能」权限，无法无闪烁地切换。改为重启访达会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight doesn't have Accessibility permission, so it can't toggle hidden files seamlessly. Restarting Finder instead closes all Finder windows and may interrupt copies or moves in progress.";
+"FinderRight 尚未获得「辅助功能」权限，只能通过重启访达来切换。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight doesn't have Accessibility permission, so it can only toggle hidden files by restarting Finder. This closes all Finder windows and may interrupt copies or moves in progress.";
 "重启访达并切换" = "Restart Finder and Toggle";
 "授权辅助功能…" = "Grant Accessibility…";
 "更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载" = "The update has no checksum file, so automatic installation was cancelled. Please download it manually from the release page.";
@@ -296,7 +296,7 @@
 "授予完全磁盘访问（推荐）" = "Grant Full Disk Access (Recommended)";
 "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。" = "Needed to work in protected folders such as Documents, Desktop and Downloads. You can skip this and grant it later in Settings → General.";
 "授予辅助功能（可选）" = "Grant Accessibility (Optional)";
-"仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。" = "Only used to toggle hidden files without flicker; nothing else needs it. You can skip this and grant it later in Settings → General.";
+"仅用于免重启访达切换隐藏文件，不会关闭访达窗口或中断拷贝，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。" = "Only used to toggle hidden files without restarting Finder, so windows stay open and copies aren't interrupted; nothing else needs it. You can skip this and grant it later in Settings → General.";
 
 /* Settings: copy path format */
 "复制格式" = "Format";

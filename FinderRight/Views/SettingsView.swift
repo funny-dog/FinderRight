@@ -376,7 +376,7 @@ struct GeneralTab: View {
                 }
             }
 
-            FRFootnote(Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」时 Finder 窗口不闪烁。"))
+            FRFootnote(Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。"))
         }
     }
 

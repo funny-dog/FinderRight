@@ -589,7 +589,7 @@ final class FinderRightService {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = L("切换隐藏文件需要重启访达")
-        alert.informativeText = L("FinderRight 尚未获得「辅助功能」权限，无法无闪烁地切换。改为重启访达会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")
+        alert.informativeText = L("FinderRight 尚未获得「辅助功能」权限，只能通过重启访达来切换。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")
         alert.alertStyle = .warning
         alert.addButton(withTitle: L("重启访达并切换"))
         alert.addButton(withTitle: L("授权辅助功能…"))

@@ -3,7 +3,7 @@ import ApplicationServices  // for AXIsProcessTrusted...
 
 /// 辅助功能权限状态检测与引导
 ///
-/// 用于：让"切换隐藏文件"通过 Cmd+Shift+. 快捷键实现，避免 killall Finder 带来的窗口闪烁。
+/// 用于：让"切换隐藏文件"通过 Cmd+Shift+. 快捷键实现，避免 killall Finder 关闭所有访达窗口、中断正在进行的拷贝或移动。
 struct AccessibilityView: View {
 
     @FRState private var hasAccess: Bool = AccessibilityChecker.check()
@@ -12,8 +12,8 @@ struct AccessibilityView: View {
         PermissionBlock(
             title: "辅助功能",
             granted: hasAccess,
-            deniedDetail: "未授权 — 「切换隐藏文件」会让 Finder 窗口短暂闪烁",
-            explanation: "FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，实现 Finder 隐藏文件即时切换（无需重启 Finder）。授权后 Finder 窗口不再闪烁。",
+            deniedDetail: "未授权 — 「切换隐藏文件」需重启访达，会关闭所有访达窗口",
+            explanation: "FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。",
             openTitle: "打开辅助功能设置…",
             tip: "提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。",
             steps: [

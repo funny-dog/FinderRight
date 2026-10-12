@@ -60,7 +60,7 @@ struct OnboardingView: View {
                         PermissionStep(
                             icon: "accessibility",
                             title: "授予辅助功能（可选）",
-                            subtitle: "仅用于无闪烁地切换隐藏文件，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
+                            subtitle: "仅用于免重启访达切换隐藏文件，不会关闭访达窗口或中断拷贝，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
                         ) {
                             FRCard { AccessibilityView() }
                         }
