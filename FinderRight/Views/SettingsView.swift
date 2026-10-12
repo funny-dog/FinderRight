@@ -161,6 +161,7 @@ private struct SidebarItem: View {
 struct GeneralTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @AppStorage("showRecentActivity") private var showRecentActivity = false
     @AppStorage("showDockIcon") private var showDockIcon = false
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
@@ -296,6 +297,13 @@ struct GeneralTab: View {
                 FRRow(title: Text("显示菜单栏图标"), subtitle: Text("关闭后，菜单栏不显示 FinderRight 图标")) {
                     FRSwitch(label: "显示菜单栏图标", isOn: $showMenuBarIcon)
                 }
+
+                FRDivider()
+
+                FRRow(title: Text("显示最近操作"), subtitle: Text("在菜单栏图标中列出压缩、解压、粘贴、移动、复制的结果，失败时图标变红")) {
+                    FRSwitch(label: "显示最近操作", isOn: $showRecentActivity)
+                }
+                .disabled(!showMenuBarIcon)
 
                 FRDivider()
 
