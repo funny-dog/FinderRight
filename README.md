@@ -40,7 +40,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
-- 📦 **压缩 / 解压** —— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
+- 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**不重启 Finder、窗口不闪烁**（需辅助功能权限）
 - ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键，并可在设置中拖动调整它们在右键菜单中的顺序
 - 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
@@ -175,7 +175,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
-- 📦 **Compress / Extract** — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
+- 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder or flickering** (needs Accessibility)
 - ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item, and drag to reorder them in Settings
 - 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)

@@ -1463,6 +1463,20 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!SharedConfig(fileURL: url).isActionEnabled(MenuFeatureCatalog.copyFileName))
         }
 
+        runTest("SharedConfig 压缩 / 解压默认关闭，显式开启后保持开启") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertTrue(!config.isActionEnabled(MenuFeatureCatalog.compress))
+            try assertTrue(!config.isActionEnabled(MenuFeatureCatalog.decompress))
+            try assertTrue(config.isActionEnabled(MenuFeatureCatalog.newFile))
+            config.setActionEnabled(MenuFeatureCatalog.compress, enabled: true)
+            let reloaded = SharedConfig(fileURL: url)
+            try assertTrue(reloaded.isActionEnabled(MenuFeatureCatalog.compress))
+            try assertTrue(!reloaded.isActionEnabled(MenuFeatureCatalog.decompress))
+        }
+
         runTest("SharedConfig.menuOrder 默认为空，清空时恢复默认") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
