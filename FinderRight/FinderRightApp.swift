@@ -32,6 +32,11 @@ struct FinderRightApp: App {
     }
 }
 
+extension Notification.Name {
+    /// 设置页「重新查看引导」发出，由 AppDelegate 打开引导窗口
+    static let openOnboarding = Notification.Name("FinderRight.openOnboarding")
+}
+
 // MARK: - AppDelegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -100,6 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(updateStatusIndicator),
             name: RecentOperations.didChangeNotification, object: nil)
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(openOnboarding),
+            name: .openOnboarding, object: nil)
+
         // 首次启动：若尚未完成引导，自动弹出引导设置窗口
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
@@ -107,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 标志位会一直是 false，导致此后每次冷启动（含右键 IPC 冷启动、开机自启）
             // 都重复弹引导并抢焦。用户已看过引导即视为完成。
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-            openOnboarding()
+            showOnboarding()
         }
     }
 
@@ -250,6 +259,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let status = NSMenuItem(title: L("FinderRight 运行中"), action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
+
+        // 引导不再常驻菜单：只有扩展未启用（右键菜单完全不出现）时才给出修复入口。
+        // 完全磁盘访问、辅助功能是可选授权，用户可能有意跳过，不在这里常驻提醒
+        if !FinderExtensionChecker.check() {
+            let setup = NSMenuItem(title: L("启用 Finder 扩展…"), action: #selector(openExtensionSetup), keyEquivalent: "")
+            setup.target = self
+            setup.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(paletteColors: [.systemOrange]))
+            setup.toolTip = L("扩展未启用时，访达右键菜单中不会出现 FinderRight")
+            menu.addItem(setup)
+        }
         menu.addItem(.separator())
 
         let records = RecentOperations.shared.records
@@ -269,10 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = NSMenuItem(title: L("设置..."), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
-
-        let onboarding = NSMenuItem(title: L("引导设置"), action: #selector(openOnboarding), keyEquivalent: "")
-        onboarding.target = self
-        menu.addItem(onboarding)
 
         menu.addItem(.separator())
 
@@ -435,12 +451,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 设置页「重新查看引导」：从头开始
     @objc private func openOnboarding() {
+        showOnboarding()
+    }
+
+    /// 菜单栏「启用 Finder 扩展…」：直接从扩展步骤开始
+    @objc private func openExtensionSetup() {
+        showOnboarding(startingAt: OnboardingView.extensionStep)
+    }
+
+    /// 引导窗口已打开时只把它提到前面，不重置用户当前所在的步骤
+    private func showOnboarding(startingAt step: Int = 0) {
         NSApp.setActivationPolicy(.regular)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.onboardingWindow == nil {
-                let hosting = NSHostingController(rootView: OnboardingView(onClose: { [weak self] in
+                let hosting = NSHostingController(rootView: OnboardingView(initialStep: step, onClose: { [weak self] in
                     self?.onboardingWindow?.close()
                 }))
                 let win = NSWindow(contentViewController: hosting)

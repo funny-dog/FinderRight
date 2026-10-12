@@ -4,7 +4,8 @@
 "欢迎使用 FinderRight" = "Welcome to FinderRight";
 "FinderRight 运行中" = "FinderRight is running";
 "设置..." = "Settings…";
-"引导设置" = "Setup Guide";
+"启用 Finder 扩展…" = "Enable Finder Extension…";
+"扩展未启用时，访达右键菜单中不会出现 FinderRight" = "While the extension is disabled, FinderRight does not appear in the Finder context menu";
 "退出 FinderRight" = "Quit FinderRight";
 
 /* Settings tabs */
@@ -136,20 +137,29 @@
 "完全可定制" = "Fully Customizable";
 "自由选择需要的功能，隐藏不需要的" = "Enable the features you want, hide the ones you don't";
 "启用 Finder 扩展" = "Enable the Finder Extension";
-"需要在系统设置中启用 FinderRight 扩展" = "You need to enable the FinderRight extension in System Settings";
-"点击下方按钮打开系统设置" = "Click the button below to open System Settings";
-"在「扩展」列表中找到 FinderRight" = "Find FinderRight in the \"Extensions\" list";
-"勾选启用 Finder 扩展" = "Check to enable the Finder extension";
 "打开系统设置" = "Open System Settings";
-"完成后点击「下一步」继续" = "Click \"Next\" when done";
 "一切就绪！" = "All set!";
 "FinderRight 已准备好为你服务" = "FinderRight is ready to go";
+"差一步就好" = "Almost There";
+"Finder 扩展尚未启用，右键菜单暂不会出现。可点「上一步」返回启用" = "The Finder extension is not enabled yet, so the context menu won't appear. Click \"Back\" to enable it.";
+"FinderRight 的右键菜单由访达扩展提供，启用后才会出现在访达中。" = "FinderRight's context menu is provided by a Finder extension. It appears in Finder once the extension is enabled.";
 "右键菜单预览" = "Right-Click Menu Preview";
 "在 VS Code 中打开" = "Open in VS Code";
 
 /* Full Disk Access */
 "完全磁盘访问" = "Full Disk Access";
 "已授权" = "Granted";
+"访达扩展" = "Finder Extension";
+"已启用" = "Enabled";
+"未启用 — 访达右键菜单中不会出现 FinderRight" = "Disabled — FinderRight won't appear in the Finder context menu";
+"FinderRight 的右键菜单由访达扩展提供，需要在系统设置中启用后才会出现。" = "FinderRight's context menu is provided by a Finder extension, which must be enabled in System Settings.";
+"打开扩展设置…" = "Open Extension Settings…";
+"提示：启用后若右键仍没有菜单，可在「设置 → 通用」中点「重启访达」。" = "Tip: If the context menu still doesn't appear after enabling, click \"Relaunch Finder\" in Settings → General.";
+"1. 点击上方按钮，会跳转到系统设置的扩展管理" = "1. Click the button above to open extension management in System Settings";
+"2. 在列表中找到 FinderRight" = "2. Find FinderRight in the list";
+"3. 打开 FinderRight 的访达扩展开关" = "3. Turn on the Finder extension switch for FinderRight";
+"4. 回到此处，状态会自动刷新" = "4. Come back here; the status refreshes automatically";
+"重新查看引导" = "View Setup Guide Again";
 "未授权 — 在 ~/Pictures、~/Documents 等受保护目录将无法工作" = "Not granted — won't work in protected folders like ~/Pictures, ~/Documents";
 "FinderRight 需要「完全磁盘访问」权限，才能在系统保护目录（Documents、Desktop、Downloads、Pictures、Movies、Music）执行右键菜单功能。" = "FinderRight needs Full Disk Access to run right-click actions in protected folders (Documents, Desktop, Downloads, Pictures, Movies, Music).";
 "打开系统设置授权…" = "Open System Settings…";
@@ -176,7 +186,7 @@
 
 /* Permissions & Extensions */
 "权限与扩展" = "Permissions & Extensions";
-"访达右键扩展" = "Finder Right-Click Extension";
+"右键菜单排查" = "Troubleshooting";
 "若右键未显示菜单，可尝试重启访达或检查扩展开关" = "If the context menu does not appear, try restarting Finder or checking extension settings";
 "重启访达" = "Relaunch Finder";
 "扩展设置..." = "Extension Settings…";

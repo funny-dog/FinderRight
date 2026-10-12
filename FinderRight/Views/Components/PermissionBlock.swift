@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// 权限状态块：状态图标 + 标题 + 状态说明；未授权时展开说明、跳转按钮和授权步骤。
-/// 完全磁盘访问与辅助功能共用，设置页与首次引导都放在卡片里使用。
+/// 访达扩展、完全磁盘访问与辅助功能共用，设置页与首次引导都放在卡片里使用。
 struct PermissionBlock: View {
     let title: LocalizedStringKey
     let granted: Bool
+    /// 已授权时在标题下方显示的状态（访达扩展用「已启用」）
+    var grantedDetail: LocalizedStringKey = "已授权"
     /// 未授权时在标题下方显示的后果说明
     let deniedDetail: LocalizedStringKey
     let explanation: LocalizedStringKey
@@ -23,7 +25,7 @@ struct PermissionBlock: View {
                     Text(title)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(FRTheme.text)
-                    Text(granted ? LocalizedStringKey("已授权") : deniedDetail)
+                    Text(granted ? grantedDetail : deniedDetail)
                         .font(.system(size: 12))
                         .foregroundColor(granted ? FRTheme.okText : FRTheme.warnText)
                         .fixedSize(horizontal: false, vertical: true)
