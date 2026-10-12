@@ -125,9 +125,9 @@ public final class SharedConfig {
         }
     }
 
-    /// 检查指定 action 是否启用（默认为启用）
+    /// 检查指定 action 是否启用（未设置时默认启用，MenuFeatureCatalog.disabledByDefault 中的除外）
     public func isActionEnabled(_ actionId: String) -> Bool {
-        return enabledActions[actionId] ?? true
+        return enabledActions[actionId] ?? !MenuFeatureCatalog.disabledByDefault.contains(actionId)
     }
 
     /// 设置指定 action 的启用状态

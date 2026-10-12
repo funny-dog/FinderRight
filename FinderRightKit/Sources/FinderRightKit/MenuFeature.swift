@@ -82,6 +82,10 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye"),
     ]
 
+    /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
+    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置
+    public static let disabledByDefault: Set<String> = [compress, decompress]
+
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }
     }
