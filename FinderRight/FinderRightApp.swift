@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var directoryAlert: NSAlert?
+    /// 菜单打开期间随更新状态刷新标题（检查中 / 下载进度 / 安装中）
+    private weak var updateMenuItem: NSMenuItem?
 
     /// 用户是否要求常驻显示 Dock 图标
     private var alwaysShowDockIcon: Bool {
@@ -104,6 +106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(updateStatusIndicator),
             name: RecentOperations.didChangeNotification, object: nil)
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(updateStatusDidChange),
+            name: UpdateChecker.statusDidChangeNotification, object: nil)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(openOnboarding),
@@ -290,6 +296,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.target = self
         menu.addItem(settings)
 
+        let update = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        update.target = self
+        configureUpdateItem(update)
+        menu.addItem(update)
+        updateMenuItem = update
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: L("退出 FinderRight"), action: #selector(quitApp), keyEquivalent: "q")
@@ -298,6 +310,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
+
+    // MARK: - 检查更新
+
+    /// 进行中时显示进度并禁用（action 置空后 NSMenu 自动置灰），空闲时可点
+    private func configureUpdateItem(_ item: NSMenuItem) {
+        let status = UpdateChecker.shared.currentStatus
+        switch status {
+        case .checking:
+            item.title = L("正在检查更新…")
+        case .downloading(let progress):
+            item.title = String(format: L("正在下载更新… %d%%"), Int(progress * 100))
+        case .installing:
+            item.title = L("正在安装更新…")
+        default:
+            item.title = L("检查更新…")
+        }
+        item.action = status.isInProgress ? nil : #selector(checkForUpdates)
+    }
+
+    @objc private func updateStatusDidChange() {
+        if let item = updateMenuItem { configureUpdateItem(item) }
+    }
+
+    /// 后台检查，结果用弹窗告知：已是最新直接提示，有新版本可一键下载安装并重启
+    @objc private func checkForUpdates() {
+        UpdateChecker.shared.check(force: true) { [weak self] status in
+            guard let self else { return }
+            switch status {
+            case .upToDate:
+                self.showUpToDateAlert()
+            case .updateAvailable(let version, let releaseURL, let downloadURL, let sha256URL):
+                self.promptUpdate(version: version, releaseURL: releaseURL, downloadURL: downloadURL, sha256URL: sha256URL)
+            case .failed(let message):
+                self.showUpdateFailure(title: self.L("无法检查更新"), message: message)
+            default:
+                break   // 检查中等中间状态由菜单项标题体现
+            }
+        }
+    }
+
+    private func showUpToDateAlert() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L("已是最新版本")
+        alert.informativeText = String(format: L("FinderRight %@ 是目前的最新版本。"), UpdateChecker.shared.currentAppVersion)
+        alert.addButton(withTitle: L("好"))
+        alert.runModal()
+    }
+
+    private func promptUpdate(version: String, releaseURL: URL, downloadURL: URL?, sha256URL: URL?) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = String(format: L("发现新版本 %@"), version)
+        let current = UpdateChecker.shared.currentAppVersion
+
+        // 发布缺少校验和时 downloadURL 为空，不能自动安装，只能去发布页手动下载
+        guard let downloadURL else {
+            alert.informativeText = String(format: L("当前版本 %@。此版本不支持自动安装，请前往发布页下载。"), current)
+            alert.addButton(withTitle: L("前往下载"))
+            alert.addButton(withTitle: L("稍后")).keyEquivalent = "\u{1b}"
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(releaseURL)
+            }
+            return
+        }
+
+        alert.informativeText = String(format: L("当前版本 %@。更新将在后台下载并安装，完成后 FinderRight 会自动重启。"), current)
+        alert.addButton(withTitle: L("立即更新"))
+        alert.addButton(withTitle: L("稍后")).keyEquivalent = "\u{1b}"
+        alert.addButton(withTitle: L("查看更新说明"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            // 成功时安装脚本会退出并重新拉起新版，这里只需处理失败；进度显示在菜单项标题上
+            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, sha256URL: sha256URL) { [weak self] status in
+                guard let self, case .failed(let message) = status else { return }
+                self.showUpdateFailure(title: self.L("自动更新失败"), message: message)
+            }
+        case .alertThirdButtonReturn:
+            NSWorkspace.shared.open(releaseURL)
+        default:
+            break
+        }
+    }
+
+    private func showUpdateFailure(title: String, message: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: L("好"))
+        alert.runModal()
+    }
 
     // MARK: - 最近操作
 
@@ -308,7 +413,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return formatter
     }()
 
-    private func recentOperationTitle(for record: OperationRecord) -> String {
+    /// - Parameter truncated: 菜单项用截断后的名称，避免长文件名把整个菜单撑宽；弹窗用完整名称
+    private func recentOperationTitle(for record: OperationRecord, truncated: Bool = false) -> String {
         let format: String
         switch (record.kind, record.succeeded) {
         case (.compress, true):    format = L("已压缩 %@")
@@ -322,17 +428,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case (.copy, true):        format = L("已复制 %@")
         case (.copy, false):       format = L("复制失败：%@")
         }
-        return String(format: format, record.subject)
+        let subject = truncated ? OperationRecord.truncatedSubject(record.subject) : record.subject
+        return String(format: format, subject)
     }
 
     private func recentOperationItem(for record: OperationRecord) -> NSMenuItem {
         let time = Self.timeFormatter.string(from: record.date)
-        let item = NSMenuItem(title: "\(recentOperationTitle(for: record))  ·  \(time)",
+        let item = NSMenuItem(title: "\(recentOperationTitle(for: record, truncated: true))  ·  \(time)",
                               action: #selector(recentOperationClicked(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = record
         if record.succeeded {
             item.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+            // 名称被截断时悬停可看完整名称；失败项的 toolTip 留给失败原因，完整名称在弹窗标题里
+            if OperationRecord.truncatedSubject(record.subject) != record.subject {
+                item.toolTip = record.subject
+            }
         } else {
             item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(paletteColors: [.systemOrange]))

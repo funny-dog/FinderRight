@@ -937,6 +937,10 @@ struct AboutTab: View {
         .onAppear {
             performCheck(force: false)
         }
+        // 菜单栏「检查更新…」发起的检查与下载也同步到这里
+        .onReceive(NotificationCenter.default.publisher(for: UpdateChecker.statusDidChangeNotification)) { _ in
+            updateStatus = UpdateChecker.shared.currentStatus
+        }
     }
 
     /// 版本状态与更新操作：有新版本、下载中、安装中、最新、失败，各有各的呈现
