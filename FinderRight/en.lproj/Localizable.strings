@@ -64,6 +64,8 @@
 "开机自动启动" = "Launch at Login";
 "登录时自动运行 FinderRight" = "Run FinderRight automatically at login";
 "显示菜单栏图标" = "Show Menu Bar Icon";
+"显示最近操作" = "Show Recent Activity";
+"在菜单栏图标中列出压缩、解压、粘贴、移动、复制的结果，失败时图标变红" = "List compress, extract, paste, move and copy results in the menu bar icon; the icon turns red on failures";
 "关闭后，菜单栏不显示 FinderRight 图标" = "When off, FinderRight won't appear in the menu bar";
 "显示程序坞图标" = "Show Dock Icon";
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
@@ -318,7 +320,12 @@
 "拖动调整顺序" = "Drag to reorder";
 "移除" = "Remove";
 "以下目录不在允许范围内，未添加：%@" = "These folders are outside the allowed locations and were not added: %@";
-"添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。" = "Once added, right-click selected files and choose Move To or Copy To. Drag the ≡ handle to reorder. Only folders in your home folder or on external drives can be added.";
+"添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。" = "Once added, right-click selected files and choose Move To or Copy To. Drag the ≡ handle to reorder. Only folders in your home folder or on external drives can be added. You can paste the result of Copy Path into the field, one folder per line.";
+"粘贴或输入目录路径，如 ~/Downloads" = "Paste or type a folder path, e.g. ~/Downloads";
+"已在列表中" = "already in the list";
+"不在允许范围内" = "outside the allowed locations";
+"%@（%@）" = "%1$@ (%2$@)";
+"以下路径未添加：%@" = "These paths were not added: %@";
 
 /* Redesigned settings window */
 "启动、显示与系统权限" = "Launch, display and system permissions";

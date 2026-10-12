@@ -18,6 +18,72 @@ public enum FavoriteDirectories {
             return "\(name) — \(PathFormatter.string(for: [parent], format: .tilde, home: home))"
         }
     }
+
+    /// 把设置页输入框里的文本拆成候选路径，兼容「复制路径」的各种格式：
+    /// 绝对路径、~ 路径、file:// URL 每行一项；终端转义路径以空格分隔，支持单引号、双引号与反斜杠转义。
+    /// 只做文本层面的拆分与反转义，存在性、是否目录与白名单由调用方校验。
+    public static func candidatePaths(fromInput text: String) -> [String] {
+        text.components(separatedBy: .newlines).flatMap { rawLine -> [String] in
+            // 路径必以 / 或 ~ 开头，去掉行首空白不会误伤；行尾空格可能是真实目录名的一部分，保留
+            let line = String(rawLine.drop(while: { $0 == " " || $0 == "\t" }))
+            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+            if line.lowercased().hasPrefix("file://") {
+                guard let url = URL(string: line), url.isFileURL else { return [line] }
+                return [url.path]
+            }
+            if line.contains(where: { $0 == "'" || $0 == "\"" || $0 == "\\" }),
+               let words = shellWords(line) {
+                return words
+            }
+            return [line]
+        }
+    }
+
+    /// 按 shell 规则拆词；引号不配对时返回 nil，由调用方按普通路径处理（如目录名本身含单引号）
+    static func shellWords(_ line: String) -> [String]? {
+        var words: [String] = []
+        var current = ""
+        var inWord = false
+        var chars = line.makeIterator()
+        while let c = chars.next() {
+            switch c {
+            case " ", "\t":
+                if inWord { words.append(current); current = ""; inWord = false }
+            case "'":
+                inWord = true
+                var closed = false
+                while let q = chars.next() {
+                    if q == "'" { closed = true; break }
+                    current.append(q)
+                }
+                guard closed else { return nil }
+            case "\"":
+                inWord = true
+                var closed = false
+                while let q = chars.next() {
+                    if q == "\"" { closed = true; break }
+                    if q == "\\" {
+                        // 双引号内反斜杠只转义 " \ $ `，其余原样保留
+                        guard let next = chars.next() else { return nil }
+                        if !"\"\\$`".contains(next) { current.append(q) }
+                        current.append(next)
+                    } else {
+                        current.append(q)
+                    }
+                }
+                guard closed else { return nil }
+            case "\\":
+                inWord = true
+                guard let next = chars.next() else { return nil }
+                current.append(next)
+            default:
+                inWord = true
+                current.append(c)
+            }
+        }
+        if inWord { words.append(current) }
+        return words
+    }
 }
 
 /// 移动 / 复制单个项目到目标目录前的检查。
