@@ -15,14 +15,18 @@ public struct OperationRecord: Equatable {
     /// 成功时产出的文件，供「在访达中显示」
     public let results: [URL]
     public let date: Date
+    /// 用户主动取消（如加密包的密码框点了「取消」）：既不算成功，也不算需要提醒的失败
+    public let cancelled: Bool
 
-    public var succeeded: Bool { failure == nil }
+    public var succeeded: Bool { failure == nil && !cancelled }
 
-    public init(kind: Kind, subject: String, failure: String? = nil, results: [URL] = [], date: Date = Date()) {
+    public init(kind: Kind, subject: String, failure: String? = nil, results: [URL] = [],
+                cancelled: Bool = false, date: Date = Date()) {
         self.kind = kind
         self.subject = subject
         self.failure = failure
         self.results = results
+        self.cancelled = cancelled
         self.date = date
     }
 
@@ -136,7 +140,7 @@ public final class RecentOperations {
         guard enabled else { lock.unlock(); return }
         storage.insert(record, at: 0)
         if storage.count > capacity { storage.removeLast(storage.count - capacity) }
-        if !record.succeeded { unseenFailures += 1 }
+        if !record.succeeded && !record.cancelled { unseenFailures += 1 }
         lock.unlock()
         notifyChange()
     }

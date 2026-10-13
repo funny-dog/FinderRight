@@ -7,6 +7,8 @@ import Foundation
 /// Docker 镜像层这类 tar 时，每个设备节点都会打印一行错误，很容易超过 64KB。
 ///
 /// stdout 只接受 FileHandle（默认丢弃到 /dev/null）：若传入 Pipe 而无人读取，会以同样方式死锁。
+/// stdin 固定接 /dev/null：bsdtar 遇到加密包且没有 --passphrase 时会反复提示「Enter passphrase」等输入，
+/// 继承到可读的 stdin 就会一直挂起。
 public enum ProcessRunner {
 
     /// stderr 只保留尾部这么多字节用于日志，避免异常输出撑爆内存
@@ -27,6 +29,7 @@ public enum ProcessRunner {
         proc.executableURL = executableURL
         proc.arguments = arguments
         if let currentDirectoryURL { proc.currentDirectoryURL = currentDirectoryURL }
+        proc.standardInput = FileHandle.nullDevice
         proc.standardOutput = standardOutput ?? FileHandle.nullDevice
         let errPipe = Pipe()
         proc.standardError = errPipe

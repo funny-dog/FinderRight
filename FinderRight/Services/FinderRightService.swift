@@ -289,6 +289,8 @@ final class FinderRightService {
             switch self.performDecompress(url: url) {
             case .success(let output):
                 RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, results: [output]))
+            case .failure(let failure) where failure.cancelled:
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, cancelled: true))
             case .failure(let failure):
                 RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, failure: failure.message))
             }
@@ -300,12 +302,20 @@ final class FinderRightService {
     /// 后台操作失败的用户可读原因（进入「最近操作」）
     private struct OperationFailure: Error {
         let message: String
+        /// 用户主动取消（加密包的密码框点了「取消」），不算失败
+        var cancelled = false
+
+        static let cancelled = OperationFailure(message: "", cancelled: true)
     }
 
     /// 子进程失败的原因：优先用 stderr 摘要，stderr 为空时退回退出码
     private static func toolFailure(_ result: ProcessRunner.Result) -> OperationFailure {
-        OperationFailure(message: OperationRecord.summary(of: result.stderr)
-            ?? String(format: L("解压工具退出码 %d"), result.status))
+        toolFailure(status: result.status, stderr: result.stderr)
+    }
+
+    private static func toolFailure(status: Int32, stderr: String) -> OperationFailure {
+        OperationFailure(message: OperationRecord.summary(of: stderr)
+            ?? String(format: L("解压工具退出码 %d"), status))
     }
 
     private func performDecompress(url: URL) -> Result<URL, OperationFailure> {
@@ -426,25 +436,32 @@ final class FinderRightService {
         }
 
         let isZip = url.pathExtension.lowercased() == "zip"
-        let tool: (executable: String, arguments: [String]) = isZip
-            ? ("/usr/bin/ditto", ["-x", "-k", archive, output.path])
-            : ("/usr/bin/tar", ["-xf", archive, "-C", output.path])
+        // 加密 zip 改用 bsdtar 带密码解；探测不出（zip64、结构异常）按普通包交给 ditto，行为与以前一致
+        if isZip, let probe = ZipProbe.inspect(url), probe.hasEncryptedEntries {
+            if case .failure(let failure) = extractEncryptedZip(url, into: output, legacyNames: probe.hasNonUTF8LegacyNames) {
+                return .failure(failure)
+            }
+        } else {
+            let tool: (executable: String, arguments: [String]) = isZip
+                ? ("/usr/bin/ditto", ["-x", "-k", archive, output.path])
+                : ("/usr/bin/tar", ["-xf", archive, "-C", output.path])
 
-        let result: ProcessRunner.Result
-        do {
-            // 解压 Linux rootfs / Docker 层这类 tar 时每个设备节点都会报一行错，stderr 轻易超过
-            // 64KB 管道缓冲；ProcessRunner 先读后等，避免死锁卡住整条 archiveQueue
-            result = try ProcessRunner.run(
-                executableURL: URL(fileURLWithPath: tool.executable),
-                arguments: tool.arguments,
-                currentDirectoryURL: output)
-        } catch {
-            serviceLog("decompress archive error: \(error.localizedDescription)")
-            return .failure(OperationFailure(message: error.localizedDescription))
-        }
-        guard result.status == 0 else {
-            serviceLog("decompress archive failed (exit \(result.status)): \(result.stderr)")
-            return .failure(Self.toolFailure(result))
+            let result: ProcessRunner.Result
+            do {
+                // 解压 Linux rootfs / Docker 层这类 tar 时每个设备节点都会报一行错，stderr 轻易超过
+                // 64KB 管道缓冲；ProcessRunner 先读后等，避免死锁卡住整条 archiveQueue
+                result = try ProcessRunner.run(
+                    executableURL: URL(fileURLWithPath: tool.executable),
+                    arguments: tool.arguments,
+                    currentDirectoryURL: output)
+            } catch {
+                serviceLog("decompress archive error: \(error.localizedDescription)")
+                return .failure(OperationFailure(message: error.localizedDescription))
+            }
+            guard result.status == 0 else {
+                serviceLog("decompress archive failed (exit \(result.status)): \(result.stderr)")
+                return .failure(Self.toolFailure(result))
+            }
         }
 
         do {
@@ -458,6 +475,40 @@ final class FinderRightService {
             serviceLog("decompress archive finalize failed: \(error)")
             return .failure(OperationFailure(message: (error as? LocalizedError)?.errorDescription
                 ?? String(describing: error)))
+        }
+    }
+
+    /// 加密 zip：弹密码框 → bsdtar 带密码解到 output；密码错误（或为空）就带提示重问，直到解开或用户取消。
+    /// 密码只在本函数的局部变量和 bsdtar 参数里，不写日志
+    private func extractEncryptedZip(_ archive: URL, into output: URL, legacyNames: Bool) -> Result<Void, OperationFailure> {
+        var retrying = false
+        while true {
+            guard let password = ArchivePasswordPrompt.ask(archiveName: archive.lastPathComponent, retrying: retrying) else {
+                serviceLog("decompress encrypted zip cancelled: \(archive.path)")
+                return .failure(.cancelled)
+            }
+            guard !password.isEmpty else {
+                retrying = true
+                continue
+            }
+
+            let outcome: EncryptedZipExtractor.Outcome
+            do {
+                outcome = try EncryptedZipExtractor.extract(archive, into: output, password: password, legacyNames: legacyNames)
+            } catch {
+                serviceLog("decompress encrypted zip error: \(error.localizedDescription)")
+                return .failure(OperationFailure(message: error.localizedDescription))
+            }
+            switch outcome {
+            case .extracted:
+                return .success(())
+            case .wrongPassword:
+                serviceLog("decompress encrypted zip: wrong passphrase, asking again")
+                retrying = true
+            case .failed(let status, let stderr):
+                serviceLog("decompress encrypted zip failed (exit \(status)): \(stderr)")
+                return .failure(Self.toolFailure(status: status, stderr: stderr))
+            }
         }
     }
 
@@ -920,7 +971,7 @@ final class FinderRightService {
             return L("没有可压缩的项目")
         case .stagingFailed(let message), .finalizeFailed(let message):
             return message
-        case .dittoFailed(let status, let stderr):
+        case .toolFailed(let status, let stderr):
             return OperationRecord.summary(of: stderr) ?? String(format: L("压缩工具退出码 %d"), status)
         }
     }

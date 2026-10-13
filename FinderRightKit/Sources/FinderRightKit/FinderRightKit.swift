@@ -15,7 +15,9 @@
 // ServiceInvocationPolicy（Services 调用方校验）   — from ServiceInvocationPolicy.swift
 // CutQueueCache（剪切队列只读缓存，角标热路径）     — from Services/CutQueueCache.swift
 // ScratchDirectoryRegistry（压缩临时目录登记与清扫）— from Services/ScratchDirectoryRegistry.swift
-// ZipCompressor（压缩：退出码判定 + 原子改名）     — from Services/ZipCompressor.swift
+// ZipCompressor（压缩：bsdtar 干净 zip / 包退回 ditto）— from Services/ZipCompressor.swift
+// ZipProbe（读中央目录：是否加密、是否 GBK 文件名） — from Services/ZipProbe.swift
+// EncryptedZipExtractor（bsdtar 带密码解加密 zip） — from Services/EncryptedZipExtractor.swift
 // XZDecompressor（.xz 进程内解压）                 — from Services/XZDecompressor.swift
 // BackgroundJobs（在途后台任务，退出前等待）        — from Services/BackgroundJobs.swift
 // CodeSignatureCheck（代码签名与进程来源校验）    — from Services/CodeSignatureCheck.swift
