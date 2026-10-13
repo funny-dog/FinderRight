@@ -1002,27 +1002,249 @@ struct FinderRightKitTestsRunner {
             try Data("x".utf8).write(to: lockedInBox)
             try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lockedInBox.path)
 
-            // 单个文件夹内含不可读文件：ditto 退出码非 0
+            // 单个文件夹内含不可读文件：压缩工具退出码非 0
             do {
                 _ = try ZipCompressor.compress(items: [box], into: work, baseName: "Box", registry: registry)
                 throw TestFailure(message: "含不可读文件时应当失败")
             } catch let error as ZipCompressor.Failure {
-                guard case .dittoFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
+                guard case .toolFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
             }
             try assertEqual(try directoryListing(work), ["Box"], "失败后不得留下 zip 或临时目录")
 
-            // 多选中有不可读文件：暂存阶段即失败
+            // 多选中有不可读文件：同样整体失败，不产出少文件的 zip
             let plain = work.appendingPathComponent("plain.txt")
             try Data("p".utf8).write(to: plain)
             try Data("y".utf8).write(to: lockedLoose)
             try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lockedLoose.path)
             do {
                 _ = try ZipCompressor.compress(items: [plain, lockedLoose], into: work, baseName: "Archive", registry: registry)
-                throw TestFailure(message: "暂存失败时应当失败")
+                throw TestFailure(message: "多选含不可读文件时应当失败")
+            } catch let error as ZipCompressor.Failure {
+                guard case .toolFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
+            }
+            try assertEqual(try directoryListing(work), ["Box", "locked2.txt", "plain.txt"], "失败后不得留下 zip 或临时目录")
+        }
+
+        runTest("ZipCompressor 干净 zip：中文名带 UTF-8 标志、排除 Mac 垃圾、保留正常隐藏文件") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let fm = FileManager.default
+            let folder = work.appendingPathComponent("项目", isDirectory: true)
+            try fm.createDirectory(at: folder.appendingPathComponent("sub"), withIntermediateDirectories: true)
+            try fm.createDirectory(at: folder.appendingPathComponent("__MACOSX"), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: folder.appendingPathComponent("__MACOSX/._报告.txt"))
+            try Data("r".utf8).write(to: folder.appendingPathComponent("报告.txt"))
+            try Data("K=V".utf8).write(to: folder.appendingPathComponent(".env"))
+            try Data().write(to: folder.appendingPathComponent(".DS_Store"))
+            // 真正的 AppleDouble（魔数 0x00051607）应排除；同样以 ._ 开头的普通文件应保留
+            try Data([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00]).write(to: folder.appendingPathComponent("._报告.txt"))
+            try Data("plain".utf8).write(to: folder.appendingPathComponent("._legit"))
+            let csv = folder.appendingPathComponent("sub/数据.csv")
+            try Data("1,2".utf8).write(to: csv)
+            _ = setxattr(csv.path, "com.apple.metadata:kMDItemWhereFroms", "t", 1, 0, 0)
+
+            let zip = try ZipCompressor.compress(items: [folder], into: work, baseName: "项目",
+                                                 registry: ScratchDirectoryRegistry(registryDirectory: reg))
+            guard let entries = ZipProbe.centralDirectoryEntries(of: zip) else {
+                throw TestFailure(message: "无法解析产物的中央目录")
+            }
+            let names = entries.map { String(decoding: $0.nameBytes, as: UTF8.self) }.sorted()
+            try assertEqual(names, ["项目/", "项目/._legit", "项目/.env", "项目/sub/", "项目/sub/数据.csv", "项目/报告.txt"].sorted())
+            for entry in entries where entry.nameBytes.contains(where: { $0 >= 0x80 }) {
+                try assertTrue(entry.flags & 0x0800 != 0, "非 ASCII 文件名必须带 UTF-8 标志: \(String(decoding: entry.nameBytes, as: UTF8.self))")
+            }
+            try assertEqual(try directoryListing(work), ["项目", "项目.zip"], "不得残留临时目录")
+        }
+
+        runTest("ZipCompressor 多选可来自不同目录，同名则报错") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let registry = ScratchDirectoryRegistry(registryDirectory: reg)
+            let d1 = work.appendingPathComponent("d1", isDirectory: true)
+            let d2 = work.appendingPathComponent("d2", isDirectory: true)
+            try FileManager.default.createDirectory(at: d2.appendingPathComponent("乙"), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: d1, withIntermediateDirectories: true)
+            let a = d1.appendingPathComponent("甲.txt")
+            try Data("a".utf8).write(to: a)
+            try Data("b".utf8).write(to: d2.appendingPathComponent("乙/x.txt"))
+
+            let zip = try ZipCompressor.compress(items: [a, d2.appendingPathComponent("乙")], into: d1,
+                                                 baseName: "Archive", registry: registry)
+            // zipinfo 在 C locale 下把 UTF-8 文件名显示成 ???，这里直接读中央目录
+            let names = (ZipProbe.centralDirectoryEntries(of: zip) ?? []).map { String(decoding: $0.nameBytes, as: UTF8.self) }
+            try assertEqual(names.sorted(), ["乙/", "乙/x.txt", "甲.txt"].sorted())
+
+            let dup = d2.appendingPathComponent("甲.txt")
+            try Data("c".utf8).write(to: dup)
+            do {
+                _ = try ZipCompressor.compress(items: [a, dup], into: d1, baseName: "Archive", registry: registry)
+                throw TestFailure(message: "多选同名应当失败")
             } catch let error as ZipCompressor.Failure {
                 guard case .stagingFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
             }
-            try assertEqual(try directoryListing(work), ["Box", "locked2.txt", "plain.txt"], "失败后不得留下 zip 或暂存目录")
+        }
+
+        runTest("ZipCompressor 子目录读不了时报错，不产出缺内容的 zip") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            let locked = work.appendingPathComponent("Box/locked", isDirectory: true)
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: locked.appendingPathComponent("a.txt"))
+            try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+            do {
+                _ = try ZipCompressor.compress(items: [work.appendingPathComponent("Box")], into: work, baseName: "Box",
+                                               registry: ScratchDirectoryRegistry(registryDirectory: reg))
+                throw TestFailure(message: "子目录不可读时应当失败")
+            } catch let error as ZipCompressor.Failure {
+                guard case .stagingFailed = error else { throw TestFailure(message: "错误类型不符: \(error)") }
+            }
+            try assertEqual(try directoryListing(work), ["Box"], "失败后不得留下 zip 或临时目录")
+        }
+
+        runTest("ZipCompressor 选中 .app 等包时退回 ditto，保留 Mac 元数据") {
+            let work = makeTempDirectory(), reg = makeTempDirectory()
+            defer {
+                try? FileManager.default.removeItem(at: work)
+                try? FileManager.default.removeItem(at: reg)
+            }
+            let app = work.appendingPathComponent("Foo.app", isDirectory: true)
+            try FileManager.default.createDirectory(at: app.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+            let plist = app.appendingPathComponent("Contents/Info.plist")
+            try Data("<plist/>".utf8).write(to: plist)
+            _ = setxattr(plist.path, "com.apple.metadata:kMDItemWhereFroms", "t", 1, 0, 0)
+
+            let zip = try ZipCompressor.compress(items: [app], into: work, baseName: "Foo",
+                                                 registry: ScratchDirectoryRegistry(registryDirectory: reg))
+            let names = (ZipProbe.centralDirectoryEntries(of: zip) ?? []).map { String(decoding: $0.nameBytes, as: UTF8.self) }
+            try assertTrue(names.contains("Foo.app/Contents/Info.plist"))
+            try assertTrue(names.contains { $0.hasPrefix("__MACOSX/") }, "ditto 应以 __MACOSX 保存扩展属性")
+        }
+
+        // 用系统 bsdtar 现场生成测试 zip，仓库里不放二进制样本
+        func makeZip(_ name: String, in dir: URL, entries: [String], options: [String]) throws -> URL {
+            let output = dir.appendingPathComponent(name)
+            let result = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/tar"),
+                                               arguments: ["--format", "zip"] + options + ["-cf", output.path] + entries,
+                                               currentDirectoryURL: dir)
+            guard result.status == 0 else { throw TestFailure(message: "生成测试 zip 失败: \(result.stderr)") }
+            return output
+        }
+
+        runTest("ZipProbe 识别加密条目与未声明编码的非 UTF-8 文件名") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("资料"), withIntermediateDirectories: true)
+            try Data("hello".utf8).write(to: work.appendingPathComponent("资料/报告.txt"))
+
+            let plain = try makeZip("plain.zip", in: work, entries: ["资料"], options: ["--options", "zip:hdrcharset=UTF-8"])
+            try assertEqual(ZipProbe.inspect(plain), ZipProbe(hasEncryptedEntries: false, hasNonUTF8LegacyNames: false))
+
+            let aes = try makeZip("aes.zip", in: work, entries: ["资料"],
+                                  options: ["--options", "zip:encryption=aes256,zip:hdrcharset=UTF-8", "--passphrase", "pw"])
+            try assertEqual(ZipProbe.inspect(aes)?.hasEncryptedEntries, true, "AES-256")
+
+            let crypto = try makeZip("zc.zip", in: work, entries: ["资料"],
+                                     options: ["--options", "zip:encryption=zipcrypt", "--passphrase", "pw"])
+            try assertEqual(ZipProbe.inspect(crypto)?.hasEncryptedEntries, true, "ZipCrypto")
+
+            // Windows 中文系统生成的 GBK 文件名、不设 UTF-8 标志
+            let gbk = try makeZip("gbk.zip", in: work, entries: ["资料"], options: ["--options", "zip:hdrcharset=CP936"])
+            try assertEqual(ZipProbe.inspect(gbk), ZipProbe(hasEncryptedEntries: false, hasNonUTF8LegacyNames: true))
+
+            // 访达 / ditto 生成的包：不设标志，但文件名本身就是 UTF-8
+            let dittoZip = work.appendingPathComponent("ditto.zip")
+            let ditto = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/ditto"),
+                                              arguments: ["-c", "-k", "--keepParent", work.appendingPathComponent("资料").path, dittoZip.path])
+            try assertEqual(ditto.status, 0, ditto.stderr)
+            try assertEqual(ZipProbe.inspect(dittoZip), ZipProbe(hasEncryptedEntries: false, hasNonUTF8LegacyNames: false))
+        }
+
+        runTest("ZipProbe 无法解析时返回 nil") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try Data("hello".utf8).write(to: work.appendingPathComponent("a.txt"))
+            let zip = try makeZip("a.zip", in: work, entries: ["a.txt"], options: [])
+
+            let empty = work.appendingPathComponent("empty.zip")
+            try Data().write(to: empty)
+            try assertNil(ZipProbe.inspect(empty), "空文件")
+
+            let garbage = work.appendingPathComponent("garbage.zip")
+            try Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) }).write(to: garbage)
+            try assertNil(ZipProbe.inspect(garbage), "随机字节")
+
+            let data = try Data(contentsOf: zip)
+            let truncated = work.appendingPathComponent("truncated.zip")
+            try data.prefix(data.count / 2).write(to: truncated)
+            try assertNil(ZipProbe.inspect(truncated), "截断")
+
+            try assertNil(ZipProbe.inspect(work.appendingPathComponent("missing.zip")), "文件不存在")
+        }
+
+        runTest("EncryptedZipExtractor 正确密码解出、错误密码识别并清空输出目录") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("资料"), withIntermediateDirectories: true)
+            try Data("hello".utf8).write(to: work.appendingPathComponent("资料/报告.txt"))
+            let out = work.appendingPathComponent("out", isDirectory: true)
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+
+            for encryption in ["aes256", "zipcrypt"] {
+                let zip = try makeZip("\(encryption).zip", in: work, entries: ["资料"],
+                                      options: ["--options", "zip:encryption=\(encryption),zip:hdrcharset=UTF-8", "--passphrase", "right"])
+                try assertEqual(try EncryptedZipExtractor.extract(zip, into: out, password: "wrong", legacyNames: false),
+                                .wrongPassword, encryption)
+                try assertEqual(try directoryListing(out), [], "错误密码后不得留下空壳文件: \(encryption)")
+
+                try assertEqual(try EncryptedZipExtractor.extract(zip, into: out, password: "right", legacyNames: false),
+                                .extracted, encryption)
+                try assertEqual(try String(contentsOf: out.appendingPathComponent("资料/报告.txt"), encoding: .utf8), "hello")
+                try FileManager.default.removeItem(at: out.appendingPathComponent("资料"))
+            }
+        }
+
+        runTest("EncryptedZipExtractor 加密且 GBK 文件名的包按 CP936 还原中文名") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("资料"), withIntermediateDirectories: true)
+            try Data("hello".utf8).write(to: work.appendingPathComponent("资料/报告.txt"))
+            let zip = try makeZip("gbk.zip", in: work, entries: ["资料"],
+                                  options: ["--options", "zip:encryption=zipcrypt,zip:hdrcharset=CP936", "--passphrase", "pw"])
+            try assertEqual(ZipProbe.inspect(zip), ZipProbe(hasEncryptedEntries: true, hasNonUTF8LegacyNames: true))
+
+            let out = work.appendingPathComponent("out", isDirectory: true)
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            try assertEqual(try EncryptedZipExtractor.extract(zip, into: out, password: "pw", legacyNames: true), .extracted)
+            try assertTrue(FileManager.default.fileExists(atPath: out.appendingPathComponent("资料/报告.txt").path))
+        }
+
+        runTest("EncryptedZipExtractor 非密码问题如实报失败") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let bogus = work.appendingPathComponent("bogus.zip")
+            try Data("not a zip at all".utf8).write(to: bogus)
+            let out = work.appendingPathComponent("out", isDirectory: true)
+            try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            let outcome = try EncryptedZipExtractor.extract(bogus, into: out, password: "pw", legacyNames: false)
+            guard case .failed = outcome else { throw TestFailure(message: "应为 failed，实际 \(outcome)") }
+            try assertTrue(!EncryptedZipExtractor.indicatesWrongPassword("tar: Error opening archive: Unrecognized archive format"))
+            try assertTrue(EncryptedZipExtractor.indicatesWrongPassword("a.txt: Incorrect passphrase: Unknown error: -1"))
+            try assertTrue(EncryptedZipExtractor.indicatesWrongPassword("a.txt: ZIP bad CRC: 0x1234 should be 0x5678"))
+        }
+
+        runTest("ProcessRunner 子进程 stdin 接 /dev/null，不会等待输入") {
+            let result = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/bin/cat"), arguments: [])
+            try assertEqual(result.status, 0)
         }
 
         // 29. .xz 进程内解压（替代外部 xz / python3）
@@ -1334,6 +1556,15 @@ struct FinderRightKitTestsRunner {
             try assertEqual(ops.records.count, 3, "标记已查看不删除记录")
             ops.clear()
             try assertTrue(ops.records.isEmpty)
+        }
+
+        runTest("RecentOperations 已取消不算成功，也不计入未查看的失败") {
+            let ops = RecentOperations(capacity: 3)
+            let cancelled = OperationRecord(kind: .decompress, subject: "secret.zip", cancelled: true)
+            try assertTrue(!cancelled.succeeded, "已取消不算成功")
+            ops.record(cancelled)
+            try assertEqual(ops.unseenFailureCount, 0)
+            try assertEqual(ops.records.first?.cancelled, true)
         }
 
         runTest("RecentOperations 关闭时不记录，关闭即清空已有记录") {

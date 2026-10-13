@@ -416,6 +416,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// - Parameter truncated: 菜单项用截断后的名称，避免长文件名把整个菜单撑宽；弹窗用完整名称
     private func recentOperationTitle(for record: OperationRecord, truncated: Bool = false) -> String {
         let format: String
+        if record.cancelled {
+            // 目前只有加密包的密码框能取消
+            let subject = truncated ? OperationRecord.truncatedSubject(record.subject) : record.subject
+            return String(format: L("已取消解压 %@"), subject)
+        }
         switch (record.kind, record.succeeded) {
         case (.compress, true):    format = L("已压缩 %@")
         case (.compress, false):   format = L("压缩失败：%@")
@@ -438,7 +443,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               action: #selector(recentOperationClicked(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = record
-        if record.succeeded {
+        if record.cancelled {
+            item.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+            if OperationRecord.truncatedSubject(record.subject) != record.subject {
+                item.toolTip = record.subject
+            }
+        } else if record.succeeded {
             item.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
             // 名称被截断时悬停可看完整名称；失败项的 toolTip 留给失败原因，完整名称在弹窗标题里
             if OperationRecord.truncatedSubject(record.subject) != record.subject {
@@ -452,9 +462,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    /// 成功项：在访达中显示产物；失败项：弹窗说明原因
+    /// 成功项：在访达中显示产物；失败项：弹窗说明原因；已取消项：没有产物也没有原因，不做任何事
     @objc private func recentOperationClicked(_ sender: NSMenuItem) {
-        guard let record = sender.representedObject as? OperationRecord else { return }
+        guard let record = sender.representedObject as? OperationRecord, !record.cancelled else { return }
         if record.succeeded {
             let existing = record.results.filter { FileManager.default.fileExists(atPath: $0.path) }
             if existing.isEmpty {
