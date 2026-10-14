@@ -8,6 +8,7 @@
 /* Menu item titles */
 "新建文件" = "New File";
 "复制路径" = "Copy Path";
+"已复制到剪贴板" = "Copied to clipboard";
 "复制文件名" = "Copy File Name";
 "前往目录…" = "Go to Folder…";
 "打开终端" = "Open in Terminal";

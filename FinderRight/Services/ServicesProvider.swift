@@ -99,7 +99,11 @@ final class ServicesProvider: NSObject {
         let joined = PathFormatter.string(for: items, format: SharedConfig.shared.copyPathFormat,
                                           home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(joined, forType: .string)
+        guard NSPasteboard.general.setString(joined, forType: .string) else {
+            showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
+            return
+        }
+        ClipboardToast.showCopied()
         NSLog("[ServicesProvider] copyPath: \(items.count) item(s)")
     }
 
@@ -115,9 +119,11 @@ final class ServicesProvider: NSObject {
         guard !items.isEmpty else { return }
         let names = PathFormatter.string(for: items, format: .name, home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
-        if !NSPasteboard.general.setString(names, forType: .string) {
+        guard NSPasteboard.general.setString(names, forType: .string) else {
             showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
+            return
         }
+        ClipboardToast.showCopied()
     }
 
     @objc func goToDirectory(_ pboard: NSPasteboard,

@@ -39,6 +39,7 @@
 "新建文件夹" = "New Folder";
 "在当前目录新建文件夹" = "Create a new folder in the current folder";
 "复制路径" = "Copy Path";
+"已复制到剪贴板" = "Copied to clipboard";
 "复制完整文件名（含扩展名），多选时每行一项" = "Copy full file names, including extensions; one item per line when several are selected";
 "复制文件或文件夹的完整路径" = "Copy the full path of files or folders";
 "移到废纸篓" = "Move to Trash";

@@ -879,7 +879,10 @@ class FinderSync: FIFinderSync {
         let format = SharedConfig.shared.copyPathFormat
         let path = PathFormatter.string(for: urls, format: format, home: IPCBridge.realUserHomeDirectory.path)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        guard NSPasteboard.general.setString(path, forType: .string) else {
+            logToFile("copyPath: pasteboard write failed"); return
+        }
+        ClipboardToast.showCopied()
         logToFile("copyPath ok: count=\(urls.count) format=\(format.rawValue)")
     }
 
@@ -891,6 +894,7 @@ class FinderSync: FIFinderSync {
         guard NSPasteboard.general.setString(names, forType: .string) else {
             logToFile("copyFileName: pasteboard write failed"); return
         }
+        ClipboardToast.showCopied()
         logToFile("copyFileName ok: count=\(urls.count)")
     }
 
