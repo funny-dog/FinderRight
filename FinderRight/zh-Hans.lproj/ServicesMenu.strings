@@ -1,6 +1,7 @@
 /* 访达右键「服务」菜单的中文标题：键为 Info.plist 中 NSMenuItem 的 default 值，须逐字一致。 */
 "FinderRight: Copy Path" = "FinderRight：复制路径";
 "FinderRight: Copy File Name" = "FinderRight：复制文件名";
+"FinderRight: Copy File Content" = "FinderRight：复制文件内容";
 "FinderRight: Go to Folder…" = "FinderRight：前往目录…";
 "FinderRight: Open in Terminal" = "FinderRight：打开终端";
 "FinderRight: Open in Editor" = "FinderRight：打开编辑器";

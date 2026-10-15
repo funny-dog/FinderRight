@@ -58,6 +58,7 @@ public final class SharedConfig {
         static let menuOrder = "menuOrder"
         static let favoriteDirectories = "favoriteDirectories"
         static let appTheme = "appTheme"
+        static let copyFileContentMaxSizeKB = "copyFileContentMaxSizeKB"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -432,6 +433,31 @@ public final class SharedConfig {
             store[Keys.appTheme] = newValue.rawValue
             save()
         }
+    }
+
+    // MARK: - Copy File Content Max Size
+
+    /// 允许「复制文件内容」的最大文件大小（KB），默认 1024 KB (1 MB)
+    public var copyFileContentMaxSizeKB: Int {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            if let saved = store[Keys.copyFileContentMaxSizeKB] as? Int, saved > 0 {
+                return saved
+            }
+            return 1024
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.copyFileContentMaxSizeKB] = max(1, newValue)
+            save()
+        }
+    }
+
+    /// 允许「复制文件内容」的最大字节数
+    public var copyFileContentMaxBytes: Int64 {
+        Int64(copyFileContentMaxSizeKB) * 1024
     }
 
     // MARK: - Reset

@@ -126,6 +126,40 @@ final class ServicesProvider: NSObject {
         ClipboardToast.showCopied()
     }
 
+    @objc func copyFileContent(_ pboard: NSPasteboard,
+                               userData: String?,
+                               error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileContent) else {
+            showAlert(NSLocalizedString("复制文件内容功能已关闭，请在设置中启用", comment: "service"))
+            return
+        }
+        let items = fileURLs(from: pboard)
+        guard items.count == 1, let url = items.first else {
+            showAlert(NSLocalizedString("仅支持复制单个文件的内容", comment: "service"))
+            return
+        }
+        let maxBytes = SharedConfig.shared.copyFileContentMaxBytes
+        let result = FileContentReader.readText(from: url, maxBytes: maxBytes)
+        switch result {
+        case .success(let text):
+            NSPasteboard.general.clearContents()
+            guard NSPasteboard.general.setString(text, forType: .string) else {
+                showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
+                return
+            }
+            ClipboardToast.showCopied(message: NSLocalizedString("已复制文件内容到剪贴板", comment: ""))
+        case .notRegularFile:
+            showAlert(NSLocalizedString("仅支持普通文件", comment: "service"))
+        case .fileTooLarge:
+            ClipboardToast.showCopied(message: NSLocalizedString("文件大小超过限制", comment: ""), isWarning: true)
+        case .readFailed:
+            showAlert(NSLocalizedString("无法读取文件内容", comment: "service"))
+        case .binaryFile:
+            ClipboardToast.showCopied(message: NSLocalizedString("无法复制：非文本文件", comment: ""), isWarning: true)
+        }
+    }
+
     @objc func goToDirectory(_ pboard: NSPasteboard,
                              userData: String?,
                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {

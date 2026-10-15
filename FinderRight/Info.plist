@@ -89,6 +89,26 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>FinderRight: Copy File Content</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>copyFileContent</string>
+			<key>NSPortName</key>
+			<string>FinderRight</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
 				<string>FinderRight: Go to Folder…</string>
 			</dict>
 			<key>NSMessage</key>
