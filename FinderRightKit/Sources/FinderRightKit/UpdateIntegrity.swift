@@ -9,10 +9,25 @@ public enum UpdateIntegrity {
     /// 会得到 `<!doctype` 这类"哈希"，虽然随后比对必然失败，但错误原因会被误报为"包被篡改"。
     public static func parseChecksum(_ text: String) -> String? {
         let token = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: .whitespaces).first?.lowercased() ?? ""
+            .components(separatedBy: .whitespaces).first ?? ""
+        return normalizedSHA256(token)
+    }
+
+    /// 解析 GitHub Releases API 中资源的 `digest` 字段（形如 `sha256:<hash>`），返回小写哈希。
+    ///
+    /// 字段缺失（旧版发布没有）或算法不是 sha256 时返回 nil，调用方应回退到 .sha256 文件。
+    public static func parseAssetDigest(_ digest: String?) -> String? {
+        guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let prefix = "sha256:"
+        guard digest.lowercased().hasPrefix(prefix) else { return nil }
+        return normalizedSHA256(String(digest.dropFirst(prefix.count)))
+    }
+
+    /// 只接受 64 位 ASCII 十六进制，统一转小写
+    private static func normalizedSHA256(_ token: String) -> String? {
         // isHexDigit 也认全角数字，额外限定 ASCII
         guard token.count == 64, token.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return nil }
-        return token
+        return token.lowercased()
     }
 }
 

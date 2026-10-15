@@ -736,6 +736,16 @@ struct FinderRightKitTestsRunner {
             try assertNil(UpdateIntegrity.parseChecksum(String(repeating: "g", count: 64)), "非十六进制")
         }
 
+        runTest("UpdateIntegrity 解析 API 资源 digest") {
+            let hash = String(repeating: "cd", count: 32)
+            try assertEqual(UpdateIntegrity.parseAssetDigest("sha256:\(hash)"), hash)
+            try assertEqual(UpdateIntegrity.parseAssetDigest("SHA256:\(hash.uppercased())"), hash, "前缀与哈希大小写都应容忍")
+            try assertNil(UpdateIntegrity.parseAssetDigest(nil), "旧发布没有 digest 字段")
+            try assertNil(UpdateIntegrity.parseAssetDigest(hash), "缺少算法前缀")
+            try assertNil(UpdateIntegrity.parseAssetDigest("sha512:\(hash)"), "非 sha256 算法")
+            try assertNil(UpdateIntegrity.parseAssetDigest("sha256:\(hash.dropLast())"), "长度不足")
+        }
+
         // 22. 路径访问策略：在白名单之上拦截 FDA 专属数据
         runTest("PathAccessPolicy 放行常规用户目录") {
             let home = "/Users/tester", tmp = "/private/var/folders/xx/T"
