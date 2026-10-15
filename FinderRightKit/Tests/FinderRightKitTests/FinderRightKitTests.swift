@@ -1783,8 +1783,9 @@ struct FinderRightKitTestsRunner {
         runTest("前往目录升级后默认显示并保留原菜单顺序") {
             let oldSaved = MenuFeatureCatalog.all.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
             let ids = MenuFeatureCatalog.ordered(by: Array(oldSaved)).map(\.id)
-            let copyName = ids.firstIndex(of: MenuFeatureCatalog.copyFileName)!
-            try assertEqual(ids[copyName + 1], MenuFeatureCatalog.goToDirectory)
+            let predId = MenuFeatureCatalog.all[MenuFeatureCatalog.all.firstIndex(where: { $0.id == MenuFeatureCatalog.goToDirectory })! - 1].id
+            let predIndex = ids.firstIndex(of: predId)!
+            try assertEqual(ids[predIndex + 1], MenuFeatureCatalog.goToDirectory)
             try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory }, Array(oldSaved))
 
             let dir = makeTempDirectory()
@@ -1979,6 +1980,102 @@ struct FinderRightKitTestsRunner {
                 try assertTrue(!theme.titleKey.isEmpty)
                 try assertTrue(theme.palette.accent.light.alphaComponent > 0)
                 try assertTrue(theme.palette.onAccent.light.alphaComponent > 0)
+            }
+        }
+
+        runTest("FileContentReader 资格预检与多格式文本读取") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            let textFile = dir.appendingPathComponent("sample.txt")
+            let utf8Content = "Hello, 访达右键! 🎉\nSecond Line"
+            try utf8Content.data(using: .utf8)!.write(to: textFile)
+
+            let utf16File = dir.appendingPathComponent("utf16.txt")
+            try "UTF16 Content".data(using: .utf16)!.write(to: utf16File)
+
+            let emptyFile = dir.appendingPathComponent("empty.txt")
+            try Data().write(to: emptyFile)
+
+            let binaryFile = dir.appendingPathComponent("binary.bin")
+            var binData = Data([0x48, 0x65, 0x6c, 0x6c, 0x6f]) // "Hello"
+            binData.append(0x00) // NUL 字节
+            binData.append(contentsOf: [0x57, 0x6f, 0x72, 0x6c, 0x64])
+            try binData.write(to: binaryFile)
+
+            let subDir = dir.appendingPathComponent("folder")
+            try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
+
+            let nonExistentFile = dir.appendingPathComponent("missing.txt")
+
+            // 1. 资格预检 isEligible
+            let limit: Int64 = 1024 * 1024 // 1 MB
+            try assertTrue(FileContentReader.isEligible(url: textFile, maxBytes: limit), "常规文本文件应满足资格")
+            try assertTrue(FileContentReader.isEligible(url: emptyFile, maxBytes: limit), "空文件应满足资格")
+            try assertTrue(!FileContentReader.isEligible(url: subDir, maxBytes: limit), "目录不应满足资格")
+            try assertTrue(!FileContentReader.isEligible(url: nonExistentFile, maxBytes: limit), "不存在的文件不应满足资格")
+            try assertTrue(!FileContentReader.isEligible(url: textFile, maxBytes: 5), "超过大小上限时不应满足资格")
+
+            // 2. 文本读取 readText
+            // UTF-8
+            let readUtf8 = FileContentReader.readText(from: textFile, maxBytes: limit)
+            try assertEqual(readUtf8, .success(utf8Content))
+
+            // UTF-16
+            let readUtf16 = FileContentReader.readText(from: utf16File, maxBytes: limit)
+            try assertEqual(readUtf16, .success("UTF16 Content"))
+
+            // 空文件
+            let readEmpty = FileContentReader.readText(from: emptyFile, maxBytes: limit)
+            try assertEqual(readEmpty, .success(""))
+
+            // 超大文件
+            let readTooLarge = FileContentReader.readText(from: textFile, maxBytes: 5)
+            if case .fileTooLarge(let size, let max) = readTooLarge {
+                try assertTrue(size > max)
+                try assertEqual(max, 5)
+            } else {
+                throw TestFailure(message: "超过上限应返回 .fileTooLarge")
+            }
+
+            // 二进制含 0x00
+            let readBin = FileContentReader.readText(from: binaryFile, maxBytes: limit)
+            try assertEqual(readBin, .binaryFile, "含 0x00 的文件应被识别为二进制")
+
+            // 目录
+            let readDir = FileContentReader.readText(from: subDir, maxBytes: limit)
+            try assertEqual(readDir, .notRegularFile, "目录应返回 .notRegularFile")
+        }
+
+        runTest("SharedConfig copyFileContentMaxSizeKB 配置与持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+
+            let config = SharedConfig(fileURL: url)
+            try assertEqual(config.copyFileContentMaxSizeKB, 1024, "默认大小上限应为 1024 KB (1MB)")
+            try assertEqual(config.copyFileContentMaxBytes, 1024 * 1024)
+
+            // 调整为 5 MB
+            config.copyFileContentMaxSizeKB = 5120
+            try assertEqual(config.copyFileContentMaxBytes, 5120 * 1024)
+
+            let reloaded = SharedConfig(fileURL: url)
+            try assertEqual(reloaded.copyFileContentMaxSizeKB, 5120, "重载后应保持 5120 KB 设置")
+            try assertEqual(reloaded.copyFileContentMaxBytes, 5120 * 1024)
+        }
+
+        runTest("MenuFeatureCatalog 包含 copyFileContent 特性") {
+            let allIds = MenuFeatureCatalog.all.map(\.id)
+            try assertTrue(allIds.contains(MenuFeatureCatalog.copyFileContent))
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileContent), "复制文件内容默认应开启")
+
+            // 验证顺序在 copyFileName 之后
+            if let nameIdx = allIds.firstIndex(of: MenuFeatureCatalog.copyFileName),
+               let contentIdx = allIds.firstIndex(of: MenuFeatureCatalog.copyFileContent) {
+                try assertTrue(contentIdx > nameIdx, "copyFileContent 顺序应在 copyFileName 之后")
+            } else {
+                throw TestFailure(message: "功能列表中未找到 copyFileName 或 copyFileContent")
             }
         }
 

@@ -58,6 +58,18 @@
 "预览文件内容" = "Preview file contents";
 "复制文件名" = "Copy File Name";
 "复制文件名到剪贴板" = "Copy file name to clipboard";
+"复制文件内容" = "Copy File Content";
+"复制单选文本文件的全部内容到剪贴板" = "Copy the full content of a selected text file to the clipboard";
+"文件大小上限" = "Maximum File Size";
+"仅在单选常规文件且大小在上限内时显示菜单项" = "Only shown when a single regular file is selected and its size is within the limit";
+"复制纯文本文件（UTF-8 / UTF-16）全部内容；建议不超过 10 MB，以避免第三方剪贴板工具出现索引卡顿。" = "Copies the full content of plain text files (UTF-8 / UTF-16). Recommended not to exceed 10 MB to prevent third-party clipboard tools from lagging.";
+"已复制文件内容到剪贴板" = "Copied file content to clipboard";
+"无法复制：非文本文件" = "Cannot copy: not a text file";
+"文件大小超过限制" = "File size exceeds limit";
+"无法读取文件内容" = "Cannot read file content";
+"仅支持复制单个文件的内容" = "Only single-file content copying is supported";
+"复制文件内容功能已关闭，请在设置中启用" = "Copy File Content is disabled; please enable it in Settings";
+"仅支持普通文件" = "Only regular files are supported";
 "复制相对路径" = "Copy Relative Path";
 "复制相对路径到剪贴板" = "Copy relative path to clipboard";
 

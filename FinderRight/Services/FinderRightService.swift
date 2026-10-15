@@ -69,12 +69,12 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
-        // directory / destination 是写入目标；archive / items / paths 是会被读取或移动的源
+        // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
         let pathKeys: [(key: String, role: PathAccessPolicy.Role)] = [
-            ("directory", .destination), ("destination", .destination), ("archive", .source), ("testPath", .source)
+            ("directory", .destination), ("destination", .destination), ("archive", .source), ("testPath", .source), ("path", .source)
         ]
         for (key, role) in pathKeys {
             if let path = req.payload[key]?.stringValue {
@@ -144,6 +144,8 @@ final class FinderRightService {
             return cancelCut(req)
         case "transferItems":
             return transferItems(req)
+        case "copyFileContent":
+            return copyFileContent(req)
         case BadgeReclaimIPC.action:
             return BadgeOwnershipManager.shared.handle(req)
         default:
@@ -973,6 +975,47 @@ final class FinderRightService {
             return message
         case .toolFailed(let status, let stderr):
             return OperationRecord.summary(of: stderr) ?? String(format: L("压缩工具退出码 %d"), status)
+        }
+    }
+
+    private func copyFileContent(_ req: IPCRequest) -> IPCResponse {
+        guard let path = req.payload["path"]?.stringValue else {
+            return IPCResponse(id: req.id, success: false, message: "参数缺失: path")
+        }
+        let expanded = (path as NSString).expandingTildeInPath
+        guard isPathAllowed(expanded, role: .source) else {
+            serviceLog("copyFileContent 路径越界被拦截: \(expanded)")
+            return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), expanded))
+        }
+        let url = URL(fileURLWithPath: expanded)
+        let maxBytes = SharedConfig.shared.copyFileContentMaxBytes
+        let result = FileContentReader.readText(from: url, maxBytes: maxBytes)
+
+        switch result {
+        case .success(let text):
+            DispatchQueue.main.async {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+                ClipboardToast.showCopied(message: L("已复制文件内容到剪贴板"))
+            }
+            return IPCResponse(id: req.id, success: true, message: "ok")
+        case .notRegularFile:
+            return IPCResponse(id: req.id, success: false, message: L("无法读取：不是普通文件"))
+        case .fileTooLarge:
+            DispatchQueue.main.async {
+                ClipboardToast.showCopied(message: L("文件大小超过限制"), isWarning: true)
+            }
+            return IPCResponse(id: req.id, success: false, message: L("文件大小超过限制"))
+        case .readFailed:
+            DispatchQueue.main.async {
+                ClipboardToast.showCopied(message: L("无法读取文件内容"), isWarning: true)
+            }
+            return IPCResponse(id: req.id, success: false, message: L("无法读取文件内容"))
+        case .binaryFile:
+            DispatchQueue.main.async {
+                ClipboardToast.showCopied(message: L("无法复制：非文本文件"), isWarning: true)
+            }
+            return IPCResponse(id: req.id, success: false, message: L("无法复制：非文本文件"))
         }
     }
 

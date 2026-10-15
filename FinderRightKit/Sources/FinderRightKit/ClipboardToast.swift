@@ -58,21 +58,26 @@ public final class ClipboardToast {
         panel.isReleasedWhenClosed = false
     }
 
-    public static func showCopied() {
-        DispatchQueue.main.async { shared.show() }
+    public static func showCopied(message: String? = nil, isWarning: Bool = false) {
+        DispatchQueue.main.async { shared.show(message: message, isWarning: isWarning) }
     }
 
     /// 根据当前主题色与外观动态更新背景与文字颜色及尺寸
-    private func updateAppearanceAndLayout() {
+    private func updateAppearanceAndLayout(message: String?, isWarning: Bool) {
         SharedConfig.shared.reload()
         let theme = FRThemeID.current
         let palette = theme.palette
 
         let appearance = panel.effectiveAppearance
-        let accent = palette.accent.resolved(for: appearance)
-        let onAccent = palette.onAccent.resolved(for: appearance)
+        let accent = isWarning ? NSColor.systemOrange : palette.accent.resolved(for: appearance)
+        let onAccent = isWarning ? NSColor.white : palette.onAccent.resolved(for: appearance)
 
-        label.stringValue = NSLocalizedString("已复制到剪贴板", comment: "clipboard feedback")
+        let iconSymbol = isWarning ? "exclamationmark.triangle" : "checkmark"
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        iconView.image = NSImage(systemSymbolName: iconSymbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(iconConfig)
+
+        label.stringValue = message ?? NSLocalizedString("已复制到剪贴板", comment: "clipboard feedback")
         label.textColor = onAccent
         label.sizeToFit()
 
@@ -109,12 +114,12 @@ public final class ClipboardToast {
         panel.setContentSize(panelSize)
     }
 
-    private func show() {
+    private func show(message: String?, isWarning: Bool) {
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
                 ?? NSScreen.main else { return }
         dismissTimer?.invalidate()
 
-        updateAppearanceAndLayout()
+        updateAppearanceAndLayout(message: message, isWarning: isWarning)
 
         let frame = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: frame.midX - panel.frame.width / 2, y: frame.minY + 64))

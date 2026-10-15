@@ -55,6 +55,7 @@ public enum MenuFeatureCatalog {
     public static let newFile      = "feature.newFile"
     public static let copyPath     = "feature.copyPath"
     public static let copyFileName = "feature.copyFileName"
+    public static let copyFileContent = "feature.copyFileContent"
     public static let goToDirectory = "feature.goToDirectory"
     public static let openTerminal = "feature.openTerminal"
     public static let openEditor   = "feature.openEditor"
@@ -70,6 +71,7 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus"),
         MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link"),
         MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制完整文件名（含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam"),
+        MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext"),
         MenuFeature(id: goToDirectory, nameKey: "前往目录…",     descriptionKey: "输入路径，在访达中打开指定目录", systemImage: "arrow.right.circle"),
         MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal"),
         MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces"),

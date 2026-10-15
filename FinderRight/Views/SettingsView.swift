@@ -467,6 +467,7 @@ struct FeaturesTab: View {
     @FRState private var showingAddSheet = false
     @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
     @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
+    @FRState private var copyFileContentMaxSizeKB: Int = SharedConfig.shared.copyFileContentMaxSizeKB
     @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder)
     @FRState private var dropTargetId: String?
 
@@ -495,6 +496,7 @@ struct FeaturesTab: View {
         FRPage(title: "功能", subtitle: "选择出现在右键菜单中的功能，拖动调整顺序") {
             menuSection
             copyPathSection
+            copyContentSection
             badgeSection
             templateSection
         }
@@ -602,6 +604,32 @@ struct FeaturesTab: View {
             FRFootnote(Text(copyPathFormat == .shellEscaped
                             ? "含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。"
                             : "多选时每行一项。「服务」菜单里的复制路径也使用此格式。"))
+        }
+    }
+
+    // MARK: 复制文件内容
+
+    private var copyContentSection: some View {
+        FRSection("复制文件内容") {
+            FRCard {
+                FRRow(title: Text("文件大小上限"), subtitle: Text("仅在单选常规文件且大小在上限内时显示菜单项")) {
+                    FRPicker(label: "文件大小上限", selection: Binding(
+                        get: {
+                            CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
+                        },
+                        set: { newValue in
+                            copyFileContentMaxSizeKB = newValue.rawValue
+                            SharedConfig.shared.copyFileContentMaxSizeKB = newValue.rawValue
+                        }
+                    )) {
+                        ForEach(CopyFileContentSizePreset.allCases) { preset in
+                            Text(preset.titleKey).tag(preset)
+                        }
+                    }
+                }
+            }
+
+            FRFootnote(Text("复制纯文本文件（UTF-8 / UTF-16）全部内容；建议不超过 10 MB，以避免第三方剪贴板工具出现索引卡顿。"))
         }
     }
 

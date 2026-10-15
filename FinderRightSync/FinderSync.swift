@@ -625,6 +625,12 @@ class FinderSync: FIFinderSync {
                 guard hasSelection else { return }
                 menu.addItem(self.makeItem(titleKey: "复制文件名", tint: .indigo, systemImage: "character.cursor.ibeam", action: #selector(self.copyFileName(_:)), shortcutId: "shortcut.copyFileName", style: style))
             },
+            MenuFeatureCatalog.copyFileContent: {
+                // 仅单选普通文本文件且在大小限制内时显示
+                guard selected.count == 1, let url = selected.first else { return }
+                guard FileContentReader.isEligible(url: url, maxBytes: SharedConfig.shared.copyFileContentMaxBytes) else { return }
+                menu.addItem(self.makeItem(titleKey: "复制文件内容", tint: .teal, systemImage: "doc.plaintext", action: #selector(self.copyFileContent(_:)), shortcutId: "shortcut.copyFileContent", style: style))
+            },
             MenuFeatureCatalog.goToDirectory: {
                 menu.addItem(self.makeItem(titleKey: "前往目录…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
             },
@@ -896,6 +902,18 @@ class FinderSync: FIFinderSync {
         }
         ClipboardToast.showCopied()
         logToFile("copyFileName ok: count=\(urls.count)")
+    }
+
+    @objc func copyFileContent(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard urls.count == 1, let url = urls.first else {
+            logToFile("copyFileContent: not single item")
+            return
+        }
+        logToFile("copyFileContent: sending ipc for \(url.path)")
+        IPCClient.shared.callAsync(action: "copyFileContent", payload: ["path": .string(url.path)]) { r in
+            logToFile("copyFileContent ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
     }
 
     @objc func openTerminal(_ sender: NSMenuItem) {
