@@ -948,11 +948,11 @@ struct AboutTab: View {
     private var updateArea: some View {
         VStack(spacing: 8) {
             switch updateStatus {
-            case .updateAvailable(let newVersion, let releaseURL, let downloadURL, let sha256URL):
+            case .updateAvailable(let newVersion, let releaseURL, let downloadURL, let checksum):
                 HStack(spacing: 8) {
                     if let downloadURL = downloadURL {
                         Button {
-                            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, sha256URL: sha256URL) { newStatus in
+                            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum) { newStatus in
                                 self.updateStatus = newStatus
                             }
                         } label: {

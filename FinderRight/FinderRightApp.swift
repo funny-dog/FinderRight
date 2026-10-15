@@ -340,8 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch status {
             case .upToDate:
                 self.showUpToDateAlert()
-            case .updateAvailable(let version, let releaseURL, let downloadURL, let sha256URL):
-                self.promptUpdate(version: version, releaseURL: releaseURL, downloadURL: downloadURL, sha256URL: sha256URL)
+            case .updateAvailable(let version, let releaseURL, let downloadURL, let checksum):
+                self.promptUpdate(version: version, releaseURL: releaseURL, downloadURL: downloadURL, checksum: checksum)
             case .failed(let message):
                 self.showUpdateFailure(title: self.L("无法检查更新"), message: message)
             default:
@@ -359,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    private func promptUpdate(version: String, releaseURL: URL, downloadURL: URL?, sha256URL: URL?) {
+    private func promptUpdate(version: String, releaseURL: URL, downloadURL: URL?, checksum: UpdateChecksum?) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = String(format: L("发现新版本 %@"), version)
@@ -383,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             // 成功时安装脚本会退出并重新拉起新版，这里只需处理失败；进度显示在菜单项标题上
-            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, sha256URL: sha256URL) { [weak self] status in
+            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum) { [weak self] status in
                 guard let self, case .failed(let message) = status else { return }
                 self.showUpdateFailure(title: self.L("自动更新失败"), message: message)
             }
