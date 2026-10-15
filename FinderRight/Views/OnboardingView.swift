@@ -1,4 +1,5 @@
 import SwiftUI
+import FinderRightKit
 
 struct OnboardingView: View {
     /// 由 AppKit 宿主（NSWindow）注入的关闭回调

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import FinderRightKit
 import Compression
 
@@ -1942,6 +1943,43 @@ struct FinderRightKitTestsRunner {
 
             reloaded.preferredEditor = ""
             try assertNil(SharedConfig(fileURL: url).preferredEditor, "空串视为未选定")
+        }
+
+        runTest("SharedConfig 主题色偏好：默认午夜薄荷且可持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+
+            let config = SharedConfig(fileURL: url)
+            try assertEqual(config.appTheme, .midnight, "默认主题应为午夜薄荷")
+            try assertNil(config.appThemeValue, "未显式设置时存储应为 nil")
+
+            config.appTheme = .sunset
+            try assertEqual(config.appThemeValue, .sunset)
+
+            let reloaded = SharedConfig(fileURL: url)
+            try assertEqual(reloaded.appTheme, .sunset, "重载后应保持落日橙主题")
+        }
+
+        runTest("FRThemeID 调色板与外观动态解析") {
+            let midnight = FRThemeID.midnight.palette
+            let lightAppearance = NSAppearance(named: .aqua)
+            let darkAppearance = NSAppearance(named: .darkAqua)
+
+            let lightAccent = midnight.accent.resolved(for: lightAppearance)
+            let darkAccent = midnight.accent.resolved(for: darkAppearance)
+            try assertTrue(lightAccent != darkAccent, "浅色与深色下的 accent 应有区分")
+
+            let lightOnAccent = midnight.onAccent.resolved(for: lightAppearance)
+            let darkOnAccent = midnight.onAccent.resolved(for: darkAppearance)
+            try assertTrue(lightOnAccent != darkOnAccent, "浅色与深色下的 onAccent 应有区分")
+
+            // 所有预置主题均应具备有效的标题与色块
+            for theme in FRThemeID.allCases {
+                try assertTrue(!theme.titleKey.isEmpty)
+                try assertTrue(theme.palette.accent.light.alphaComponent > 0)
+                try assertTrue(theme.palette.onAccent.light.alphaComponent > 0)
+            }
         }
 
         print("\n-----------------------------------------")

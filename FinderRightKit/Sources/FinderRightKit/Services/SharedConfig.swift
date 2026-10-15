@@ -57,6 +57,7 @@ public final class SharedConfig {
         static let copyPathFormat = "copyPathFormat"
         static let menuOrder = "menuOrder"
         static let favoriteDirectories = "favoriteDirectories"
+        static let appTheme = "appTheme"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
@@ -406,6 +407,31 @@ public final class SharedConfig {
         var current = shortcuts
         if let s = shortcut { current[id] = s } else { current.removeValue(forKey: id) }
         shortcuts = current
+    }
+
+    // MARK: - App Theme
+
+    /// 存储的 appTheme，nil 表示尚未写入
+    public var appThemeValue: FRThemeID? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let raw = store[Keys.appTheme] as? String {
+            return FRThemeID(rawValue: raw)
+        }
+        return nil
+    }
+
+    /// 界面主题色，默认午夜薄荷
+    public var appTheme: FRThemeID {
+        get {
+            appThemeValue ?? .midnight
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.appTheme] = newValue.rawValue
+            save()
+        }
     }
 
     // MARK: - Reset
