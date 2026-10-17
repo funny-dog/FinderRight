@@ -2270,27 +2270,28 @@ struct FinderRightKitTestsRunner {
             let cmdX = ActionShortcut(key: "x", modifiers: cmd), cmdV = ActionShortcut(key: "v", modifiers: cmd)
             let opt = 1 << 19
             let optCmdC = ActionShortcut(key: "c", modifiers: cmd | opt)
-            let sftCmdG = ActionShortcut(key: "g", modifiers: cmd | shift), sftCmdDot = ActionShortcut(key: ".", modifiers: cmd | shift)
+            let sftCmdDot = ActionShortcut(key: ".", modifiers: cmd | shift)
             let all = ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": optCmdC,
-                       "shortcut.goToDirectory": sftCmdG, "shortcut.toggleHidden": sftCmdDot]
+                       "shortcut.toggleHidden": sftCmdDot]
             try assertEqual(T.defaultShortcuts, all, "默认值与访达原生一致")
+            try assertNil(T.defaultShortcuts["shortcut.goToDirectory"], "前往目录不占用访达的 ⇧⌘G")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: []), all, "全新安装")
             try assertEqual(T.defaultsToApply(current: [
                 "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
                 "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
                 "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl),
-            ], alreadyApplied: []).keys.sorted(), ["shortcut.goToDirectory", "shortcut.toggleHidden"], "用户设置过的行一律保留")
+            ], alreadyApplied: []).keys.sorted(), ["shortcut.toggleHidden"], "用户设置过的行一律保留")
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": ActionShortcut(key: "v", modifiers: cmd | ctl)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.goToDirectory", "shortcut.toggleHidden"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden"]),
                             ["shortcut.cut": cmdX], "只补没设置的那一行")
             try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.goToDirectory", "shortcut.toggleHidden"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden"]),
                             ["shortcut.cut": cmdX], "⌘V 已被其他动作占用则不填")
             // 1.6.4 升级：剪切 / 粘贴补过（用户之后清空了剪切），新增的三项默认只补空位
             let legacy = T.legacyAppliedActionIds(cutPasteApplied: true)
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": cmdV, "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl)],
                                               alreadyApplied: legacy),
-                            ["shortcut.goToDirectory": sftCmdG, "shortcut.toggleHidden": sftCmdDot], "清空的剪切不补回，用户的复制路径不覆盖")
+                            ["shortcut.toggleHidden": sftCmdDot], "清空的剪切不补回，用户的复制路径不覆盖")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: Set(all.keys)), [:], "补过的行清空后不再补回")
             try assertTrue(T.legacyAppliedActionIds(cutPasteApplied: false).isEmpty)
             try assertTrue(T.handlesAction("shortcut.cut") && T.handlesAction("shortcut.paste"))
