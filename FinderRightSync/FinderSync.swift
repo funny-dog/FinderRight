@@ -133,10 +133,10 @@ private func createCutBadgeImage() -> NSImage {
     return image
 }
 
-// MARK: - 彩色菜单图标
+// MARK: - 菜单图标
 
 
-/// 彩色菜单图标渲染：预渲染为 2x 位图并按「风格 + 符号 + 颜色 + 明暗」缓存。
+/// 菜单图标渲染：预渲染为 2x 位图并按「风格 + 符号 + 颜色 + 明暗」缓存。
 ///
 /// 菜单要跨进程交给 Finder 绘制，图片在构建菜单时就得定型 —— 不能依赖延迟绘制或动态颜色，
 /// 所以按当前系统明暗各画一份。代价是悬停高亮时彩色线条不会反白（模板图才会）。
@@ -146,7 +146,8 @@ enum MenuIconRenderer {
     private static let side: CGFloat = 16
 
     static func image(symbol: String, tint: MenuTint, style: MenuIconStyle) -> NSImage? {
-        let dark = NSApplication.shared.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let appearance = NSApplication.shared.effectiveAppearance
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let key = "\(style.rawValue)|\(symbol)|\(tint.name)|\(dark ? "dark" : "light")"
         lock.lock()
         if let cached = cache[key] {
@@ -155,14 +156,18 @@ enum MenuIconRenderer {
         }
         lock.unlock()
 
-        guard let image = render(symbol: symbol, tint: tint, asTile: style == .tile, dark: dark) else { return nil }
+        var rendered: NSImage?
+        appearance.performAsCurrentDrawingAppearance {
+            rendered = render(symbol: symbol, tint: tint, style: style, dark: dark)
+        }
+        guard let image = rendered else { return nil }
         lock.lock()
         cache[key] = image
         lock.unlock()
         return image
     }
 
-    private static func render(symbol: String, tint: MenuTint, asTile: Bool, dark: Bool) -> NSImage? {
+    private static func render(symbol: String, tint: MenuTint, style: MenuIconStyle, dark: Bool) -> NSImage? {
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: nil),
               let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side * 2), pixelsHigh: Int(side * 2),
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
@@ -178,6 +183,7 @@ enum MenuIconRenderer {
         let glyphColor: NSColor
         let box: NSRect
         let config: NSImage.SymbolConfiguration
+        let asTile = style == .tile
         if asTile {
             srgb(dark ? tint.tile.dark : tint.tile.light).setFill()
             NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: side, height: side), xRadius: 4, yRadius: 4).fill()
@@ -185,7 +191,7 @@ enum MenuIconRenderer {
             box = NSRect(x: 2, y: 2, width: 12, height: 12)
             config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold)
         } else {
-            glyphColor = srgb(dark ? tint.line.dark : tint.line.light)
+            glyphColor = style == .modern ? .labelColor : srgb(dark ? tint.line.dark : tint.line.light)
             box = NSRect(x: 0, y: 0, width: side, height: side)
             config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
         }
@@ -209,6 +215,8 @@ enum MenuIconRenderer {
         rep.size = NSSize(width: side, height: side)
         let image = NSImage(size: rep.size)
         image.addRepresentation(rep)
+        // Finder 跨进程绘制时保留当前文字色，同时保留模板标记供菜单处理高亮。
+        image.isTemplate = style == .modern
         return image
     }
 
@@ -293,17 +301,10 @@ private func logToFile(_ message: String) {
 class FinderSync: FIFinderSync {
 
     // MARK: - 静态图标与资源缓存（零 I/O、零解析延迟）
-    private static var symbolCache: [String: NSImage] = [:]
     private static let cacheQueue = DispatchQueue(label: "com.finderright.app.sync.cache", qos: .utility)
 
     private static func getSymbolImage(named name: String) -> NSImage? {
-        if let img = symbolCache[name] { return img }
-        if let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
-            img.isTemplate = true
-            symbolCache[name] = img
-            return img
-        }
-        return nil
+        MenuIconRenderer.image(symbol: name, tint: .graphite, style: .modern)
     }
 
     private static func preloadSymbols() {
