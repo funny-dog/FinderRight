@@ -1154,15 +1154,20 @@ struct ShortcutsTab: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasAccessibility = AccessibilityChecker.check()
         }
-        .alert(isPresented: Binding(
-            get: { conflictMessage != nil },
-            set: { if !$0 { conflictMessage = nil } }
-        )) {
-            Alert(
-                title: Text("快捷键冲突"),
-                message: Text(conflictMessage ?? ""),
-                dismissButton: .default(Text("好"))
-            )
+        .onChange(of: conflictMessage) { message in
+            guard let message else { return }
+            showSheet(FRDialog(title: NSLocalizedString("快捷键冲突", comment: ""), message: message,
+                               symbol: "exclamationmark.triangle", tone: .warning,
+                               buttons: [NSLocalizedString("好", comment: "")])) { _ in conflictMessage = nil }
+        }
+    }
+
+    /// 设置窗口内的弹窗以 sheet 显示；找不到窗口时退回模态
+    private func showSheet(_ dialog: FRDialog, completion: @escaping (Int?) -> Void) {
+        if let window = NSApp.keyWindow {
+            dialog.beginSheet(for: window, completion: completion)
+        } else {
+            completion(dialog.runModal())
         }
     }
 
@@ -1172,22 +1177,13 @@ struct ShortcutsTab: View {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
-    /// 用 NSAlert 确认：本页已挂着冲突提示的 .alert，SwiftUI 不会再弹出子视图上的 .alert（实测点了没反应）
     private func confirmRestoreDefaults() {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = NSLocalizedString("恢复默认快捷键？", comment: "")
-        alert.informativeText = NSLocalizedString("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。", comment: "")
-        alert.addButton(withTitle: NSLocalizedString("恢复默认", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("取消", comment: ""))
-        let restore = { (response: NSApplication.ModalResponse) in
-            if response == .alertFirstButtonReturn { restoreDefaults() }
-        }
-        if let window = NSApp.keyWindow {
-            alert.beginSheetModal(for: window, completionHandler: restore)
-        } else {
-            restore(alert.runModal())
-        }
+        let dialog = FRDialog(
+            title: NSLocalizedString("恢复默认快捷键？", comment: ""),
+            message: NSLocalizedString("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。", comment: ""),
+            symbol: "arrow.counterclockwise", tone: .warning,
+            buttons: [NSLocalizedString("恢复默认", comment: ""), NSLocalizedString("取消", comment: "")])
+        showSheet(dialog) { if $0 == 0 { restoreDefaults() } }
     }
 
     /// 全部换成默认快捷键，并刷新各行、按键拦截与服务快捷键

@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
-    private var directoryAlert: NSAlert?
+    private var directoryDialog: FRDialog?
     /// 菜单打开期间随更新状态刷新标题（检查中 / 下载进度 / 安装中）
     private weak var updateMenuItem: NSMenuItem?
 
@@ -155,12 +155,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let content = try? String(contentsOf: errorFileURL, encoding: .utf8),
            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try? fm.removeItem(at: errorFileURL)
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("自动更新失败", comment: "alert")
-                alert.informativeText = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                alert.alertStyle = .warning
-                alert.runModal()
+            DispatchQueue.main.async { [weak self] in
+                self?.showUpdateFailure(title: NSLocalizedString("自动更新失败", comment: "alert"),
+                                        message: content.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
     }
@@ -358,43 +355,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showUpToDateAlert() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = L("已是最新版本")
-        alert.informativeText = String(format: L("FinderRight %@ 是目前的最新版本。"), UpdateChecker.shared.currentAppVersion)
-        alert.addButton(withTitle: L("好"))
-        alert.runModal()
+        FRDialog(title: L("已是最新版本"),
+                 message: String(format: L("FinderRight %@ 是目前的最新版本。"), UpdateChecker.shared.currentAppVersion),
+                 symbol: "checkmark.seal", buttons: [L("好")]).runModal()
     }
 
     private func promptUpdate(version: String, releaseURL: URL, downloadURL: URL?, checksum: UpdateChecksum?) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = String(format: L("发现新版本 %@"), version)
+        let title = String(format: L("发现新版本 %@"), version)
         let current = UpdateChecker.shared.currentAppVersion
 
         // 发布缺少校验和时 downloadURL 为空，不能自动安装，只能去发布页手动下载
         guard let downloadURL else {
-            alert.informativeText = String(format: L("当前版本 %@。此版本不支持自动安装，请前往发布页下载。"), current)
-            alert.addButton(withTitle: L("前往下载"))
-            alert.addButton(withTitle: L("稍后")).keyEquivalent = "\u{1b}"
-            if alert.runModal() == .alertFirstButtonReturn {
+            let dialog = FRDialog(title: title,
+                                  message: String(format: L("当前版本 %@。此版本不支持自动安装，请前往发布页下载。"), current),
+                                  symbol: "arrow.down.circle", buttons: [L("前往下载"), L("稍后")])
+            if dialog.runModal() == 0 {
                 NSWorkspace.shared.open(releaseURL)
             }
             return
         }
 
-        alert.informativeText = String(format: L("当前版本 %@。更新将在后台下载并安装，完成后 FinderRight 会自动重启。"), current)
-        alert.addButton(withTitle: L("立即更新"))
-        alert.addButton(withTitle: L("稍后")).keyEquivalent = "\u{1b}"
-        alert.addButton(withTitle: L("查看更新说明"))
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
+        let dialog = FRDialog(title: title,
+                              message: String(format: L("当前版本 %@。更新将在后台下载并安装，完成后 FinderRight 会自动重启。"), current),
+                              symbol: "arrow.down.circle", buttons: [L("立即更新"), L("稍后"), L("查看更新说明")])
+        dialog.cancelIndex = 1
+        switch dialog.runModal() {
+        case 0:
             // 成功时安装脚本会退出并重新拉起新版，这里只需处理失败；进度显示在菜单项标题上
             UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum) { [weak self] status in
                 guard let self, case .failed(let message) = status else { return }
                 self.showUpdateFailure(title: self.L("自动更新失败"), message: message)
             }
-        case .alertThirdButtonReturn:
+        case 2:
             NSWorkspace.shared.open(releaseURL)
         default:
             break
@@ -402,13 +394,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showUpdateFailure(title: String, message: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: L("好"))
-        alert.runModal()
+        FRDialog(title: title, message: message, symbol: "exclamationmark.triangle", tone: .warning,
+                 buttons: [L("好")]).runModal()
     }
 
     // MARK: - 最近操作
@@ -481,13 +468,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = recentOperationTitle(for: record)
-        alert.informativeText = (record.failure ?? "") + "\n\n" + L("更多信息可在「控制台」App 中搜索 FinderRightService 查看。")
-        alert.addButton(withTitle: L("好"))
-        alert.runModal()
+        FRDialog(title: recentOperationTitle(for: record),
+                 message: (record.failure ?? "") + "\n\n" + L("更多信息可在「控制台」App 中搜索 FinderRightService 查看。"),
+                 symbol: "exclamationmark.triangle", tone: .warning, buttons: [L("好")]).runModal()
     }
 
     @objc private func clearRecentOperations() {
@@ -532,67 +515,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openGoToDirectory(initialPath: String = "", failure: String? = nil) {
-        NSApp.activate(ignoringOtherApps: true)
-        if let directoryAlert {
-            directoryAlert.window.makeKeyAndOrderFront(nil)
+        if let directoryDialog {
+            directoryDialog.bringToFront()
             return
         }
 
-        let alert = NSAlert()
-        alert.messageText = L("打开路径…")
-        alert.informativeText = failure ?? L("输入或粘贴文件、文件夹的路径（绝对路径或以 ~/ 开头）")
-        // 回车默认「在访达中显示」：文件会在所在文件夹中选中，文件夹直接打开
-        alert.addButton(withTitle: L("在访达中显示"))
-        alert.addButton(withTitle: L("打开"))
-        alert.addButton(withTitle: L("取消")).keyEquivalent = "\u{1b}"
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        input.stringValue = initialPath
-        input.placeholderString = "/Users/… / ~/Documents/…"
-        input.setAccessibilityLabel(L("文件或文件夹路径"))
-        input.cell?.isScrollable = true
-        input.cell?.wraps = false
-        input.cell?.usesSingleLineMode = true
-        alert.accessoryView = input
-        alert.window.initialFirstResponder = input
-        directoryAlert = alert
-        defer { directoryAlert = nil }
-
-        while true {
-            let response = alert.runModal()
-            guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
+        let home = IPCBridge.realUserHomeDirectory.path
+        let dialog = FRDialog(
+            title: L("打开路径"),
+            message: failure ?? L("输入或粘贴文件、文件夹的路径（绝对路径或以 ~/ 开头）"),
+            symbol: "arrow.right.circle",
+            // 回车默认「在访达中显示」：文件会在所在文件夹中选中，文件夹直接打开
+            buttons: [L("在访达中显示"), L("打开"), L("取消")],
+            input: .text(initial: initialPath, placeholder: "/Users/… / ~/Documents/…",
+                         accessibilityLabel: L("文件或文件夹路径"),
+                         hint: { [weak self] input in self?.pathHint(for: input, home: home) }))
+        dialog.validate = { [weak self] index in
+            guard index != 2 else { return nil }
             do {
-                let target = try DirectoryPath.resolve(input.stringValue, home: IPCBridge.realUserHomeDirectory.path)
-                let enteredPath = input.stringValue
-                let reopenOnFailure: (Error?) -> Void = { [weak self] error in
-                    guard let error else { return }
-                    DispatchQueue.main.async {
-                        self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
-                    }
-                }
-                switch target {
-                case .file(let file) where response == .alertFirstButtonReturn:
-                    NSWorkspace.shared.activateFileViewerSelecting([file])
-                case .file(let file):
-                    // 与在访达中双击相同：交给该文件的默认 App
-                    NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                        reopenOnFailure(error)
-                    }
-                case .directory(let directory):
-                    guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
-                        alert.informativeText = L("无法打开目录，请检查访问权限")
-                        continue
-                    }
-                    NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                        reopenOnFailure(error)
-                    }
-                }
-                return
+                _ = try DirectoryPath.resolve(dialog.text, home: home)
+                return nil
             } catch let error as DirectoryPath.ValidationError {
-                alert.informativeText = L(error.rawValue)
+                return self?.L(error.rawValue)
             } catch {
-                alert.informativeText = error.localizedDescription
+                return error.localizedDescription
             }
-            alert.window.initialFirstResponder = input
+        }
+        directoryDialog = dialog
+        let response = dialog.runModal()
+        directoryDialog = nil
+
+        guard response == 0 || response == 1,
+              let target = try? DirectoryPath.resolve(dialog.text, home: home) else { return }
+        let enteredPath = dialog.text
+        let reopenOnFailure: (Error?) -> Void = { [weak self] error in
+            guard let error else { return }
+            DispatchQueue.main.async {
+                self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
+            }
+        }
+        switch target {
+        case .file(let file) where response == 0:
+            NSWorkspace.shared.activateFileViewerSelecting([file])
+        case .file(let file):
+            // 与在访达中双击相同：交给该文件的默认 App
+            NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                reopenOnFailure(error)
+            }
+        case .directory(let directory):
+            guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
+                openGoToDirectory(initialPath: enteredPath, failure: L("无法打开目录，请检查访问权限"))
+                return
+            }
+            NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                reopenOnFailure(error)
+            }
+        }
+    }
+
+    /// 输入框下方的实时识别：是文件还是文件夹、位于哪里
+    private func pathHint(for input: String, home: String) -> FRDialog.Hint? {
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let abbreviate = { (path: String) -> String in
+            path == home || path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
+        }
+        switch try? DirectoryPath.resolve(input, home: home) {
+        case .file(let file):
+            return FRDialog.Hint(symbol: "doc", text: String(format: L("文件 · 位于 %@"), abbreviate(file.deletingLastPathComponent().path)), ok: true)
+        case .directory(let directory):
+            return FRDialog.Hint(symbol: "folder", text: String(format: L("文件夹 · %@"), abbreviate(directory.path)), ok: true)
+        case nil:
+            return FRDialog.Hint(symbol: "questionmark.circle", text: L("未找到这个路径"), ok: false)
         }
     }
 

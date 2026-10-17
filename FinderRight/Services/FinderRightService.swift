@@ -639,24 +639,21 @@ final class FinderRightService {
         Self.isConfirmingHiddenFilesFallback = true
         defer { Self.isConfirmingHiddenFilesFallback = false }
 
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = L("切换隐藏文件需要重启访达")
-        alert.informativeText = L("FinderRight 尚未获得「辅助功能」权限，只能通过重启访达来切换。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L("重启访达并切换"))
-        alert.addButton(withTitle: L("授权辅助功能…"))
-        alert.addButton(withTitle: L("取消"))
+        let dialog = FRDialog(
+            title: L("切换隐藏文件需要重启访达"),
+            message: L("FinderRight 尚未获得「辅助功能」权限，只能通过重启访达来切换。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。"),
+            symbol: "exclamationmark.triangle", tone: .warning,
+            buttons: [L("重启访达并切换"), L("授权辅助功能…"), L("取消")])
 
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
+        switch dialog.runModal() {
+        case 0:
             // defaults 读写与 killall 都会同步等待子进程，放到后台，不阻塞主线程
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self else { return }
                 let resp = self.toggleHiddenFilesViaDefaults(req, newValue: "toggle")
                 self.serviceLog("toggleHiddenFiles 用户确认重启访达: \(resp.message ?? "")")
             }
-        case .alertSecondButtonReturn:
+        case 1:
             // 系统授权弹窗会把 FinderRight 加进辅助功能列表，用户只需打开开关
             let promptOpts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(promptOpts)

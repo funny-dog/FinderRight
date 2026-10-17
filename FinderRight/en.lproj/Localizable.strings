@@ -542,3 +542,8 @@
 "请输入解压密码。" = "Enter the password to extract it.";
 "密码错误，请重新输入。" = "Incorrect password. Please try again.";
 "解压" = "Extract";
+"打开路径" = "Open Path";
+"文件 · 位于 %@" = "File · in %@";
+"文件夹 · %@" = "Folder · %@";
+"未找到这个路径" = "Path not found";
+"密码" = "Password";

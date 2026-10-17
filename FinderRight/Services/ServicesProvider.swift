@@ -258,7 +258,7 @@ final class ServicesProvider: NSObject {
             let choices = BuiltInFileTemplates.text.map { NSLocalizedString($0.name, comment: "service") }
                 + customTemplates.map { $0.name.isEmpty ? ".\($0.fileExtension)" : "\($0.name) (.\($0.fileExtension))" }
                 + officeTemplates.map { NSLocalizedString($0.titleKey, comment: "service") }
-            guard let index = chooseFileAction(title: "在此文件夹新建文件…", details: destination.path,
+            guard let index = chooseFileAction(title: "在此文件夹新建文件…", symbol: "doc.badge.plus", details: destination.path,
                                               choices: choices, button: "创建") else { return }
             var payload: [String: AnyJSON] = ["directory": .string(destination.path), "baseName": .string("untitled")]
             if textTemplates.indices.contains(index) {
@@ -304,6 +304,7 @@ final class ServicesProvider: NSObject {
             let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
                 + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
             guard let index = chooseFileAction(title: mode == .move ? "移动到常用目录…" : "复制到常用目录…",
+                                              symbol: mode == .move ? "arrowshape.turn.up.right" : "plus.square.on.square",
                                               details: details, choices: choices, button: mode == .move ? "移动" : "复制") else { return }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "transferItems", payload: [
                 "items": .stringArray(items.map(\.path)), "destination": .string(favorites[index]), "mode": .string(mode.rawValue)
@@ -326,23 +327,18 @@ final class ServicesProvider: NSObject {
         return true
     }
 
-    private func chooseFileAction(title: String, details: String, choices: [String], button: String) -> Int? {
+    private func chooseFileAction(title: String, symbol: String, details: String, choices: [String], button: String) -> Int? {
         guard !isShowingFileActionPrompt else { return nil }
         isShowingFileActionPrompt = true
         defer { isShowingFileActionPrompt = false }
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString(title, comment: "service")
-        alert.informativeText = details
-        alert.addButton(withTitle: NSLocalizedString(button, comment: "service"))
-        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
-        let choice = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 480, height: 26))
-        // 逐项添加：addItems(withTitles:) 会合并同名项，自定义模板与内置模板重名时下标会错位
-        choices.forEach { choice.menu?.addItem(NSMenuItem(title: $0, action: nil, keyEquivalent: "")) }
-        choice.setAccessibilityLabel(NSLocalizedString("模板或目标目录", comment: "service"))
-        alert.accessoryView = choice
-        guard alert.runModal() == .alertFirstButtonReturn, choices.indices.contains(choice.indexOfSelectedItem) else { return nil }
-        return choice.indexOfSelectedItem
+        let dialog = FRDialog(
+            title: NSLocalizedString(title, comment: "service"),
+            message: details,
+            symbol: symbol,
+            buttons: [NSLocalizedString(button, comment: "service"), NSLocalizedString("取消", comment: "service")],
+            input: .choice(choices, accessibilityLabel: NSLocalizedString("模板或目标目录", comment: "service")))
+        guard dialog.runModal() == 0, choices.indices.contains(dialog.selectedIndex) else { return nil }
+        return dialog.selectedIndex
     }
 
     private func performFileAction(_ request: IPCRequest, feature: String) {
@@ -359,11 +355,8 @@ final class ServicesProvider: NSObject {
     /// 调用方校验失败（非访达调用）仍只写 error，避免其他 App 借服务反复弹窗。
     private func showAlert(_ title: String, message: String = "") {
         DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = message
-            alert.runModal()
+            FRDialog(title: title, message: message, symbol: "exclamationmark.triangle", tone: .warning,
+                     buttons: [NSLocalizedString("好", comment: "service")]).runModal()
         }
     }
 
@@ -450,15 +443,11 @@ final class ServicesProvider: NSObject {
         guard !isConfirmingCutPaste else { return false }
         isConfirmingCutPaste = true
         defer { isConfirmingCutPaste = false }
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("剪切文件", comment: "service")
-        alert.informativeText = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
+        let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
             + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
             + "\n\n" + NSLocalizedString("确认后在目标文件夹调用「粘贴」即可移动。", comment: "service")
-        alert.addButton(withTitle: NSLocalizedString("剪切", comment: "service"))
-        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
-        return alert.runModal() == .alertFirstButtonReturn
+        return FRDialog(title: NSLocalizedString("剪切文件", comment: "service"), message: details, symbol: "scissors",
+                        buttons: [NSLocalizedString("剪切", comment: "service"), NSLocalizedString("取消", comment: "service")]).runModal() == 0
     }
 
     @objc func pasteFiles(_ pboard: NSPasteboard,
@@ -501,13 +490,10 @@ final class ServicesProvider: NSObject {
         guard !isConfirmingCutPaste else { return false }
         isConfirmingCutPaste = true
         defer { isConfirmingCutPaste = false }
-        let alert = NSAlert()
-        alert.messageText = NSLocalizedString("粘贴已剪切的文件", comment: "service")
-        alert.informativeText = String(format: NSLocalizedString(
+        let details = String(format: NSLocalizedString(
             "将 FinderRight 剪切队列中的文件移动到：\n%@", comment: "service"), destination.path)
-        alert.addButton(withTitle: NSLocalizedString("粘贴", comment: "service"))
-        alert.addButton(withTitle: NSLocalizedString("取消", comment: "service"))
-        return alert.runModal() == .alertFirstButtonReturn
+        return FRDialog(title: NSLocalizedString("粘贴已剪切的文件", comment: "service"), message: details, symbol: "doc.on.clipboard",
+                        buttons: [NSLocalizedString("粘贴", comment: "service"), NSLocalizedString("取消", comment: "service")]).runModal() == 0
     }
 
     @objc func compressZip(_ pboard: NSPasteboard,
