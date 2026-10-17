@@ -9,6 +9,25 @@ public enum ServiceInvocationPolicy {
 
     public static let trustedFrontmostBundleIds: Set<String> = ["com.apple.finder"]
 
+    /// 推断服务的实际调用方。
+    ///
+    /// 经键盘快捷键触发服务时，系统会先把提供程序（本 App）激活到前台再派发（实测每次如此），
+    /// 此时 frontmost 是本 App。若本 App 没有自己的窗口在前（用户并非在本 App 里操作），
+    /// 实际调用方就是被激活前的前台应用。其余情况原样返回 frontmost。
+    /// 这与 frontmost 校验一样只是缓解：后台 App 也能在访达在前时 NSPerformService，无法据此区分。
+    public static func effectiveCaller(frontmostBundleId: String?,
+                                       providerBundleId: String?,
+                                       providerHasKeyWindow: Bool,
+                                       previousFrontmostBundleId: String?) -> String? {
+        guard let providerBundleId, !providerBundleId.isEmpty,
+              frontmostBundleId == providerBundleId,
+              !providerHasKeyWindow,
+              let previous = previousFrontmostBundleId, previous != providerBundleId else {
+            return frontmostBundleId
+        }
+        return previous
+    }
+
     public static func acceptsDestructiveService(frontmostBundleId: String?) -> Bool {
         guard let frontmostBundleId else { return false }
         return trustedFrontmostBundleIds.contains(frontmostBundleId)
@@ -26,12 +45,24 @@ public enum ServiceInvocationPolicy {
             || requiresServiceConfirmation(frontmostBundleId: frontmostBundleId, providerBundleId: providerBundleId)
     }
 
-    /// 空白处服务可收到当前目录；选中文件夹时则收到该文件夹，拒绝猜测文件或多选的目标。
+    /// 粘贴 / 新建的目标目录：
+    /// - 恰好一个文件夹：就是它（空白处服务收到的当前目录、或选中的目标文件夹）；
+    /// - 否则（选中文件、多选）：选中项共同所在的目录，即用户正在浏览的文件夹——
+    ///   快捷键调用时用户通常只是选着当前目录里的某个文件，不能因此拒绝。
+    /// 选中项分属不同目录（如搜索结果）时无法确定目标，返回 nil。
     public static func pasteDestination(for items: [URL]) -> URL? {
-        guard items.count == 1, let url = items.first, url.isFileURL else { return nil }
+        guard !items.isEmpty, items.allSatisfy(\.isFileURL) else { return nil }
+        let fm = FileManager.default
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else { return nil }
+        if items.count == 1, let url = items.first,
+           fm.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return url
+        }
+        guard items.allSatisfy({ fm.fileExists(atPath: $0.path) }) else { return nil }
+        let parents = Set(items.map { $0.deletingLastPathComponent().standardizedFileURL.path })
+        guard parents.count == 1, let parent = parents.first else { return nil }
+        let url = URL(fileURLWithPath: parent, isDirectory: true)
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
         return url
     }
 }

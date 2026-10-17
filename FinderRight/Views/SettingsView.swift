@@ -364,12 +364,7 @@ struct GeneralTab: View {
                 FRDivider()
                 FRRow(title: Text("右键菜单排查"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
                     HStack(spacing: 8) {
-                        Button("重启访达") {
-                            let proc = Process()
-                            proc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-                            proc.arguments = ["Finder"]
-                            try? proc.run()
-                        }
+                        Button("重启访达") { FinderRelauncher.relaunch() }
                         .buttonStyle(.frSecondary)
 
                         Button("扩展设置...") {
@@ -1078,6 +1073,7 @@ struct ShortcutsTab: View {
         ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
         ("shortcut.copyPath",     "复制路径",       "link"),
         ("shortcut.copyFileName", "复制文件名",     "character.cursor.ibeam"),
+        ("shortcut.copyFileContent", "复制文件内容", "doc.plaintext"),
         ("shortcut.goToDirectory", "前往目录…",     "arrow.right.circle"),
         ("shortcut.openTerminal", "打开终端",       "terminal"),
         ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
@@ -1089,10 +1085,25 @@ struct ShortcutsTab: View {
     ]
 
     @FRState private var conflictMessage: String?
+    /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
+    @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
 
     var body: some View {
-        FRPage(title: "快捷键", subtitle: "为右键菜单里的功能绑定快捷键") {
-            FRSection("右键菜单快捷键") {
+        FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
+            FRSection("访达快捷键") {
+                if needsFinderRestart {
+                    FRCard {
+                        FRRow(title: Text("重启访达后新快捷键生效"),
+                              subtitle: Text("访达只在启动时读取服务快捷键。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")) {
+                            Button("重启访达") {
+                                FinderRelauncher.relaunch()
+                                needsFinderRestart = false
+                            }
+                            .buttonStyle(.frPrimary)
+                        }
+                    }
+                }
+
                 FRCard {
                     ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
                         if index > 0 { FRDivider() }
@@ -1102,13 +1113,15 @@ struct ShortcutsTab: View {
                                      allActions: actions,
                                      onConflict: { msg in
                                          conflictMessage = msg
-                                     })
+                                     },
+                                     onChange: { syncServiceShortcuts(changedActionId: action.id) })
                     }
                 }
 
-                FRFootnote(Text("需含 ⌘、⌥ 或 ⌃ 之一。点击按钮后按键录制，Delete 清除，ESC 取消。\n快捷键仅在 Finder 右键菜单已展开时生效，不是全局热键。"))
+                FRFootnote(Text("需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键（如 ⌘X、⌘V）或系统文本编辑按键（如 ⌃V 翻页）相同，否则访达会先拿去处理。建议用 ⌃⌘ 组合，如 ⌃⌘X / ⌃⌘V。点击按钮后按键录制，Delete 清除，ESC 取消。\n「粘贴」需有选中项：选中一个文件夹则粘贴进该文件夹，选中文件则粘贴到当前文件夹；空白处没有选中项时系统不会派发快捷键，请用右键菜单粘贴。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。\n快捷键会同步到「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页设置为准。"))
             }
         }
+        .onAppear { needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch }
         .alert(isPresented: Binding(
             get: { conflictMessage != nil },
             set: { if !$0 { conflictMessage = nil } }
@@ -1120,6 +1133,13 @@ struct ShortcutsTab: View {
             )
         }
     }
+
+    /// 把全部快捷键同步为系统服务快捷键；有变化且该动作有对应服务时提示重启访达
+    private func syncServiceShortcuts(changedActionId: String) {
+        guard ServiceShortcutSync.run() else { return }
+        NSUpdateDynamicServices()
+        if ServiceShortcuts.hasService(actionId: changedActionId) { needsFinderRestart = true }
+    }
 }
 
 // MARK: - 单行快捷键录制组件
@@ -1130,6 +1150,7 @@ struct ShortcutCell: View {
     let actionIcon: String
     let allActions: [(id: String, name: String, icon: String)]
     let onConflict: (String) -> Void
+    let onChange: () -> Void
 
     @FRState private var shortcut: ActionShortcut?
     @FRState private var isRecording = false
@@ -1139,10 +1160,25 @@ struct ShortcutCell: View {
         HStack(spacing: 12) {
             FRIconChip(systemName: actionIcon)
 
-            Text(LocalizedStringKey(actionName))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(FRTheme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(LocalizedStringKey(actionName))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(FRTheme.text)
+                if let reserved = shortcut.flatMap(FinderReservedShortcuts.conflict(for:)) {
+                    // 旧版本允许录入 ⌘X / ⌘V、⌃V 等，这里提示它们不会生效
+                    Text(reserved.kind == .textEditing
+                         ? String(format: NSLocalizedString("与系统文本编辑按键（%@）冲突，不会生效，请重新录制", comment: ""), reserved.name)
+                         : String(format: NSLocalizedString("与访达「%@」冲突，不会生效，请重新录制", comment: ""),
+                                  NSLocalizedString(reserved.name, comment: "")))
+                        .font(.system(size: 11))
+                        .foregroundColor(FRTheme.warnText)
+                } else if !ServiceShortcuts.hasService(actionId: actionId) {
+                    Text("仅在右键菜单展开时生效")
+                        .font(.system(size: 11))
+                        .foregroundColor(FRTheme.mute)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button { isRecording ? cancelRecording() : startRecording() } label: {
                 Group {
@@ -1213,6 +1249,23 @@ struct ShortcutCell: View {
 
     private func finishRecording(_ newShortcut: ActionShortcut?) {
         if let candidate = newShortcut {
+            if let reserved = FinderReservedShortcuts.conflict(for: candidate) {
+                let message: String
+                switch reserved.kind {
+                case .system:
+                    message = String(format: NSLocalizedString("该快捷键已被系统「%@」占用，请换一个组合", comment: ""),
+                                     NSLocalizedString(reserved.name, comment: ""))
+                case .finderMenu:
+                    message = String(format: NSLocalizedString("该快捷键是访达自带的「%@」，访达会优先响应，请换一个组合（例如加上 ⌃）", comment: ""),
+                                     NSLocalizedString(reserved.name, comment: ""))
+                case .textEditing:
+                    message = String(format: NSLocalizedString("该快捷键是系统文本编辑按键（%@），访达会先拿去处理，请换一个组合（例如 ⌃⌘ 组合）", comment: ""),
+                                     reserved.name)
+                }
+                cancelRecording()
+                onConflict(message)
+                return
+            }
             for other in allActions where other.id != actionId {
                 if let existing = SharedConfig.shared.shortcut(forActionId: other.id),
                    existing.key.lowercased() == candidate.key.lowercased(),
@@ -1229,6 +1282,7 @@ struct ShortcutCell: View {
         shortcut = newShortcut
         SharedConfig.shared.setShortcut(newShortcut, forActionId: actionId)
         removeMonitor()
+        onChange()
     }
 
     private func removeMonitor() {
@@ -1244,5 +1298,51 @@ struct ShortcutCell: View {
         if flags.contains(.command) { r += "⌘" }
         r += s.key.uppercased()
         return r
+    }
+}
+
+// MARK: - 服务快捷键同步
+
+enum ServiceShortcutSync {
+    /// 最近一次真正改写 pbs 的时间；访达早于它启动就说明还没读到新快捷键
+    private static let syncedAtKey = "serviceShortcutsSyncedAt"
+
+    /// 把设置里的快捷键写入系统服务快捷键，返回是否有变化
+    @discardableResult
+    static func run() -> Bool {
+        guard let bundleId = Bundle.main.bundleIdentifier,
+              ServiceShortcuts.sync(shortcuts: SharedConfig.shared.shortcuts, bundleId: bundleId) else { return false }
+        UserDefaults.standard.set(Date(), forKey: syncedAtKey)
+        return true
+    }
+
+    /// 访达是否在最近一次同步之前启动（需要重启才能用上新快捷键）
+    static var finderNeedsRelaunch: Bool {
+        guard let syncedAt = UserDefaults.standard.object(forKey: syncedAtKey) as? Date,
+              let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first,
+              let started = processStartDate(pid: finder.processIdentifier) else { return false }
+        return started < syncedAt
+    }
+
+    /// 访达由 launchd 拉起，NSRunningApplication.launchDate 为 nil，改从内核读进程启动时间
+    private static func processStartDate(pid: pid_t) -> Date? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let tv = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(tv.tv_sec) + TimeInterval(tv.tv_usec) / 1_000_000)
+    }
+}
+
+// MARK: - 重启访达
+
+enum FinderRelauncher {
+    /// killall 后由系统自动拉起访达（会关闭所有访达窗口）
+    static func relaunch() {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        proc.arguments = ["Finder"]
+        try? proc.run()
     }
 }
