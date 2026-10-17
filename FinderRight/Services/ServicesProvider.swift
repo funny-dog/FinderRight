@@ -235,7 +235,7 @@ final class ServicesProvider: NSObject {
                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.goToDirectory) else {
-            showAlert(NSLocalizedString("前往目录功能已关闭，请在设置中启用", comment: "service"))
+            showAlert(NSLocalizedString("打开路径功能已关闭，请在设置中启用", comment: "service"))
             return
         }
         DispatchQueue.main.async(execute: showDirectoryPrompt)

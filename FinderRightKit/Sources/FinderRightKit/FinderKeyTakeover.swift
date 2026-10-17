@@ -38,7 +38,7 @@ public enum FinderKeyTakeover {
 
     /// 默认快捷键与访达原生一致；用户可改成别的组合，清空即停用。
     /// 未授权「辅助功能」时这些组合照旧由访达自己响应，效果相同。
-    /// 前往目录不设默认：⇧⌘G 会把访达自带的「前往文件夹」换成 FinderRight 的输入框，改变用户已有习惯。
+    /// 打开路径不设默认：⇧⌘G 会把访达自带的「前往文件夹」换成 FinderRight 的输入框，改变用户已有习惯。
     public static let defaultShortcuts: [String: ActionShortcut] = {
         let cmd = ModifierBits.commandBit, opt = ModifierBits.optionBit, sft = ModifierBits.shiftBit
         return [

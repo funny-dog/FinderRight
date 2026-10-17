@@ -649,7 +649,7 @@ class FinderSync: FIFinderSync {
                 menu.addItem(self.makeItem(titleKey: "复制文件内容", tint: .teal, systemImage: "doc.plaintext", action: #selector(self.copyFileContent(_:)), shortcutId: "shortcut.copyFileContent", style: style))
             },
             MenuFeatureCatalog.goToDirectory: {
-                menu.addItem(self.makeItem(titleKey: "前往目录…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
+                menu.addItem(self.makeItem(titleKey: "打开路径…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
             },
             MenuFeatureCatalog.openTerminal: {
                 menu.addItem(self.makeItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))

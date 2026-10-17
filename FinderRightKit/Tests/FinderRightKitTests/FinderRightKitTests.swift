@@ -1760,7 +1760,7 @@ struct FinderRightKitTestsRunner {
             try assertTrue(SharedConfig(fileURL: url).menuOrder.isEmpty)
         }
 
-        runTest("前往目录接受绝对路径、主目录与目录符号链接") {
+        runTest("打开路径接受绝对路径、主目录与目录符号链接") {
             let home = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: home) }
             let directory = home.appendingPathComponent("中文 目录", isDirectory: true)
@@ -1769,31 +1769,85 @@ struct FinderRightKitTestsRunner {
             try FileManager.default.createDirectory(at: spaced, withIntermediateDirectories: true)
             let link = home.appendingPathComponent("目录链接")
             try FileManager.default.createSymbolicLink(at: link, withDestinationURL: directory)
-            try assertEqual(try DirectoryPath.url(for: directory.path, home: home.path).path, directory.path)
-            try assertEqual(try DirectoryPath.url(for: spaced.path, home: home.path).path, spaced.path, "不修剪真实目录名中的空格")
-            try assertEqual(try DirectoryPath.url(for: "~/中文 目录", home: home.path).path, directory.path)
-            try assertEqual(try DirectoryPath.url(for: "~", home: home.path).path, home.path)
-            try assertEqual(try DirectoryPath.url(for: link.path, home: home.path).path, link.path)
-            try assertEqual(try DirectoryPath.url(for: "/", home: home.path).path, "/", "允许前往主目录以外的目录")
+            func dir(_ input: String) throws -> String {
+                guard case .directory(let url) = try DirectoryPath.resolve(input, home: home.path) else {
+                    throw TestFailure(message: "应识别为目录：\(input)")
+                }
+                return url.path
+            }
+            try assertEqual(try dir(directory.path), directory.path)
+            try assertEqual(try dir(spaced.path), spaced.path, "不修剪真实目录名中的空格")
+            try assertEqual(try dir("~/中文 目录"), directory.path)
+            try assertEqual(try dir("~"), home.path)
+            try assertEqual(try dir(link.path), link.path)
+            try assertEqual(try dir("/"), "/", "允许前往主目录以外的目录")
         }
 
-        runTest("前往目录拒绝相对路径、空输入、普通文件和不存在的目录") {
+        runTest("打开路径把文件识别为文件，并清理复制来的引号、空白、file URL 与转义") {
+            let home = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let folder = home.appendingPathComponent("项目 A", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("报告 (终版).txt")
+            try Data().write(to: file)
+            let encoded = URL(fileURLWithPath: file.path).absoluteString
+            let inputs = [
+                file.path,
+                "  \(file.path)\n",
+                "'\(file.path)'",
+                "\"\(file.path)\"",
+                "“\(file.path)”",
+                encoded,
+                " \(encoded) ",
+                file.path.replacingOccurrences(of: " ", with: "\\ ")
+                    .replacingOccurrences(of: "(", with: "\\(").replacingOccurrences(of: ")", with: "\\)"),
+                "~/项目 A/报告 (终版).txt",
+                "\"~/项目 A/报告 (终版).txt\"",
+            ]
+            for input in inputs {
+                guard case .file(let url) = try DirectoryPath.resolve(input, home: home.path) else {
+                    throw TestFailure(message: "应识别为文件：\(input)")
+                }
+                try assertEqual(url.path, file.path, "输入：\(input)")
+            }
+            guard case .directory(let url) = try DirectoryPath.resolve("'\(folder.path)/'\n", home: home.path) else {
+                throw TestFailure(message: "带引号的目录应识别为目录")
+            }
+            try assertEqual(url.standardizedFileURL.path, folder.path)
+        }
+
+        runTest("打开路径拒绝相对路径、空输入与不存在的路径") {
+            let home = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let cases: [(String, DirectoryPath.ValidationError)] = [
+                ("", .invalidPath), ("   ", .invalidPath), ("''", .invalidPath),
+                ("Documents", .invalidPath), ("~other/Documents", .invalidPath),
+                ("https://example.com/a", .invalidPath),
+                (home.path + "\0ignored", .invalidPath),
+                (home.appendingPathComponent("missing").path, .unavailable),
+                ("'\(home.appendingPathComponent("missing").path)'", .unavailable),
+            ]
+            for (input, expected) in cases {
+                do {
+                    _ = try DirectoryPath.resolve(input, home: home.path)
+                    throw TestFailure(message: "应拒绝输入：\(input)")
+                } catch let error as DirectoryPath.ValidationError {
+                    try assertEqual(error, expected, "输入：\(input)")
+                }
+            }
+        }
+
+        runTest("常用目录只接受目录，普通文件报不是目录") {
             let home = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: home) }
             let file = home.appendingPathComponent("报告.txt")
             try Data().write(to: file)
-            let cases: [(String, DirectoryPath.ValidationError)] = [
-                ("", .invalidPath), ("Documents", .invalidPath), ("~other/Documents", .invalidPath),
-                (home.path + "\0ignored", .invalidPath), (file.path, .notDirectory),
-                (home.appendingPathComponent("missing").path, .unavailable),
-            ]
-            for (input, expected) in cases {
-                do {
-                    _ = try DirectoryPath.url(for: input, home: home.path)
-                    throw TestFailure(message: "应拒绝输入：\(input)")
-                } catch let error as DirectoryPath.ValidationError {
-                    try assertEqual(error, expected)
-                }
+            try assertEqual(try DirectoryPath.url(for: home.path, home: home.path).path, home.path)
+            do {
+                _ = try DirectoryPath.url(for: file.path, home: home.path)
+                throw TestFailure(message: "应拒绝普通文件")
+            } catch let error as DirectoryPath.ValidationError {
+                try assertEqual(error, .notDirectory)
             }
         }
 

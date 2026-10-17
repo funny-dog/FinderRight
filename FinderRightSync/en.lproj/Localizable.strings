@@ -15,7 +15,7 @@
 "无法复制：非文本文件" = "Cannot copy: not a text file";
 "文件大小超过限制" = "File size exceeds limit";
 "无法读取文件内容" = "Cannot read file content";
-"前往目录…" = "Go to Folder…";
+"打开路径…" = "Open Path…";
 "打开终端" = "Open in Terminal";
 "打开编辑器" = "Open in Editor";
 "剪切" = "Cut";

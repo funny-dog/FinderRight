@@ -4,7 +4,7 @@ import Carbon
 import FinderRightKit
 
 /// 在访达里处理设置页的所有快捷键（需「辅助功能」权限）。决策规则见 Kit 的 FinderKeyTakeover。
-/// 剪切 / 粘贴默认 ⌘X / ⌘V，可改，清空即停用；切换隐藏文件、前往目录直接执行；
+/// 剪切 / 粘贴默认 ⌘X / ⌘V，可改，清空即停用；切换隐藏文件、打开路径直接执行；
 /// 其他行点访达「服务」子菜单里的 FinderRight 项（没有选中项时按键交还访达）。
 /// 未授权时剪切 / 粘贴不可用，其他行回退为系统服务快捷键（ServiceShortcutSync 一直在同步）。
 ///
@@ -40,7 +40,7 @@ final class FinderShortcutInterceptor {
 
     /// 只在主线程创建与开关
     private var tap: CFMachPort?
-    /// 打开「前往目录」输入框（AppDelegate 提供），只在主线程调用
+    /// 打开「打开路径」输入框（AppDelegate 提供），只在主线程调用
     private var showDirectoryPrompt: (() -> Void)?
 
     private init() {}
@@ -307,7 +307,7 @@ final class FinderShortcutInterceptor {
         ServicesProvider.trace("takeover paste: success=\(response.success)")
     }
 
-    /// 不经服务的动作：切换隐藏文件、前往目录（两者都不需要选中项）
+    /// 不经服务的动作：切换隐藏文件、打开路径（两者都不需要选中项）
     private func performAction(_ actionId: String) {
         guard locked({ finderIsFrontmost }) else { return }
         switch actionId {
@@ -420,7 +420,7 @@ final class FinderShortcutInterceptor {
             NSDictionary(contentsOfFile: (lproj as NSString).appendingPathComponent("ServicesMenu.strings")) as? [String: String]
         }
         var result: [String: Set<String>] = [:]
-        // 前往目录只是打开输入框，不需要选中项，直接调用，不走服务
+        // 打开路径只是打开输入框，不需要选中项，直接调用，不走服务
         for binding in ServiceShortcuts.bindings
         where !FinderKeyTakeover.handlesAction(binding.actionId) && binding.actionId != FinderKeyTakeover.goToDirectoryActionId {
             result[binding.actionId] = FinderKeyTakeover.serviceMenuTitles(menuTitle: binding.menuTitle, translations: translations)

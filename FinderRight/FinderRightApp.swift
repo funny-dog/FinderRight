@@ -539,14 +539,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let alert = NSAlert()
-        alert.messageText = L("前往目录…")
-        alert.informativeText = failure ?? L("输入绝对路径或以 ~/ 开头的路径")
+        alert.messageText = L("打开路径…")
+        alert.informativeText = failure ?? L("输入或粘贴文件、文件夹的路径（绝对路径或以 ~/ 开头）")
+        // 回车默认「在访达中显示」：文件会在所在文件夹中选中，文件夹直接打开
+        alert.addButton(withTitle: L("在访达中显示"))
         alert.addButton(withTitle: L("打开"))
-        alert.addButton(withTitle: L("取消"))
+        alert.addButton(withTitle: L("取消")).keyEquivalent = "\u{1b}"
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
         input.stringValue = initialPath
-        input.placeholderString = "/Users/… / ~/Documents"
-        input.setAccessibilityLabel(L("目录路径"))
+        input.placeholderString = "/Users/… / ~/Documents/…"
+        input.setAccessibilityLabel(L("文件或文件夹路径"))
         input.cell?.isScrollable = true
         input.cell?.wraps = false
         input.cell?.usesSingleLineMode = true
@@ -555,18 +557,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         directoryAlert = alert
         defer { directoryAlert = nil }
 
-        while alert.runModal() == .alertFirstButtonReturn {
+        while true {
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
             do {
-                let directory = try DirectoryPath.url(for: input.stringValue, home: IPCBridge.realUserHomeDirectory.path)
-                guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
-                    alert.informativeText = L("无法打开目录，请检查访问权限")
-                    continue
-                }
+                let target = try DirectoryPath.resolve(input.stringValue, home: IPCBridge.realUserHomeDirectory.path)
                 let enteredPath = input.stringValue
-                NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+                let reopenOnFailure: (Error?) -> Void = { [weak self] error in
                     guard let error else { return }
                     DispatchQueue.main.async {
                         self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
+                    }
+                }
+                switch target {
+                case .file(let file) where response == .alertFirstButtonReturn:
+                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                case .file(let file):
+                    // 与在访达中双击相同：交给该文件的默认 App
+                    NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                        reopenOnFailure(error)
+                    }
+                case .directory(let directory):
+                    guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
+                        alert.informativeText = L("无法打开目录，请检查访问权限")
+                        continue
+                    }
+                    NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                        reopenOnFailure(error)
                     }
                 }
                 return
