@@ -84,12 +84,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
         // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
-        // 先把设置里的快捷键同步成系统服务快捷键（覆盖升级前的旧状态），register 内会刷新服务缓存
+        // 先补上默认快捷键（每行只补一次、只填空位，不覆盖用户设置），
+        // 再把设置里的快捷键同步成系统服务快捷键（覆盖升级前的旧状态），register 内会刷新服务缓存
+        FinderShortcutInterceptor.applyDefaultShortcutsIfNeeded()
         ServiceShortcutSync.run()
         ServicesProvider.register { [weak self] in self?.openGoToDirectory() }
-        // 剪切 / 粘贴快捷键（默认 ⌘X / ⌘V）由按键拦截处理，访达在前台时生效
-        FinderCutPasteInterceptor.applyDefaultShortcutsIfNeeded()
-        FinderCutPasteInterceptor.shared.start()
+        // 授权「辅助功能」后快捷键由按键拦截处理，访达在前台时生效
+        FinderShortcutInterceptor.shared.start { [weak self] in self?.openGoToDirectory() }
 
         // 自动注册并启用自身包含的 FinderSync 扩展
         registerFinderSyncPlugin()

@@ -745,7 +745,7 @@ final class FinderRightService {
             // 经服务快捷键剪切时扩展不知情，靠通知让它打上角标
             CutQueueChangeNotifier.post()
             // 剪切 / 粘贴快捷键生效时把整个队列放进剪贴板，右键剪切后按粘贴键也能交给访达移动
-            FinderCutPasteInterceptor.shared.mirrorCutQueue(queue)
+            FinderShortcutInterceptor.shared.mirrorCutQueue(queue)
 
             return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
         }
