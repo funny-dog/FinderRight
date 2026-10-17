@@ -201,11 +201,12 @@ final class FinderShortcutInterceptor {
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
-        let (chords, copy) = locked { (chords, copyChord) }
+        // 局部变量别与属性同名：旧版编译器（CI 的 Xcode 16）会把闭包里的 chords 当成正在声明的局部变量
+        let (currentChords, copy) = locked { (self.chords, self.copyChord) }
         let command = FinderKeyTakeover.command(
             keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
             modifierFlags: event.flags.rawValue,
-            chords: chords, copy: copy)
+            chords: currentChords, copy: copy)
         guard let command else { return Unmanaged.passUnretained(event) }
 
         let (pid, app, finderFront) = locked { (finderPid, finderApp, finderIsFrontmost) }
