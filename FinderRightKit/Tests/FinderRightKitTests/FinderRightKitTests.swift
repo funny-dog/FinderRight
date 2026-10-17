@@ -2141,11 +2141,15 @@ struct FinderRightKitTestsRunner {
                 cutKey: ["enabled_context_menu": false, "key_equivalent": "@~x"],
                 pasteKey: ["key_equivalent": "@~v"],
             ]
+            let copyPath = ServiceShortcuts.bindings.first { $0.actionId == "shortcut.copyPath" }!
+            let copyPathKey = ServiceShortcuts.statusEntryKey(bundleId: bid, binding: copyPath)
             let merged = ServiceShortcuts.mergedStatus(existing, bundleId: bid, shortcuts: [
+                "shortcut.copyPath": ActionShortcut(key: "c", modifiers: cmdBit | ctlBit),
                 "shortcut.cut": ActionShortcut(key: "x", modifiers: cmdBit | ctlBit),
             ])
+            try assertEqual((merged[copyPathKey] as? [String: Any])?["key_equivalent"] as? String, "@^c")
             let cutEntry = merged[cutKey] as? [String: Any]
-            try assertEqual(cutEntry?["key_equivalent"] as? String, "@^x")
+            try assertNil(cutEntry?["key_equivalent"], "剪切由按键拦截处理，不写服务快捷键")
             try assertEqual(cutEntry?["enabled_context_menu"] as? Bool, false, "保留用户的启用状态")
             try assertNil(merged[pasteKey], "清除快捷键后空条目应删除")
             try assertEqual((merged["other.app - Other - doIt"] as? [String: String])?["key_equivalent"], "@~o", "不碰其他 App")
@@ -2226,18 +2230,58 @@ struct FinderRightKitTestsRunner {
                             providerHasKeyWindow: false, previousFrontmostBundleId: "com.example.evil"), "com.example.evil", "激活前是其他 App 仍会被拒")
         }
 
-        runTest("FinderCutPasteTakeover 只认纯 ⌘X/⌘C/⌘V，按字符而非键码") {
+        runTest("FinderCutPasteTakeover 按键码与修饰键识别，修饰键须完全一致") {
             let cmd: UInt64 = 1 << 20, shift: UInt64 = 1 << 17, opt: UInt64 = 1 << 19, ctl: UInt64 = 1 << 18
             let capsLock: UInt64 = 1 << 16, numericPad: UInt64 = 1 << 21
-            try assertEqual(FinderCutPasteTakeover.command(characters: "x", modifierFlags: cmd), .cut)
-            try assertEqual(FinderCutPasteTakeover.command(characters: "C", modifierFlags: cmd), .copy, "大写字符同样识别")
-            try assertEqual(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | capsLock | numericPad), .paste, "无关标志位不影响")
-            try assertNil(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | opt), "⌥⌘V 是访达自己的移动")
-            try assertNil(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | shift))
-            try assertNil(FinderCutPasteTakeover.command(characters: "x", modifierFlags: cmd | ctl))
-            try assertNil(FinderCutPasteTakeover.command(characters: "x", modifierFlags: ctl), "不含 ⌘")
-            try assertNil(FinderCutPasteTakeover.command(characters: "a", modifierFlags: cmd))
-            try assertNil(FinderCutPasteTakeover.command(characters: nil, modifierFlags: cmd))
+            typealias T = FinderCutPasteTakeover
+            // ANSI 布局：X=7 C=8 V=9
+            let cmdX = T.KeyChord(keyCode: 7, modifiers: 1 << 20), cmdV = T.KeyChord(keyCode: 9, modifiers: 1 << 20)
+            let cmdC = T.KeyChord(keyCode: 8, modifiers: 1 << 20)
+            try assertEqual(T.command(keyCode: 7, modifierFlags: cmd, cut: cmdX, paste: cmdV, copy: cmdC), .cut)
+            try assertEqual(T.command(keyCode: 9, modifierFlags: cmd | capsLock | numericPad, cut: cmdX, paste: cmdV, copy: cmdC), .paste, "无关标志位不影响")
+            try assertEqual(T.command(keyCode: 8, modifierFlags: cmd, cut: cmdX, paste: cmdV, copy: cmdC), .copy)
+            try assertNil(T.command(keyCode: 9, modifierFlags: cmd | opt, cut: cmdX, paste: cmdV, copy: cmdC), "⌥⌘V 是访达自己的移动")
+            try assertNil(T.command(keyCode: 9, modifierFlags: cmd | shift, cut: cmdX, paste: cmdV, copy: cmdC))
+            try assertNil(T.command(keyCode: 0, modifierFlags: cmd, cut: cmdX, paste: cmdV, copy: cmdC))
+
+            let ctlV = T.KeyChord(keyCode: 9, modifiers: 1 << 18)
+            try assertEqual(T.command(keyCode: 9, modifierFlags: ctl, cut: cmdX, paste: ctlV, copy: cmdC), .paste, "改成 ⌃V")
+            try assertNil(T.command(keyCode: 9, modifierFlags: cmd, cut: cmdX, paste: ctlV, copy: cmdC), "改键后 ⌘V 交还访达")
+            try assertNil(T.command(keyCode: 7, modifierFlags: cmd, cut: nil, paste: cmdV, copy: cmdC), "清空即停用")
+            try assertEqual(T.KeyChord(keyCode: 7, modifiers: (1 << 20) | (1 << 16)), cmdX, "构造时去掉无关位")
+
+            try assertEqual(T.functionKeyCode(for: "\u{F708}"), 96, "F5")
+            try assertEqual(T.functionKeyCode(for: "\u{F700}"), 126, "↑")
+            try assertNil(T.functionKeyCode(for: "v"))
+        }
+
+        runTest("FinderCutPasteTakeover 升级统一为 ⌘X / ⌘V，录制只拦系统全局快捷键") {
+            typealias T = FinderCutPasteTakeover
+            let cmd = 1 << 20, ctl = 1 << 18, shift = 1 << 17
+            let cmdX = ActionShortcut(key: "x", modifiers: cmd), cmdV = ActionShortcut(key: "v", modifiers: cmd)
+            try assertEqual(T.migratedShortcuts([:]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV])
+            let copyPath = ActionShortcut(key: "c", modifiers: cmd | ctl)
+            try assertEqual(T.migratedShortcuts([
+                "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
+                "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
+                "shortcut.copyPath": copyPath,
+            ]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": copyPath], "旧的替代键改为 ⌘X / ⌘V，其他动作保留")
+            try assertEqual(T.migratedShortcuts([
+                "shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd | (1 << 16)),
+            ]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV], "其他动作占着 ⌘V（从未生效）则清掉")
+            try assertTrue(T.handlesAction("shortcut.cut") && T.handlesAction("shortcut.paste"))
+            try assertTrue(!T.handlesAction("shortcut.copyPath"))
+            try assertTrue(!ServiceShortcuts.syncsShortcut(actionId: "shortcut.cut"))
+            try assertTrue(ServiceShortcuts.syncsShortcut(actionId: "shortcut.copyPath"))
+
+            let ctlV = ActionShortcut(key: "v", modifiers: ctl)
+            let bindings = FinderReservedShortcuts.parseBindings(["^v": "pageDown:"])
+            try assertNil(T.recordingConflict(for: ctlV, actionId: "shortcut.paste", textBindings: bindings), "粘贴行可用 ⌃V")
+            try assertNil(T.recordingConflict(for: cmdV, actionId: "shortcut.paste", textBindings: bindings), "粘贴行可用 ⌘V")
+            try assertEqual(T.recordingConflict(for: ctlV, actionId: "shortcut.copyPath", textBindings: bindings)?.kind, .textEditing, "其他行仍走服务，照样拦")
+            try assertEqual(T.recordingConflict(for: cmdV, actionId: "shortcut.copyPath", textBindings: bindings)?.kind, .finderMenu)
+            let screenshot = ActionShortcut(key: "3", modifiers: cmd | shift)
+            try assertEqual(T.recordingConflict(for: screenshot, actionId: "shortcut.cut", textBindings: bindings)?.kind, .system, "系统全局快捷键轮不到拦截")
         }
 
         runTest("FinderCutPasteTakeover 焦点在文字输入里一律放行") {
@@ -2256,19 +2300,6 @@ struct FinderRightKitTestsRunner {
             try assertEqual(T.decide(.paste, focusIsText: false, pasteboardIsCutMirror: false), .passThrough, "剪贴板已换成别的内容：普通粘贴")
             try assertEqual(T.decide(.copy, focusIsText: false, pasteboardIsCutMirror: true), .copyThenCancelCut)
             try assertEqual(T.decide(nil, focusIsText: false, pasteboardIsCutMirror: true), .passThrough)
-        }
-
-        runTest("FinderCutPasteTakeover 只有剪切行的 ⌘X、粘贴行的 ⌘V 引导到接管开关") {
-            let cmd = 1 << 20, shift = 1 << 17, opt = 1 << 19
-            typealias T = FinderCutPasteTakeover
-            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd), forActionId: "shortcut.cut"))
-            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "V", modifiers: cmd), forActionId: "shortcut.paste"), "大写字符")
-            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd | (1 << 16)), forActionId: "shortcut.paste"), "无关标志位")
-            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd), forActionId: "shortcut.cut"), "剪切行录 ⌘V 仍算冲突")
-            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd), forActionId: "shortcut.copyPath"))
-            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd | opt), forActionId: "shortcut.paste"), "⌥⌘V 是访达移动")
-            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd | shift), forActionId: "shortcut.cut"))
-            try assertNil(T.takeoverShortcut(forActionId: "shortcut.newFile"))
         }
 
         runTest("CutPasteboardMirror 按 changeCount 判断剪贴板是否仍是剪切内容") {

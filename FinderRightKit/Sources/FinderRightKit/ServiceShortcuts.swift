@@ -15,8 +15,8 @@ import CoreFoundation
 /// 写入后新启动的 App 立即读到；已运行的 App（访达）须重启才会重新读取。
 ///
 /// ## 优先级
-/// 访达自身菜单栏的快捷键优先于服务快捷键，⌘X / ⌘V 这类被访达占用的组合永远轮不到服务，
-/// 因此录制时用 `FinderReservedShortcuts` 拦截。
+/// 访达自身菜单栏的快捷键优先于服务快捷键，被访达占用的组合永远轮不到服务，
+/// 因此录制时用 `FinderReservedShortcuts` 拦截。剪切 / 粘贴不在此列，见 `syncsShortcut`。
 public enum ServiceShortcuts {
 
     /// 设置页 action ID 与 Info.plist 中某个 NSServices 条目的对应关系
@@ -54,6 +54,12 @@ public enum ServiceShortcuts {
         bindings.contains { $0.actionId == actionId }
     }
 
+    /// 该动作的快捷键是否同步为服务快捷键。剪切 / 粘贴改由按键拦截处理（FinderCutPasteTakeover），
+    /// 不再写入服务快捷键：否则同一组合两边都响应，且改键后还要重启访达。
+    public static func syncsShortcut(actionId: String) -> Bool {
+        hasService(actionId: actionId) && !FinderCutPasteTakeover.handlesAction(actionId)
+    }
+
     /// pbs.plist 中 NSServicesStatus 的条目键
     public static func statusEntryKey(bundleId: String, binding: Binding) -> String {
         "\(bundleId) - \(binding.menuTitle) - \(binding.message)"
@@ -80,7 +86,8 @@ public enum ServiceShortcuts {
         for binding in bindings {
             let key = statusEntryKey(bundleId: bundleId, binding: binding)
             var entry = (result[key] as? [String: Any]) ?? [:]
-            if let shortcut = shortcuts[binding.actionId],
+            if syncsShortcut(actionId: binding.actionId),
+               let shortcut = shortcuts[binding.actionId],
                FinderReservedShortcuts.conflict(for: shortcut) == nil {
                 entry[keyEquivalentKey] = keyEquivalent(for: shortcut)
             } else {

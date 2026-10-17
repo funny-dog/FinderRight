@@ -142,18 +142,10 @@
 "解压到当前目录" = "Extract Here";
 "切换隐藏文件" = "Toggle Hidden Files";
 "访达快捷键" = "Finder Shortcuts";
-"在访达中用 ⌘X / ⌘V 剪切和粘贴" = "Cut and paste with ⌘X / ⌘V in Finder";
-"%@ 已启用（上方开关）" = "%@ is on (switch above)";
-"需打开上方「⌘X / ⌘V」开关才会生效" = "Turn on the \"⌘X / ⌘V\" switch above for this to work";
-"使用 ⌘X / ⌘V" = "Use ⌘X / ⌘V";
-"⌘X / ⌘V 不能绑定为服务快捷键，访达会先处理。打开上方的「在访达中用 ⌘X / ⌘V 剪切和粘贴」后，⌘X 剪切、⌘V 粘贴会一起生效。" = "⌘X / ⌘V can't be bound as Services shortcuts because Finder handles them first. Turn on \"Cut and paste with ⌘X / ⌘V in Finder\" above, and ⌘X cut and ⌘V paste will both work.";
-"打开开关" = "Turn On";
-"⌘X / ⌘V 已经可以用了" = "⌘X / ⌘V already work";
-"上方开关已打开，在访达中直接按 ⌘X 剪切、⌘V 粘贴即可，无需再绑定。" = "The switch above is on. Press ⌘X to cut and ⌘V to paste in Finder; no binding needed.";
-"⌘X 剪切选中的文件，⌘V 粘贴到当前窗口所在的文件夹，空白处也可以。文件由访达自己移动，可以撤销。重命名或输入文字时不受影响。" = "⌘X cuts the selected files and ⌘V pastes them into the folder of the current window, even with nothing selected. Finder moves the files itself, so the move can be undone. Renaming or typing text is not affected.";
-"需要「辅助功能」权限才能生效" = "Requires Accessibility permission";
-"剪切时会把文件放进剪贴板，右键菜单剪切也一样。剪切后在访达里拷贝了别的内容，剪切会取消。" = "Cutting puts the files on the clipboard, including cuts from the context menu. Copying something else in Finder after cutting cancels the cut.";
-"需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键（如 ⌘X、⌘V）或系统文本编辑按键（如 ⌃V 翻页）相同，否则访达会先拿去处理。建议用 ⌃⌘ 组合，如 ⌃⌘X / ⌃⌘V。点击按钮后按键录制，Delete 清除，ESC 取消。\n这里的「粘贴」需有选中项：选中一个文件夹则粘贴进该文件夹，选中文件则粘贴到当前文件夹；空白处没有选中项时系统不会派发快捷键，请用右键菜单，或打开上方的 ⌘X / ⌘V。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。\n快捷键会同步到「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页设置为准。" = "Must include ⌘, ⌥, or ⌃, and must not match a built-in Finder shortcut (such as ⌘X or ⌘V) or a system text-editing key (such as ⌃V for page down), which Finder handles first. ⌃⌘ combinations such as ⌃⌘X / ⌃⌘V work well. Click to record, Delete to clear, ESC to cancel.\n\"Paste\" here needs a selection: it goes into the selected folder, or into the current folder when files are selected. With nothing selected the system does not send the shortcut, so use the context menu, or turn on ⌘X / ⌘V above. \"Toggle Hidden Files\" has no system service and only works while the context menu is open.\nShortcuts are synced to System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders; this page is the source of truth.";
+"剪切、粘贴快捷键需要「辅助功能」权限" = "Cut and paste shortcuts need Accessibility permission";
+"授权后在访达中直接按键剪切、粘贴，空白处也能粘贴。" = "Once granted, press the shortcuts in Finder to cut and paste, even with nothing selected.";
+"粘贴到当前窗口所在的文件夹，空白处也可以" = "Pastes into the folder of the current window, even with nothing selected";
+"点击按钮后按键录制，Delete 清除，ESC 取消。\n「剪切」「粘贴」默认是 ⌘X / ⌘V，可改成任意组合（如 ⌃X / ⌃V），清除即停用；由 FinderRight 抢在访达之前处理，需要「辅助功能」权限。粘贴会把文件移到当前窗口所在的文件夹，空白处也可以，由访达自己移动、可以撤销；重命名或输入文字时不受影响。剪切时会把文件放进剪贴板，之后在访达里拷贝了别的内容，剪切会取消。\n其他快捷键同步为系统服务快捷键（「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页为准），要在访达中选中文件后按，改完需重启访达。它们需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键或系统文本编辑按键（如 ⌃V 翻页）相同，建议用 ⌃⌘ 组合。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。" = "Click to record, Delete to clear, ESC to cancel.\n\"Cut\" and \"Paste\" default to ⌘X / ⌘V and can be changed to any combination (such as ⌃X / ⌃V); clear them to turn them off. FinderRight handles them before Finder does, which requires Accessibility permission. Paste moves the files into the folder of the current window, even with nothing selected; Finder does the move, so it can be undone. Renaming or typing text is not affected. Cutting puts the files on the clipboard; copying something else in Finder afterwards cancels the cut.\nOther shortcuts are synced as system Services shortcuts (System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders; this page is the source of truth). They work on the selection in Finder, and Finder must be restarted after changing them. They must include ⌘, ⌥, or ⌃, and must not match a built-in Finder shortcut or a system text-editing key (such as ⌃V for page down); ⌃⌘ combinations work well. \"Toggle Hidden Files\" has no system service and only works while the context menu is open.";
 "重启访达后新快捷键生效" = "Relaunch Finder to Use New Shortcuts";
 "访达只在启动时读取服务快捷键。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "Finder reads service shortcuts only at launch. Relaunching closes all Finder windows and may interrupt copies or moves in progress.";
 "仅在右键菜单展开时生效" = "Only works while the context menu is open";
@@ -305,7 +297,7 @@
 /* Accessibility */
 "辅助功能" = "Accessibility";
 "未授权 — 「切换隐藏文件」需重启访达，会关闭所有访达窗口" = "Not granted — \"Toggle Hidden Files\" must restart Finder, closing all Finder windows";
-"FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件；在访达中用 ⌘X / ⌘V 剪切和粘贴也需要它。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut, toggling hidden files without restarting Finder. Using ⌘X / ⌘V to cut and paste in Finder needs it too. Without it, Finder has to restart, which closes all Finder windows and may interrupt copies or moves in progress.";
+"FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件；剪切、粘贴快捷键也需要它。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut, toggling hidden files without restarting Finder. Cut and paste shortcuts need it too. Without it, Finder has to restart, which closes all Finder windows and may interrupt copies or moves in progress.";
 "打开辅助功能设置…" = "Open Accessibility Settings…";
 "提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。" = "Note: If authorization fails after an update, remove the old entry with \"-\" in System Settings and re-add it with \"+\".";
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";

@@ -1,14 +1,51 @@
 import Foundation
 
-/// 在访达中接管 ⌘X / ⌘V 的纯决策逻辑（按键拦截与菜单驱动在主 App 的 FinderCutPasteInterceptor）。
+/// 设置页「剪切」「粘贴」快捷键的纯决策逻辑（按键拦截与菜单驱动在主 App 的 FinderCutPasteInterceptor）。
 ///
-/// 做法：⌘X 用辅助功能点访达「拷贝」拿到选中文件，记入剪切队列；⌘V 点访达「将项目移到这里」，
+/// 这两行不走系统服务快捷键，而是由按键拦截处理：拦截排在访达之前，⌘X / ⌘V、⌃V 等任意组合都能用。
+/// 剪切键用辅助功能点访达「拷贝」拿到选中文件，记入剪切队列；粘贴键点访达「将项目移到这里」，
 /// 由访达自己移动（空白处可用、支持撤销与冲突处理），目标是当前窗口所在目录。
-/// 剪切队列有内容时，剪贴板镜像为整个队列，右键剪切后按 ⌘V 也能移动。
+/// 剪切队列有内容时，剪贴板镜像为整个队列，右键剪切后按粘贴键也能移动。
 public enum FinderCutPasteTakeover {
 
-    /// UserDefaults 开关，默认关闭
-    public static let enabledKey = "finderCutPasteTakeover"
+    public static let cutActionId = "shortcut.cut"
+    public static let pasteActionId = "shortcut.paste"
+
+    /// 默认与系统一致：⌘X / ⌘V；用户可改成别的组合，清空即停用
+    public static let defaultShortcuts: [String: ActionShortcut] = [
+        cutActionId: ActionShortcut(key: "x", modifiers: ModifierBits.commandBit),
+        pasteActionId: ActionShortcut(key: "v", modifiers: ModifierBits.commandBit),
+    ]
+
+    /// 该动作的快捷键由按键拦截处理（不同步为系统服务快捷键）
+    public static func handlesAction(_ actionId: String) -> Bool {
+        actionId == cutActionId || actionId == pasteActionId
+    }
+
+    /// 首次运行本版本时的快捷键迁移：剪切 / 粘贴统一改为与系统一致的 ⌘X / ⌘V。
+    /// 旧版本走服务快捷键，录不了 ⌘X / ⌘V，用户录的组合只是替代键，不再保留；
+    /// 其他动作若占着 ⌘X / ⌘V（旧版本允许录入，但作为服务快捷键从未生效）一并清掉，避免两行显示同一组合。
+    public static func migratedShortcuts(_ current: [String: ActionShortcut]) -> [String: ActionShortcut] {
+        func same(_ a: ActionShortcut, _ b: ActionShortcut) -> Bool {
+            a.key.lowercased() == b.key.lowercased()
+                && ModifierBits.normalized(a.modifiers) == ModifierBits.normalized(b.modifiers)
+        }
+        var result = current.filter { entry in
+            !defaultShortcuts.values.contains { same($0, entry.value) }
+        }
+        for (actionId, shortcut) in defaultShortcuts { result[actionId] = shortcut }
+        return result
+    }
+
+    /// 录制时要拦下的冲突。剪切 / 粘贴由拦截抢在访达之前处理，只有系统全局快捷键（截屏、切换 App 等）
+    /// 轮不到我们；其他动作走系统服务，访达菜单与文本编辑按键也都会先被访达拿走。
+    public static func recordingConflict(for shortcut: ActionShortcut, actionId: String,
+                                         textBindings: [FinderReservedShortcuts.BindingKey: String]? = nil) -> FinderReservedShortcuts.Reserved? {
+        let conflict = textBindings.map { FinderReservedShortcuts.conflict(for: shortcut, textBindings: $0) }
+            ?? FinderReservedShortcuts.conflict(for: shortcut)
+        guard let conflict else { return nil }
+        return handlesAction(actionId) && !conflict.isSystem ? nil : conflict
+    }
 
     public enum Command: Equatable {
         case cut, copy, paste
@@ -25,32 +62,44 @@ public enum FinderCutPasteTakeover {
         case paste
     }
 
-    /// 设置页「剪切」「粘贴」两行对应的接管按键。系统服务绑不了这两个键，录到时引导用户改用开关。
-    public static func takeoverShortcut(forActionId actionId: String) -> ActionShortcut? {
-        switch actionId {
-        case "shortcut.cut": return ActionShortcut(key: "x", modifiers: ModifierBits.commandBit)
-        case "shortcut.paste": return ActionShortcut(key: "v", modifiers: ModifierBits.commandBit)
-        default: return nil
+    /// 按键在当前键盘布局下的物理键码 + 修饰键。
+    ///
+    /// 拦截回调跑在独立线程，不能在那里把按键翻译成字符：NSEvent.charactersIgnoringModifiers
+    /// 遇到 ⌃ 组合会调用输入法接口，而它们只许在主线程调用（实测直接断言崩溃）。
+    /// 所以先在主线程把录制的字符换算成键码，回调里只比较键码和修饰键。
+    public struct KeyChord: Equatable {
+        public let keyCode: Int
+        public let modifiers: Int
+
+        public init(keyCode: Int, modifiers: Int) {
+            self.keyCode = keyCode
+            self.modifiers = ModifierBits.normalized(modifiers)
         }
     }
 
-    public static func isTakeoverShortcut(_ shortcut: ActionShortcut, forActionId actionId: String) -> Bool {
-        guard let expected = takeoverShortcut(forActionId: actionId) else { return false }
-        return shortcut.key.lowercased() == expected.key && ModifierBits.normalized(shortcut.modifiers) == expected.modifiers
+    /// 访达原生 ⌘C 的字符，用来在剪切后取消剪切
+    public static let copyShortcut = ActionShortcut(key: "c", modifiers: ModifierBits.commandBit)
+
+    /// 按换算好的剪切 / 粘贴 / 拷贝键识别按键。修饰键必须完全一致（⌥⌘V 是访达自己的移动，不能当成 ⌘V）。
+    public static func command(keyCode: Int, modifierFlags: UInt64,
+                               cut: KeyChord?, paste: KeyChord?, copy: KeyChord?) -> Command? {
+        let pressed = KeyChord(keyCode: keyCode, modifiers: Int(truncatingIfNeeded: modifierFlags))
+        if pressed == cut { return .cut }
+        if pressed == paste { return .paste }
+        if pressed == copy { return .copy }
+        return nil
     }
 
-    /// 只认纯 ⌘ 加 X / C / V。带 ⇧⌥⌃ 的组合（如 ⌥⌘V、⌥⌘C）是访达自己的功能，不碰。
-    /// `characters` 取 charactersIgnoringModifiers，按当前键盘布局的字符判断，不按物理键码。
-    public static func command(characters: String?, modifierFlags: UInt64) -> Command? {
-        let flags = Int(truncatingIfNeeded: modifierFlags)
-        let mask = ModifierBits.commandBit | ModifierBits.shiftBit | ModifierBits.optionBit | ModifierBits.controlBit
-        guard flags & mask == ModifierBits.commandBit else { return nil }
-        switch characters?.lowercased() {
-        case "x": return .cut
-        case "c": return .copy
-        case "v": return .paste
-        default: return nil
-        }
+    /// 功能键与方向键：录制时得到的是 NSEvent 私有区字符，键盘布局换算不出来，按固定键码处理
+    public static func functionKeyCode(for character: String) -> Int? {
+        guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1 else { return nil }
+        let table: [UInt32: Int] = [
+            0xF700: 126, 0xF701: 125, 0xF702: 123, 0xF703: 124,             // ↑ ↓ ← →
+            0xF704: 122, 0xF705: 120, 0xF706: 99, 0xF707: 118,               // F1–F4
+            0xF708: 96, 0xF709: 97, 0xF70A: 98, 0xF70B: 100,                 // F5–F8
+            0xF70C: 101, 0xF70D: 109, 0xF70E: 103, 0xF70F: 111,              // F9–F12
+        ]
+        return table[scalar.value]
     }
 
     /// 焦点在文字输入里（重命名、搜索框、路径输入框）时，⌘X / ⌘V 是剪切粘贴文字，必须放行。
