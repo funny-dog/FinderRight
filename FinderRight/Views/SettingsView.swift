@@ -1087,9 +1087,13 @@ struct ShortcutsTab: View {
     @FRState private var conflictMessage: String?
     /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
+    @AppStorage(FinderCutPasteTakeover.enabledKey) private var cutPasteTakeover = false
+    @FRState private var hasAccessibility = AccessibilityChecker.check()
 
     var body: some View {
         FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
+            cutPasteTakeoverSection
+
             FRSection("访达快捷键") {
                 if needsFinderRestart {
                     FRCard {
@@ -1118,10 +1122,17 @@ struct ShortcutsTab: View {
                     }
                 }
 
-                FRFootnote(Text("需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键（如 ⌘X、⌘V）或系统文本编辑按键（如 ⌃V 翻页）相同，否则访达会先拿去处理。建议用 ⌃⌘ 组合，如 ⌃⌘X / ⌃⌘V。点击按钮后按键录制，Delete 清除，ESC 取消。\n「粘贴」需有选中项：选中一个文件夹则粘贴进该文件夹，选中文件则粘贴到当前文件夹；空白处没有选中项时系统不会派发快捷键，请用右键菜单粘贴。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。\n快捷键会同步到「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页设置为准。"))
+                FRFootnote(Text("需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键（如 ⌘X、⌘V）或系统文本编辑按键（如 ⌃V 翻页）相同，否则访达会先拿去处理。建议用 ⌃⌘ 组合，如 ⌃⌘X / ⌃⌘V。点击按钮后按键录制，Delete 清除，ESC 取消。\n这里的「粘贴」需有选中项：选中一个文件夹则粘贴进该文件夹，选中文件则粘贴到当前文件夹；空白处没有选中项时系统不会派发快捷键，请用右键菜单，或打开上方的 ⌘X / ⌘V。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。\n快捷键会同步到「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页设置为准。"))
             }
         }
-        .onAppear { needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch }
+        .onAppear {
+            needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
+            hasAccessibility = AccessibilityChecker.check()
+        }
+        // 从系统设置授权后切回本 App 时刷新提示
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasAccessibility = AccessibilityChecker.check()
+        }
         .alert(isPresented: Binding(
             get: { conflictMessage != nil },
             set: { if !$0 { conflictMessage = nil } }
@@ -1132,6 +1143,47 @@ struct ShortcutsTab: View {
                 dismissButton: .default(Text("好"))
             )
         }
+    }
+
+    /// ⌘X / ⌘V 接管开关：系统服务拿不到这两个键，只能靠辅助功能拦截按键
+    private var cutPasteTakeoverSection: some View {
+        FRSection("⌘X / ⌘V") {
+            FRCard {
+                FRRow(title: Text("在访达中用 ⌘X / ⌘V 剪切和粘贴"),
+                      subtitle: Text("⌘X 剪切选中的文件，⌘V 粘贴到当前窗口所在的文件夹，空白处也可以。文件由访达自己移动，可以撤销。重命名或输入文字时不受影响。")) {
+                    FRSwitch(label: "在访达中用 ⌘X / ⌘V 剪切和粘贴", isOn: Binding(
+                        get: { cutPasteTakeover },
+                        set: { on in
+                            cutPasteTakeover = on
+                            if on && !AccessibilityChecker.check() { requestAccessibility() }
+                        }
+                    ))
+                }
+
+                if cutPasteTakeover && !hasAccessibility {
+                    FRDivider()
+                    HStack(spacing: 12) {
+                        Text("需要「辅助功能」权限才能生效")
+                            .font(.system(size: 12))
+                            .foregroundColor(FRTheme.warnText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("授权辅助功能…") { requestAccessibility() }
+                            .buttonStyle(.frSecondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+            }
+
+            FRFootnote(Text("剪切时会把文件放进剪贴板，右键菜单剪切也一样。剪切后在访达里拷贝了别的内容，剪切会取消。"))
+        }
+    }
+
+    /// 系统弹窗会把 FinderRight 加进辅助功能列表；再打开设置页，用户只需打开开关
+    private func requestAccessibility() {
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
     /// 把全部快捷键同步为系统服务快捷键；有变化且该动作有对应服务时提示重启访达
