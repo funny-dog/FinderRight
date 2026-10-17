@@ -38,11 +38,11 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - 📂 **前往目录** —— 输入绝对路径或 `~/` 路径，在 Finder 中打开指定目录
 - 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）
 - ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加
-- ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动；可在设置中打开「⌘X / ⌘V」，在访达里直接用 ⌘X 剪切、⌘V 粘贴到当前文件夹（空白处也可以，需「辅助功能」权限）
+- ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动；在访达里直接用 ⌘X 剪切、⌘V 粘贴到当前文件夹（空白处也可以，快捷键可在设置中修改，需「辅助功能」权限）
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
 - 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**无需重启 Finder，不会关闭窗口或中断拷贝**（需辅助功能权限）
-- ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键（自动同步为系统服务快捷键，在访达里选中文件后直接按键即可，无需展开右键菜单），并可在设置中拖动调整它们在右键菜单中的顺序
+- ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键（剪切 / 粘贴由 FinderRight 直接处理，其余自动同步为系统服务快捷键，在访达里选中文件后直接按键即可，无需展开右键菜单），并可在设置中拖动调整它们在右键菜单中的顺序
 - 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
 - 🔐 **升级免重新授权** —— 自 1.3.0 起使用固定证书签名，之后的版本升级会自动保留「完全磁盘访问」与「辅助功能」授权；自动更新还会校验新版本与当前版本出自同一证书，拒绝被篡改或冒充的更新包
 
@@ -173,11 +173,11 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder
 - 💻 **Open in Terminal** — open the current folder in your default terminal, or choose Ghostty / Terminal / iTerm2 / Warp, etc.
 - ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings
-- ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste; turn on "⌘X / ⌘V" in Settings to cut with ⌘X and paste into the current folder with ⌘V right in Finder (works with nothing selected; requires Accessibility permission)
+- ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste; cut with ⌘X and paste into the current folder with ⌘V right in Finder (works with nothing selected; the keys can be changed in Settings; requires Accessibility permission)
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
 - 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder, so windows stay open and copies keep running** (needs Accessibility)
-- ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item (synced as a system Services shortcut, so it works on the selection in Finder without opening the context menu), and drag to reorder them in Settings
+- ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item (Cut / Paste are handled by FinderRight directly; the rest are synced as system Services shortcuts, so they work on the selection in Finder without opening the context menu), and drag to reorder them in Settings
 - 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)
 - 🔐 **No Re-authorization on Upgrade** — signed with a fixed certificate since 1.3.0, so later upgrades keep the Full Disk Access and Accessibility permissions; the auto-updater also verifies that a new version is signed with the same certificate and rejects tampered or impostor packages
 

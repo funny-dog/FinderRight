@@ -1,12 +1,15 @@
 import AppKit
 import ApplicationServices
+import Carbon
 import FinderRightKit
 
-/// 在访达中接管 ⌘X / ⌘V（设置开关，默认关闭；需「辅助功能」权限）。决策规则见 Kit 的 FinderCutPasteTakeover。
+/// 处理设置页「剪切」「粘贴」快捷键（默认 ⌘X / ⌘V，可改，清空即停用；需「辅助功能」权限）。
+/// 决策规则见 Kit 的 FinderCutPasteTakeover。
 ///
 /// - 只在访达处于前台时启用按键拦截：看不到其他 App 的按键，本 App 卡顿也不会拖慢别处打字。
-/// - 拦截跑在独立线程的 run loop 上，回调里只做本地判断和一次焦点查询；
+/// - 拦截跑在独立线程的 run loop 上，回调里只比较键码、查一次焦点；
 ///   点菜单、等剪贴板、写剪切队列都放到工作队列。
+/// - 回调里绝不把按键翻译成字符：输入法接口只许在主线程调用。快捷键在主线程预先换算成键码。
 /// - 不发合成按键：直接用辅助功能点访达「编辑」菜单，不受键盘布局影响，也不会被自己再拦一次。
 final class FinderCutPasteInterceptor {
 
@@ -29,6 +32,9 @@ final class FinderCutPasteInterceptor {
     private var finderApp: AXUIElement?
     private var finderIsFrontmost = false
     private var tapShouldBeEnabled = false
+    private var cutChord: FinderCutPasteTakeover.KeyChord?
+    private var pasteChord: FinderCutPasteTakeover.KeyChord?
+    private var copyChord: FinderCutPasteTakeover.KeyChord?
 
     /// 只在主线程创建与开关
     private var tap: CFMachPort?
@@ -48,37 +54,65 @@ final class FinderCutPasteInterceptor {
         center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
-        // 开关变化；从系统设置授权后切回本 App
-        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+        // 切换输入法 / 键盘布局后，同一字符可能落在别的键上，要重新换算键码
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
+        // 从系统设置授权后切回本 App
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
         refresh()
     }
 
-    var isEnabledInSettings: Bool {
-        UserDefaults.standard.bool(forKey: FinderCutPasteTakeover.enabledKey)
+    /// 首次运行本版本时把剪切 / 粘贴统一为 ⌘X / ⌘V（规则见 FinderCutPasteTakeover.migratedShortcuts）。
+    /// 只做一次：之后用户改键或清空都保留。
+    static func applyDefaultShortcutsIfNeeded() {
+        let appliedKey = "cutPasteNativeShortcutsApplied"
+        guard !UserDefaults.standard.bool(forKey: appliedKey) else { return }
+        let config = SharedConfig.shared
+        config.shortcuts = FinderCutPasteTakeover.migratedShortcuts(config.shortcuts)
+        UserDefaults.standard.set(true, forKey: appliedKey)
     }
 
-    /// 开关已打开且已授权：剪切时才把队列镜像到剪贴板
+    /// 至少设了一个剪切 / 粘贴快捷键且已授权：剪切时才把队列镜像到剪贴板
     var isActive: Bool {
-        isEnabledInSettings && AXIsProcessTrusted()
+        let shortcuts = SharedConfig.shared.shortcuts
+        let hasShortcut = shortcuts[FinderCutPasteTakeover.cutActionId] != nil
+            || shortcuts[FinderCutPasteTakeover.pasteActionId] != nil
+        return hasShortcut && AXIsProcessTrusted()
     }
 
-    /// 按开关、授权与访达是否在前台决定是否拦截
-    private func refresh() {
+    /// 按快捷键设置、授权与访达是否在前台决定是否拦截。设置页改了快捷键也调用它。
+    func refresh() {
         let front = NSWorkspace.shared.frontmostApplication
         let finderFront = front?.bundleIdentifier == Self.finderBundleId
-        let want = finderFront && isActive
+        let shortcuts = SharedConfig.shared.shortcuts
+        let cut = shortcuts[FinderCutPasteTakeover.cutActionId]
+        let paste = shortcuts[FinderCutPasteTakeover.pasteActionId]
+        let want = finderFront && (cut != nil || paste != nil) && AXIsProcessTrusted()
         if want, let front {
             updateFinder(pid: front.processIdentifier)
             if tap == nil { createTap() }
         }
-        locked {
+        let chords = (cut: cut.flatMap(Self.chord(for:)), paste: paste.flatMap(Self.chord(for:)),
+                      copy: Self.chord(for: FinderCutPasteTakeover.copyShortcut))
+        let chordsChanged = locked { () -> Bool in
+            let changed = cutChord != chords.cut || pasteChord != chords.paste || copyChord != chords.copy
             finderIsFrontmost = finderFront
             tapShouldBeEnabled = want && tap != nil
+            cutChord = chords.cut
+            pasteChord = chords.paste
+            copyChord = chords.copy
+            return changed
+        }
+        if chordsChanged {
+            func describe(_ chord: FinderCutPasteTakeover.KeyChord?) -> String {
+                chord.map { "\($0.keyCode)/\($0.modifiers)" } ?? "无"
+            }
+            ServicesProvider.trace("takeover: 键码 cut=\(describe(chords.cut)) paste=\(describe(chords.paste)) copy=\(describe(chords.copy))")
         }
         if let tap { CGEvent.tapEnable(tap: tap, enable: want) }
     }
@@ -134,9 +168,11 @@ final class FinderCutPasteInterceptor {
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
+        let (cut, paste, copy) = locked { (cutChord, pasteChord, copyChord) }
         let command = FinderCutPasteTakeover.command(
-            characters: NSEvent(cgEvent: event)?.charactersIgnoringModifiers,
-            modifierFlags: event.flags.rawValue)
+            keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
+            modifierFlags: event.flags.rawValue,
+            cut: cut, paste: paste, copy: copy)
         guard let command else { return Unmanaged.passUnretained(event) }
 
         let (pid, app, finderFront) = locked { (finderPid, finderApp, finderIsFrontmost) }
@@ -161,7 +197,7 @@ final class FinderCutPasteInterceptor {
             if !isRepeat { scheduleCancelCutIfPasteboardReplaced() }
             return Unmanaged.passUnretained(event)
         case .cut:
-            // 按住不放的重复按键也要吞掉，否则会落到访达手里
+            // 按住不放的重复按键也要吞掉，否则会落到访达手里（⌘V 会变成普通粘贴）
             if !isRepeat { workQueue.async { self.performCut() } }
             return nil
         case .paste:
@@ -191,7 +227,7 @@ final class FinderCutPasteInterceptor {
         guard locked({ finderIsFrontmost }) else { return }
         let pasteboard = NSPasteboard.general
         let before = pasteboard.changeCount
-        // 没有选中项时「拷贝」不可用，⌘X 就什么也不做（与访达原生一致）
+        // 没有选中项时「拷贝」不可用，剪切键就什么也不做（与访达原生 ⌘X 一致）
         guard pressFinderEditItem(Self.copyItem) else {
             ServicesProvider.trace("takeover cut: 拷贝不可用")
             return
@@ -247,8 +283,8 @@ final class FinderCutPasteInterceptor {
 
     // MARK: - 剪贴板镜像
 
-    /// 剪切队列更新后调用（任何来源：⌘X、右键、服务）：把整个队列放进剪贴板，
-    /// 这样 ⌘V 交给访达移动时，移动的正是带角标的这些文件。
+    /// 剪切队列更新后调用（任何来源：剪切键、右键、服务）：把整个队列放进剪贴板，
+    /// 这样粘贴键交给访达移动时，移动的正是带角标的这些文件。
     func mirrorCutQueue(_ paths: [String]) {
         guard !paths.isEmpty, isActive else { return }
         let pasteboard = NSPasteboard.general
@@ -256,6 +292,42 @@ final class FinderCutPasteInterceptor {
         guard pasteboard.writeObjects(paths.map { NSURL(fileURLWithPath: $0) }) else { return }
         let changeCount = pasteboard.changeCount
         locked { mirror.record(changeCount: changeCount) }
+    }
+
+    // MARK: - 键码换算（主线程）
+
+    /// 录制的快捷键 → 当前键盘布局下的键码。TIS / UCKeyTranslate 只在主线程调用。
+    private static func chord(for shortcut: ActionShortcut) -> FinderCutPasteTakeover.KeyChord? {
+        let character = shortcut.key.lowercased()
+        guard let keyCode = FinderCutPasteTakeover.functionKeyCode(for: character) ?? keyCode(for: character) else {
+            ServicesProvider.trace("takeover: 当前键盘布局里找不到按键「\(character)」")
+            return nil
+        }
+        return FinderCutPasteTakeover.KeyChord(keyCode: keyCode, modifiers: shortcut.modifiers)
+    }
+
+    /// 逐个键码翻译（不带修饰键），找出产生该字符的键。与录制时 charactersIgnoringModifiers 的结果对应。
+    /// 用键盘布局而不是当前输入法：中文输入法下取到的是其底层的 ABC 等布局。
+    private static func keyCode(for character: String) -> Int? {
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
+        let layoutData = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue() as Data
+        return layoutData.withUnsafeBytes { buffer -> Int? in
+            guard let layout = buffer.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return nil }
+            for code in 0..<128 {
+                var deadKeyState: UInt32 = 0
+                var chars = [UniChar](repeating: 0, count: 4)
+                var length = 0
+                let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDisplay), 0,
+                                            UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                                            &deadKeyState, chars.count, &length, &chars)
+                if status == noErr, length > 0,
+                   String(utf16CodeUnits: chars, count: length).lowercased() == character {
+                    return code
+                }
+            }
+            return nil
+        }
     }
 
     // MARK: - 访达菜单
