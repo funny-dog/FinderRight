@@ -1087,23 +1087,27 @@ struct ShortcutsTab: View {
     @FRState private var conflictMessage: String?
     /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
-    /// 剪切 / 粘贴快捷键靠辅助功能拦截按键
+    /// 授权后所有快捷键由按键拦截处理；未授权时剪切 / 粘贴不可用，其他行退回服务快捷键
     @FRState private var hasAccessibility = AccessibilityChecker.check()
+    @FRState private var showRestoreConfirm = false
+    /// 恢复默认后递增，让各行重新读取快捷键
+    @FRState private var reloadToken = 0
 
     var body: some View {
         FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
             FRSection("访达快捷键") {
                 if !hasAccessibility {
                     FRCard {
-                        FRRow(title: Text("剪切、粘贴快捷键需要「辅助功能」权限"),
-                              subtitle: Text("授权后在访达中直接按键剪切、粘贴，空白处也能粘贴。")) {
+                        FRRow(title: Text("快捷键需要「辅助功能」权限"),
+                              subtitle: Text("授权后在访达中直接按键，任意组合都能用，改完立即生效，空白处也能粘贴。未授权时剪切、粘贴不可用，其他快捷键退回系统服务快捷键，改完要重启访达。")) {
                             Button("授权辅助功能…") { requestAccessibility() }
                                 .buttonStyle(.frPrimary)
                         }
                     }
                 }
 
-                if needsFinderRestart {
+                // 授权后按键拦截立即生效，不用重启；只有退回服务快捷键时才需要
+                if needsFinderRestart && !hasAccessibility {
                     FRCard {
                         FRRow(title: Text("重启访达后新快捷键生效"),
                               subtitle: Text("访达只在启动时读取服务快捷键。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")) {
@@ -1123,14 +1127,30 @@ struct ShortcutsTab: View {
                                      actionName: action.name,
                                      actionIcon: action.icon,
                                      allActions: actions,
+                                     interceptorAvailable: hasAccessibility,
                                      onConflict: { msg in
                                          conflictMessage = msg
                                      },
                                      onChange: { shortcutChanged(actionId: action.id) })
+                        .id("\(action.id)-\(reloadToken)")
                     }
                 }
 
-                FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。\n「剪切」「粘贴」默认是 ⌘X / ⌘V，可改成任意组合（如 ⌃X / ⌃V），清除即停用；由 FinderRight 抢在访达之前处理，需要「辅助功能」权限。粘贴会把文件移到当前窗口所在的文件夹，空白处也可以，由访达自己移动、可以撤销；重命名或输入文字时不受影响。剪切时会把文件放进剪贴板，之后在访达里拷贝了别的内容，剪切会取消。\n其他快捷键同步为系统服务快捷键（「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页为准），要在访达中选中文件后按，改完需重启访达。它们需含 ⌘、⌥ 或 ⌃ 之一，且不能与访达自带快捷键或系统文本编辑按键（如 ⌃V 翻页）相同，建议用 ⌃⌘ 组合。「切换隐藏文件」没有对应的系统服务，仅在右键菜单展开时生效。"))
+                FRCard {
+                    FRRow(title: Text("恢复默认快捷键"),
+                          subtitle: Text("剪切 ⌘X、粘贴 ⌘V、复制路径 ⌥⌘C、前往目录 ⇧⌘G、切换隐藏文件 ⇧⌘.，与访达一致；其他快捷键清空。")) {
+                        Button("恢复默认…") { showRestoreConfirm = true }
+                            .buttonStyle(.frSecondary)
+                            .alert(isPresented: $showRestoreConfirm) {
+                                Alert(title: Text("恢复默认快捷键？"),
+                                      message: Text("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。"),
+                                      primaryButton: .destructive(Text("恢复默认")) { restoreDefaults() },
+                                      secondaryButton: .cancel(Text("取消")))
+                            }
+                    }
+                }
+
+                FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。默认快捷键与访达一致，升级不会改动你设置过的快捷键。\n授权「辅助功能」后，所有快捷键由 FinderRight 抢在访达之前处理：可以用任意组合（包括访达自带的，如 ⌥⌘C），改完立即生效；重命名或输入文字时不受影响。「剪切」「粘贴」默认是 ⌘X / ⌘V，清除即停用；粘贴会把文件移到当前窗口所在的文件夹，空白处也可以，由访达自己移动、可以撤销；剪切时会把文件放进剪贴板，之后在访达里拷贝了别的内容，剪切会取消。除剪切、粘贴、切换隐藏文件、前往目录外，其他快捷键要先选中文件再按，没有选中项时按键交还访达。\n未授权时剪切、粘贴不可用，与访达自带快捷键相同的组合由访达自己响应；其他快捷键同步为系统服务快捷键（「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页为准），改完需重启访达，且不能与访达自带快捷键或系统文本编辑按键（如 ⌃V 翻页）相同。「切换隐藏文件」没有对应的系统服务，未授权时仅在右键菜单展开时生效。"))
             }
         }
         .onAppear {
@@ -1159,9 +1179,19 @@ struct ShortcutsTab: View {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
-    /// 剪切 / 粘贴交给按键拦截立即生效；其余同步为系统服务快捷键，有变化时提示重启访达
+    /// 全部换成默认快捷键，并刷新各行、按键拦截与服务快捷键
+    private func restoreDefaults() {
+        FinderShortcutInterceptor.restoreDefaultShortcuts()
+        reloadToken += 1
+        FinderShortcutInterceptor.shared.refresh()
+        guard ServiceShortcutSync.run() else { return }
+        NSUpdateDynamicServices()
+        needsFinderRestart = true
+    }
+
+    /// 按键拦截立即生效；其余行同时同步为系统服务快捷键（未授权时的回退），有变化时记下需重启访达
     private func shortcutChanged(actionId: String) {
-        FinderCutPasteInterceptor.shared.refresh()
+        FinderShortcutInterceptor.shared.refresh()
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
         if ServiceShortcuts.syncsShortcut(actionId: actionId) { needsFinderRestart = true }
@@ -1175,6 +1205,8 @@ struct ShortcutCell: View {
     let actionName: String
     let actionIcon: String
     let allActions: [(id: String, name: String, icon: String)]
+    /// 已授权「辅助功能」：所有行由按键拦截处理
+    let interceptorAvailable: Bool
     let onConflict: (String) -> Void
     let onChange: () -> Void
 
@@ -1190,20 +1222,31 @@ struct ShortcutCell: View {
                 Text(LocalizedStringKey(actionName))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(FRTheme.text)
-                if let reserved = shortcut.flatMap({ FinderCutPasteTakeover.recordingConflict(for: $0, actionId: actionId) }) {
-                    // 旧版本允许录入 ⌃V 等，这里提示它们不会生效
-                    Text(reserved.kind == .textEditing
-                         ? String(format: NSLocalizedString("与系统文本编辑按键（%@）冲突，不会生效，请重新录制", comment: ""), reserved.name)
-                         : String(format: NSLocalizedString("与访达「%@」冲突，不会生效，请重新录制", comment: ""),
-                                  NSLocalizedString(reserved.name, comment: "")))
-                        .font(.system(size: 11))
-                        .foregroundColor(FRTheme.warnText)
-                } else if actionId == FinderCutPasteTakeover.pasteActionId {
+                if let reserved = shortcut.flatMap({
+                    FinderKeyTakeover.recordingConflict(for: $0, actionId: actionId, interceptorAvailable: interceptorAvailable)
+                }) {
+                    // 系统全局快捷键永远轮不到；访达 / 文本编辑组合在未授权（退回服务快捷键）时由访达或系统响应
+                    Group {
+                        switch reserved.kind {
+                        case .system:
+                            Text(String(format: NSLocalizedString("与系统「%@」冲突，不会生效，请重新录制", comment: ""),
+                                        NSLocalizedString(reserved.name, comment: "")))
+                        case .textEditing:
+                            Text(String(format: NSLocalizedString("未授权「辅助功能」时被系统文本编辑按键（%@）占用", comment: ""),
+                                        reserved.name))
+                        case .finderMenu:
+                            Text(String(format: NSLocalizedString("未授权「辅助功能」时由访达自带的「%@」响应", comment: ""),
+                                        NSLocalizedString(reserved.name, comment: "")))
+                        }
+                    }
+                    .font(.system(size: 11))
+                    .foregroundColor(FRTheme.warnText)
+                } else if actionId == FinderKeyTakeover.pasteActionId {
                     Text("粘贴到当前窗口所在的文件夹，空白处也可以")
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
-                } else if !ServiceShortcuts.hasService(actionId: actionId) {
-                    Text("仅在右键菜单展开时生效")
+                } else if actionId == FinderKeyTakeover.toggleHiddenActionId && !interceptorAvailable {
+                    Text("需要「辅助功能」权限，否则仅在右键菜单展开时生效")
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
                 }
@@ -1279,9 +1322,10 @@ struct ShortcutCell: View {
 
     private func finishRecording(_ newShortcut: ActionShortcut?) {
         if let candidate = newShortcut {
-            // 剪切 / 粘贴由按键拦截抢在访达之前处理，只拦系统全局快捷键；其他行走服务，照旧拦截
-            if let reserved = FinderCutPasteTakeover.recordingConflict(for: candidate, actionId: actionId) {
-                let message: String
+            // 已授权：按键拦截抢在访达之前处理，只拦系统全局快捷键；未授权：除剪切 / 粘贴外退回服务快捷键，照旧拦截
+            if let reserved = FinderKeyTakeover.recordingConflict(for: candidate, actionId: actionId,
+                                                                   interceptorAvailable: interceptorAvailable) {
+                var message: String
                 switch reserved.kind {
                 case .system:
                     message = String(format: NSLocalizedString("该快捷键已被系统「%@」占用，请换一个组合", comment: ""),
@@ -1292,6 +1336,9 @@ struct ShortcutCell: View {
                 case .textEditing:
                     message = String(format: NSLocalizedString("该快捷键是系统文本编辑按键（%@），访达会先拿去处理，请换一个组合（例如 ⌃⌘ 组合）", comment: ""),
                                      reserved.name)
+                }
+                if !reserved.isSystem {
+                    message += "\n" + NSLocalizedString("授权「辅助功能」后可以使用这个组合。", comment: "")
                 }
                 cancelRecording()
                 onConflict(message)

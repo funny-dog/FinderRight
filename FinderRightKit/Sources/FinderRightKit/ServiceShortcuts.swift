@@ -16,7 +16,8 @@ import CoreFoundation
 ///
 /// ## 优先级
 /// 访达自身菜单栏的快捷键优先于服务快捷键，被访达占用的组合永远轮不到服务，
-/// 因此录制时用 `FinderReservedShortcuts` 拦截。剪切 / 粘贴不在此列，见 `syncsShortcut`。
+/// 因此录制时用 `FinderReservedShortcuts` 拦截。授权「辅助功能」后所有行改由按键拦截处理
+/// （FinderKeyTakeover），服务快捷键只是未授权时的回退；剪切 / 粘贴没有回退，见 `syncsShortcut`。
 public enum ServiceShortcuts {
 
     /// 设置页 action ID 与 Info.plist 中某个 NSServices 条目的对应关系
@@ -54,10 +55,11 @@ public enum ServiceShortcuts {
         bindings.contains { $0.actionId == actionId }
     }
 
-    /// 该动作的快捷键是否同步为服务快捷键。剪切 / 粘贴改由按键拦截处理（FinderCutPasteTakeover），
-    /// 不再写入服务快捷键：否则同一组合两边都响应，且改键后还要重启访达。
+    /// 该动作的快捷键是否同步为服务快捷键（未授权「辅助功能」时的回退）。授权后按键拦截先拿到按键并吞掉，
+    /// 服务快捷键不会再触发，所以一直同步也不会重复执行。
+    /// 剪切 / 粘贴只由按键拦截处理（FinderKeyTakeover），不写入：服务版本的行为与访达原生不一致。
     public static func syncsShortcut(actionId: String) -> Bool {
-        hasService(actionId: actionId) && !FinderCutPasteTakeover.handlesAction(actionId)
+        hasService(actionId: actionId) && !FinderKeyTakeover.handlesAction(actionId)
     }
 
     /// pbs.plist 中 NSServicesStatus 的条目键
