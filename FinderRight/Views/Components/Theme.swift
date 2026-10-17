@@ -21,6 +21,9 @@ enum FRTheme {
 
     /// 强调色（填充用）
     static let accent = themed(\.accent)
+    /// 开关关闭态的轨道与滑块：比卡片底色明显亮一档，深色下也能一眼看出轮廓
+    static let switchOffTrack = dynamic(FRColorPair(0xDCDCE1, 0x46464E))
+    static let switchOffKnob = dynamic(FRColorPair(0xFFFFFF, 0xD4D4D8))
     /// 强调色（文字 / 图标用）：浅色下加深，保证在浅底上的对比度
     static let accentText = themed(\.accentText)
     /// 压在强调色填充上的文字
@@ -209,16 +212,43 @@ extension FRRow where Trailing == EmptyView {
 
 // MARK: - 控件
 
-/// 开关：沿用系统原生开关（保留无障碍与键盘支持），只把开启色换成主题强调色
+/// 开关：自绘轨道与滑块，开 / 关两态颜色都由主题控制（原生开关的 tint 会被系统淡化，关闭态也改不了色）。
+/// 外层用 Button 保留键盘操作，无障碍语义交给原生 Toggle 表达
 struct FRSwitch: View {
     let label: LocalizedStringKey
     @Binding var isOn: Bool
 
+    @Environment(\.isEnabled) private var isEnabled
+
+    private let width: CGFloat = 38
+    private let height: CGFloat = 22
+    private let inset: CGFloat = 2
+
+    /// 开启态滑块：石墨主题的强调色接近白 / 黑，滑块取反色（onAccent）形成明暗反转；其余主题用白色
+    private var onKnob: Color {
+        FRThemeID.current == .graphite ? FRTheme.onAccent : .white
+    }
+
     var body: some View {
-        Toggle(label, isOn: $isOn)
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .tint(FRTheme.accent)
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { isOn.toggle() }
+        } label: {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(isOn ? FRTheme.accent : FRTheme.switchOffTrack)
+                Circle()
+                    .fill(isOn ? onKnob : FRTheme.switchOffKnob)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+                    .padding(inset)
+            }
+            .frame(width: width, height: height)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityRepresentation {
+            Toggle(label, isOn: $isOn)
+        }
     }
 }
 
