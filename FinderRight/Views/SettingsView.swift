@@ -1084,7 +1084,24 @@ struct ShortcutsTab: View {
         ("shortcut.toggleHidden", "切换隐藏文件",   "eye"),
     ]
 
-    @FRState private var conflictMessage: String?
+    /// 快捷键页的弹窗：冲突提示与 ⌘X / ⌘V 接管引导共用一个 alert
+    private enum ShortcutAlert: Identifiable {
+        case conflict(String)
+        /// 在剪切 / 粘贴行录到 ⌘X / ⌘V，开关未打开
+        case enableTakeover
+        /// 同上，开关已打开
+        case takeoverReady
+
+        var id: String {
+            switch self {
+            case .conflict(let message): return "conflict:" + message
+            case .enableTakeover: return "enableTakeover"
+            case .takeoverReady: return "takeoverReady"
+            }
+        }
+    }
+
+    @FRState private var activeAlert: ShortcutAlert?
     /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
     @AppStorage(FinderCutPasteTakeover.enabledKey) private var cutPasteTakeover = false
@@ -1116,7 +1133,10 @@ struct ShortcutsTab: View {
                                      actionIcon: action.icon,
                                      allActions: actions,
                                      onConflict: { msg in
-                                         conflictMessage = msg
+                                         activeAlert = .conflict(msg)
+                                     },
+                                     onTakeoverShortcut: {
+                                         activeAlert = cutPasteTakeover ? .takeoverReady : .enableTakeover
                                      },
                                      onChange: { syncServiceShortcuts(changedActionId: action.id) })
                     }
@@ -1133,15 +1153,22 @@ struct ShortcutsTab: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasAccessibility = AccessibilityChecker.check()
         }
-        .alert(isPresented: Binding(
-            get: { conflictMessage != nil },
-            set: { if !$0 { conflictMessage = nil } }
-        )) {
-            Alert(
-                title: Text("快捷键冲突"),
-                message: Text(conflictMessage ?? ""),
-                dismissButton: .default(Text("好"))
-            )
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .conflict(let message):
+                return Alert(title: Text("快捷键冲突"),
+                             message: Text(message),
+                             dismissButton: .default(Text("好")))
+            case .enableTakeover:
+                return Alert(title: Text("使用 ⌘X / ⌘V"),
+                             message: Text("⌘X / ⌘V 不能绑定为服务快捷键，访达会先处理。打开上方的「在访达中用 ⌘X / ⌘V 剪切和粘贴」后，⌘X 剪切、⌘V 粘贴会一起生效。"),
+                             primaryButton: .default(Text("打开开关")) { setCutPasteTakeover(true) },
+                             secondaryButton: .cancel(Text("取消")))
+            case .takeoverReady:
+                return Alert(title: Text("⌘X / ⌘V 已经可以用了"),
+                             message: Text("上方开关已打开，在访达中直接按 ⌘X 剪切、⌘V 粘贴即可，无需再绑定。"),
+                             dismissButton: .default(Text("好")))
+            }
         }
     }
 
@@ -1153,10 +1180,7 @@ struct ShortcutsTab: View {
                       subtitle: Text("⌘X 剪切选中的文件，⌘V 粘贴到当前窗口所在的文件夹，空白处也可以。文件由访达自己移动，可以撤销。重命名或输入文字时不受影响。")) {
                     FRSwitch(label: "在访达中用 ⌘X / ⌘V 剪切和粘贴", isOn: Binding(
                         get: { cutPasteTakeover },
-                        set: { on in
-                            cutPasteTakeover = on
-                            if on && !AccessibilityChecker.check() { requestAccessibility() }
-                        }
+                        set: { setCutPasteTakeover($0) }
                     ))
                 }
 
@@ -1178,6 +1202,11 @@ struct ShortcutsTab: View {
 
             FRFootnote(Text("剪切时会把文件放进剪贴板，右键菜单剪切也一样。剪切后在访达里拷贝了别的内容，剪切会取消。"))
         }
+    }
+
+    private func setCutPasteTakeover(_ on: Bool) {
+        cutPasteTakeover = on
+        if on && !AccessibilityChecker.check() { requestAccessibility() }
     }
 
     /// 系统弹窗会把 FinderRight 加进辅助功能列表；再打开设置页，用户只需打开开关
@@ -1202,8 +1231,11 @@ struct ShortcutCell: View {
     let actionIcon: String
     let allActions: [(id: String, name: String, icon: String)]
     let onConflict: (String) -> Void
+    /// 在剪切 / 粘贴行录到 ⌘X / ⌘V：交给上层引导打开接管开关
+    let onTakeoverShortcut: () -> Void
     let onChange: () -> Void
 
+    @AppStorage(FinderCutPasteTakeover.enabledKey) private var cutPasteTakeover = false
     @FRState private var shortcut: ActionShortcut?
     @FRState private var isRecording = false
     @FRState private var monitor: Any?
@@ -1216,7 +1248,19 @@ struct ShortcutCell: View {
                 Text(LocalizedStringKey(actionName))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(FRTheme.text)
-                if let reserved = shortcut.flatMap(FinderReservedShortcuts.conflict(for:)) {
+                if cutPasteTakeover, let takeover = FinderCutPasteTakeover.takeoverShortcut(forActionId: actionId) {
+                    Text(String(format: NSLocalizedString("%@ 已启用（上方开关）", comment: ""), displayString(takeover)))
+                        .font(.system(size: 11))
+                        .foregroundColor(FRTheme.accentText)
+                }
+                if let stored = shortcut, FinderCutPasteTakeover.isTakeoverShortcut(stored, forActionId: actionId) {
+                    // 旧版本存下的 ⌘X / ⌘V：开关打开时由上方开关提供，不再报冲突
+                    if !cutPasteTakeover {
+                        Text("需打开上方「⌘X / ⌘V」开关才会生效")
+                            .font(.system(size: 11))
+                            .foregroundColor(FRTheme.warnText)
+                    }
+                } else if let reserved = shortcut.flatMap(FinderReservedShortcuts.conflict(for:)) {
                     // 旧版本允许录入 ⌘X / ⌘V、⌃V 等，这里提示它们不会生效
                     Text(reserved.kind == .textEditing
                          ? String(format: NSLocalizedString("与系统文本编辑按键（%@）冲突，不会生效，请重新录制", comment: ""), reserved.name)
@@ -1301,6 +1345,12 @@ struct ShortcutCell: View {
 
     private func finishRecording(_ newShortcut: ActionShortcut?) {
         if let candidate = newShortcut {
+            // ⌘X / ⌘V 绑不成服务快捷键，但上方开关能提供：引导过去，而不是报冲突
+            if FinderCutPasteTakeover.isTakeoverShortcut(candidate, forActionId: actionId) {
+                cancelRecording()
+                onTakeoverShortcut()
+                return
+            }
             if let reserved = FinderReservedShortcuts.conflict(for: candidate) {
                 let message: String
                 switch reserved.kind {
