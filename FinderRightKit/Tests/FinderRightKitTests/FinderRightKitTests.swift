@@ -836,7 +836,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(templates.first { $0.fileExtension == "md" }!.content, "# Untitled\n\n")
         }
 
-        runTest("Services 粘贴只接受一个存在的本地目录") {
+        runTest("Services 粘贴目标：单个文件夹即其本身，选中文件时取所在目录") {
             let root = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: root) }
             let file = root.appendingPathComponent("file.txt")
@@ -846,8 +846,11 @@ struct FinderRightKitTestsRunner {
             try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [root]), root, "空白处传来的当前目录")
             try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [link]), link, "目录符号链接仍由业务层校验真实路径")
             try assertNil(ServiceInvocationPolicy.pasteDestination(for: []))
-            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [root, link]), "多选不能猜测目标")
-            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [file]), "文件不能当作目标目录")
+            try assertNil(ServiceInvocationPolicy.pasteDestination(for: [root, link]), "分属不同目录时不能猜测目标")
+            try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [file])?.standardizedFileURL.path,
+                            root.standardizedFileURL.path, "选中文件 → 粘贴到它所在的目录")
+            try assertEqual(ServiceInvocationPolicy.pasteDestination(for: [file, link])?.standardizedFileURL.path,
+                            root.standardizedFileURL.path, "同一目录下多选 → 该目录")
             try assertNil(ServiceInvocationPolicy.pasteDestination(for: [root.appendingPathComponent("missing")]))
             try assertNil(ServiceInvocationPolicy.pasteDestination(for: [URL(string: "https://example.com/folder")!]))
         }
@@ -2091,6 +2094,136 @@ struct FinderRightKitTestsRunner {
             } else {
                 throw TestFailure(message: "功能列表中未找到 copyFileName 或 copyFileContent")
             }
+        }
+
+        // MARK: - 服务快捷键同步
+
+        let cmdBit = 1 << 20, optBit = 1 << 19, ctlBit = 1 << 18, sftBit = 1 << 17
+
+        runTest("ServiceShortcuts key_equivalent 修饰符前缀与小写字符") {
+            try assertEqual(ServiceShortcuts.keyEquivalent(for: ActionShortcut(key: "P", modifiers: cmdBit | optBit | ctlBit)), "@~^p")
+            try assertEqual(ServiceShortcuts.keyEquivalent(for: ActionShortcut(key: "x", modifiers: ctlBit | cmdBit | sftBit)), "@^$x")
+            try assertEqual(ServiceShortcuts.keyEquivalent(for: ActionShortcut(key: "k", modifiers: ctlBit | optBit)), "~^k")
+        }
+
+        runTest("ServiceShortcuts 映射与 Info.plist 的 NSServices 一致") {
+            // Tests/FinderRightKitTests/xxx.swift → 仓库根目录
+            let root = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+            let plistURL = root.appendingPathComponent("FinderRight/Info.plist")
+            let data = try Data(contentsOf: plistURL)
+            // Info.plist 含 $(VAR) 占位符，仍是合法 plist
+            let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            let services = (plist?["NSServices"] as? [[String: Any]]) ?? []
+            let pairs = Set(services.compactMap { svc -> String? in
+                guard let title = (svc["NSMenuItem"] as? [String: String])?["default"],
+                      let message = svc["NSMessage"] as? String else { return nil }
+                return "\(title)|\(message)"
+            })
+            try assertTrue(!pairs.isEmpty, "应能读到 NSServices")
+            for b in ServiceShortcuts.bindings {
+                try assertTrue(pairs.contains("\(b.menuTitle)|\(b.message)"), "Info.plist 缺少 \(b.menuTitle) / \(b.message)")
+            }
+            try assertTrue(!ServiceShortcuts.hasService(actionId: "shortcut.toggleHidden"), "切换隐藏文件没有对应服务")
+        }
+
+        runTest("ServiceShortcuts 合并只改本 App 条目的 key_equivalent") {
+            let bid = "com.finderright.app"
+            let cut = ServiceShortcuts.bindings.first { $0.actionId == "shortcut.cut" }!
+            let paste = ServiceShortcuts.bindings.first { $0.actionId == "shortcut.paste" }!
+            let cutKey = ServiceShortcuts.statusEntryKey(bundleId: bid, binding: cut)
+            let pasteKey = ServiceShortcuts.statusEntryKey(bundleId: bid, binding: paste)
+            try assertEqual(cutKey, "com.finderright.app - FinderRight: Cut - cutFiles")
+
+            let existing: [String: Any] = [
+                "other.app - Other - doIt": ["key_equivalent": "@~o"],
+                cutKey: ["enabled_context_menu": false, "key_equivalent": "@~x"],
+                pasteKey: ["key_equivalent": "@~v"],
+            ]
+            let merged = ServiceShortcuts.mergedStatus(existing, bundleId: bid, shortcuts: [
+                "shortcut.cut": ActionShortcut(key: "x", modifiers: cmdBit | ctlBit),
+            ])
+            let cutEntry = merged[cutKey] as? [String: Any]
+            try assertEqual(cutEntry?["key_equivalent"] as? String, "@^x")
+            try assertEqual(cutEntry?["enabled_context_menu"] as? Bool, false, "保留用户的启用状态")
+            try assertNil(merged[pasteKey], "清除快捷键后空条目应删除")
+            try assertEqual((merged["other.app - Other - doIt"] as? [String: String])?["key_equivalent"], "@~o", "不碰其他 App")
+
+            let reserved = ServiceShortcuts.mergedStatus([:], bundleId: bid, shortcuts: [
+                "shortcut.paste": ActionShortcut(key: "v", modifiers: cmdBit),
+            ])
+            try assertNil(reserved[pasteKey], "与访达 ⌘V 冲突的旧快捷键不写入服务")
+        }
+
+        runTest("ServiceShortcuts 写入偏好域并可读回，无变化时不重复写") {
+            // 固定域名 + 用后删文件，避免在 ~/Library/Preferences 堆积测试残留
+            let domain = "com.finderright.tests.pbs"
+            let clear = {
+                CFPreferencesSetAppValue("NSServicesStatus" as CFString, nil, domain as CFString)
+                CFPreferencesSetAppValue("ServicesShortcutsPresent" as CFString, nil, domain as CFString)
+                CFPreferencesAppSynchronize(domain as CFString)
+            }
+            clear()
+            defer {
+                clear()
+                let file = FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent("Library/Preferences/\(domain).plist")
+                try? FileManager.default.removeItem(at: file)
+            }
+            let bid = "com.finderright.app"
+            let shortcuts = ["shortcut.copyPath": ActionShortcut(key: "c", modifiers: cmdBit | ctlBit | optBit)]
+            try assertTrue(ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, domain: domain), "首次写入应有变化")
+            try assertEqual(ServiceShortcuts.storedKeyEquivalents(bundleId: bid, domain: domain), ["shortcut.copyPath": "@~^c"])
+            try assertTrue(!ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, domain: domain), "相同内容不应重复写")
+            try assertTrue(ServiceShortcuts.sync(shortcuts: [:], bundleId: bid, domain: domain))
+            try assertEqual(ServiceShortcuts.storedKeyEquivalents(bundleId: bid, domain: domain), [:])
+        }
+
+        runTest("FinderReservedShortcuts 拦截访达原生 ⌘X / ⌘V，放行带 ⌃ 的组合") {
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "x", modifiers: cmdBit))?.name, "剪切")
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: cmdBit))?.name, "粘贴")
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "c", modifiers: cmdBit | optBit))?.name, "拷贝路径名")
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "3", modifiers: cmdBit | sftBit))?.isSystem, true)
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "3", modifiers: cmdBit | sftBit))?.kind, .system)
+            try assertNil(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "x", modifiers: cmdBit | ctlBit)))
+            try assertNil(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: cmdBit | ctlBit)))
+            // 多余的位（如 capsLock / 设备相关位）不影响判断
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: cmdBit | (1 << 16)))?.name, "粘贴")
+        }
+
+        runTest("FinderReservedShortcuts 解析文本编辑按键绑定，拦截 ⌃V（pageDown:）") {
+            try assertEqual(FinderReservedShortcuts.parseBindingKey("^v"), .init(modifiers: ctlBit, key: "v"))
+            try assertEqual(FinderReservedShortcuts.parseBindingKey("^A"), .init(modifiers: ctlBit | sftBit, key: "a"), "大写隐含 ⇧")
+            try assertEqual(FinderReservedShortcuts.parseBindingKey("@~^\u{F701}"), .init(modifiers: cmdBit | optBit | ctlBit, key: "\u{F701}"))
+            try assertNil(FinderReservedShortcuts.parseBindingKey("$\u{F700}"), "只含 ⇧ 的组合不可能被录制")
+            try assertNil(FinderReservedShortcuts.parseBindingKey("a"))
+            try assertEqual(FinderReservedShortcuts.parseBindingKey("^"), nil, "单独的 ^ 字符不是组合键")
+
+            let bindings = FinderReservedShortcuts.parseBindings(["^v": "pageDown:", "^k": ["deleteToEndOfParagraph:", "x"], "^x": ["a": "b"]])
+            let hit = FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: ctlBit), textBindings: bindings)
+            try assertEqual(hit, .init(name: "pageDown:", kind: .textEditing))
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "k", modifiers: ctlBit), textBindings: bindings)?.name, "deleteToEndOfParagraph:")
+            try assertNil(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "x", modifiers: ctlBit), textBindings: bindings), "多键序列子字典忽略")
+
+            // 真实系统绑定表：⌃V 必须被拦截，⌃X、⌃⌘V 放行
+            try assertEqual(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: ctlBit))?.kind, .textEditing)
+            try assertNil(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "x", modifiers: ctlBit)))
+            try assertNil(FinderReservedShortcuts.conflict(for: ActionShortcut(key: "v", modifiers: ctlBit | cmdBit)))
+        }
+
+        runTest("ServiceInvocationPolicy 被派发激活时按激活前的前台应用判定调用方") {
+            let me = "com.finderright.app", finder = "com.apple.finder"
+            try assertEqual(ServiceInvocationPolicy.effectiveCaller(frontmostBundleId: me, providerBundleId: me,
+                            providerHasKeyWindow: false, previousFrontmostBundleId: finder), finder, "快捷键触发：系统先激活本 App")
+            try assertEqual(ServiceInvocationPolicy.effectiveCaller(frontmostBundleId: me, providerBundleId: me,
+                            providerHasKeyWindow: true, previousFrontmostBundleId: finder), me, "用户正在本 App 窗口里操作")
+            try assertEqual(ServiceInvocationPolicy.effectiveCaller(frontmostBundleId: me, providerBundleId: me,
+                            providerHasKeyWindow: false, previousFrontmostBundleId: nil), me)
+            try assertEqual(ServiceInvocationPolicy.effectiveCaller(frontmostBundleId: finder, providerBundleId: me,
+                            providerHasKeyWindow: false, previousFrontmostBundleId: "com.apple.mail"), finder, "访达在前时不改写")
+            try assertEqual(ServiceInvocationPolicy.effectiveCaller(frontmostBundleId: me, providerBundleId: me,
+                            providerHasKeyWindow: false, previousFrontmostBundleId: "com.example.evil"), "com.example.evil", "激活前是其他 App 仍会被拒")
         }
 
         print("\n-----------------------------------------")

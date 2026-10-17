@@ -742,6 +742,8 @@ final class FinderRightService {
             } catch {
                 return IPCResponse(id: req.id, success: false, message: String(format: L("写入剪切队列失败：%@"), error.localizedDescription))
             }
+            // 经服务快捷键剪切时扩展不知情，靠通知让它打上角标
+            CutQueueChangeNotifier.post()
 
             return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
         }
@@ -758,6 +760,7 @@ final class FinderRightService {
         Self.cutPasteQueue.sync {
             Self.cutCancelGeneration += 1
             cutQueue.clear()
+            CutQueueChangeNotifier.post()
             return IPCResponse(id: req.id, success: true, message: "已取消剪切")
         }
     }
@@ -766,6 +769,8 @@ final class FinderRightService {
     private func takeCutQueue() throws -> (id: UUID, paths: [String], generation: Int)? {
         try Self.cutPasteQueue.sync {
             guard let batch = try cutQueue.take() else { return nil }
+            // 队列已被取走：通知扩展清掉源文件上的剪切角标
+            CutQueueChangeNotifier.post()
             return (batch.id, batch.paths, Self.cutCancelGeneration)
         }
     }
@@ -801,6 +806,7 @@ final class FinderRightService {
             do {
                 let retryPaths = generation == Self.cutCancelGeneration ? failedPaths : []
                 try cutQueue.finish(batchID, retrying: retryPaths)
+                if !retryPaths.isEmpty { CutQueueChangeNotifier.post() }
             } catch {
                 serviceLog("粘贴结算失败，保留本批恢复记录: \(error.localizedDescription)")
             }
@@ -1028,6 +1034,7 @@ final class FinderRightService {
         do {
             let restored = try CutQueueStore().recover(existingOnly: true)
             if !restored.isEmpty {
+                CutQueueChangeNotifier.post()
                 NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
             }
         } catch {

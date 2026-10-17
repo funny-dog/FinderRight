@@ -43,6 +43,9 @@
 	<true/>
 	<!-- NSMenuItem 只认 default 键（英文）；中文标题放在 zh-Hans.lproj/ServicesMenu.strings，
 	     以 default 原文为键。在 NSMenuItem 里写 zh-Hans 等语言键不会生效。 -->
+	<!-- NSRequiredContext 一律只写 NSTextContent=FilePath：带 NSApplicationIdentifier（尤其与 NSTextContent 并用）时，
+	     访达里服务快捷键与「服务」菜单实测都不会派发到本 App。来源校验在 ServicesProvider 里按前台 App 做，
+	     上下文本来也挡不住 NSPerformService 的程序化调用。 -->
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -77,8 +80,8 @@
 			<string>FinderRight</string>
 			<key>NSRequiredContext</key>
 			<dict>
-				<key>NSApplicationIdentifier</key>
-				<string>com.apple.finder</string>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
 			</dict>
 			<key>NSSendTypes</key>
 			<array>
@@ -97,8 +100,8 @@
 			<string>FinderRight</string>
 			<key>NSRequiredContext</key>
 			<dict>
-				<key>NSApplicationIdentifier</key>
-				<string>com.apple.finder</string>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
 			</dict>
 			<key>NSSendTypes</key>
 			<array>
@@ -117,8 +120,8 @@
 			<string>FinderRight</string>
 			<key>NSRequiredContext</key>
 			<dict>
-				<key>NSApplicationIdentifier</key>
-				<string>com.apple.finder</string>
+				<key>NSTextContent</key>
+				<string>FilePath</string>
 			</dict>
 			<key>NSSendTypes</key>
 			<array>
@@ -197,8 +200,6 @@
 			<string>FinderRight</string>
 			<key>NSRequiredContext</key>
 			<dict>
-				<key>NSApplicationIdentifier</key>
-				<string>com.apple.finder</string>
 				<key>NSTextContent</key>
 				<string>FilePath</string>
 			</dict>
@@ -255,7 +256,7 @@
 			<key>NSMessage</key><string>newFile</string>
 			<key>NSPortName</key><string>FinderRight</string>
 			<key>NSRequiredContext</key>
-			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<dict><key>NSTextContent</key><string>FilePath</string></dict>
 			<key>NSSendTypes</key>
 			<array><string>NSFilenamesPboardType</string></array>
 		</dict>
@@ -267,7 +268,7 @@
 			<key>NSMessage</key><string>moveToFavorite</string>
 			<key>NSPortName</key><string>FinderRight</string>
 			<key>NSRequiredContext</key>
-			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<dict><key>NSTextContent</key><string>FilePath</string></dict>
 			<key>NSSendTypes</key>
 			<array><string>NSFilenamesPboardType</string></array>
 		</dict>
@@ -279,7 +280,7 @@
 			<key>NSMessage</key><string>copyToFavorite</string>
 			<key>NSPortName</key><string>FinderRight</string>
 			<key>NSRequiredContext</key>
-			<dict><key>NSApplicationIdentifier</key><string>com.apple.finder</string></dict>
+			<dict><key>NSTextContent</key><string>FilePath</string></dict>
 			<key>NSSendTypes</key>
 			<array><string>NSFilenamesPboardType</string></array>
 		</dict>

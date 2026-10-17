@@ -21,6 +21,8 @@ private let cutBadgeLock = NSLock()
 private var inMemoryCutPaths: Set<String> = []
 /// 本进程是否打过剪切角标（受 cutBadgeLock 保护）。从未打过时，角标回调无需逐个发送清除消息
 private var didSetCutBadge = false
+/// 打过剪切角标的规范化路径（受 cutBadgeLock 保护）：队列被主 App 改写后据此清掉已不在队列里的角标
+private var badgedCutPaths: Set<String> = []
 
 /// 持久化队列的缓存：文件未变化时只 stat、不读盘（角标回调热路径）
 private let cutQueueCache = CutQueueCache(store: cutQueueStore)
@@ -34,11 +36,36 @@ private func persistedCutQueuePaths() -> Set<String> {
 private func setCutBadge(for url: URL) {
     cutBadgeLock.lock()
     didSetCutBadge = true
+    badgedCutPaths.insert(normalizePath(url.path))
     cutBadgeLock.unlock()
     FIFinderSyncController.default().setBadgeIdentifier(cutBadgeIdentifier, for: url)
 }
 
 /// 获取当前待剪切队列中的所有源文件路径集合（内存乐观队列与持久化队列的并集）
+/// 主 App 改写剪切队列后（尤其是经服务快捷键剪切 / 粘贴，扩展事先不知情）按落盘队列对齐角标：
+/// 落盘队列是权威状态，内存乐观集合只保留仍在队列里的路径；不在队列里的旧角标清掉，队列里的补上。
+/// 扩展自己发起的剪切在 IPC 落盘前若碰上别的通知，乐观路径会被短暂剔除，落盘后的通知与 0.4s 补推会再打上。
+/// 返回本次新打上角标的路径（此前未打过），调用方据此为其所在目录抢回角标归属。
+@discardableResult
+private func reconcileCutBadgesWithQueue() -> Set<String> {
+    let persisted = persistedCutQueuePaths()
+    cutBadgeLock.lock()
+    inMemoryCutPaths.formIntersection(persisted)
+    let stale = badgedCutPaths.subtracting(persisted)
+    badgedCutPaths.subtract(stale)
+    let added = persisted.subtracting(badgedCutPaths)
+    cutBadgeLock.unlock()
+
+    for path in stale {
+        FIFinderSyncController.default().setBadgeIdentifier("", for: URL(fileURLWithPath: path))
+    }
+    for path in persisted {
+        setCutBadge(for: URL(fileURLWithPath: path))
+    }
+    logToFile("cutQueueChanged: badged=\(persisted.count) new=\(added.count) cleared=\(stale.count)")
+    return added
+}
+
 private func currentCutQueuePaths() -> Set<String> {
     cutBadgeLock.lock()
     let memoryPaths = inMemoryCutPaths
@@ -311,6 +338,10 @@ class FinderSync: FIFinderSync {
         FIFinderSyncController.default().setBadgeImage(createCutBadgeImage(), label: "已剪切", forBadgeIdentifier: cutBadgeIdentifier)
         logToFile("setBadgeImage registered for \(cutBadgeIdentifier)")
 
+        // 服务快捷键剪切 / 粘贴由主 App 直接处理，扩展只能靠这条通知得知队列变化。
+        // 必须在 init 注册：只用快捷键、从不展开右键菜单时，延后初始化永远不会执行。
+        CutQueueChangeNotifier.observe { [weak self] in self?.handleCutQueueChanged() }
+
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
 
@@ -468,6 +499,16 @@ class FinderSync: FIFinderSync {
             // 等待期间可能已粘贴或取消剪切，届时同样不再需要抢回
             guard BadgeOwnershipProbe.directory(dir, containsAnyOf: currentCutQueuePaths()) else { return }
             self?.requestBadgeReclaimIfNeeded(directory: dir, reason: "probe")
+        }
+    }
+
+    /// 剪切队列被主 App 改写：对齐角标；快捷键剪切与右键剪切一样，需为新剪切项所在目录兜底抢回角标归属，
+    /// 否则目录归属在别的 Finder Sync 扩展手里时角标根本不显示，看起来像「剪切没生效」。
+    private func handleCutQueueChanged() {
+        let added = reconcileCutBadgesWithQueue()
+        let parents = Set(added.map { ($0 as NSString).deletingLastPathComponent })
+        for dir in parents {
+            requestBadgeReclaimIfNeeded(directory: dir, reason: "cut")
         }
     }
 

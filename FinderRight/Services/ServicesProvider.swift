@@ -32,6 +32,9 @@ final class ServicesProvider: NSObject {
     private var isShowingFileActionPrompt = false
     private let showDirectoryPrompt: () -> Void
 
+    /// 最近一个非本 App 的前台应用：快捷键触发服务时系统会先激活本 App，需据此还原真实调用方
+    private var previousFrontmostBundleId: String?
+
     private init(showDirectoryPrompt: @escaping () -> Void) {
         self.showDirectoryPrompt = showDirectoryPrompt
         super.init()
@@ -46,9 +49,44 @@ final class ServicesProvider: NSObject {
         let provider = ServicesProvider(showDirectoryPrompt: showDirectoryPrompt)
         NSApp.servicesProvider = provider
         sharedInstance = provider
+        provider.trackFrontmostApplication()
         // 强制系统重新扫描本 App 的 NSServices，确保安装 / 更新后菜单项立即可见
         NSUpdateDynamicServices()
         NSLog("[ServicesProvider] registered, services refreshed")
+    }
+
+    // MARK: - 调用方判定
+
+    private func trackFrontmostApplication() {
+        let me = Bundle.main.bundleIdentifier
+        if let current = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, current != me {
+            previousFrontmostBundleId = current
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            guard let id = app?.bundleIdentifier, id != me else { return }
+            self?.previousFrontmostBundleId = id
+        }
+    }
+
+    /// 服务的实际调用方（见 ServiceInvocationPolicy.effectiveCaller）
+    private func invokingBundleId() -> String? {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let hasKeyWindow = NSApp.keyWindow?.isVisible == true
+        return ServiceInvocationPolicy.effectiveCaller(
+            frontmostBundleId: frontmost,
+            providerBundleId: Bundle.main.bundleIdentifier,
+            providerHasKeyWindow: hasKeyWindow,
+            previousFrontmostBundleId: previousFrontmostBundleId)
+    }
+
+    /// 快捷键触发时系统把本 App 激活到了前台；不需要交互的服务处理完立即把前台还给访达，
+    /// 否则用户接下来在访达里按的键（如紧接着的粘贴）全部落到本 App 上。
+    private func returnFocusToFinderIfNeeded() {
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier,
+              NSApp.keyWindow?.isVisible != true else { return }
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
     }
 
     // MARK: - 从 pasteboard 读取选中的文件 URL
@@ -59,6 +97,28 @@ final class ServicesProvider: NSObject {
     /// 右键「服务」子菜单的 Keka / iTerm2 等服务一致），所以选中的文件以
     /// `NSFilenamesPboardType`（POSIX 路径字符串数组）放入 pasteboard，优先按此读取；
     /// 再回退到文件 URL 读取，兼容个别以 URL 形式投递的情况。
+    /// 服务调用诊断日志（统一日志里 NSLog 内容被系统脱敏，排查快捷键是否触发服务只能看文件）。
+    /// 只记服务名、项数、前台 App 与结果，不记路径。
+    static func trace(_ message: String) {
+        let line = "[\(Self.traceDateFormatter.string(from: Date()))] \(message)\n"
+        traceQueue.async {
+            let url = IPCBridge.rootDirectory.appendingPathComponent("service-debug.log")
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: Data(line.utf8))
+            } else {
+                try? Data(line.utf8).write(to: url)
+            }
+        }
+    }
+    private static let traceQueue = DispatchQueue(label: "com.finderright.app.services.trace")
+    private static let traceDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return f
+    }()
+
     private func fileURLs(from pboard: NSPasteboard) -> [URL] {
         let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
         if let paths = pboard.propertyList(forType: filenamesType) as? [String], !paths.isEmpty {
@@ -78,9 +138,10 @@ final class ServicesProvider: NSObject {
     }
 
     /// 剪切 / 粘贴 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
-    /// 仅直接受理访达前台调用；剪切 / 粘贴另处理提供程序被系统激活的情况，要求用户确认。
+    /// 仅直接受理访达调用（含快捷键触发时系统先激活本 App 的情况，见 invokingBundleId）；
+    /// 用户正在本 App 窗口里时剪切 / 粘贴要求确认。
     private func isInvokedFromFinder(_ service: String) -> Bool {
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmost = invokingBundleId()
         guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost) else {
             NSLog("[ServicesProvider] 拒绝 \(service)：前台应用为 \(frontmost ?? "nil")，不是访达")
             return false
@@ -104,6 +165,7 @@ final class ServicesProvider: NSObject {
             return
         }
         ClipboardToast.showCopied()
+        returnFocusToFinderIfNeeded()
         NSLog("[ServicesProvider] copyPath: \(items.count) item(s)")
     }
 
@@ -124,11 +186,18 @@ final class ServicesProvider: NSObject {
             return
         }
         ClipboardToast.showCopied()
+        returnFocusToFinderIfNeeded()
     }
 
     @objc func copyFileContent(_ pboard: NSPasteboard,
                                userData: String?,
                                error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        // 以「完全磁盘访问」身份读文件内容写入剪贴板：任何 App 都能 NSPerformService 传入任意路径，
+        // 必须只受理访达前台调用，否则可借本 App 读出受保护文件
+        guard isInvokedFromFinder("copyFileContent") else {
+            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
+            return
+        }
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileContent) else {
             showAlert(NSLocalizedString("复制文件内容功能已关闭，请在设置中启用", comment: "service"))
@@ -149,6 +218,7 @@ final class ServicesProvider: NSObject {
                 return
             }
             ClipboardToast.showCopied(message: NSLocalizedString("已复制文件内容到剪贴板", comment: ""))
+            returnFocusToFinderIfNeeded()
         case .notRegularFile:
             showAlert(NSLocalizedString("仅支持普通文件", comment: "service"))
         case .fileTooLarge:
@@ -243,7 +313,7 @@ final class ServicesProvider: NSObject {
 
     private func canStartFileAction(_ feature: String, error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
         guard ServiceInvocationPolicy.acceptsInteractiveService(
-            frontmostBundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            frontmostBundleId: invokingBundleId(),
             providerBundleId: Bundle.main.bundleIdentifier) else {
             error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
             return false
@@ -341,7 +411,8 @@ final class ServicesProvider: NSObject {
     @objc func cutFiles(_ pboard: NSPasteboard,
                         userData: String?,
                         error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmost = invokingBundleId()
+        Self.trace("cutFiles called: items=\(fileURLs(from: pboard).count) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") caller=\(frontmost ?? "nil")")
         // 云盘目录里系统会先激活本 App 再派发服务，此时访达不在前台，需用户确认后才写入剪切队列
         let needsConfirmation = ServiceInvocationPolicy.requiresServiceConfirmation(
             frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
@@ -363,6 +434,7 @@ final class ServicesProvider: NSObject {
             payload: ["paths": .stringArray(items.map(\.path))])
         guard needsConfirmation else {
             performFileAction(request, feature: MenuFeatureCatalog.cut)
+            returnFocusToFinderIfNeeded()
             return
         }
         // 确认框放到服务返回之后，避免模态等待占用 Services 的同步超时
@@ -392,11 +464,14 @@ final class ServicesProvider: NSObject {
     @objc func pasteFiles(_ pboard: NSPasteboard,
                           userData: String?,
                           error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmost = invokingBundleId()
+        let items = fileURLs(from: pboard)
+        Self.trace("pasteFiles called: items=\(items.count) dirs=\(items.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }.count) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") caller=\(frontmost ?? "nil")")
         let needsConfirmation = ServiceInvocationPolicy.requiresServiceConfirmation(
             frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
         guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost)
                 || needsConfirmation else {
+            Self.trace("pasteFiles rejected: not from Finder")
             error?.pointee = NSLocalizedString("请从访达调用粘贴服务", comment: "service") as NSString
             return
         }
@@ -405,10 +480,12 @@ final class ServicesProvider: NSObject {
             showAlert(NSLocalizedString("粘贴功能已关闭，请在设置中启用", comment: "service"))
             return
         }
-        guard let destination = ServiceInvocationPolicy.pasteDestination(for: fileURLs(from: pboard)) else {
+        guard let destination = ServiceInvocationPolicy.pasteDestination(for: items) else {
+            Self.trace("pasteFiles rejected: no destination")
             showAlert(NSLocalizedString("请选择一个目标文件夹，再调用粘贴服务", comment: "service"))
             return
         }
+        Self.trace("pasteFiles accepted: confirm=\(needsConfirmation)")
         // 确认框与移动都放到服务返回之后：模态等待和云盘大文件移动不能占用 Services 的同步超时。
         DispatchQueue.main.async { [self] in
             if needsConfirmation && !confirmPaste(into: destination) { return }
@@ -416,6 +493,7 @@ final class ServicesProvider: NSObject {
                 id: UUID().uuidString,
                 action: "pasteFiles",
                 payload: ["destination": .string(destination.path)]), feature: MenuFeatureCatalog.paste)
+            if !needsConfirmation { returnFocusToFinderIfNeeded() }
         }
     }
 
