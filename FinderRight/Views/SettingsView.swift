@@ -217,7 +217,7 @@ struct GeneralTab: View {
                 if currentLoginStatus == .requiresApproval {
                     FRDivider()
                     HStack(spacing: 12) {
-                        Text("已注册，但需要在「系统设置」-「通用」-「登录项」中允许启动")
+                        Text("已注册，但需要在「系统设置」-「通用」-「登录项与扩展」（macOS 14 及更早为「登录项」）中允许启动")
                             .font(.system(size: 12))
                             .foregroundColor(FRTheme.warnText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1089,7 +1089,6 @@ struct ShortcutsTab: View {
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
     /// 授权后所有快捷键由按键拦截处理；未授权时剪切 / 粘贴不可用，其他行退回服务快捷键
     @FRState private var hasAccessibility = AccessibilityChecker.check()
-    @FRState private var showRestoreConfirm = false
     /// 恢复默认后递增，让各行重新读取快捷键
     @FRState private var reloadToken = 0
 
@@ -1138,15 +1137,9 @@ struct ShortcutsTab: View {
 
                 FRCard {
                     FRRow(title: Text("恢复默认快捷键"),
-                          subtitle: Text("剪切 ⌘X、粘贴 ⌘V、复制路径 ⌥⌘C、前往目录 ⇧⌘G、切换隐藏文件 ⇧⌘.，与访达一致；其他快捷键清空。")) {
-                        Button("恢复默认…") { showRestoreConfirm = true }
+                          subtitle: Text("剪切 ⌘X、粘贴 ⌘V、复制路径 ⌥⌘C、切换隐藏文件 ⇧⌘.，与访达一致；其他快捷键清空。")) {
+                        Button("恢复默认…") { confirmRestoreDefaults() }
                             .buttonStyle(.frSecondary)
-                            .alert(isPresented: $showRestoreConfirm) {
-                                Alert(title: Text("恢复默认快捷键？"),
-                                      message: Text("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。"),
-                                      primaryButton: .destructive(Text("恢复默认")) { restoreDefaults() },
-                                      secondaryButton: .cancel(Text("取消")))
-                            }
                     }
                 }
 
@@ -1177,6 +1170,24 @@ struct ShortcutsTab: View {
     private func requestAccessibility() {
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
+    /// 用 NSAlert 确认：本页已挂着冲突提示的 .alert，SwiftUI 不会再弹出子视图上的 .alert（实测点了没反应）
+    private func confirmRestoreDefaults() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = NSLocalizedString("恢复默认快捷键？", comment: "")
+        alert.informativeText = NSLocalizedString("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。", comment: "")
+        alert.addButton(withTitle: NSLocalizedString("恢复默认", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("取消", comment: ""))
+        let restore = { (response: NSApplication.ModalResponse) in
+            if response == .alertFirstButtonReturn { restoreDefaults() }
+        }
+        if let window = NSApp.keyWindow {
+            alert.beginSheetModal(for: window, completionHandler: restore)
+        } else {
+            restore(alert.runModal())
+        }
     }
 
     /// 全部换成默认快捷键，并刷新各行、按键拦截与服务快捷键

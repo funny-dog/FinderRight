@@ -42,7 +42,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
 - 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**无需重启 Finder，不会关闭窗口或中断拷贝**（需辅助功能权限）
-- ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键，在访达里直接按键即可，无需展开右键菜单（授权「辅助功能」后由 FinderRight 直接处理，任意组合都能用、改完立即生效；未授权时除剪切 / 粘贴外自动退回系统服务快捷键）；默认快捷键与访达一致（⌥⌘C 复制路径、⇧⌘G 前往目录、⇧⌘. 切换隐藏文件），升级不覆盖你的设置，可一键恢复默认，并可在设置中拖动调整它们在右键菜单中的顺序
+- ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键，在访达里直接按键即可，无需展开右键菜单（授权「辅助功能」后由 FinderRight 直接处理，任意组合都能用、改完立即生效；未授权时除剪切 / 粘贴外自动退回系统服务快捷键）；默认快捷键与访达一致（⌥⌘C 复制路径、⇧⌘. 切换隐藏文件），升级不覆盖你的设置，可一键恢复默认，并可在设置中拖动调整它们在右键菜单中的顺序
 - 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
 - 🔐 **升级免重新授权** —— 自 1.3.0 起使用固定证书签名，之后的版本升级会自动保留「完全磁盘访问」与「辅助功能」授权；自动更新还会校验新版本与当前版本出自同一证书，拒绝被篡改或冒充的更新包
 
@@ -177,7 +177,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
 - 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder, so windows stay open and copies keep running** (needs Accessibility)
-- ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item and press it right in Finder without opening the context menu (with Accessibility permission FinderRight handles them directly, so any combination works and changes apply immediately; without it, everything except Cut / Paste falls back to system Services shortcuts); defaults match Finder (⌥⌘C Copy Path, ⇧⌘G Go to Folder, ⇧⌘. Toggle Hidden Files), updates never overwrite your shortcuts, and you can restore the defaults in one click, and drag to reorder them in Settings
+- ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item and press it right in Finder without opening the context menu (with Accessibility permission FinderRight handles them directly, so any combination works and changes apply immediately; without it, everything except Cut / Paste falls back to system Services shortcuts); defaults match Finder (⌥⌘C Copy Path, ⇧⌘. Toggle Hidden Files), updates never overwrite your shortcuts, and you can restore the defaults in one click, and drag to reorder them in Settings
 - 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)
 - 🔐 **No Re-authorization on Upgrade** — signed with a fixed certificate since 1.3.0, so later upgrades keep the Full Disk Access and Accessibility permissions; the auto-updater also verifies that a new version is signed with the same certificate and rejects tampered or impostor packages
 
