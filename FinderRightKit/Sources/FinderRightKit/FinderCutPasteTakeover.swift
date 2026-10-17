@@ -22,19 +22,17 @@ public enum FinderCutPasteTakeover {
         actionId == cutActionId || actionId == pasteActionId
     }
 
-    /// 首次运行本版本时的快捷键迁移：剪切 / 粘贴统一改为与系统一致的 ⌘X / ⌘V。
-    /// 旧版本走服务快捷键，录不了 ⌘X / ⌘V，用户录的组合只是替代键，不再保留；
-    /// 其他动作若占着 ⌘X / ⌘V（旧版本允许录入，但作为服务快捷键从未生效）一并清掉，避免两行显示同一组合。
-    public static func migratedShortcuts(_ current: [String: ActionShortcut]) -> [String: ActionShortcut] {
+    /// 首次运行本版本时要补上的默认快捷键：只填剪切 / 粘贴里用户还没设置的那一行。
+    /// 用户设置过的组合（包括旧版本录的）一律保留，升级不能覆盖用户的选择；
+    /// 默认组合若已被其他动作占用也不填，避免两行显示同一组合。
+    public static func defaultsToApply(current: [String: ActionShortcut]) -> [String: ActionShortcut] {
         func same(_ a: ActionShortcut, _ b: ActionShortcut) -> Bool {
             a.key.lowercased() == b.key.lowercased()
                 && ModifierBits.normalized(a.modifiers) == ModifierBits.normalized(b.modifiers)
         }
-        var result = current.filter { entry in
-            !defaultShortcuts.values.contains { same($0, entry.value) }
+        return defaultShortcuts.filter { actionId, shortcut in
+            current[actionId] == nil && !current.values.contains { same($0, shortcut) }
         }
-        for (actionId, shortcut) in defaultShortcuts { result[actionId] = shortcut }
-        return result
     }
 
     /// 录制时要拦下的冲突。剪切 / 粘贴由拦截抢在访达之前处理，只有系统全局快捷键（截屏、切换 App 等）
