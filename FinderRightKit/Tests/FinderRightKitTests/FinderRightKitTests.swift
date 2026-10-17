@@ -2226,6 +2226,48 @@ struct FinderRightKitTestsRunner {
                             providerHasKeyWindow: false, previousFrontmostBundleId: "com.example.evil"), "com.example.evil", "激活前是其他 App 仍会被拒")
         }
 
+        runTest("FinderCutPasteTakeover 只认纯 ⌘X/⌘C/⌘V，按字符而非键码") {
+            let cmd: UInt64 = 1 << 20, shift: UInt64 = 1 << 17, opt: UInt64 = 1 << 19, ctl: UInt64 = 1 << 18
+            let capsLock: UInt64 = 1 << 16, numericPad: UInt64 = 1 << 21
+            try assertEqual(FinderCutPasteTakeover.command(characters: "x", modifierFlags: cmd), .cut)
+            try assertEqual(FinderCutPasteTakeover.command(characters: "C", modifierFlags: cmd), .copy, "大写字符同样识别")
+            try assertEqual(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | capsLock | numericPad), .paste, "无关标志位不影响")
+            try assertNil(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | opt), "⌥⌘V 是访达自己的移动")
+            try assertNil(FinderCutPasteTakeover.command(characters: "v", modifierFlags: cmd | shift))
+            try assertNil(FinderCutPasteTakeover.command(characters: "x", modifierFlags: cmd | ctl))
+            try assertNil(FinderCutPasteTakeover.command(characters: "x", modifierFlags: ctl), "不含 ⌘")
+            try assertNil(FinderCutPasteTakeover.command(characters: "a", modifierFlags: cmd))
+            try assertNil(FinderCutPasteTakeover.command(characters: nil, modifierFlags: cmd))
+        }
+
+        runTest("FinderCutPasteTakeover 焦点在文字输入里一律放行") {
+            try assertTrue(FinderCutPasteTakeover.isTextInput(role: "AXTextField", subrole: nil), "重命名")
+            try assertTrue(FinderCutPasteTakeover.isTextInput(role: "AXTextField", subrole: "AXSearchField"), "搜索框")
+            try assertTrue(FinderCutPasteTakeover.isTextInput(role: "AXTextArea", subrole: nil))
+            try assertTrue(!FinderCutPasteTakeover.isTextInput(role: "AXList", subrole: "AXCollectionList"), "图标视图")
+            try assertTrue(!FinderCutPasteTakeover.isTextInput(role: "AXOutline", subrole: nil), "列表视图")
+            try assertTrue(!FinderCutPasteTakeover.isTextInput(role: nil, subrole: nil))
+
+            typealias T = FinderCutPasteTakeover
+            try assertEqual(T.decide(.cut, focusIsText: false, pasteboardIsCutMirror: false), .cut)
+            try assertEqual(T.decide(.cut, focusIsText: true, pasteboardIsCutMirror: true), .passThrough, "重命名时剪切文字")
+            try assertEqual(T.decide(.paste, focusIsText: true, pasteboardIsCutMirror: true), .passThrough, "重命名时粘贴文字，不能移走文件")
+            try assertEqual(T.decide(.paste, focusIsText: false, pasteboardIsCutMirror: true), .paste)
+            try assertEqual(T.decide(.paste, focusIsText: false, pasteboardIsCutMirror: false), .passThrough, "剪贴板已换成别的内容：普通粘贴")
+            try assertEqual(T.decide(.copy, focusIsText: false, pasteboardIsCutMirror: true), .copyThenCancelCut)
+            try assertEqual(T.decide(nil, focusIsText: false, pasteboardIsCutMirror: true), .passThrough)
+        }
+
+        runTest("CutPasteboardMirror 按 changeCount 判断剪贴板是否仍是剪切内容") {
+            var mirror = CutPasteboardMirror()
+            try assertTrue(!mirror.matches(currentChangeCount: 0), "未记录时不匹配")
+            mirror.record(changeCount: 42)
+            try assertTrue(mirror.matches(currentChangeCount: 42))
+            try assertTrue(!mirror.matches(currentChangeCount: 43), "之后又复制了别的")
+            mirror.reset()
+            try assertTrue(!mirror.matches(currentChangeCount: 42))
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

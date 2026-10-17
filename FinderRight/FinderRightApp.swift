@@ -87,6 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 先把设置里的快捷键同步成系统服务快捷键（覆盖升级前的旧状态），register 内会刷新服务缓存
         ServiceShortcutSync.run()
         ServicesProvider.register { [weak self] in self?.openGoToDirectory() }
+        // 设置里打开「⌘X / ⌘V」后，在访达前台时接管这两个按键
+        FinderCutPasteInterceptor.shared.start()
 
         // 自动注册并启用自身包含的 FinderSync 扩展
         registerFinderSyncPlugin()
