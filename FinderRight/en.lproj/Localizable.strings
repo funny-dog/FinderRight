@@ -143,6 +143,13 @@
 "切换隐藏文件" = "Toggle Hidden Files";
 "访达快捷键" = "Finder Shortcuts";
 "在访达中用 ⌘X / ⌘V 剪切和粘贴" = "Cut and paste with ⌘X / ⌘V in Finder";
+"%@ 已启用（上方开关）" = "%@ is on (switch above)";
+"需打开上方「⌘X / ⌘V」开关才会生效" = "Turn on the \"⌘X / ⌘V\" switch above for this to work";
+"使用 ⌘X / ⌘V" = "Use ⌘X / ⌘V";
+"⌘X / ⌘V 不能绑定为服务快捷键，访达会先处理。打开上方的「在访达中用 ⌘X / ⌘V 剪切和粘贴」后，⌘X 剪切、⌘V 粘贴会一起生效。" = "⌘X / ⌘V can't be bound as Services shortcuts because Finder handles them first. Turn on \"Cut and paste with ⌘X / ⌘V in Finder\" above, and ⌘X cut and ⌘V paste will both work.";
+"打开开关" = "Turn On";
+"⌘X / ⌘V 已经可以用了" = "⌘X / ⌘V already work";
+"上方开关已打开，在访达中直接按 ⌘X 剪切、⌘V 粘贴即可，无需再绑定。" = "The switch above is on. Press ⌘X to cut and ⌘V to paste in Finder; no binding needed.";
 "⌘X 剪切选中的文件，⌘V 粘贴到当前窗口所在的文件夹，空白处也可以。文件由访达自己移动，可以撤销。重命名或输入文字时不受影响。" = "⌘X cuts the selected files and ⌘V pastes them into the folder of the current window, even with nothing selected. Finder moves the files itself, so the move can be undone. Renaming or typing text is not affected.";
 "需要「辅助功能」权限才能生效" = "Requires Accessibility permission";
 "剪切时会把文件放进剪贴板，右键菜单剪切也一样。剪切后在访达里拷贝了别的内容，剪切会取消。" = "Cutting puts the files on the clipboard, including cuts from the context menu. Copying something else in Finder after cutting cancels the cut.";

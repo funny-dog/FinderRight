@@ -2258,6 +2258,19 @@ struct FinderRightKitTestsRunner {
             try assertEqual(T.decide(nil, focusIsText: false, pasteboardIsCutMirror: true), .passThrough)
         }
 
+        runTest("FinderCutPasteTakeover 只有剪切行的 ⌘X、粘贴行的 ⌘V 引导到接管开关") {
+            let cmd = 1 << 20, shift = 1 << 17, opt = 1 << 19
+            typealias T = FinderCutPasteTakeover
+            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd), forActionId: "shortcut.cut"))
+            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "V", modifiers: cmd), forActionId: "shortcut.paste"), "大写字符")
+            try assertTrue(T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd | (1 << 16)), forActionId: "shortcut.paste"), "无关标志位")
+            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd), forActionId: "shortcut.cut"), "剪切行录 ⌘V 仍算冲突")
+            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd), forActionId: "shortcut.copyPath"))
+            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "v", modifiers: cmd | opt), forActionId: "shortcut.paste"), "⌥⌘V 是访达移动")
+            try assertTrue(!T.isTakeoverShortcut(ActionShortcut(key: "x", modifiers: cmd | shift), forActionId: "shortcut.cut"))
+            try assertNil(T.takeoverShortcut(forActionId: "shortcut.newFile"))
+        }
+
         runTest("CutPasteboardMirror 按 changeCount 判断剪贴板是否仍是剪切内容") {
             var mirror = CutPasteboardMirror()
             try assertTrue(!mirror.matches(currentChangeCount: 0), "未记录时不匹配")

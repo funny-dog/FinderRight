@@ -25,6 +25,20 @@ public enum FinderCutPasteTakeover {
         case paste
     }
 
+    /// 设置页「剪切」「粘贴」两行对应的接管按键。系统服务绑不了这两个键，录到时引导用户改用开关。
+    public static func takeoverShortcut(forActionId actionId: String) -> ActionShortcut? {
+        switch actionId {
+        case "shortcut.cut": return ActionShortcut(key: "x", modifiers: ModifierBits.commandBit)
+        case "shortcut.paste": return ActionShortcut(key: "v", modifiers: ModifierBits.commandBit)
+        default: return nil
+        }
+    }
+
+    public static func isTakeoverShortcut(_ shortcut: ActionShortcut, forActionId actionId: String) -> Bool {
+        guard let expected = takeoverShortcut(forActionId: actionId) else { return false }
+        return shortcut.key.lowercased() == expected.key && ModifierBits.normalized(shortcut.modifiers) == expected.modifiers
+    }
+
     /// 只认纯 ⌘ 加 X / C / V。带 ⇧⌥⌃ 的组合（如 ⌥⌘V、⌥⌘C）是访达自己的功能，不碰。
     /// `characters` 取 charactersIgnoringModifiers，按当前键盘布局的字符判断，不按物理键码。
     public static func command(characters: String?, modifierFlags: UInt64) -> Command? {
