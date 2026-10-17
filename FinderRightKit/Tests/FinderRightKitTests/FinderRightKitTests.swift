@@ -2255,20 +2255,19 @@ struct FinderRightKitTestsRunner {
             try assertNil(T.functionKeyCode(for: "v"))
         }
 
-        runTest("FinderCutPasteTakeover 升级统一为 ⌘X / ⌘V，录制只拦系统全局快捷键") {
+        runTest("FinderCutPasteTakeover 默认 ⌘X / ⌘V 只补空位、不覆盖用户设置，录制只拦系统全局快捷键") {
             typealias T = FinderCutPasteTakeover
             let cmd = 1 << 20, ctl = 1 << 18, shift = 1 << 17
             let cmdX = ActionShortcut(key: "x", modifiers: cmd), cmdV = ActionShortcut(key: "v", modifiers: cmd)
-            try assertEqual(T.migratedShortcuts([:]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV])
-            let copyPath = ActionShortcut(key: "c", modifiers: cmd | ctl)
-            try assertEqual(T.migratedShortcuts([
+            try assertEqual(T.defaultsToApply(current: [:]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV])
+            try assertEqual(T.defaultsToApply(current: [
                 "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
                 "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
-                "shortcut.copyPath": copyPath,
-            ]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": copyPath], "旧的替代键改为 ⌘X / ⌘V，其他动作保留")
-            try assertEqual(T.migratedShortcuts([
-                "shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd | (1 << 16)),
-            ]), ["shortcut.cut": cmdX, "shortcut.paste": cmdV], "其他动作占着 ⌘V（从未生效）则清掉")
+            ]), [:], "用户设置过的剪切 / 粘贴一律保留")
+            try assertEqual(T.defaultsToApply(current: ["shortcut.paste": ActionShortcut(key: "v", modifiers: cmd | ctl)]),
+                            ["shortcut.cut": cmdX], "只补没设置的那一行")
+            try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd)]),
+                            ["shortcut.cut": cmdX], "⌘V 已被其他动作占用则不填")
             try assertTrue(T.handlesAction("shortcut.cut") && T.handlesAction("shortcut.paste"))
             try assertTrue(!T.handlesAction("shortcut.copyPath"))
             try assertTrue(!ServiceShortcuts.syncsShortcut(actionId: "shortcut.cut"))

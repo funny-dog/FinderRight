@@ -67,13 +67,15 @@ final class FinderCutPasteInterceptor {
         refresh()
     }
 
-    /// 首次运行本版本时把剪切 / 粘贴统一为 ⌘X / ⌘V（规则见 FinderCutPasteTakeover.migratedShortcuts）。
-    /// 只做一次：之后用户改键或清空都保留。
+    /// 首次运行本版本时补上默认的 ⌘X / ⌘V（规则见 FinderCutPasteTakeover.defaultsToApply）：
+    /// 只填用户没设置的行，用户的快捷键升级后保持不变。只做一次：之后用户清空就是停用，不会再被补回。
     static func applyDefaultShortcutsIfNeeded() {
         let appliedKey = "cutPasteNativeShortcutsApplied"
         guard !UserDefaults.standard.bool(forKey: appliedKey) else { return }
         let config = SharedConfig.shared
-        config.shortcuts = FinderCutPasteTakeover.migratedShortcuts(config.shortcuts)
+        for (actionId, shortcut) in FinderCutPasteTakeover.defaultsToApply(current: config.shortcuts) {
+            config.setShortcut(shortcut, forActionId: actionId)
+        }
         UserDefaults.standard.set(true, forKey: appliedKey)
     }
 
