@@ -268,6 +268,69 @@ struct FRThemeSwatches: View {
     }
 }
 
+/// 右键菜单图标风格实时预览（展示具有代表性的功能图标样式）
+struct MenuIconPreview: View {
+    let style: MenuIconStyle
+
+    private var sampleFeatures: [MenuFeature] {
+        let sampleIds = [
+            MenuFeatureCatalog.newFile,
+            MenuFeatureCatalog.copyPath,
+            MenuFeatureCatalog.openTerminal,
+            MenuFeatureCatalog.openEditor,
+            MenuFeatureCatalog.cut,
+        ]
+        return sampleIds.compactMap { MenuFeatureCatalog.feature(forId: $0) }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if style == .none {
+                Text(LocalizedStringKey("无图标"))
+                    .font(.system(size: 12))
+                    .foregroundColor(FRTheme.mute)
+                    .padding(.horizontal, 4)
+            } else {
+                ForEach(sampleFeatures) { feature in
+                    sampleIcon(feature)
+                        .help(Text(LocalizedStringKey(feature.nameKey)))
+                }
+            }
+        }
+        .frame(minHeight: 20)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(LocalizedStringKey("右键菜单预览")))
+        .animation(.easeInOut(duration: 0.18), value: style)
+    }
+
+    @ViewBuilder
+    private func sampleIcon(_ feature: MenuFeature) -> some View {
+        switch style {
+        case .tile:
+            ZStack {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color(nsColor: feature.tint.dynamicTileColor()))
+                    .frame(width: 18, height: 18)
+                Image(systemName: feature.systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(feature.tint.darkGlyph ? Color(nsColor: NSColor(hex: 0x2B2200)) : .white)
+            }
+        case .tinted:
+            Image(systemName: feature.systemImage)
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundColor(Color(nsColor: feature.tint.dynamicLineColor()))
+                .frame(width: 18, height: 18)
+        case .modern:
+            Image(systemName: feature.systemImage)
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundColor(FRTheme.text)
+                .frame(width: 18, height: 18)
+        case .none:
+            EmptyView()
+        }
+    }
+}
+
 struct FRButtonStyle: ButtonStyle {
     enum Kind {
         case secondary

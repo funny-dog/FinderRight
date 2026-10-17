@@ -207,6 +207,20 @@ struct FinderRightKitTestsRunner {
             try assertNil(MenuIconStyle(storedValue: "unknown"))
         }
 
+        runTest("MenuTint 与功能色绑定") {
+            try assertEqual(MenuTint.blue.name, "blue")
+            try assertEqual(MenuTint.blue.tile.light, 0x007AFF)
+            try assertTrue(!MenuTint.blue.darkGlyph)
+            try assertTrue(MenuTint.yellow.darkGlyph)
+
+            let newFile = MenuFeatureCatalog.feature(forId: MenuFeatureCatalog.newFile)
+            try assertEqual(newFile?.tint, .blue)
+            let terminal = MenuFeatureCatalog.feature(forId: MenuFeatureCatalog.openTerminal)
+            try assertEqual(terminal?.tint, .graphite)
+            let cut = MenuFeatureCatalog.feature(forId: MenuFeatureCatalog.cut)
+            try assertEqual(cut?.tint, .orange)
+        }
+
         runTest("SharedConfig 多线程并发压测") {
             let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-concurrent-\(UUID().uuidString).plist")
             defer { try? FileManager.default.removeItem(at: tempURL) }

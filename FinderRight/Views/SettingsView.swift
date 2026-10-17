@@ -283,15 +283,19 @@ struct GeneralTab: View {
                 FRDivider()
 
                 FRRow(title: Text("右键菜单图标")) {
-                    FRPicker(label: "右键菜单图标", selection: Binding(
-                        get: { menuIconStyle },
-                        set: { newValue in
-                            menuIconStyle = newValue
-                            SharedConfig.shared.menuIconStyle = newValue
-                        }
-                    )) {
-                        ForEach(MenuIconStyle.allCases) { style in
-                            Text(LocalizedStringKey(style.titleKey)).tag(style)
+                    HStack(spacing: 12) {
+                        MenuIconPreview(style: menuIconStyle)
+
+                        FRPicker(label: "右键菜单图标", selection: Binding(
+                            get: { menuIconStyle },
+                            set: { newValue in
+                                menuIconStyle = newValue
+                                SharedConfig.shared.menuIconStyle = newValue
+                            }
+                        )) {
+                            ForEach(MenuIconStyle.allCases) { style in
+                                Text(LocalizedStringKey(style.titleKey)).tag(style)
+                            }
                         }
                     }
                 }
