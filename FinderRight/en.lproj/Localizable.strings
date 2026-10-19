@@ -318,6 +318,11 @@
 
 /* Permissions & Extensions */
 "权限与扩展" = "Permissions & Extensions";
+"管理访达与快速查看扩展，以及系统授权" = "Manage Finder and Quick Look extensions, and system permissions";
+"扩展" = "Extensions";
+"系统权限" = "System Permissions";
+"排查与引导" = "Troubleshooting & Setup";
+"前往权限与扩展" = "Open Permissions & Extensions";
 "右键菜单排查" = "Troubleshooting";
 "若右键未显示菜单，可尝试重启访达或检查扩展开关" = "If the context menu does not appear, try restarting Finder or checking extension settings";
 "重启访达" = "Relaunch Finder";
@@ -472,7 +477,7 @@
 "以下路径未添加：%@" = "These paths were not added: %@";
 
 /* Redesigned settings window */
-"启动、显示与系统权限" = "Launch, display and system permissions";
+"启动、显示与外观" = "Launch, display and appearance";
 "选择出现在右键菜单中的功能，拖动调整顺序" = "Choose what appears in the right-click menu, and drag to reorder";
 "右键「移动到 / 复制到」使用的目的地" = "Destinations for the right-click \"Move to / Copy to\"";
 "清除" = "Clear";
