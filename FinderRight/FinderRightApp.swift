@@ -64,6 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 撤销记录只存内存：清掉上次崩溃或强退残留的状态文件，免得扩展显示无效的撤销菜单项
+        UndoCenter.shared.clear()
+
         // 「切换隐藏文件」在扩展端是无状态固定文案（见 FinderSync.menu(for:) 里该菜单项的说明），
         // 不再需要在启动时把 SharedConfig 锚定到 Finder 真实状态。
 
@@ -647,6 +650,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        UndoCenter.shared.clear()
     }
 
     // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复启动时弹出设置的唯一入口）

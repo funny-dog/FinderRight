@@ -146,6 +146,8 @@ final class FinderRightService {
             return transferItems(req)
         case "copyFileContent":
             return copyFileContent(req)
+        case "undoLast":
+            return undoLast(req)
         case BadgeReclaimIPC.action:
             return BadgeOwnershipManager.shared.handle(req)
         default:
@@ -185,6 +187,7 @@ final class FinderRightService {
             let fileURL = UniqueName.fileURL(baseName: baseName, ext: ext, in: dirURL)
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
+                registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 return IPCResponse(id: req.id, success: true, message: fileURL.path)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
@@ -233,6 +236,7 @@ final class FinderRightService {
             let fileURL = UniqueName.fileURL(baseName: baseName, ext: template.fileExtension, in: dirURL)
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
+                registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 return IPCResponse(id: req.id, success: true, message: fileURL.path)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
@@ -260,6 +264,7 @@ final class FinderRightService {
         Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
             do {
                 let zip = try ZipCompressor.compress(items: itemURLs, into: dir, baseName: name)
+                self?.registerUndo(.compress, name: zip.lastPathComponent, items: [(zip, nil)])
                 DispatchQueue.main.async {
                     NSWorkspace.shared.activateFileViewerSelecting([zip])
                 }
@@ -290,6 +295,7 @@ final class FinderRightService {
             let subject = url.lastPathComponent
             switch self.performDecompress(url: url) {
             case .success(let output):
+                self.registerUndo(.decompress, name: output.lastPathComponent, items: [(output, nil)])
                 RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, results: [output]))
             case .failure(let failure) where failure.cancelled:
                 RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, cancelled: true))
@@ -715,17 +721,18 @@ final class FinderRightService {
         }
 
         // 收敛到 cutPasteQueue 串行队列，确保 cut-queue.json 互斥访问
-        return Self.cutPasteQueue.sync {
+        let result: (response: IPCResponse, before: [String], added: Int) = Self.cutPasteQueue.sync {
             let fileManager = FileManager.default
 
             // 过滤出实际存在的源文件路径
             let validPaths = paths.filter { fileManager.fileExists(atPath: $0) }
             guard !validPaths.isEmpty else {
-                return IPCResponse(id: req.id, success: false, message: L("选中的文件均不存在"))
+                return (IPCResponse(id: req.id, success: false, message: L("选中的文件均不存在")), [], 0)
             }
 
             // 读取现有剪切队列并过滤掉外部已删除的文件
             var queue = cutQueue.read().filter { fileManager.fileExists(atPath: $0) }
+            let before = queue
 
             // 合并并去重
             for p in validPaths {
@@ -737,15 +744,21 @@ final class FinderRightService {
             do {
                 try cutQueue.write(queue)
             } catch {
-                return IPCResponse(id: req.id, success: false, message: String(format: L("写入剪切队列失败：%@"), error.localizedDescription))
+                return (IPCResponse(id: req.id, success: false, message: String(format: L("写入剪切队列失败：%@"), error.localizedDescription)), [], 0)
             }
             // 经服务快捷键剪切时扩展不知情，靠通知让它打上角标
             CutQueueChangeNotifier.post()
             // 剪切 / 粘贴快捷键生效时把整个队列放进剪贴板，右键剪切后按粘贴键也能交给访达移动
             FinderShortcutInterceptor.shared.mirrorCutQueue(queue)
 
-            return IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件")
+            return (IPCResponse(id: req.id, success: true, message: "已剪切 \(validPaths.count) 个文件"),
+                    before, queue.count - before.count)
         }
+        // 全是已在队列里的项时没有新动作，不覆盖上一条撤销记录
+        if result.added > 0 {
+            registerUndo(.cut, name: "", items: [], cutQueueBefore: result.before, displayCount: result.added)
+        }
+        return result.response
     }
 
     /// 取消剪切：清空剪切队列。
@@ -756,12 +769,17 @@ final class FinderRightService {
     /// 无法撤回，但代次自增会让这批任务结束后不再把失败路径归还回队列（取消必须赢）。
     private func cancelCut(_ req: IPCRequest) -> IPCResponse {
         // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
-        Self.cutPasteQueue.sync {
+        let response = Self.cutPasteQueue.sync {
             Self.cutCancelGeneration += 1
             cutQueue.clear()
             CutQueueChangeNotifier.post()
             return IPCResponse(id: req.id, success: true, message: "已取消剪切")
         }
+        // 用户主动取消后剪切记录作废；⌘V 交给访达移动后的清空带 keepUndo，不动撤销记录
+        if req.payload["keepUndo"]?.boolValue != true {
+            UndoCenter.shared.invalidate(kind: .cut)
+        }
+        return response
     }
 
     /// 在 cutPasteQueue 短事务中一次性取走当前剪切队列，并记录取走时的取消代次
@@ -816,6 +834,7 @@ final class FinderRightService {
         let fileManager = FileManager.default
         var firstError: String?
         var pastedPaths: [URL] = []
+        var pastedPairs: [(current: URL, original: URL?)] = []
         var failedPaths: [String] = []
 
         for sourcePath in sourcePaths {
@@ -845,6 +864,7 @@ final class FinderRightService {
             do {
                 try fileManager.moveItem(at: sourceURL, to: destURL)
                 pastedPaths.append(destURL)
+                pastedPairs.append((destURL, sourceURL))
             } catch {
                 if firstError == nil { firstError = error.localizedDescription }
                 failedPaths.append(sourcePath)
@@ -854,6 +874,7 @@ final class FinderRightService {
         finishPaste(batchID: batchID, failedPaths: failedPaths, generation: generation)
 
         if !pastedPaths.isEmpty {
+            registerUndo(.paste, name: destDir.lastPathComponent, items: pastedPairs)
             DispatchQueue.main.async {
                 NSWorkspace.shared.activateFileViewerSelecting(pastedPaths)
             }
@@ -914,6 +935,7 @@ final class FinderRightService {
         let fileManager = FileManager.default
         let destPath = destDir.resolvingSymlinksInPath().path
         var done: [URL] = []
+        var transferred: [(current: URL, original: URL?)] = []
         var failed = 0
         var firstError: String?
 
@@ -942,10 +964,15 @@ final class FinderRightService {
                     try fileManager.copyItem(at: sourceURL, to: destURL)
                 }
                 done.append(destURL)
+                transferred.append((destURL, mode == .move ? sourceURL : nil))
             } catch {
                 failed += 1
                 if firstError == nil { firstError = error.localizedDescription }
             }
+        }
+
+        if !done.isEmpty {
+            registerUndo(mode == .move ? .move : .copy, name: destDir.lastPathComponent, items: transferred)
         }
 
         let subject = Self.subject(forPaths: sourcePaths)
@@ -958,6 +985,92 @@ final class FinderRightService {
         } else if !done.isEmpty {
             serviceLog("transferItems(\(mode.rawValue)) succeeded: \(done.count) item(s) to \(destDir.path)")
             RecentOperations.shared.record(OperationRecord(kind: kind, subject: subject, results: done))
+        }
+    }
+
+    // MARK: - 撤销上一次操作
+
+    /// 登记一次可撤销的操作。指纹在操作完成后、在新位置上取；取不到的项丢弃，
+    /// 全部丢弃时（剪切除外，它不动文件）不登记，旧记录保持不变
+    private func registerUndo(_ kind: UndoRecord.Kind, name: String, items: [(current: URL, original: URL?)],
+                              cutQueueBefore: [String]? = nil, displayCount: Int? = nil) {
+        let recorded = items.compactMap { pair in
+            FileFingerprint.capture(pair.current).map {
+                UndoRecord.Item(current: pair.current, original: pair.original, fingerprint: $0)
+            }
+        }
+        guard kind == .cut || !recorded.isEmpty else { return }
+        let snapshot = FinderUndoMenu.snapshot()
+        UndoCenter.shared.register(UndoRecord(kind: kind, name: name, items: recorded,
+                                              cutQueueBefore: cutQueueBefore, finderSnapshot: snapshot),
+                                   displayCount: displayCount)
+        serviceLog("undo registered: \(kind.rawValue) items=\(recorded.count) finder=\(snapshot.map { "\($0.title)/\($0.enabled)" } ?? "nil")")
+    }
+
+    /// 撤销 FinderRight 记录的上一次操作。来源：⌘Z 拦截、扩展右键菜单、菜单栏。
+    /// IPC 立即返回「已受理」，文件移动或送废纸篓在 transferQueue 上执行，结果用提示告知
+    private func undoLast(_ req: IPCRequest) -> IPCResponse {
+        guard let record = UndoCenter.shared.beginUndo() else {
+            ClipboardToast.show(message: L("没有可撤销的操作"), style: .failure)
+            return IPCResponse(id: req.id, success: false, message: L("没有可撤销的操作"))
+        }
+        Self.backgroundJobs.run(on: Self.transferQueue) {
+            self.performUndo(record)
+            // 只清「撤销中」标记：撤销期间别的队列登记的新记录照常保留
+            UndoCenter.shared.endUndo()
+        }
+        return IPCResponse(id: req.id, success: true, message: "已受理撤销，正在后台处理")
+    }
+
+    private func performUndo(_ record: UndoRecord) {
+        var outcome: UndoOutcome
+        if record.kind == .cut {
+            outcome = restoreCutQueue(record.cutQueueBefore ?? [])
+        } else {
+            outcome = UndoExecutor.run(record, trash: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) })
+            // 撤销右键粘贴：移回原处的项重新进入剪切队列，回到「已剪切、待粘贴」的状态
+            if record.kind == .paste, !outcome.undone.isEmpty {
+                Self.cutPasteQueue.sync {
+                    do {
+                        let queue = try cutQueue.appendUnique(outcome.undone.map(\.path))
+                        CutQueueChangeNotifier.post()
+                        FinderShortcutInterceptor.shared.mirrorCutQueue(queue)
+                    } catch {
+                        serviceLog("撤销粘贴后写回剪切队列失败: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+
+        let action = UndoText.actionDescription(kind: record.kind, count: record.count, name: record.name, localize: L)
+        let message = UndoText.feedback(for: record, outcome: outcome, localize: L)
+        ClipboardToast.show(message: message, style: Self.toastStyle(outcome.status))
+        RecentOperations.shared.record(OperationRecord(
+            kind: .undo, subject: action,
+            failure: outcome.skipped.isEmpty ? nil : message,
+            results: outcome.undone))
+        serviceLog("undo \(record.kind.rawValue): undone=\(outcome.undone.count) skipped=\(outcome.skipped.count)")
+    }
+
+    /// 撤销剪切：把剪切队列原样写回这次剪切之前的内容
+    private func restoreCutQueue(_ before: [String]) -> UndoOutcome {
+        Self.cutPasteQueue.sync {
+            do {
+                try cutQueue.write(before)
+            } catch {
+                return UndoOutcome(skipped: [.init(name: L("剪切队列"), reason: .failed(error.localizedDescription))])
+            }
+            CutQueueChangeNotifier.post()
+            FinderShortcutInterceptor.shared.mirrorCutQueue(before)
+            return UndoOutcome()
+        }
+    }
+
+    private static func toastStyle(_ status: UndoOutcome.Status) -> ClipboardToast.Style {
+        switch status {
+        case .success: return .success
+        case .partial: return .partial
+        case .failure: return .failure
         }
     }
 
