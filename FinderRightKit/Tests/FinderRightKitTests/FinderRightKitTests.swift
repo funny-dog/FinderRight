@@ -2572,6 +2572,106 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!mirror.matches(currentChangeCount: 42))
         }
 
+        // MARK: 撤销上一次操作
+
+        runTest("UndoExecutor 移回原处并拒绝覆盖") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let src = root.appendingPathComponent("src"), dst = root.appendingPathComponent("dst")
+            try fm.createDirectory(at: src, withIntermediateDirectories: true)
+            try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+            let a = src.appendingPathComponent("a.txt"), b = src.appendingPathComponent("b.txt")
+            try Data("a".utf8).write(to: a)
+            try Data("b".utf8).write(to: b)
+            let a2 = dst.appendingPathComponent("a.txt"), b2 = dst.appendingPathComponent("b.txt")
+            try fm.moveItem(at: a, to: a2)
+            try fm.moveItem(at: b, to: b2)
+            let record = UndoRecord(kind: .move, name: "dst", items: [
+                .init(current: a2, original: a, fingerprint: FileFingerprint.capture(a2)!),
+                .init(current: b2, original: b, fingerprint: FileFingerprint.capture(b2)!)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+            try Data("占位".utf8).write(to: b)   // 原位置被同名文件占用
+            let outcome = UndoExecutor.run(record, trash: { _ in throw TestFailure(message: "不应进废纸篓") })
+            try assertEqual(outcome.undone, [a])
+            try assertEqual(outcome.skipped, [UndoOutcome.Skip(name: "b.txt", reason: .originalOccupied)])
+            try assertEqual(outcome.status, .partial)
+            try assertEqual(try String(contentsOf: b, encoding: .utf8), "占位", "绝不覆盖")
+            try assertTrue(fm.fileExists(atPath: b2.path), "跳过的项保持原样")
+        }
+
+        runTest("UndoExecutor 被修改 / 已不存在 / 原文件夹没了 都跳过") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let src = root.appendingPathComponent("src"), gone = root.appendingPathComponent("gone")
+            let dst = root.appendingPathComponent("dst")
+            for dir in [src, gone, dst] { try fm.createDirectory(at: dir, withIntermediateDirectories: true) }
+            let a = src.appendingPathComponent("a.txt"), b = src.appendingPathComponent("b.txt")
+            let c = gone.appendingPathComponent("c.txt")
+            for (url, text) in [(a, "a"), (b, "b"), (c, "c")] { try Data(text.utf8).write(to: url) }
+            var items: [UndoRecord.Item] = []
+            for url in [a, b, c] {
+                let moved = dst.appendingPathComponent(url.lastPathComponent)
+                try fm.moveItem(at: url, to: moved)
+                items.append(.init(current: moved, original: url, fingerprint: FileFingerprint.capture(moved)!))
+            }
+            try Data("改过了，长度也变了".utf8).write(to: items[0].current)
+            try fm.removeItem(at: items[1].current)
+            try fm.removeItem(at: gone)
+            let record = UndoRecord(kind: .move, name: "dst", items: items, cutQueueBefore: nil, finderSnapshot: nil)
+            let outcome = UndoExecutor.run(record, trash: { _ in })
+            try assertEqual(outcome.undone, [])
+            try assertEqual(outcome.status, .failure)
+            try assertEqual(outcome.skipped.map(\.reason), [.modified, .missing, .originalFolderMissing])
+        }
+
+        runTest("UndoExecutor 复制品进废纸篓，文件夹内新增文件视为已修改") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let dst = root.appendingPathComponent("dst"), trashDir = root.appendingPathComponent("trash")
+            try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+            try fm.createDirectory(at: trashDir, withIntermediateDirectories: true)
+            let file = dst.appendingPathComponent("a.txt"), folder = dst.appendingPathComponent("folder")
+            try Data("a".utf8).write(to: file)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            // 先把文件夹修改时间拨回过去，确保之后新增文件一定改变它
+            try fm.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -60)], ofItemAtPath: folder.path)
+            let record = UndoRecord(kind: .copy, name: "dst", items: [
+                .init(current: file, original: nil, fingerprint: FileFingerprint.capture(file)!),
+                .init(current: folder, original: nil, fingerprint: FileFingerprint.capture(folder)!)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+            try Data("new".utf8).write(to: folder.appendingPathComponent("added.txt"))
+            var trashed: [URL] = []
+            let outcome = UndoExecutor.run(record, trash: { url in
+                try fm.moveItem(at: url, to: trashDir.appendingPathComponent(url.lastPathComponent))
+                trashed.append(url)
+            })
+            try assertEqual(trashed, [file])
+            try assertEqual(outcome.undone, [file])
+            try assertEqual(outcome.skipped, [UndoOutcome.Skip(name: "folder", reason: .modified)])
+            try assertEqual(outcome.status, .partial)
+        }
+
+        runTest("UndoExecutor 符号链接按链接本身移回") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let src = root.appendingPathComponent("src"), dst = root.appendingPathComponent("dst")
+            try fm.createDirectory(at: src, withIntermediateDirectories: true)
+            try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+            let link = src.appendingPathComponent("link")
+            try fm.createSymbolicLink(atPath: link.path, withDestinationPath: "/nonexistent/target")
+            let moved = dst.appendingPathComponent("link")
+            try fm.moveItem(at: link, to: moved)
+            guard let fingerprint = FileFingerprint.capture(moved) else {
+                throw TestFailure(message: "指向不存在目标的链接也要能取到指纹（不跟随链接）")
+            }
+            let record = UndoRecord(kind: .move, name: "dst",
+                                    items: [.init(current: moved, original: link, fingerprint: fingerprint)],
+                                    cutQueueBefore: nil, finderSnapshot: nil)
+            let outcome = UndoExecutor.run(record, trash: { _ in })
+            try assertEqual(outcome.status, .success)
+            try assertEqual(try fm.destinationOfSymbolicLink(atPath: link.path), "/nonexistent/target")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
