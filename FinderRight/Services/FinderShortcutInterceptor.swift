@@ -321,9 +321,8 @@ final class FinderShortcutInterceptor {
             return
         }
         locked { mirror.reset() }
-        // 文件已交给访达移动：清空剪切队列与角标。keepUndo：这次移动由访达自己记撤销，
-        // FinderRight 的旧撤销记录保持不动（⌘Z 时访达撤销项已变，自然交还访达）
-        let response = service.handle(IPCRequest(id: UUID().uuidString, action: "cancelCut", payload: ["keepUndo": .bool(true)]))
+        // 文件已交给访达移动：清空剪切队列与角标，剪切记录随之作废（这次移动由访达自己撤销）
+        let response = service.handle(IPCRequest(id: UUID().uuidString, action: "cancelCut", payload: [:]))
         ServicesProvider.trace("takeover paste: success=\(response.success)")
     }
 

@@ -775,10 +775,8 @@ final class FinderRightService {
             CutQueueChangeNotifier.post()
             return IPCResponse(id: req.id, success: true, message: "已取消剪切")
         }
-        // 用户主动取消后剪切记录作废；⌘V 交给访达移动后的清空带 keepUndo，不动撤销记录
-        if req.payload["keepUndo"]?.boolValue != true {
-            UndoCenter.shared.invalidate(kind: .cut)
-        }
+        // 剪切已被取消或已被 ⌘V 交给访达移动，剪切记录作废
+        UndoCenter.shared.invalidate(kind: .cut)
         return response
     }
 
@@ -788,6 +786,8 @@ final class FinderRightService {
             guard let batch = try cutQueue.take() else { return nil }
             // 队列已被取走：通知扩展清掉源文件上的剪切角标
             CutQueueChangeNotifier.post()
+            // 剪切在取走这一刻就被粘贴用掉：移动途中不能再「撤销剪切」，粘贴完成后登记的是粘贴记录
+            UndoCenter.shared.invalidate(kind: .cut)
             return (batch.id, batch.paths, Self.cutCancelGeneration)
         }
     }
@@ -1023,23 +1023,12 @@ final class FinderRightService {
     }
 
     private func performUndo(_ record: UndoRecord) {
-        var outcome: UndoOutcome
+        let outcome: UndoOutcome
         if record.kind == .cut {
             outcome = restoreCutQueue(record.cutQueueBefore ?? [])
         } else {
+            // 撤销粘贴只把文件移回原处，不放回剪切队列：与 ⌘V 交给访达移动后由访达撤销的结果一致
             outcome = UndoExecutor.run(record, trash: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) })
-            // 撤销右键粘贴：移回原处的项重新进入剪切队列，回到「已剪切、待粘贴」的状态
-            if record.kind == .paste, !outcome.undone.isEmpty {
-                Self.cutPasteQueue.sync {
-                    do {
-                        let queue = try cutQueue.appendUnique(outcome.undone.map(\.path))
-                        CutQueueChangeNotifier.post()
-                        FinderShortcutInterceptor.shared.mirrorCutQueue(queue)
-                    } catch {
-                        serviceLog("撤销粘贴后写回剪切队列失败: \(error.localizedDescription)")
-                    }
-                }
-            }
         }
 
         let action = UndoText.actionDescription(kind: record.kind, count: record.count, name: record.name, localize: L)
