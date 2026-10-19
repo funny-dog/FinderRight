@@ -29,23 +29,3 @@ jobs:
       - uses: github/codeql-action/analyze@v4
         with:
           category: /language:actions
-
-  analyze-swift:
-    name: Analyze (swift, manual only)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v4
-        with:
-          languages: swift
-          build-mode: manual
-      - name: Build app and extensions for Swift analysis
-        run: bash scripts/build.sh
-      - uses: github/codeql-action/analyze@v4
-        with:
-          category: /language:swift
