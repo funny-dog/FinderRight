@@ -14,31 +14,38 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    name: Analyze (actions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - language: actions
-            os: ubuntu-latest
-            build-mode: none
-          - language: swift
-            os: macos-15
-            build-mode: manual
     steps:
       - uses: actions/checkout@v4
       - uses: github/codeql-action/init@v4
         with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          languages: actions
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:actions
+
+  analyze-swift:
+    name: Analyze (swift, manual only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
       - name: Build app and extensions for Swift analysis
-        if: matrix.language == 'swift'
         run: bash scripts/build.sh
       - uses: github/codeql-action/analyze@v4
         with:
-          category: /language:${{ matrix.language }}
+          category: /language:swift
