@@ -358,11 +358,7 @@ struct GeneralTab: View {
             FRCard {
                 FinderExtensionView()
                 FRDivider()
-                FRRow(title: Text("文件夹与 ZIP 预览"), subtitle: Text("在系统设置的「扩展 → 快速查看」中启用 FinderRight Preview，然后按空格或右键选择「快速查看」。")) {
-                    Text("只读预览")
-                        .font(.caption)
-                        .foregroundStyle(FRTheme.mute)
-                }
+                PreviewExtensionToggle()
                 FRDivider()
                 FullDiskAccessView()
                 FRDivider()
@@ -1435,5 +1431,69 @@ enum FinderRelauncher {
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
         proc.arguments = ["Finder"]
         try? proc.run()
+    }
+}
+
+/// 通用设置中的 Quick Look 开关，直接读取与修改系统的扩展选举。
+private struct PreviewExtensionToggle: View {
+    @FRState private var enabled: Bool? = nil
+    @FRState private var busy = false
+    @FRState private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            FRRow(title: Text("文件夹与 ZIP 预览"), subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。")) {
+                HStack(spacing: 8) {
+                    if busy {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel(Text("正在更新预览设置"))
+                    }
+                    FRSwitch(label: "文件夹与 ZIP 预览", isOn: Binding(
+                        get: { enabled ?? false },
+                        set: { update(to: $0) }
+                    ))
+                    .disabled(busy || enabled == nil)
+                }
+            }
+            if let errorMessage {
+                FRDivider()
+                HStack(spacing: 8) {
+                    Text(verbatim: errorMessage)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("重新检测") { update() }
+                        .buttonStyle(.frSecondary)
+                        .disabled(busy)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+        }
+        .onAppear { update() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in update() }
+    }
+
+    private func update(to desired: Bool? = nil) {
+        guard !busy else { return }
+        busy = true
+        errorMessage = nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result {
+                if let desired { try PreviewExtensionManager.setEnabled(desired) }
+                return try PreviewExtensionManager.isEnabled()
+            }
+            DispatchQueue.main.async {
+                busy = false
+                switch result {
+                case .success(let value): enabled = value
+                case .failure(let error):
+                    enabled = nil
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }

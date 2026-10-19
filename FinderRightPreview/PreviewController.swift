@@ -28,16 +28,20 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
 
     override func loadView() {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 500))
+        container.autoresizingMask = [.width, .height]
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
+        // 滚动条保留独立空间，避免覆盖最后一行内容。
+        scroll.scrollerStyle = .legacy
         scroll.borderType = .noBorder
         outline.dataSource = self
         outline.delegate = self
         outline.rowHeight = 26
         outline.usesAlternatingRowBackgroundColors = true
         outline.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+        outline.autoresizingMask = [.width]
         outline.allowsMultipleSelection = false
         outline.setAccessibilityLabel(text("Folder and ZIP contents"))
         for (id, title, width) in [("name", "Name", 340.0), ("date", "Modified", 160.0),
@@ -55,7 +59,8 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
 
         status.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         status.textColor = .secondaryLabelColor
-        status.maximumNumberOfLines = 2
+        status.maximumNumberOfLines = 1
+        status.lineBreakMode = .byTruncatingMiddle
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         status.setAccessibilityLabel(text("Preview status"))
         progress.style = .spinning
@@ -80,6 +85,14 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         ])
         view = container
         preferredContentSize = container.frame.size
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        outline.sizeLastColumnToFit()
+        if let scroll = outline.enclosingScrollView {
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
     }
 
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {

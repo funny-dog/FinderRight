@@ -23,6 +23,14 @@ swiftc -typecheck -parse-as-library \
   FinderRight/Views/*.swift \
   FinderRight/Views/Components/*.swift
 
+swiftc -parse-as-library \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Services/PreviewExtensionManager.swift scripts/test-preview-settings.swift \
+  -o "$KIT_BUILD_DIR/test-preview-settings"
+"$KIT_BUILD_DIR/test-preview-settings"
+
 echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \

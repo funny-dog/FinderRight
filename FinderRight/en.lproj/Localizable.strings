@@ -548,5 +548,9 @@
 "未找到这个路径" = "Path not found";
 "密码" = "Password";
 "文件夹与 ZIP 预览" = "Folder and ZIP previews";
-"在系统设置的「扩展 → 快速查看」中启用 FinderRight Preview，然后按空格或右键选择「快速查看」。" = "Enable FinderRight Preview under Extensions → Quick Look in System Settings, then press Space or choose Quick Look from Finder’s context menu.";
-"只读预览" = "Read-only preview";
+"使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。" = "Use FinderRight previews with Space or Finder’s Quick Look menu. Turn off to restore the system default. Reopen the Quick Look window after changing this setting.";
+"正在更新预览设置" = "Updating preview settings";
+"未找到快速查看扩展，请确认 FinderRight 已安装并在系统设置中启用扩展。" = "Quick Look extension not found. Make sure FinderRight is installed and enable the extension in System Settings.";
+"无法确认快速查看扩展状态，请在系统设置中检查后重新检测。" = "Unable to determine the Quick Look extension state. Check System Settings, then try again.";
+"无法访问系统扩展设置，请稍后重新检测。" = "Unable to access system extension settings. Please try again later.";
+"快速查看扩展开关未生效，请在系统设置中检查后重试。" = "The Quick Look extension setting did not take effect. Check System Settings, then try again.";

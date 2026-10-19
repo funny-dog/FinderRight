@@ -60,7 +60,20 @@ struct PreviewChecks {
         try Data("broken".utf8).write(to: bad)
         prepare(controller, bad)
         precondition(outline.numberOfRows == 0)
-        print("✓ Quick Look 集成检查通过（虚拟目录、加载、排序、延迟展开、切换预览、损坏 ZIP）")
+        let many = root.appendingPathComponent("many", isDirectory: true)
+        try FileManager.default.createDirectory(at: many, withIntermediateDirectories: true)
+        for index in 0..<30 { try Data().write(to: many.appendingPathComponent("file-\(index).sh")) }
+        prepare(controller, many)
+        controller.view.needsLayout = true
+        controller.view.layoutSubtreeIfNeeded()
+        let scroll = outline.enclosingScrollView!
+        scroll.tile()
+        precondition(outline.frame.width <= scroll.contentView.bounds.width + 1, "默认宽度不应出现横向溢出")
+        precondition(outline.rect(ofColumn: 3).maxX <= scroll.contentView.bounds.width + 1, "最后一列应在可视范围内")
+        let footer = controller.view.subviews.compactMap { $0 as? NSStackView }.first!
+        precondition(controller.view.bounds.contains(footer.frame), "状态栏必须在预览边界内")
+        precondition(footer.frame.maxY < scroll.frame.minY, "状态栏不能与内容区重叠")
+        print("✓ Quick Look 集成检查通过（目录加载、排序、展开、切换、异常包、列宽与底部布局）")
     }
 
     private static func findOutline(_ view: NSView) -> NSOutlineView? {

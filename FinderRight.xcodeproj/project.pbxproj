@@ -222,6 +222,7 @@
 
 
 /* Begin PBXBuildFile section */
+		BC3EB4A2FEEB4DA18DD88905 /* PreviewExtensionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */; };
 		1261239C83FCB9E220E19F28 /* FeatureToggleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B7BE2E2B07467F69638A79 /* FeatureToggleRow.swift */; };
 		22C25A9128FE6FCCAFD49B12 /* FinderRightKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2F6EC8301EC5AA41DAB8B7A0 /* FinderRightKit */; };
 		243E762F0056764ACE4745E1 /* FinderRightSync.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 38B5FAD57D085D6D23C277F0 /* FinderRightSync.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -268,6 +269,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewExtensionManager.swift; sourceTree = "<group>"; };
 		12BB40FE596DC418390953E5 /* AccessibilityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityView.swift; sourceTree = "<group>"; };
 		24862F55CF5D1BAD7EF15C23 /* FinderRight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinderRight.entitlements; sourceTree = "<group>"; };
 		34544E291386B1CC859ADB10 /* FinderRightApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderRightApp.swift; sourceTree = "<group>"; };
@@ -388,6 +390,7 @@
 		9EF149E2070668CB361F1C25 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */,
 				5E2ACE88CF8425D287BFD98E /* FinderRightService.swift */,
 				B9C457953093E65A5E0FB987 /* ServicesProvider.swift */,
 				821B634B8F3D9C655AA237BA /* XPCListenerHost.swift */,
@@ -514,6 +517,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC3EB4A2FEEB4DA18DD88905 /* PreviewExtensionManager.swift in Sources */,
 				4E1466EB093F383B811A175C /* AccessibilityView.swift in Sources */,
 				1261239C83FCB9E220E19F28 /* FeatureToggleRow.swift in Sources */,
 				80F82831D00976393409CBCB /* FinderRightApp.swift in Sources */,
