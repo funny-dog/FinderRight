@@ -13,6 +13,7 @@ BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PROJECT_DIR
 STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
+PREVIEW_DIR="$APP_DIR/Contents/PlugIns/FinderRightPreview.appex"
 # 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
 KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
 
@@ -45,6 +46,18 @@ swiftc -O -parse-as-library \
   -Xlinker -e -Xlinker _NSExtensionMain \
   FinderRightSync/*.swift \
   -o "$APPEX_DIR/Contents/MacOS/FinderRightSync"
+
+echo "=== 编译 Quick Look 扩展 FinderRightPreview (Release) ==="
+mkdir -p "$PREVIEW_DIR/Contents/MacOS"
+swiftc -O -parse-as-library \
+  -module-name FinderRightPreview \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  -framework QuickLookUI -framework AppKit \
+  -Xlinker -e -Xlinker _NSExtensionMain \
+  FinderRightPreview/*.swift \
+  -o "$PREVIEW_DIR/Contents/MacOS/FinderRightPreview"
 
 echo "=== 4. 组装与替换 Plist 变量 ==="
 # 主 App Info.plist
@@ -130,6 +143,18 @@ if [ -f "FinderRightSync/cut-badge.png" ]; then
   cp FinderRightSync/cut-badge.png "$APPEX_DIR/Contents/Resources/"
 fi
 
+sed \
+  -e 's/\$(EXECUTABLE_NAME)/FinderRightPreview/g' \
+  -e 's/\$(PRODUCT_MODULE_NAME)/FinderRightPreview/g' \
+  FinderRightPreview/Info.plist > "$PREVIEW_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PREVIEW_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PREVIEW_DIR/Contents/Info.plist"
+echo -n "XPC!????" > "$PREVIEW_DIR/Contents/PkgInfo"
+for language in en zh-Hans; do
+  mkdir -p "$PREVIEW_DIR/Contents/Resources/$language.lproj"
+  cp "FinderRightPreview/$language.lproj/Localizable.strings" "$PREVIEW_DIR/Contents/Resources/$language.lproj/"
+done
+
 echo "=== 5. 代码签名 ==="
 # 优先使用 scripts/setup-signing.sh 生成的自签名证书：签名规则「标识 + 证书指纹」跨版本不变，
 # 用户升级后无需重新授权，自动更新也以它验签。找不到证书时退回 ad-hoc（只适合本地调试）。
@@ -161,11 +186,12 @@ sign_bundle() {
 # DYLD_INSERT_LIBRARIES，同用户恶意程序用 `open --env` 拉起本 App 即可注入代码并继承这两项授权。
 # Kit 为静态库、主程序只链接系统库，库验证不受影响；主 App 不发 AppleEvent，无需额外 entitlement。
 sign_bundle FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
+sign_bundle FinderRightPreview/FinderRightPreview.entitlements "$PREVIEW_DIR"
 sign_bundle FinderRight/FinderRight.entitlements "$APP_DIR"
 
-# 硬校验：签名有效且两者都带 runtime 标志，否则立即构建失败，不让加固静默回退
-codesign --verify --strict "$APP_DIR"
-for bundle in "$APP_DIR" "$APPEX_DIR"; do
+# 硬校验：主 App 和两个扩展签名有效且都带 runtime 标志，否则立即构建失败
+for bundle in "$APP_DIR" "$APPEX_DIR" "$PREVIEW_DIR"; do
+  codesign --verify --strict "$bundle"
   # 先取完整输出再匹配：pipefail 下 `codesign | grep -q` 会因 grep 提前退出、codesign 收到 SIGPIPE 而误判失败
   sig_info="$(codesign -dv "$bundle" 2>&1)"
   if [[ "$sig_info" != *"flags="*"runtime"* ]]; then

@@ -10,6 +10,9 @@ private var passedTests = 0
 private var failedTests = 0
 
 private func runTest(_ name: String, _ block: () throws -> Void) {
+    if let filter = ProcessInfo.processInfo.environment["FINDERRIGHT_TEST_FILTER"], !filter.isEmpty {
+        guard name.contains(filter) else { return }
+    }
     totalTests += 1
     print("▶ 运行测试: \(name)...", terminator: " ")
     do {
@@ -72,6 +75,43 @@ private func zipEntries(_ zip: URL) throws -> [String] {
 /// 目录下的全部条目名（含隐藏项，已排序）
 private func directoryListing(_ dir: URL) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+}
+
+/// 带一个 stored 文件的普通 ZIP，可修改字段验证目录解析边界。
+private func previewZipFixture(_ name: String, flags: UInt16 = 0x0800, mode: UInt32 = 0o100644) -> Data {
+    let name = Data(name.utf8)
+    var local = Data(repeating: 0, count: 30)
+    putZipField(0x04034b50, at: 0, into: &local)
+    putZipField(20, at: 4, bytes: 2, into: &local)
+    putZipField(UInt32(flags), at: 6, bytes: 2, into: &local)
+    putZipField(0x3610a686, at: 14, into: &local) // "hello" 的 CRC32
+    putZipField(5, at: 18, into: &local)
+    putZipField(5, at: 22, into: &local)
+    putZipField(UInt32(name.count), at: 26, bytes: 2, into: &local)
+    local.append(name)
+    local.append(Data("hello".utf8))
+    var directory = Data(repeating: 0, count: 46)
+    putZipField(0x02014b50, at: 0, into: &directory)
+    putZipField(0x0314, at: 4, bytes: 2, into: &directory)
+    putZipField(20, at: 6, bytes: 2, into: &directory)
+    putZipField(UInt32(flags), at: 8, bytes: 2, into: &directory)
+    putZipField(0x3610a686, at: 16, into: &directory)
+    putZipField(5, at: 20, into: &directory)
+    putZipField(5, at: 24, into: &directory)
+    putZipField(UInt32(name.count), at: 28, bytes: 2, into: &directory)
+    putZipField(mode << 16, at: 38, into: &directory)
+    directory.append(name)
+    var end = Data(repeating: 0, count: 22)
+    putZipField(0x06054b50, at: 0, into: &end)
+    putZipField(1, at: 8, bytes: 2, into: &end)
+    putZipField(1, at: 10, bytes: 2, into: &end)
+    putZipField(UInt32(directory.count), at: 12, into: &end)
+    putZipField(UInt32(local.count), at: 16, into: &end)
+    return local + directory + end
+}
+
+private func putZipField(_ value: UInt32, at offset: Int, bytes: Int = 4, into data: inout Data) {
+    for index in 0..<bytes { data[offset + index] = UInt8(truncatingIfNeeded: value >> (index * 8)) }
 }
 
 /// 当前进程的 audit token（测试「按 audit token 校验运行中进程的签名」用）
@@ -1217,6 +1257,133 @@ struct FinderRightKitTestsRunner {
             try assertNil(ZipProbe.inspect(truncated), "截断")
 
             try assertNil(ZipProbe.inspect(work.appendingPathComponent("missing.zip")), "文件不存在")
+        }
+
+        runTest("Preview 文件夹只读当前层、包含隐藏项、不展开链接与文件包，并限制数量") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("目录/下层"), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("Demo.app/Contents"), withIntermediateDirectories: true)
+            try Data("hello".utf8).write(to: work.appendingPathComponent("中文.txt"))
+            try Data().write(to: work.appendingPathComponent(".hidden"))
+            let link = work.appendingPathComponent("link")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: work.appendingPathComponent("目录"))
+            let listing = try PreviewContents.folder(work)
+            try assertEqual(listing.entries.count, 5)
+            try assertTrue(!listing.truncated)
+            try assertTrue(listing.entries.contains { $0.path == ".hidden" })
+            try assertEqual(listing.entries.first { $0.path == "中文.txt" }?.size, 5)
+            try assertEqual(listing.entries.first { $0.path == "Demo.app" }?.isDirectory, false)
+            try assertEqual(listing.entries.first { $0.path == "link" }?.isSymbolicLink, true)
+            try assertTrue(!listing.entries.contains { $0.path.contains("/") })
+            try assertTrue(try PreviewContents.folder(work, limit: 1).truncated)
+            try assertEqual(try PreviewContents.folder(work, limit: 0).entries.count, 0)
+            do {
+                _ = try PreviewContents.folder(link)
+                throw TestFailure(message: "不应跟随链接枚举目录")
+            } catch is CocoaError {}
+        }
+
+        runTest("Preview 中文 ZIP 的元数据、GBK、加密目录和数量上限") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent("资料"), withIntermediateDirectories: true)
+            try Data("hello".utf8).write(to: work.appendingPathComponent("资料/报告.txt"))
+            for (name, options) in [("utf8", ["--options", "zip:hdrcharset=UTF-8"]),
+                                     ("gbk", ["--options", "zip:hdrcharset=CP936"]),
+                                     ("encrypted", ["--options", "zip:encryption=zipcrypt,zip:hdrcharset=UTF-8", "--passphrase", "pw"])] {
+                let zip = try makeZip(name + ".zip", in: work, entries: ["资料"], options: options)
+                let listing = try PreviewContents.zip(zip)
+                let file = listing.entries.first { $0.path == "资料/报告.txt" }
+                try assertEqual(file?.size, 5, name)
+                try assertTrue(file?.modificationDate != nil, name)
+                try assertTrue(listing.entries.contains { $0.isDirectory && $0.path == "资料/" }, name)
+                try assertTrue(try PreviewContents.zip(zip, limit: 1).truncated, name)
+            }
+        }
+
+        runTest("Preview ZIP 隐式目录与符号链接只读元数据") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let zip = work.appendingPathComponent("test.zip")
+            try previewZipFixture("a/b/中文.txt").write(to: zip)
+            let listing = try PreviewContents.zip(zip)
+            try assertEqual(listing.entries.map(\.path), ["a/b/中文.txt"])
+            try assertEqual(listing.entries.first?.size, 5)
+            try previewZipFixture("link", mode: 0o120777).write(to: zip)
+            try assertEqual(try PreviewContents.zip(zip).entries.first?.isSymbolicLink, true)
+        }
+
+        runTest("Preview ZIP 空包与注释中的伪 EOCD") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let zip = work.appendingPathComponent("test.zip")
+            var empty = Data(repeating: 0, count: 22)
+            putZipField(0x06054b50, at: 0, into: &empty)
+            try empty.write(to: zip)
+            try assertEqual(try PreviewContents.zip(zip).entries.count, 0)
+            var data = previewZipFixture("file.txt")
+            putZipField(22, at: data.count - 2, bytes: 2, into: &data)
+            data.append(empty)
+            try data.write(to: zip)
+            try assertEqual(try PreviewContents.zip(zip).entries.map(\.path), ["file.txt"])
+        }
+
+        runTest("Preview ZIP 拒绝损坏、ZIP64、分卷和异常目录字段") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let zip = work.appendingPathComponent("test.zip")
+            func rejects(_ data: Data, _ expected: PreviewError) throws {
+                try data.write(to: zip)
+                let result = Result { try PreviewContents.zip(zip) }
+                guard case let .failure(error) = result else {
+                    throw TestFailure(message: "应拒绝异常 ZIP")
+                }
+                try assertEqual(error as? PreviewError, expected)
+            }
+            try rejects(Data("broken".utf8), .invalidArchive)
+            let original = previewZipFixture("file.txt")
+            try rejects(Data(original.dropLast()), .invalidArchive)
+            var zip64 = original
+            putZipField(0xFFFF, at: zip64.count - 12, bytes: 2, into: &zip64)
+            try rejects(zip64, .zip64NotSupported)
+            var split = original
+            putZipField(1, at: split.count - 18, bytes: 2, into: &split)
+            try rejects(split, .multiDiskNotSupported)
+            var overflow = original
+            putZipField(0xFFFF_FFFE, at: overflow.count - 10, into: &overflow)
+            try rejects(overflow, .invalidArchive)
+            try rejects(previewZipFixture("file.txt", flags: 0x2000), .encryptedDirectory)
+        }
+
+        runTest("Preview ZIP 拒绝绝对路径、穿越、空组件及过深路径") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let zip = work.appendingPathComponent("test.zip")
+            for name in ["../x", "/x", "a//x", "a/./x", "C:/x", "a\\..\\x", String(repeating: "a/", count: 32) + "x"] {
+                try previewZipFixture(name).write(to: zip)
+                do {
+                    _ = try PreviewContents.zip(zip)
+                    throw TestFailure(message: "应拒绝路径 \(name)")
+                } catch let error as PreviewError { try assertEqual(error, .invalidPath, name) }
+            }
+        }
+
+        runTest("Preview ZIP 不读取管道或符号链接") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let fifo = work.appendingPathComponent("pipe.zip")
+            try assertEqual(mkfifo(fifo.path, 0o600), 0)
+            let file = work.appendingPathComponent("file.zip")
+            try previewZipFixture("a.txt").write(to: file)
+            let link = work.appendingPathComponent("link.zip")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+            for url in [fifo, link] {
+                do {
+                    _ = try PreviewContents.zip(url)
+                    throw TestFailure(message: "应拒绝非普通文件 \(url)")
+                } catch let error as CocoaError { try assertEqual(error.code, .fileReadUnsupportedScheme) }
+            }
         }
 
         runTest("EncryptedZipExtractor 正确密码解出、错误密码识别并清空输出目录") {

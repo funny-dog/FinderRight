@@ -547,3 +547,6 @@
 "文件夹 · %@" = "Folder · %@";
 "未找到这个路径" = "Path not found";
 "密码" = "Password";
+"文件夹与 ZIP 预览" = "Folder and ZIP previews";
+"在系统设置的「扩展 → 快速查看」中启用 FinderRight Preview，然后按空格或右键选择「快速查看」。" = "Enable FinderRight Preview under Extensions → Quick Look in System Settings, then press Space or choose Quick Look from Finder’s context menu.";
+"只读预览" = "Read-only preview";

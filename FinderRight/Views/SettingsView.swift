@@ -358,6 +358,12 @@ struct GeneralTab: View {
             FRCard {
                 FinderExtensionView()
                 FRDivider()
+                FRRow(title: Text("文件夹与 ZIP 预览"), subtitle: Text("在系统设置的「扩展 → 快速查看」中启用 FinderRight Preview，然后按空格或右键选择「快速查看」。")) {
+                    Text("只读预览")
+                        .font(.caption)
+                        .foregroundStyle(FRTheme.mute)
+                }
+                FRDivider()
                 FullDiskAccessView()
                 FRDivider()
                 AccessibilityView()
