@@ -1086,6 +1086,7 @@ struct AboutTab: View {
 struct ShortcutsTab: View {
 
     private let actions: [(id: String, name: String, icon: String)] = [
+        ("shortcut.undo",         "撤销",           "arrow.uturn.backward"),
         ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
         ("shortcut.copyPath",     "复制路径",       "link"),
         ("shortcut.copyFileName", "复制文件名",     "character.cursor.ibeam"),

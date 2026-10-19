@@ -285,6 +285,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
+        // 只在有可撤销的记录时出现；菜单栏入口不比对访达撤销项，点了就撤销 FinderRight 的记录
+        if let record = UndoCenter.shared.current {
+            let state = UndoMenuState(kind: record.kind, count: record.count, name: record.name)
+            let undo = NSMenuItem(title: UndoText.menuTitle(for: state, localize: L), action: #selector(undoLast), keyEquivalent: "")
+            undo.target = self
+            undo.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
+            menu.addItem(undo)
+            menu.addItem(.separator())
+        }
+
         let records = RecentOperations.shared.records
         if !records.isEmpty {
             let header = NSMenuItem(title: L("最近操作"), action: nil, keyEquivalent: "")
@@ -317,6 +327,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
+
+    /// 菜单栏「撤销」走与 ⌘Z、右键菜单相同的 undoLast 处理
+    private let undoService = FinderRightService()
 
     // MARK: - 检查更新
 
@@ -476,6 +489,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FRDialog(title: recentOperationTitle(for: record),
                  message: (record.failure ?? "") + "\n\n" + L("更多信息可在「控制台」App 中搜索 FinderRightService 查看。"),
                  symbol: "exclamationmark.triangle", tone: .warning, buttons: [L("好")]).runModal()
+    }
+
+    @objc private func undoLast() {
+        _ = undoService.handle(IPCRequest(id: UUID().uuidString, action: "undoLast", payload: [:]))
     }
 
     @objc private func clearRecentOperations() {

@@ -219,15 +219,33 @@ final class FinderShortcutInterceptor {
 
         let focusIsText = focusIsTextInput(app)
         let pasteboardIsCutMirror = command == .paste && isPasteboardCutMirror()
+        // 只有撤销键才读访达撤销项：与操作完成时记下的样子相同，说明之后访达没做过可撤销的操作
+        var undoNote = ""
+        var undo = UndoShortcutDecision.passThrough
+        if command == .undo {
+            let snapshot = FinderUndoMenu.snapshot(app: app)
+            undo = UndoCenter.shared.shortcutDecision(finderSnapshot: snapshot)
+            undoNote = " undo=\(undo) finder=\(snapshot.map { "\($0.title)/\($0.enabled)" } ?? "nil")"
+        }
         let decision = FinderKeyTakeover.decide(
-            command, focusIsText: focusIsText, pasteboardIsCutMirror: pasteboardIsCutMirror)
+            command, focusIsText: focusIsText, pasteboardIsCutMirror: pasteboardIsCutMirror, undo: undo)
         let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        ServicesProvider.trace("takeover key: \(command) decision=\(decision) text=\(focusIsText) mirror=\(pasteboardIsCutMirror) repeat=\(isRepeat)")
+        ServicesProvider.trace("takeover key: \(command) decision=\(decision) text=\(focusIsText) mirror=\(pasteboardIsCutMirror) repeat=\(isRepeat)\(undoNote)")
 
         switch decision {
-        case .passThrough, .undo, .swallow:
-            // 撤销在 Task 5 接入前一律交还访达
+        case .passThrough:
             return Unmanaged.passUnretained(event)
+        case .undo:
+            if !isRepeat {
+                workQueue.async {
+                    let response = self.service.handle(IPCRequest(id: UUID().uuidString, action: "undoLast", payload: [:]))
+                    ServicesProvider.trace("takeover undo: success=\(response.success)")
+                }
+            }
+            return nil
+        case .swallow:
+            // 撤销进行中：不重复执行，也不能落到访达手里撤销别的东西
+            return nil
         case .copyThenCancelCut:
             if !isRepeat { scheduleCancelCutIfPasteboardReplaced() }
             return Unmanaged.passUnretained(event)
