@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .library(
             name: "FinderRightKit",
+            type: .static,
             targets: ["FinderRightKit"]
         ),
         .executable(
