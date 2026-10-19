@@ -1,0 +1,15 @@
+name: 功能建议 / Feature request
+description: 提出新功能或改进建议 / Suggest a feature or improvement for FinderRight
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题 / Problem to solve
+      description: 描述使用场景，以及目前遇到的不便。 / Describe your use case and what could be better.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 希望怎样改进（可选）/ Suggested improvement (optional)
+      description: 如果已有想法，可以描述期望的操作方式或效果。 / Share how you would like it to work, if you have an idea.
