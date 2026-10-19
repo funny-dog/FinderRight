@@ -89,8 +89,10 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        outline.sizeLastColumnToFit()
         if let scroll = outline.enclosingScrollView {
+            scroll.tile()
+            outline.setFrameSize(NSSize(width: scroll.contentSize.width, height: outline.frame.height))
+            outline.sizeLastColumnToFit()
             scroll.reflectScrolledClipView(scroll.contentView)
         }
     }

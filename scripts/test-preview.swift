@@ -64,12 +64,19 @@ struct PreviewChecks {
         try FileManager.default.createDirectory(at: many, withIntermediateDirectories: true)
         for index in 0..<30 { try Data().write(to: many.appendingPathComponent("file-\(index).sh")) }
         prepare(controller, many)
-        controller.view.needsLayout = true
-        controller.view.layoutSubtreeIfNeeded()
         let scroll = outline.enclosingScrollView!
-        scroll.tile()
-        precondition(outline.frame.width <= scroll.contentView.bounds.width + 1, "默认宽度不应出现横向溢出")
-        precondition(outline.rect(ofColumn: 3).maxX <= scroll.contentView.bounds.width + 1, "最后一列应在可视范围内")
+        for width in [760.0, 640.0, 960.0, 320.0] {
+            controller.view.setFrameSize(NSSize(width: width, height: 500))
+            controller.view.needsLayout = true
+            controller.view.layoutSubtreeIfNeeded()
+            // 无窗口测试显式派发布局回调，避免依赖不同系统的控制器生命周期。
+            controller.viewDidLayout()
+            if width >= 640 {
+                precondition(outline.frame.width <= scroll.contentView.bounds.width + 1, "宽度 \(width) 不应出现横向溢出")
+                precondition(outline.rect(ofColumn: 3).maxX <= scroll.contentView.bounds.width + 1, "宽度 \(width) 的最后一列应在可视范围内")
+            }
+            precondition(outline.rect(ofColumn: 3).maxX <= outline.frame.width + 1, "窄窗口中的最后一列必须可通过横向滚动访问")
+        }
         let footer = controller.view.subviews.compactMap { $0 as? NSStackView }.first!
         precondition(controller.view.bounds.contains(footer.frame), "状态栏必须在预览边界内")
         precondition(footer.frame.maxY < scroll.frame.minY, "状态栏不能与内容区重叠")
