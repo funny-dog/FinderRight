@@ -5,10 +5,12 @@ import FinderRightKit
 ///
 /// ## 为什么需要它
 /// FinderSync 扩展（`FIFinderSync`）在 **File Provider 域**（iCloud Drive、Google Drive、
-/// OneDrive、Dropbox 等）内被 macOS 架构性禁止：系统把右键菜单 / 徽章这个扩展点保留给
-/// 域自身的 File Provider 扩展，第三方 Finder Sync 写进 `directoryURLs` 的云盘路径会被
-/// 静默忽略，`beginObservingDirectory` / `menu(for:)` 回调永不触发（与完全磁盘访问无关，
-/// 那是文件权限 / TCC，而这是扩展点路由）。
+/// OneDrive、Dropbox 等）内拿不到右键菜单。Apple DTS 的说明：Finder Sync 按「一个目录只归属
+/// 一个扩展」设计，云盘目录归提供者自己的扩展，第三方扩展本就不应期望在其中生效
+/// （https://github.com/aonez/Keka/issues/1327 中转述的 DTS 答复）。
+/// 实测（macOS 27，iCloud Drive / Google Drive）：显式写进 `directoryURLs`、经安全书签
+/// 授予目录访问后，`beginObservingDirectory` / `menu(for:)` 回调仍不触发。
+/// 与完全磁盘访问无关：那是文件权限 / TCC，而这是扩展点按目录归属的路由。
 ///
 /// ## 解决方案
 /// 改用 **macOS Services**。Services 基于 Finder 提供的文件路径经响应链派发，与目录归属无关，

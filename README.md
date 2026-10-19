@@ -164,9 +164,25 @@ xcodebuild -scheme FinderRight -configuration Release \
 
 ### ☁️ iCloud / Google Drive 等云盘
 
-iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **File Provider 域**，系统只允许其自身扩展提供右键菜单，第三方 Finder 扩展无法在其中显示菜单（**与完全磁盘访问无关**）。因此在这些云盘文件夹里，FinderRight 的操作改为出现在 **右键 →「服务」子菜单**：复制路径 / 复制文件名 / 打开路径 / 新建文件（含模板） / 移动到常用目录 / 复制到常用目录 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
+iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **File Provider 域**，目录归云盘自己的扩展管理。Apple 技术支持（DTS）的说明是：Finder 扩展按「一个目录只归属一个扩展」设计，第三方扩展在其他云盘提供者管理的目录里本就不应期望生效（见 [Keka #1327 中转述的 DTS 答复](https://github.com/aonez/Keka/issues/1327)）。在 macOS 27 上对 iCloud Drive 与 Google Drive 实测，显式注册目录、授予目录访问权限后右键菜单依然不出现；完全磁盘访问同样改变不了这一点。因此在这些云盘文件夹里，FinderRight 的操作改为出现在 **右键 →「服务」子菜单**：复制路径 / 复制文件名 / 打开路径 / 新建文件（含模板） / 移动到常用目录 / 复制到常用目录 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
 
 使用 FinderRight「剪切」后，在目标目录空白处选择「服务 → FinderRight：粘贴到此文件夹」。本机 Google Drive 实测空白处可传入当前目录；若未显示「服务」，可返回上一级，右键目标文件夹调用同一服务。粘贴服务只接受一个现存目录，不接受普通文件或多选；它移动的是 FinderRight 剪切队列中的文件，不是系统剪贴板里的复制项。若系统在调用时激活 FinderRight，会先展示目标路径，确认后才移动文件；取消不会取走剪切队列。复制文件名保留扩展名，多选时每行一项；打开路径可在选中文件或文件夹后从右键服务调用，弹出路径输入框；选中项不决定要打开的路径，目标由输入内容决定。新建文件服务只接受一个现存文件夹，确认框可选择内置文本类型、Office 空白文档和设置中的自定义模板，默认文件名为 untitled，同名自动编号。移动到／复制到服务支持多选，在确认框中选择设置里的常用目录并查看目标完整路径；取消确认不操作文件。取消剪切尚未提供服务入口。「服务」菜单的标题由 macOS 按系统语言显示（中文系统显示中文，其他语言显示英文），不随 FinderRight 设置里的界面语言切换。
+
+### 🩺 常见问题排查
+
+| 症状 | 原因与处理 |
+| --- | --- |
+| 右键完全没有 FinderRight 菜单 | 确认「系统设置 → 隐私与安全性 → 扩展 → 访达扩展」中已勾选 FinderRight，再重启访达。两者都可在「设置 → 权限与扩展 → 右键菜单排查」中一键完成。 |
+| 升级后菜单或角标还是旧的 | 系统缓存了旧的扩展进程，重启访达即可（见「升级说明」）。 |
+| 云盘文件夹里没有菜单 | 系统限制，改用「右键 → 服务」子菜单（见「iCloud / Google Drive 等云盘」）。 |
+| `/Applications`、`/Users/Shared` 等系统目录没有菜单 | 扩展只注册用户主目录与已挂载卷，这些目录同样通过「右键 → 服务」使用。 |
+| 菜单里没有压缩 / 解压 | 默认关闭，在「设置 → 功能 → 右键菜单功能」中开启。 |
+| 快捷键按了没反应 | 授予「辅助功能」权限。除剪切、粘贴、切换隐藏文件、打开路径外，其他快捷键要先选中文件。未授权时剪切、粘贴不可用，其他快捷键退回系统服务快捷键，改完要重启访达。 |
+| 剪切后没有剪刀角标 | 其他访达扩展（如 Keka）可能占用了该目录的角标显示权。剪切本身不受影响，照常粘贴即可；也可在「设置 → 功能」开启「自动解决角标冲突」。 |
+| 压缩、解压、粘贴后看不到结果 | 这些操作在后台执行，不弹通知。开启「设置 → 通用 → 显示最近操作」后，结果和失败原因会列在菜单栏图标里。 |
+| 打开终端没有切到当前目录 | Ghostty / Alacritty / Kitty 已在运行时无法通过参数指定目录（见「已知行为与取舍」）。 |
+| 升级后权限开关是开的却不生效 | 从 1.2.0 及更早版本升级需要重新授权一次（见「升级说明」）。 |
+| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件夹与 ZIP 预览」，再重新打开快速查看窗口。 |
 
 ### 📄 许可证
 
@@ -302,9 +318,25 @@ xcodebuild -scheme FinderRight -configuration Release \
 
 ### ☁️ iCloud / Google Drive and other cloud folders
 
-iCloud Drive, Google Drive, OneDrive, Dropbox and similar cloud storage are **File Provider domains** on macOS; the system only lets their own extension provide the right-click menu, so third-party Finder extensions can't show a menu there (**unrelated to Full Disk Access**). Inside these cloud folders, FinderRight's actions appear under **right-click → Services** instead: Copy Path / Copy File Name / Go to Folder / New File (including templates) / Move to Favorite Folder / Copy to Favorite Folder / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
+iCloud Drive, Google Drive, OneDrive, Dropbox and similar cloud storage are **File Provider domains** on macOS, and their folders are owned by the provider's own extension. According to Apple Developer Technical Support (DTS), Finder extensions are designed around a single owning extension per folder, so a third-party extension should not be expected to work inside a folder managed by another cloud provider (see [the DTS reply quoted in Keka #1327](https://github.com/aonez/Keka/issues/1327)). Testing on macOS 27 with iCloud Drive and Google Drive confirmed it: the right-click menu still did not appear after explicitly registering the folders and granting folder access, and Full Disk Access does not change this either. Inside these cloud folders, FinderRight's actions appear under **right-click → Services** instead: Copy Path / Copy File Name / Go to Folder / New File (including templates) / Move to Favorite Folder / Copy to Favorite Folder / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
 
 After using FinderRight's Cut, right-click empty space in the destination folder and choose **Services → FinderRight: Paste into This Folder**. On the tested Mac, Google Drive can pass the current folder for this action. If Services is absent, go to the parent folder and right-click the destination folder instead. Paste requires one existing directory, rejects files and multiple selections, and moves FinderRight's cut queue rather than items copied to the system clipboard. If the system activates FinderRight during invocation, it shows the destination path and asks for confirmation before moving files; cancelling preserves the cut queue. Copy File Name keeps extensions and writes one name per line for multiple selections. Go to Folder is available from the right-click Services menu after selecting a file or folder. It opens a path prompt; the entered path determines the destination, independently of the selection. New File requires one existing folder. Its confirmation dialog offers built-in text types, blank Office documents, and custom templates from Settings; the default name is untitled, with numbering on conflicts. Move/Copy to Favorite Folder supports multiple selections and shows configured favorites with their full paths in a confirmation dialog. Cancelling performs no file operation. Cancel Cut does not yet have a service entry. Service titles are shown by macOS in the system language (Chinese on a Chinese system, English otherwise) and do not follow the interface language chosen in FinderRight's Settings.
+
+### 🩺 Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| No FinderRight items in the right-click menu at all | Make sure FinderRight is checked under System Settings → Privacy & Security → Extensions → Finder Extensions, then relaunch Finder. Both are one click away in Settings → Permissions & Extensions → Troubleshooting. |
+| Menu or badges still look old after upgrading | macOS caches the old extension process; relaunch Finder (see "Upgrading from Older Versions"). |
+| No menu inside cloud folders | A system limitation; use right-click → Services instead (see "iCloud / Google Drive and other cloud folders"). |
+| No menu in `/Applications`, `/Users/Shared` and other system folders | The extension only registers your home folder and mounted volumes; use right-click → Services there as well. |
+| No Compress / Extract in the menu | Off by default; turn them on in Settings → Features → Right-Click Menu Features. |
+| Shortcuts do nothing | Grant Accessibility permission. Apart from Cut, Paste, Toggle Hidden Files and Go to Folder, shortcuts need a selected item. Without Accessibility, Cut and Paste are unavailable and the other shortcuts fall back to system Services shortcuts, which need a Finder relaunch after changes. |
+| No scissors badge after cutting | Another Finder extension (such as Keka) may hold the badge slot for that folder. Cutting still works and you can paste as usual; you can also turn on "Resolve Badge Conflicts Automatically" in Settings → Features. |
+| No visible result after compress / extract / paste | These run in the background without notifications. Turn on Settings → General → Show Recent Activity to see outcomes and failure reasons in the menu bar icon. |
+| Open in Terminal doesn't switch to the folder | Ghostty / Alacritty / Kitty can't receive a working directory while already running (see "Known Behavior and Tradeoffs"). |
+| Permissions look enabled but don't work after upgrading | Upgrading from 1.2.0 or earlier requires authorizing once more (see "Upgrading from Older Versions"). |
+| Pressing Space on a folder or ZIP still shows the system preview | Turn on "Folder and ZIP previews" in Settings → Permissions & Extensions → Extensions, then reopen the Quick Look window. |
 
 ### 📄 License
 

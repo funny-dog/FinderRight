@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
-        // 云盘文件夹中也可用（FinderSync 扩展在这些目录被系统架构性禁止）。
+        // 云盘文件夹中也可用（这些目录归云盘自己的扩展，FinderSync 扩展拿不到右键菜单）。
         // 先补上默认快捷键（每行只补一次、只填空位，不覆盖用户设置），
         // 再把设置里的快捷键同步成系统服务快捷键（覆盖升级前的旧状态），register 内会刷新服务缓存
         FinderShortcutInterceptor.applyDefaultShortcutsIfNeeded()

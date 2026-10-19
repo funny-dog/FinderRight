@@ -435,10 +435,12 @@ class FinderSync: FIFinderSync {
     /// 注意：精确注册这些目录**不能**帮我们赢得角标归属 —— 其他扩展（如 Keka）注册了
     /// 完全相同的路径时仍是先注册者胜出（见 requestBadgeIdentifier 处的说明）。
     ///
-    /// 注意：iCloud Drive、Google Drive 等云盘是 macOS 的 **File Provider 域**，系统把右键
-    /// 菜单 / 徽章扩展点保留给域自身的 File Provider 扩展，会**静默忽略**第三方 Finder Sync
-    /// 对这些路径的 directoryURLs 注册（实测 `beginObservingDirectory` / `menu(for:)` 回调
-    /// 永不触发，且与完全磁盘访问无关 —— 那是文件权限，这是扩展点路由）。
+    /// 注意：iCloud Drive、Google Drive 等云盘是 macOS 的 **File Provider 域**，目录归提供者
+    /// 自己的扩展。Apple DTS 说明 Finder Sync 按「一个目录只归属一个扩展」设计，第三方扩展
+    /// 本就不应期望在其中生效（https://github.com/aonez/Keka/issues/1327 中转述的 DTS 答复）。
+    /// 实测：对这些路径的 directoryURLs 注册（含经安全书签授予目录访问后）不会触发
+    /// `beginObservingDirectory` / `menu(for:)` 回调，且与完全磁盘访问无关 —— 那是文件权限，
+    /// 这是扩展点按目录归属的路由。
     /// 因此这里不再尝试注册云盘路径；云盘文件夹的右键操作改由主 App 的 macOS Services 提供
     /// （见主 App 的 `ServicesProvider`）。
     private static func buildMonitoredDirectories() -> Set<URL> {
