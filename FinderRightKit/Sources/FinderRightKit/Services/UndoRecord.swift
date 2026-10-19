@@ -82,14 +82,20 @@ public struct UndoRecord: Equatable {
     public let cutQueueBefore: [String]?
     /// 操作完成时读到的访达撤销项；读不到（未授权等）时为 nil，此时 ⌘Z 一律交还访达
     public let finderSnapshot: FinderUndoSnapshot?
+    /// 显示用项数；剪切没有 items（不动文件），由登记方给出本次新增的项数
+    public var displayCount: Int?
 
-    public init(kind: Kind, name: String, items: [Item], cutQueueBefore: [String]?, finderSnapshot: FinderUndoSnapshot?) {
+    public init(kind: Kind, name: String, items: [Item], cutQueueBefore: [String]?,
+                finderSnapshot: FinderUndoSnapshot?, displayCount: Int? = nil) {
         self.kind = kind
         self.name = name
         self.items = items
         self.cutQueueBefore = cutQueueBefore
         self.finderSnapshot = finderSnapshot
+        self.displayCount = displayCount
     }
+
+    public var count: Int { displayCount ?? items.count }
 
     /// 撤销方式：移动类移回原处，其余（复制品、新建的文件、压缩包、解压产物）送进废纸篓
     public var restoresByMoving: Bool {

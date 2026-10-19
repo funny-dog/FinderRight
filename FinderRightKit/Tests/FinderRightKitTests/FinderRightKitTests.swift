@@ -2672,6 +2672,77 @@ struct FinderRightKitTestsRunner {
             try assertEqual(try fm.destinationOfSymbolicLink(atPath: link.path), "/nonexistent/target")
         }
 
+        runTest("UndoCenter 快照比较决定 ⌘Z 归属") {
+            let center = UndoCenter(stateDirectory: makeTempDirectory())
+            let snap = FinderUndoSnapshot(title: "撤销重命名", enabled: true)
+            try assertEqual(center.shortcutDecision(finderSnapshot: snap), .passThrough, "无记录放行")
+            center.register(UndoRecord(kind: .cut, name: "", items: [], cutQueueBefore: [], finderSnapshot: snap), displayCount: 1)
+            try assertEqual(center.shortcutDecision(finderSnapshot: snap), .undo)
+            try assertEqual(center.shortcutDecision(finderSnapshot: FinderUndoSnapshot(title: "撤销移动", enabled: true)),
+                            .passThrough, "访达之后又有操作")
+            try assertEqual(center.shortcutDecision(finderSnapshot: nil), .passThrough, "读不到访达菜单")
+            try assertTrue(center.beginUndo() != nil)
+            try assertEqual(center.shortcutDecision(finderSnapshot: snap), .ignore, "撤销中吞掉连按")
+            try assertNil(center.beginUndo(), "撤销中不能再开始一次")
+            center.endUndo()
+            try assertEqual(center.shortcutDecision(finderSnapshot: snap), .passThrough, "撤销后记录已清空")
+        }
+
+        runTest("UndoCenter 记录快照为 nil 时 ⌘Z 一律放行") {
+            let center = UndoCenter(stateDirectory: makeTempDirectory())
+            center.register(UndoRecord(kind: .cut, name: "", items: [], cutQueueBefore: [], finderSnapshot: nil), displayCount: 1)
+            try assertEqual(center.shortcutDecision(finderSnapshot: FinderUndoSnapshot(title: "撤销", enabled: false)), .passThrough)
+            try assertEqual(center.shortcutDecision(finderSnapshot: nil), .passThrough)
+            try assertTrue(center.beginUndo() != nil, "菜单入口仍能取到记录")
+        }
+
+        runTest("UndoCenter 状态文件随记录写入与清除，且不含路径") {
+            let dir = makeTempDirectory()
+            let center = UndoCenter(stateDirectory: dir)
+            let fp = FileFingerprint(fileNumber: 1, device: 1, isDirectory: false, modificationDate: nil, size: 0)
+            let move = UndoRecord(kind: .move, name: "Projects", items: [
+                .init(current: URL(fileURLWithPath: "/tmp/Projects/a"), original: URL(fileURLWithPath: "/tmp/a"), fingerprint: fp),
+                .init(current: URL(fileURLWithPath: "/tmp/Projects/b"), original: URL(fileURLWithPath: "/tmp/b"), fingerprint: fp)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+            center.register(move)
+            try assertEqual(UndoMenuState.read(from: dir), UndoMenuState(kind: .move, count: 2, name: "Projects"))
+            let raw = try String(contentsOf: dir.appendingPathComponent(UndoMenuState.fileName), encoding: .utf8)
+            try assertTrue(!raw.contains("/tmp"), "状态文件不能写路径")
+            _ = center.beginUndo()
+            try assertNil(UndoMenuState.read(from: dir), "开始撤销即清除状态")
+            center.register(move)
+            center.endUndo()
+            try assertEqual(center.current, move, "撤销期间登记的新记录在 endUndo 后保留")
+            center.invalidate(kind: .copy)
+            try assertEqual(center.current, move, "类型不符不作废")
+            center.invalidate(kind: .move)
+            try assertNil(center.current)
+            try assertNil(UndoMenuState.read(from: dir))
+            center.register(move)
+            center.clear()
+            try assertNil(center.current)
+            try assertNil(UndoMenuState.read(from: dir))
+        }
+
+        runTest("UndoText 菜单标题与提示文案") {
+            let id: (String) -> String = { $0 }
+            try assertEqual(UndoText.menuTitle(for: UndoMenuState(kind: .move, count: 3, name: "Projects"), localize: id),
+                            "撤销移动到“Projects”（3 项）")
+            try assertEqual(UndoText.menuTitle(for: UndoMenuState(kind: .cut, count: 2, name: ""), localize: id), "撤销剪切（2 项）")
+            let fp = FileFingerprint(fileNumber: 1, device: 1, isDirectory: false, modificationDate: nil, size: 0)
+            let item = UndoRecord.Item(current: URL(fileURLWithPath: "/x/a.txt"), original: nil, fingerprint: fp)
+            let record = UndoRecord(kind: .move, name: "Projects", items: [item, item, item], cutQueueBefore: nil, finderSnapshot: nil)
+            let two = [URL(fileURLWithPath: "/a"), URL(fileURLWithPath: "/b")]
+            try assertEqual(UndoText.feedback(for: record, outcome: UndoOutcome(undone: two + [URL(fileURLWithPath: "/c")]), localize: id),
+                            "已撤销：移动到“Projects”（3 项）")
+            try assertEqual(UndoText.feedback(for: record, outcome: UndoOutcome(undone: two, skipped: [
+                .init(name: "b.txt", reason: .modified), .init(name: "c.txt", reason: .missing)]), localize: id),
+                            "已撤销 2 项，跳过 2 项：“b.txt”在操作后被修改等 1 项")
+            try assertEqual(UndoText.feedback(for: record, outcome: UndoOutcome(skipped: [
+                .init(name: "a.txt", reason: .originalOccupied)]), localize: id),
+                            "无法撤销：“a.txt”原位置已有同名项目")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
