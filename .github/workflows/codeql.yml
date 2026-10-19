@@ -42,6 +42,11 @@ jobs:
             build-mode: manual
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare Xcode project
+        if: matrix.language == 'swift'
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen generate
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
@@ -49,8 +54,6 @@ jobs:
       - name: Build app and extensions for Swift analysis
         if: matrix.language == 'swift'
         run: |
-          brew install xcodegen
-          xcodegen generate
           xcodebuild -scheme FinderRight -configuration Debug \
             -destination 'generic/platform=macOS' \
             -derivedDataPath build/codeql \
