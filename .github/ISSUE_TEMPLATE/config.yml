@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 私密报告安全漏洞 / Report a security vulnerability privately
+    url: https://github.com/funny-dog/FinderRight/security/advisories/new
+    about: 文件安全、权限绕过和更新校验等安全问题请使用此入口。 / Use this for file safety, permission bypass, or update integrity vulnerabilities.

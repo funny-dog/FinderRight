@@ -10,6 +10,8 @@
 
 [English](#english) · [中文](#中文)
 
+[参与贡献 / Contributing](CONTRIBUTING.md) · [安全说明 / Security](SECURITY.md)
+
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 

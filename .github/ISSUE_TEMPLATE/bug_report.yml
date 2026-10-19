@@ -1,0 +1,47 @@
+name: 问题反馈 / Bug report
+description: 报告 FinderRight 的使用问题 / Report a problem with FinderRight
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先查看 README 的已知行为与权限说明。安全漏洞请使用私密报告入口：https://github.com/funny-dog/FinderRight/security/advisories/new
+        Please check the README first. Report security vulnerabilities privately using the link above.
+  - type: input
+    id: version
+    attributes:
+      label: FinderRight 版本 / Version
+      description: 可在「关于」页面查看 / See the About page.
+      placeholder: 例如 / e.g. 1.3.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本与芯片 / macOS version and chip
+      placeholder: 例如 / e.g. macOS 15.7, Apple M2
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: 权限与扩展状态 / Permissions and extensions
+      description: 说明访达扩展、快速查看扩展、完全磁盘访问、辅助功能是否开启，以及问题发生的目录类型（本地、云盘、外置盘等）。不要填写私人路径。
+      placeholder: Finder extension / Quick Look extension / Full Disk Access / Accessibility; local / cloud / external volume
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤与实际结果 / Steps and actual result
+      description: 请说明操作步骤、实际发生的情况，以及是否每次都能复现。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果 / Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 截图或日志（可选）/ Screenshots or logs (optional)
+      description: 可在 Console.app 搜索 FinderRightService。提交前请移除用户名、私人路径、文件内容、令牌及其他敏感信息。 / Remove personal paths, file contents, tokens, and other sensitive data before sharing.
