@@ -631,6 +631,13 @@ class FinderSync: FIFinderSync {
         // 每个功能一个构建闭包，按用户在设置里拖拽排好的顺序依次添加。
         // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，依附在剪切之后、随剪切一起排序
         let builders: [String: () -> Void] = [
+            MenuFeatureCatalog.undo: {
+                // 主 App 有可撤销的记录时才写这个状态文件；文件里只有显示信息，不含路径
+                guard let state = UndoMenuState.read() else { return }
+                let item = self.makeItem(titleKey: "撤销", tint: .gray, systemImage: "arrow.uturn.backward", action: #selector(self.undoLast(_:)), shortcutId: "shortcut.undo", style: style)
+                item.title = UndoText.menuTitle(for: state, localize: self.L)
+                menu.addItem(item)
+            },
             MenuFeatureCatalog.newFile: {
                 // 新建文件 —— 容器/侧边栏/空选中时
                 guard isContainerLike else { return }
@@ -1177,6 +1184,13 @@ class FinderSync: FIFinderSync {
         }
         IPCClient.shared.callAsync(action: "cancelCut", payload: [:]) { r in
             logToFile("cancelCut ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    /// 撤销 FinderRight 的上一次操作。结果提示由主 App 弹出，扩展只记日志
+    @objc func undoLast(_ sender: NSMenuItem) {
+        IPCClient.shared.callAsync(action: "undoLast", payload: [:]) { r in
+            logToFile("undoLast ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
 

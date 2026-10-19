@@ -47,3 +47,13 @@
 "复制到" = "Copy To";
 "尚未添加常用目录" = "No Favorite Folders Yet";
 "管理常用目录…" = "Manage Favorite Folders…";
+
+/* 撤销上一次操作 */
+"移动到“%@”（%d 项）" = "Move to “%@” (%d items)";
+"复制到“%@”（%d 项）" = "Copy to “%@” (%d items)";
+"粘贴到“%@”（%d 项）" = "Paste into “%@” (%d items)";
+"剪切（%d 项）" = "Cut (%d items)";
+"新建“%@”" = "New “%@”";
+"压缩“%@”" = "Compress “%@”";
+"解压“%@”" = "Extract “%@”";
+"撤销%@" = "Undo %@";
