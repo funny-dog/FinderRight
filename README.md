@@ -41,6 +41,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动；在访达里直接用 ⌘X 剪切、⌘V 粘贴到当前文件夹（空白处也可以，快捷键可在设置中修改，需「辅助功能」权限）
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
 - 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
+- 👀 **文件夹 / ZIP 快速查看** —— 选中文件夹或 ZIP 后按空格，或右键选择系统「快速查看」，以可展开列表查看名称、修改日期、大小和类型；ZIP 只读目录，不解压文件。需启用独立的 FinderRight Preview 快速查看扩展
 - 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**无需重启 Finder，不会关闭窗口或中断拷贝**（需辅助功能权限）
 - ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键，在访达里直接按键即可，无需展开右键菜单（授权「辅助功能」后由 FinderRight 直接处理，任意组合都能用、改完立即生效；未授权时除剪切 / 粘贴外自动退回系统服务快捷键）；默认快捷键与访达一致（⌥⌘C 复制路径、⇧⌘. 切换隐藏文件），升级不覆盖你的设置，可一键恢复默认，并可在设置中拖动调整它们在右键菜单中的顺序
 - 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
@@ -76,6 +77,15 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
    - **授予辅助功能**（让"切换隐藏文件"无需重启 Finder）
 
 > ⚠️ 当前版本使用自签名证书签名，未经 Apple 公证，因此需要第 3 步手动放行。若未来提供 Developer ID 公证版，可省去第 3 步。
+
+### 文件夹与 ZIP 预览
+
+安装并启动 FinderRight 后，在「设置 → 权限与扩展 → 扩展」中打开 **文件夹与 ZIP 预览**；关闭此开关会停用 FinderRight Preview，恢复系统默认预览。开关与系统扩展设置同步；也可在系统设置中搜索「扩展」，在「快速查看」中管理 **FinderRight Preview**（与「访达扩展」是两个独立开关，入口随 macOS 版本而异）。切换后重新打开快速查看窗口。回到 Finder，选中文件夹或 `.zip`，按空格或右键选择系统「快速查看」即可。只提供只读列表，支持展开子目录及点击列标题排序，不提供包内文件内容预览、拖出或解压操作。
+
+- 文件夹展开时才读取子目录；包含隐藏项，不展开符号链接或 `.app` 等文件包，也不递归统计目录大小。
+- 每层文件夹最多显示 2,000 项，ZIP 最多显示 10,000 条目录记录；达到上限会提示内容不完整。
+- 第一版支持普通 ZIP，不支持 ZIP64、分卷 ZIP、RAR / 7z 等其他格式；损坏包、读取失败会显示原因。能读取中央目录的加密 ZIP 可显示条目，但不会解密文件内容。
+- 受保护目录、尚未下载的云盘文件是否可读，取决于系统授予预览扩展的访问权限；主 App 的完全磁盘访问权限不会自动授予该扩展。其他 App 若也提供相同类型的 Quick Look 扩展，可能影响系统选择。
 
 ### 🔄 升级说明
 
@@ -147,6 +157,7 @@ xcodebuild -scheme FinderRight -configuration Release \
 
 - **主 App**（未沙箱）：菜单栏 + 设置界面，借用 TCC 权限执行实际文件操作
 - **Finder 扩展**（沙箱）：负责右键菜单
+- **Quick Look 扩展**（只读沙箱）：负责文件夹 / ZIP 内容预览，空格与系统右键「快速查看」共用
 - **IPC**：扩展通过"文件 + URL scheme"唤醒主 App 执行操作，无需 App Group / 付费开发者账号
 
 ### ☁️ iCloud / Google Drive 等云盘
@@ -176,6 +187,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste; cut with ⌘X and paste into the current folder with ⌘V right in Finder (works with nothing selected; the keys can be changed in Settings; requires Accessibility permission)
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
 - 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
+- 👀 **Folder / ZIP Quick Look** — press Space or choose Finder’s native Quick Look context-menu item to browse an expandable, sortable contents list without extracting ZIP files. Toggle it in FinderRight Settings → Permissions & Extensions → Extensions → Folder and ZIP previews. The switch follows the system extension setting; turning it off restores the system default preview. Reopen Quick Look after changing it. Read-only; no file-content preview or extraction. Includes hidden items, loads folders on expansion, and does not follow symbolic links or browse app packages. Limited to 2,000 items per folder and 10,000 ZIP records, with a partial-results notice. ZIP64, split ZIP, and other archive formats are not supported. Access to protected or cloud-only files depends on the extension’s sandbox permissions, independently of the main app’s Full Disk Access.
 - 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder, so windows stay open and copies keep running** (needs Accessibility)
 - ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item and press it right in Finder without opening the context menu (with Accessibility permission FinderRight handles them directly, so any combination works and changes apply immediately; without it, everything except Cut / Paste falls back to system Services shortcuts); defaults match Finder (⌥⌘C Copy Path, ⇧⌘. Toggle Hidden Files), updates never overwrite your shortcuts, and you can restore the defaults in one click, and drag to reorder them in Settings
 - 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)

@@ -6,7 +6,223 @@
 	objectVersion = 77;
 	objects = {
 
+/* Quick Look preview extension */
+		AEE83BED6EB83E654B68E23B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "PreviewNode.swift";
+			sourceTree = "<group>";
+		};
+		5F9714FB8DBD089DC3A0651D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "PreviewController.swift";
+			sourceTree = "<group>";
+		};
+		97E4D8C264AE75508C22EBE2 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.xml";
+			path = "Info.plist";
+			sourceTree = "<group>";
+		};
+		20F6D940FD8D5C89DB48F824 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.entitlements";
+			path = "FinderRightPreview.entitlements";
+			sourceTree = "<group>";
+		};
+		CA01CC852BFE067F634B6E71 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.strings";
+			path = "en.lproj/Localizable.strings";
+			sourceTree = "<group>";
+			name = "en";
+		};
+		A028EF20665D6153825E2C5A = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.strings";
+			path = "zh-Hans.lproj/Localizable.strings";
+			sourceTree = "<group>";
+			name = "zh-Hans";
+		};
+		FA56E6150973FCDE6E7B3BF5 = {
+			isa = "PBXVariantGroup";
+			children = (
+				"CA01CC852BFE067F634B6E71",
+				"A028EF20665D6153825E2C5A",
+			);
+			name = "Localizable.strings";
+			sourceTree = "<group>";
+		};
+		477D40D34B2856548F6418B6 = {
+			isa = "PBXGroup";
+			children = (
+				"AEE83BED6EB83E654B68E23B",
+				"5F9714FB8DBD089DC3A0651D",
+				"97E4D8C264AE75508C22EBE2",
+				"20F6D940FD8D5C89DB48F824",
+				"FA56E6150973FCDE6E7B3BF5",
+			);
+			path = "FinderRightPreview";
+			sourceTree = "<group>";
+		};
+		2EBE213508B642086C2335E1 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.app-extension";
+			includeInIndex = "0";
+			path = "FinderRightPreview.appex";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		6796E0690982B8F31E82005A = {
+			isa = "XCSwiftPackageProductDependency";
+			productName = "FinderRightKit";
+		};
+		699156065B28D99041186C93 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "wrapper.framework";
+			name = "QuickLookUI.framework";
+			path = "System/Library/Frameworks/QuickLookUI.framework";
+			sourceTree = "SDKROOT";
+		};
+		6E690CE16B46BB98F9B3DE6B = {
+			isa = "PBXBuildFile";
+			fileRef = "AEE83BED6EB83E654B68E23B";
+		};
+		CF78C047A45EBDB15599CB8F = {
+			isa = "PBXBuildFile";
+			fileRef = "5F9714FB8DBD089DC3A0651D";
+		};
+		4DF33431A0A65E5ED1643B4F = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = (
+				"6E690CE16B46BB98F9B3DE6B",
+				"CF78C047A45EBDB15599CB8F",
+			);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		645D722492E3A9139E3B4043 = {
+			isa = "PBXBuildFile";
+			fileRef = "FA56E6150973FCDE6E7B3BF5";
+		};
+		E7FE2E3056A499C8C2C1FED8 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = (
+				"645D722492E3A9139E3B4043",
+			);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		8FD4B328861F5B232661B701 = {
+			isa = "PBXBuildFile";
+			productRef = "6796E0690982B8F31E82005A";
+		};
+		6BA618F5B930E0AE8E1E902F = {
+			isa = "PBXBuildFile";
+			fileRef = "699156065B28D99041186C93";
+		};
+		AE60F2AC24A1589C0E708D97 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = "2147483647";
+			files = (
+				"8FD4B328861F5B232661B701",
+				"6BA618F5B930E0AE8E1E902F",
+			);
+			runOnlyForDeploymentPostprocessing = "0";
+		};
+		3C9D26409B05256A93E99D2E = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				CODE_SIGN_ENTITLEMENTS = "FinderRightPreview/FinderRightPreview.entitlements";
+				COMBINE_HIDPI_IMAGES = "YES";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				INFOPLIST_FILE = "FinderRightPreview/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.finderright.app.preview";
+				SDKROOT = "macosx";
+				PRODUCT_NAME = "FinderRightPreview";
+				PRODUCT_MODULE_NAME = "FinderRightPreview";
+			};
+			name = "Debug";
+		};
+		8EC44DFA8E1771B3BBB0D7B3 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				CODE_SIGN_ENTITLEMENTS = "FinderRightPreview/FinderRightPreview.entitlements";
+				COMBINE_HIDPI_IMAGES = "YES";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				INFOPLIST_FILE = "FinderRightPreview/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.finderright.app.preview";
+				SDKROOT = "macosx";
+				PRODUCT_NAME = "FinderRightPreview";
+				PRODUCT_MODULE_NAME = "FinderRightPreview";
+			};
+			name = "Release";
+		};
+		62310004BEC000F1B3BF1AB9 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (
+				"3C9D26409B05256A93E99D2E",
+				"8EC44DFA8E1771B3BBB0D7B3",
+			);
+			defaultConfigurationIsVisible = "0";
+			defaultConfigurationName = "Release";
+		};
+		1FF4AB524A71626CC28B8A20 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = "62310004BEC000F1B3BF1AB9";
+			buildPhases = (
+				"4DF33431A0A65E5ED1643B4F",
+				"E7FE2E3056A499C8C2C1FED8",
+				"AE60F2AC24A1589C0E708D97",
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "FinderRightPreview";
+			packageProductDependencies = (
+				"6796E0690982B8F31E82005A",
+			);
+			productName = "FinderRightPreview";
+			productReference = "2EBE213508B642086C2335E1";
+			productType = "com.apple.product-type.app-extension";
+		};
+		46A1DE075B7CC61FBF0AA950 = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = "36AB7CD8F78C1A400F405D2B";
+			proxyType = "1";
+			remoteGlobalIDString = "1FF4AB524A71626CC28B8A20";
+			remoteInfo = "FinderRightPreview";
+		};
+		50A5977B94BCC689B23B0201 = {
+			isa = "PBXTargetDependency";
+			target = "1FF4AB524A71626CC28B8A20";
+			targetProxy = "46A1DE075B7CC61FBF0AA950";
+		};
+		523C175C3C9A6FBC253C82CD = {
+			isa = "PBXBuildFile";
+			fileRef = "2EBE213508B642086C2335E1";
+			settings = {
+				ATTRIBUTES = (
+					"CodeSignOnCopy",
+					"RemoveHeadersOnCopy",
+				);
+			};
+		};
+
+
 /* Begin PBXBuildFile section */
+		BC3EB4A2FEEB4DA18DD88905 /* PreviewExtensionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */; };
 		1261239C83FCB9E220E19F28 /* FeatureToggleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B7BE2E2B07467F69638A79 /* FeatureToggleRow.swift */; };
 		22C25A9128FE6FCCAFD49B12 /* FinderRightKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2F6EC8301EC5AA41DAB8B7A0 /* FinderRightKit */; };
 		243E762F0056764ACE4745E1 /* FinderRightSync.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 38B5FAD57D085D6D23C277F0 /* FinderRightSync.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -44,6 +260,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				523C175C3C9A6FBC253C82CD,
 				243E762F0056764ACE4745E1 /* FinderRightSync.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -52,6 +269,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewExtensionManager.swift; sourceTree = "<group>"; };
 		12BB40FE596DC418390953E5 /* AccessibilityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityView.swift; sourceTree = "<group>"; };
 		24862F55CF5D1BAD7EF15C23 /* FinderRight.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FinderRight.entitlements; sourceTree = "<group>"; };
 		34544E291386B1CC859ADB10 /* FinderRightApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderRightApp.swift; sourceTree = "<group>"; };
@@ -100,6 +318,7 @@
 		3269298AFC5DF06531A8F281 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				2EBE213508B642086C2335E1,
 				67F9BED5E9A2F03515A082E2 /* FinderRight.app */,
 				38B5FAD57D085D6D23C277F0 /* FinderRightSync.appex */,
 			);
@@ -171,6 +390,7 @@
 		9EF149E2070668CB361F1C25 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AD8CB5B41AC644DC97F13875 /* PreviewExtensionManager.swift */,
 				5E2ACE88CF8425D287BFD98E /* FinderRightService.swift */,
 				B9C457953093E65A5E0FB987 /* ServicesProvider.swift */,
 				821B634B8F3D9C655AA237BA /* XPCListenerHost.swift */,
@@ -181,6 +401,7 @@
 		EA530B2AC410F34E76068CA9 = {
 			isa = PBXGroup;
 			children = (
+				477D40D34B2856548F6418B6,
 				54E8BDB05FB6F3335BBE04C0 /* FinderRight */,
 				469E638E2E1BFC3EAB3674DE /* FinderRightSync */,
 				7FDF5557EB23DE589C50B1AF /* Packages */,
@@ -204,6 +425,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				50A5977B94BCC689B23B0201,
 				2FE30A0EF02CE7B7410868C9 /* PBXTargetDependency */,
 			);
 			name = FinderRight;
@@ -263,6 +485,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				1FF4AB524A71626CC28B8A20,
 				9D354D840B25475F8B3737F5 /* FinderRight */,
 				9FF70832F3A40918650A68FC /* FinderRightSync */,
 			);
@@ -294,6 +517,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC3EB4A2FEEB4DA18DD88905 /* PreviewExtensionManager.swift in Sources */,
 				4E1466EB093F383B811A175C /* AccessibilityView.swift in Sources */,
 				1261239C83FCB9E220E19F28 /* FeatureToggleRow.swift in Sources */,
 				80F82831D00976393409CBCB /* FinderRightApp.swift in Sources */,

@@ -31,6 +31,9 @@ targets:
       - target: FinderRightSync
         embed: true
         codeSign: true
+      - target: FinderRightPreview
+        embed: true
+        codeSign: true
       - package: FinderRightKit
     settings:
       base:
@@ -67,3 +70,26 @@ targets:
           - "@executable_path/../../../../Frameworks"
     # 同上：不要 `info:` block。NSExtension 字段必须在 Info.plist 中手动保留，
     # 否则 FinderSync 扩展不被 macOS 识别 → pluginkit 不显示 → 右键无菜单。
+
+  FinderRightPreview:
+    type: app-extension
+    platform: macOS
+    sources:
+      - FinderRightPreview
+    dependencies:
+      - sdk: QuickLookUI.framework
+        embed: false
+      - sdk: AppKit.framework
+        embed: false
+      - package: FinderRightKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.finderright.app.preview
+        PRODUCT_MODULE_NAME: FinderRightPreview
+        INFOPLIST_FILE: FinderRightPreview/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FinderRightPreview/FinderRightPreview.entitlements
+        GENERATE_INFOPLIST_FILE: false
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"

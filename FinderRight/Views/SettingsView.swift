@@ -20,6 +20,7 @@ struct SettingsView: View {
         case shortcuts = "快捷键"
         case tools = "终端"
         case editors = "编辑器"
+        case permissions = "权限与扩展"
         case about = "关于"
 
         var icon: String {
@@ -30,6 +31,7 @@ struct SettingsView: View {
             case .shortcuts: return "keyboard"
             case .tools: return "terminal"
             case .editors: return "curlybraces"
+            case .permissions: return "checkmark.shield"
             case .about: return "info.circle"
             }
         }
@@ -43,6 +45,7 @@ struct SettingsView: View {
             case .shortcuts: return "shortcuts"
             case .tools: return "tools"
             case .editors: return "editors"
+            case .permissions: return "permissions"
             case .about: return "about"
             }
         }
@@ -79,6 +82,7 @@ struct SettingsView: View {
         case .shortcuts: ShortcutsTab()
         case .tools: ToolsTab()
         case .editors: EditorsTab()
+        case .permissions: PermissionsTab()
         case .about: AboutTab()
         }
     }
@@ -175,10 +179,9 @@ struct GeneralTab: View {
     @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
     var body: some View {
-        FRPage(title: "通用", subtitle: "启动、显示与系统权限") {
+        FRPage(title: "通用", subtitle: "启动、显示与外观") {
             launchSection
             displaySection
-            permissionSection
         }
         .onAppear {
             calibrateLaunchAtLoginStatus()
@@ -340,45 +343,6 @@ struct GeneralTab: View {
         }
     }
 
-    // MARK: 权限与扩展
-
-    private var permissionSection: some View {
-        FRSection {
-            HStack {
-                FRCaption("权限与扩展")
-                Spacer()
-                // 引导已不在菜单栏常驻，想重看的用户从这里进入
-                Button("重新查看引导") {
-                    NotificationCenter.default.post(name: .openOnboarding, object: nil)
-                }
-                .buttonStyle(.frLink)
-                .padding(.trailing, 4)
-            }
-        } content: {
-            FRCard {
-                FinderExtensionView()
-                FRDivider()
-                FullDiskAccessView()
-                FRDivider()
-                AccessibilityView()
-                FRDivider()
-                FRRow(title: Text("右键菜单排查"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
-                    HStack(spacing: 8) {
-                        Button("重启访达") { FinderRelauncher.relaunch() }
-                        .buttonStyle(.frSecondary)
-
-                        Button("扩展设置...") {
-                            FinderExtensionChecker.openSettings()
-                        }
-                        .buttonStyle(.frSecondary)
-                    }
-                }
-            }
-
-            FRFootnote(Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。"))
-        }
-    }
-
     // MARK: 行为
 
     private func changeLanguage(to newValue: String) {
@@ -455,6 +419,58 @@ struct GeneralTab: View {
         try? proc.run()
         DispatchQueue.main.async {
             NSApp.terminate(nil)
+        }
+    }
+}
+
+// MARK: - 权限与扩展 Tab
+
+struct PermissionsTab: View {
+    var body: some View {
+        FRPage(title: "权限与扩展", subtitle: "管理访达与快速查看扩展，以及系统授权") {
+            FRSection("扩展") {
+                FRCard {
+                    FinderExtensionView()
+                    FRDivider()
+                    PreviewExtensionToggle()
+                }
+            }
+
+            FRSection("系统权限") {
+                FRCard {
+                    FullDiskAccessView()
+                    FRDivider()
+                    AccessibilityView()
+                }
+
+                FRFootnote(Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。"))
+            }
+
+            FRSection {
+                HStack {
+                    FRCaption("排查与引导")
+                    Spacer()
+                    Button("重新查看引导") {
+                        NotificationCenter.default.post(name: .openOnboarding, object: nil)
+                    }
+                    .buttonStyle(.frLink)
+                    .padding(.trailing, 4)
+                }
+            } content: {
+                FRCard {
+                    FRRow(title: Text("右键菜单排查"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
+                        HStack(spacing: 8) {
+                            Button("重启访达") { FinderRelauncher.relaunch() }
+                                .buttonStyle(.frSecondary)
+
+                            Button("扩展设置...") {
+                                FinderExtensionChecker.openSettings()
+                            }
+                            .buttonStyle(.frSecondary)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1099,8 +1115,14 @@ struct ShortcutsTab: View {
                     FRCard {
                         FRRow(title: Text("快捷键需要「辅助功能」权限"),
                               subtitle: Text("授权后在访达中直接按键，任意组合都能用，改完立即生效，空白处也能粘贴。未授权时剪切、粘贴不可用，其他快捷键退回系统服务快捷键，改完要重启访达。")) {
-                            Button("授权辅助功能…") { requestAccessibility() }
-                                .buttonStyle(.frPrimary)
+                            VStack(alignment: .trailing, spacing: 8) {
+                                Button("授权辅助功能…") { requestAccessibility() }
+                                    .buttonStyle(.frPrimary)
+                                Button("前往权限与扩展") {
+                                    SettingsNavigation.shared.selectedTab = .permissions
+                                }
+                                .buttonStyle(.frLink)
+                            }
                         }
                     }
                 }
@@ -1429,5 +1451,69 @@ enum FinderRelauncher {
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
         proc.arguments = ["Finder"]
         try? proc.run()
+    }
+}
+
+/// 权限与扩展页中的 Quick Look 开关，直接读取与修改系统的扩展选举。
+private struct PreviewExtensionToggle: View {
+    @FRState private var enabled: Bool? = nil
+    @FRState private var busy = false
+    @FRState private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            FRRow(title: Text("文件夹与 ZIP 预览"), subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。")) {
+                HStack(spacing: 8) {
+                    if busy {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel(Text("正在更新预览设置"))
+                    }
+                    FRSwitch(label: "文件夹与 ZIP 预览", isOn: Binding(
+                        get: { enabled ?? false },
+                        set: { update(to: $0) }
+                    ))
+                    .disabled(busy || enabled == nil)
+                }
+            }
+            if let errorMessage {
+                FRDivider()
+                HStack(spacing: 8) {
+                    Text(verbatim: errorMessage)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("重新检测") { update() }
+                        .buttonStyle(.frSecondary)
+                        .disabled(busy)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+        }
+        .onAppear { update() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in update() }
+    }
+
+    private func update(to desired: Bool? = nil) {
+        guard !busy else { return }
+        busy = true
+        errorMessage = nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result {
+                if let desired { try PreviewExtensionManager.setEnabled(desired) }
+                return try PreviewExtensionManager.isEnabled()
+            }
+            DispatchQueue.main.async {
+                busy = false
+                switch result {
+                case .success(let value): enabled = value
+                case .failure(let error):
+                    enabled = nil
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }

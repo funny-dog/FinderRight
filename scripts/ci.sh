@@ -23,12 +23,31 @@ swiftc -typecheck -parse-as-library \
   FinderRight/Views/*.swift \
   FinderRight/Views/Components/*.swift
 
+swiftc -parse-as-library \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Services/PreviewExtensionManager.swift scripts/test-preview-settings.swift \
+  -o "$KIT_BUILD_DIR/test-preview-settings"
+"$KIT_BUILD_DIR/test-preview-settings"
+
 echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -framework FinderSync -framework AppKit \
   FinderRightSync/*.swift
+
+echo "=== [CI] 5. 编译 Quick Look 扩展代码并运行预览集成检查 ==="
+swiftc -parse-as-library \
+  -module-name FinderRightPreview \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  -framework QuickLookUI -framework AppKit \
+  FinderRightPreview/*.swift scripts/test-preview.swift \
+  -o "$KIT_BUILD_DIR/test-preview"
+"$KIT_BUILD_DIR/test-preview"
 
 echo ""
 echo "========================================="
