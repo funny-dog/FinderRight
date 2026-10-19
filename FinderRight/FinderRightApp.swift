@@ -426,6 +426,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case (.move, false):       format = L("移动失败：%@")
         case (.copy, true):        format = L("已复制 %@")
         case (.copy, false):       format = L("复制失败：%@")
+        case (.undo, true):        format = L("已撤销 %@")
+        case (.undo, false):       format = L("撤销未完成：%@")
         }
         let subject = truncated ? OperationRecord.truncatedSubject(record.subject) : record.subject
         return String(format: format, subject)

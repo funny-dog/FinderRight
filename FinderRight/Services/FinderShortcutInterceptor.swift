@@ -225,7 +225,8 @@ final class FinderShortcutInterceptor {
         ServicesProvider.trace("takeover key: \(command) decision=\(decision) text=\(focusIsText) mirror=\(pasteboardIsCutMirror) repeat=\(isRepeat)")
 
         switch decision {
-        case .passThrough:
+        case .passThrough, .undo, .swallow:
+            // 撤销在 Task 5 接入前一律交还访达
             return Unmanaged.passUnretained(event)
         case .copyThenCancelCut:
             if !isRepeat { scheduleCancelCutIfPasteboardReplaced() }

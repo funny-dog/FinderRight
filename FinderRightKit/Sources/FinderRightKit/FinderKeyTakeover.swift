@@ -16,9 +16,12 @@ public enum FinderKeyTakeover {
     public static let toggleHiddenActionId = "shortcut.toggleHidden"
     public static let copyPathActionId = "shortcut.copyPath"
     public static let goToDirectoryActionId = "shortcut.goToDirectory"
+    public static let undoActionId = "shortcut.undo"
 
     public enum Command: Equatable {
         case cut, copy, paste
+        /// 撤销 FinderRight 的上一次操作（是否轮到它由调用方比较访达撤销项后给出）
+        case undo
         /// 其他动作（服务或切换隐藏文件），关联设置页 action ID
         case action(String)
     }
@@ -34,6 +37,10 @@ public enum FinderKeyTakeover {
         case paste
         /// 吞掉按键，执行该动作
         case runAction(String)
+        /// 吞掉按键，撤销 FinderRight 的上一次操作
+        case undo
+        /// 只吞掉按键、什么也不做（撤销进行中的连按）
+        case swallow
     }
 
     /// 默认快捷键与访达原生一致；用户可改成别的组合，清空即停用。
@@ -46,13 +53,15 @@ public enum FinderKeyTakeover {
             pasteActionId: ActionShortcut(key: "v", modifiers: cmd),
             copyPathActionId: ActionShortcut(key: "c", modifiers: cmd | opt),        // 访达「拷贝路径名」
             toggleHiddenActionId: ActionShortcut(key: ".", modifiers: cmd | sft),    // 访达「显示隐藏文件」
+            undoActionId: ActionShortcut(key: "z", modifiers: cmd),                  // 与访达撤销共存，见 UndoCenter
         ]
     }()
 
     /// 只能由按键拦截处理的动作（没有可用的服务快捷键回退）。剪切 / 粘贴的服务版本需要选中项、
     /// 粘贴还进选中文件夹，与访达原生行为不一致，所以这两行不同步为服务快捷键。
+    /// 撤销同理：只能由拦截判断该撤销 FinderRight 还是交给访达，没有服务可回退。
     public static func handlesAction(_ actionId: String) -> Bool {
-        actionId == cutActionId || actionId == pasteActionId
+        actionId == cutActionId || actionId == pasteActionId || actionId == undoActionId
     }
 
     /// 启动时要补上的默认快捷键。每行的默认值只补一次（alreadyApplied 记录补过的行），且只填空位：
@@ -120,6 +129,7 @@ public enum FinderKeyTakeover {
             switch actionId {
             case cutActionId: return .cut
             case pasteActionId: return .paste
+            case undoActionId: return .undo
             default: return .action(actionId)
             }
         }
@@ -149,13 +159,21 @@ public enum FinderKeyTakeover {
 
     /// - focusIsText: 焦点在文字输入里；取不到焦点时调用方应传 true，宁可放行也不误操作文件
     /// - pasteboardIsCutMirror: 剪切队列非空，且剪贴板仍是剪切时写入的那份
-    public static func decide(_ command: Command?, focusIsText: Bool, pasteboardIsCutMirror: Bool) -> Decision {
+    /// - undo: 撤销键的去向（UndoCenter.shortcutDecision），只对 .undo 命令有意义
+    public static func decide(_ command: Command?, focusIsText: Bool, pasteboardIsCutMirror: Bool,
+                              undo: UndoShortcutDecision = .passThrough) -> Decision {
         guard let command, !focusIsText else { return .passThrough }
         switch command {
         case .cut: return .cut
         case .copy: return .copyThenCancelCut
         case .paste: return pasteboardIsCutMirror ? .paste : .passThrough
         case .action(let actionId): return .runAction(actionId)
+        case .undo:
+            switch undo {
+            case .undo: return .undo
+            case .ignore: return .swallow
+            case .passThrough: return .passThrough
+            }
         }
     }
 

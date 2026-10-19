@@ -58,21 +58,56 @@ public final class ClipboardToast {
         panel.isReleasedWhenClosed = false
     }
 
+    /// 撤销结果的提示样式：全部撤销 / 部分撤销 / 一项未撤销
+    public enum Style {
+        case success, partial, failure
+    }
+
+    /// 内部外观：复制提示跟随主题色，警告为橙色，撤销结果按 Style 用绿 / 黄 / 红
+    private enum Look {
+        case copied, warning, result(Style)
+    }
+
     public static func showCopied(message: String? = nil, isWarning: Bool = false) {
-        DispatchQueue.main.async { shared.show(message: message, isWarning: isWarning) }
+        DispatchQueue.main.async { shared.show(message: message, look: isWarning ? .warning : .copied) }
+    }
+
+    /// 撤销结果提示：文字较长，停留时间比复制提示更久
+    public static func show(message: String, style: Style) {
+        DispatchQueue.main.async { shared.show(message: message, look: .result(style)) }
     }
 
     /// 根据当前主题色与外观动态更新背景与文字颜色及尺寸
-    private func updateAppearanceAndLayout(message: String?, isWarning: Bool) {
+    private func updateAppearanceAndLayout(message: String?, look: Look) {
         SharedConfig.shared.reload()
         let theme = FRThemeID.current
         let palette = theme.palette
 
         let appearance = panel.effectiveAppearance
-        let accent = isWarning ? NSColor.systemOrange : palette.accent.resolved(for: appearance)
-        let onAccent = isWarning ? NSColor.white : palette.onAccent.resolved(for: appearance)
-
-        let iconSymbol = isWarning ? "exclamationmark.triangle" : "checkmark"
+        let accent: NSColor, onAccent: NSColor, iconSymbol: String
+        switch look {
+        case .copied:
+            accent = palette.accent.resolved(for: appearance)
+            onAccent = palette.onAccent.resolved(for: appearance)
+            iconSymbol = "checkmark"
+        case .warning:
+            accent = .systemOrange
+            onAccent = .white
+            iconSymbol = "exclamationmark.triangle"
+        case .result(.success):
+            accent = .systemGreen
+            onAccent = .white
+            iconSymbol = "checkmark"
+        case .result(.partial):
+            // 黄底白字看不清，改用深色文字
+            accent = .systemYellow
+            onAccent = .black
+            iconSymbol = "exclamationmark.triangle"
+        case .result(.failure):
+            accent = .systemRed
+            onAccent = .white
+            iconSymbol = "xmark"
+        }
         let iconConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
         iconView.image = NSImage(systemSymbolName: iconSymbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(iconConfig)
@@ -114,12 +149,12 @@ public final class ClipboardToast {
         panel.setContentSize(panelSize)
     }
 
-    private func show(message: String?, isWarning: Bool) {
+    private func show(message: String?, look: Look) {
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
                 ?? NSScreen.main else { return }
         dismissTimer?.invalidate()
 
-        updateAppearanceAndLayout(message: message, isWarning: isWarning)
+        updateAppearanceAndLayout(message: message, look: look)
 
         let frame = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: frame.midX - panel.frame.width / 2, y: frame.minY + 64))
@@ -128,7 +163,9 @@ public final class ClipboardToast {
             .announcement: label.stringValue,
             .priority: NSAccessibilityPriorityLevel.medium.rawValue,
         ])
-        let timer = Timer(timeInterval: 1.2, repeats: false) { [weak self] _ in
+        let duration: TimeInterval
+        if case .result = look { duration = 3 } else { duration = 1.2 }
+        let timer = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
             self?.panel.orderOut(nil)
         }
         RunLoop.main.add(timer, forMode: .common)

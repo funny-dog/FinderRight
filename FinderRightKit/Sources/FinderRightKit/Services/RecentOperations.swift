@@ -4,7 +4,7 @@ import Foundation
 public struct OperationRecord: Equatable {
 
     public enum Kind: String {
-        case compress, decompress, paste, move, copy
+        case compress, decompress, paste, move, copy, undo
     }
 
     public let kind: Kind

@@ -119,6 +119,7 @@ public enum MenuIconStyle: String, Codable, CaseIterable, Identifiable {
 
 /// 内置功能清单。`all` 的顺序即右键菜单的顺序。
 public enum MenuFeatureCatalog {
+    public static let undo         = "feature.undo"
     public static let newFile      = "feature.newFile"
     public static let copyPath     = "feature.copyPath"
     public static let copyFileName = "feature.copyFileName"
@@ -135,6 +136,8 @@ public enum MenuFeatureCatalog {
     public static let toggleHidden = "feature.toggleHidden"
 
     public static let all: [MenuFeature] = [
+        // 只在有可撤销的操作时出现，放最前面便于发现
+        MenuFeature(id: undo,         nameKey: "撤销",           descriptionKey: "撤销 FinderRight 的上一次文件操作，只在可撤销时出现", systemImage: "arrow.uturn.backward", tint: .gray),
         MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus", tint: .blue),
         MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link", tint: .indigo),
         MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制完整文件名（含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo),

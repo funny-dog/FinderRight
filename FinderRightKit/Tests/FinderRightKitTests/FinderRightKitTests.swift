@@ -2041,7 +2041,8 @@ struct FinderRightKitTestsRunner {
             let oldSaved = ["feature.toggleHidden", "feature.newFile", "feature.copyPath", "feature.openTerminal",
                             "feature.openEditor", "feature.cut", "feature.paste", "feature.compress", "feature.decompress"]
             let ids = MenuFeatureCatalog.ordered(by: oldSaved).map(\.id)
-            try assertEqual(ids.first, "feature.toggleHidden", "用户的自定义顺序保持不变")
+            try assertEqual(ids.first, MenuFeatureCatalog.undo, "新增的撤销没有前一项，放最前")
+            try assertEqual(ids[1], "feature.toggleHidden", "用户的自定义顺序保持不变")
             let paste = ids.firstIndex(of: "feature.paste")!
             try assertEqual(Array(ids[paste...paste + 2]), ["feature.paste", "feature.moveTo", "feature.copyTo"])
         }
@@ -2492,8 +2493,9 @@ struct FinderRightKitTestsRunner {
             let opt = 1 << 19
             let optCmdC = ActionShortcut(key: "c", modifiers: cmd | opt)
             let sftCmdDot = ActionShortcut(key: ".", modifiers: cmd | shift)
+            let cmdZ = ActionShortcut(key: "z", modifiers: cmd)
             let all = ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": optCmdC,
-                       "shortcut.toggleHidden": sftCmdDot]
+                       "shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ]
             try assertEqual(T.defaultShortcuts, all, "默认值与访达原生一致")
             try assertNil(T.defaultShortcuts["shortcut.goToDirectory"], "前往目录不占用访达的 ⇧⌘G")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: []), all, "全新安装")
@@ -2501,18 +2503,20 @@ struct FinderRightKitTestsRunner {
                 "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
                 "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
                 "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl),
-            ], alreadyApplied: []).keys.sorted(), ["shortcut.toggleHidden"], "用户设置过的行一律保留")
+            ], alreadyApplied: []).keys.sorted(), ["shortcut.toggleHidden", "shortcut.undo"], "用户设置过的行一律保留")
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": ActionShortcut(key: "v", modifiers: cmd | ctl)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo"]),
                             ["shortcut.cut": cmdX], "只补没设置的那一行")
             try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo"]),
                             ["shortcut.cut": cmdX], "⌘V 已被其他动作占用则不填")
             // 1.6.4 升级：剪切 / 粘贴补过（用户之后清空了剪切），新增的三项默认只补空位
             let legacy = T.legacyAppliedActionIds(cutPasteApplied: true)
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": cmdV, "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl)],
                                               alreadyApplied: legacy),
-                            ["shortcut.toggleHidden": sftCmdDot], "清空的剪切不补回，用户的复制路径不覆盖")
+                            ["shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ], "清空的剪切不补回，用户的复制路径不覆盖；升级时补上新增的撤销")
+            try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": cmdZ], alreadyApplied: Set(all.keys).subtracting(["shortcut.undo"])),
+                            [:], "⌘Z 已被用户占用则不补撤销")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: Set(all.keys)), [:], "补过的行清空后不再补回")
             try assertTrue(T.legacyAppliedActionIds(cutPasteApplied: false).isEmpty)
             try assertTrue(T.handlesAction("shortcut.cut") && T.handlesAction("shortcut.paste"))
@@ -2741,6 +2745,26 @@ struct FinderRightKitTestsRunner {
             try assertEqual(UndoText.feedback(for: record, outcome: UndoOutcome(skipped: [
                 .init(name: "a.txt", reason: .originalOccupied)]), localize: id),
                             "无法撤销：“a.txt”原位置已有同名项目")
+        }
+
+        runTest("FinderKeyTakeover 撤销键按决策吞键或放行") {
+            typealias T = FinderKeyTakeover
+            try assertEqual(T.defaultShortcuts[T.undoActionId], ActionShortcut(key: "z", modifiers: 1 << 20), "默认 ⌘Z")
+            try assertTrue(T.handlesAction(T.undoActionId))
+            try assertEqual(T.decide(.undo, focusIsText: false, pasteboardIsCutMirror: false, undo: .undo), .undo)
+            try assertEqual(T.decide(.undo, focusIsText: false, pasteboardIsCutMirror: false, undo: .ignore), .swallow)
+            try assertEqual(T.decide(.undo, focusIsText: false, pasteboardIsCutMirror: false, undo: .passThrough), .passThrough)
+            try assertEqual(T.decide(.undo, focusIsText: true, pasteboardIsCutMirror: false, undo: .undo), .passThrough, "重命名时放行")
+            // ANSI 布局 Z=6；与现有按键测试一致，修饰键直接用 CGEventFlags 位（⌘ = 1 << 20）
+            let chord = T.KeyChord(keyCode: 6, modifiers: 1 << 20)
+            try assertEqual(T.command(keyCode: 6, modifierFlags: 1 << 20, chords: [T.undoActionId: chord], copy: nil), .undo)
+        }
+
+        runTest("MenuFeatureCatalog 撤销排第一且默认开启") {
+            try assertEqual(MenuFeatureCatalog.all.first?.id, MenuFeatureCatalog.undo)
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.undo))
+            try assertEqual(MenuFeatureCatalog.ordered(by: [MenuFeatureCatalog.newFile]).first?.id, MenuFeatureCatalog.undo,
+                            "老用户保存的顺序里没有它时也放最前")
         }
 
         print("\n-----------------------------------------")
