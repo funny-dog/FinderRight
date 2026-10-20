@@ -36,6 +36,8 @@ struct LaunchPresentationChecks {
         check("URL 冷启动不额外弹设置", expected: false, event: urlEvent)
         check("语言切换与更新重启显式显示设置", expected: true, isDefaultLaunch: false,
               arguments: [LaunchPresentation.showSettingsArgument])
+        check("自动更新重启保持后台", expected: false,
+              arguments: [LaunchPresentation.backgroundArgument])
         check("无关参数不改变后台启动", expected: false, isDefaultLaunch: false,
               arguments: ["--other"])
     }

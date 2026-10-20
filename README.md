@@ -92,7 +92,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 
 ### 🔄 升级说明
 
-可以通过应用内「关于」页面的自动更新直接升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
+可在「设置 → 通用」开启「自动检查并安装更新」（默认关闭）：开启后立即检查，应用运行期间每 6 小时检查一次，发现可安装的新版本后在文件操作空闲时下载安装并自动重启；自动安装退出前会等待进行中的文件操作完成。关闭开关后不再发起自动更新，已经开始的更新仍会完成。也可以通过应用内「关于」页面手动检查并升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
 
 > 💡 **版本升级注意事项**：
 > 1. **重启访达（重要）**：macOS 系统会缓存 FinderSync 扩展进程。覆盖安装或更新后，**务必在终端执行以下命令重启访达**，以使系统加载最新版本的扩展插件（否则右键菜单或剪切角标可能不会即时刷新）：
@@ -248,7 +248,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 
 ### 🔄 Upgrading from Older Versions
 
-You can upgrade directly via the built-in auto-updater in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
+Enable "Automatically check for and install updates" in Settings → General (off by default) to check immediately and every 6 hours while the app is running. Installable updates download when file operations are idle, then install and restart automatically; the app waits for any ongoing file operations before quitting. Turning the switch off stops future automatic updates; an update already in progress will still finish. You can also check and upgrade manually in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
 
 > 💡 **Upgrade Tips**:
 > 1. **Restart Finder (Important)**: macOS caches FinderSync extension processes. After upgrading or overwriting the app, **always restart Finder via Terminal** to ensure the new extension bundle is loaded (otherwise the context menu or badges may not update immediately):

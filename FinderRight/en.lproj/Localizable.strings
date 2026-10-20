@@ -635,3 +635,8 @@
 
 "通过服务菜单或快捷键打开终端时使用" = "Used when opening a terminal through Services or keyboard shortcuts";
 "默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry. Drag the handle on the left to reorder terminals in the context menu.";
+
+"更新" = "Updates";
+"自动检查并安装更新" = "Automatically check for and install updates";
+"开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。" = "Check immediately when enabled, then every 6 hours while running. Download and install when idle, then restart automatically. Off by default.";
+"关闭后不再发起自动更新；已经开始的更新仍会完成。" = "Turning this off stops future automatic updates; an update already in progress will still finish.";

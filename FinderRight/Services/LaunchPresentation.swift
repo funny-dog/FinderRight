@@ -1,12 +1,14 @@
 import AppKit
 
 enum LaunchPresentation {
+    static let backgroundArgument = "--background"
     static let showSettingsArgument = "--show-settings"
 
     static func shouldShowSettings(isDefaultLaunch: Bool,
                                    event: NSAppleEventDescriptor?,
                                    receivedURL: Bool,
                                    arguments: [String]) -> Bool {
+        if arguments.contains(backgroundArgument) { return false }
         if arguments.contains(showSettingsArgument) { return true }
         guard isDefaultLaunch, !receivedURL else { return false }
         guard let event else { return true }

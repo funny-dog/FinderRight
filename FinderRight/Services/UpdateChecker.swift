@@ -47,12 +47,62 @@ public final class UpdateChecker: NSObject {
         }
     }
     private var lastCheckedDate: Date?
+    static let automaticUpdatesKey = "automaticallyCheckAndInstallUpdates"
+    private let defaults: UserDefaults
+    private let checkSession: URLSession
+    private var automaticUpdateTimer: Timer?
+    private var automaticUpdateGeneration = 0
+    private(set) var isAutomaticInstall = false
 
     private var activeDownloadSession: URLSession?
     private var downloadDelegate: UpdateDownloadDelegate?
 
-    private override init() {
+    init(defaults: UserDefaults = .standard, checkSession: URLSession = .shared) {
+        self.defaults = defaults
+        self.checkSession = checkSession
         super.init()
+    }
+
+    /// 启动和偏好变更时调用；关闭后不再发起更新，已开始的安装流程继续完成。
+    func configureAutomaticUpdates() {
+        guard defaults.bool(forKey: Self.automaticUpdatesKey) else {
+            if automaticUpdateTimer != nil { automaticUpdateGeneration += 1 }
+            automaticUpdateTimer?.invalidate()
+            automaticUpdateTimer = nil
+            return
+        }
+        guard automaticUpdateTimer == nil else { return }
+        automaticUpdateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in
+            self?.checkAutomatically()
+        }
+        // 避免在 UserDefaults 的同步通知中重入更新检查。
+        DispatchQueue.main.async { [weak self] in self?.checkAutomatically() }
+    }
+
+    private func checkAutomatically() {
+        guard defaults.bool(forKey: Self.automaticUpdatesKey), !currentStatus.isInProgress else { return }
+        let generation = automaticUpdateGeneration
+        check(force: true) { [weak self] status in
+            guard let self, self.automaticUpdateGeneration == generation,
+                  self.defaults.bool(forKey: Self.automaticUpdatesKey),
+                  case .updateAvailable(_, _, .some, .some) = status else { return }
+            self.installAutomaticUpdateWhenIdle(status, generation: generation)
+        }
+    }
+
+    private func installAutomaticUpdateWhenIdle(_ status: UpdateCheckStatus, generation: Int) {
+        guard defaults.bool(forKey: Self.automaticUpdatesKey), automaticUpdateGeneration == generation,
+              currentStatus == status,
+              case .updateAvailable(_, _, let downloadURL?, let checksum?) = status else { return }
+        guard FinderRightService.backgroundJobs.isIdle else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+                self?.installAutomaticUpdateWhenIdle(status, generation: generation)
+            }
+            return
+        }
+        startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum, automatically: true) { status in
+            if case .failed(let message) = status { NSLog("[UpdateChecker] 自动更新失败：%@", message) }
+        }
     }
 
     /// 当前本地版本号（例如 "1.1.4"）
@@ -94,7 +144,7 @@ public final class UpdateChecker: NSObject {
         request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
 
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        let task = checkSession.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
 
             if let error = error {
@@ -177,7 +227,10 @@ public final class UpdateChecker: NSObject {
     private static let checksumFetchAttempts = 3
 
     /// 开始下载并自动安装更新
-    public func startDownloadAndInstall(downloadURL: URL, checksum: UpdateChecksum?, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+    public func startDownloadAndInstall(downloadURL: URL, checksum: UpdateChecksum?, automatically: Bool = false,
+                                        statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        guard !currentStatus.isInProgress else { return }
+        isAutomaticInstall = automatically
         let updateStatus = UpdateCheckStatus.downloading(progress: 0.0)
         self.currentStatus = updateStatus
         statusHandler(updateStatus)
@@ -287,6 +340,7 @@ public final class UpdateChecker: NSObject {
 
     /// 在主线程调用：记录并上报失败状态
     private func fail(_ message: String, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        isAutomaticInstall = false
         let failed = UpdateCheckStatus.failed(message)
         currentStatus = failed
         statusHandler(failed)
@@ -304,9 +358,7 @@ public final class UpdateChecker: NSObject {
             self.performInstallAndRelaunch(zipURL: zipLocation) { installError in
                 if let installError = installError {
                     DispatchQueue.main.async {
-                        let failedStatus = UpdateCheckStatus.failed("安装失败: \(installError.localizedDescription)")
-                        self.currentStatus = failedStatus
-                        statusHandler(failedStatus)
+                        self.fail("安装失败: \(installError.localizedDescription)", statusHandler: statusHandler)
                     }
                 }
             }
@@ -366,7 +418,7 @@ public final class UpdateChecker: NSObject {
             if (fileManager.fileExists(atPath: targetAppURL.path) && !isTargetWritable) || !isParentWritable {
                 let errMsg = "无权限写入 \(targetAppURL.path)，请手动下载安装"
                 DispatchQueue.main.async {
-                    if let releaseURL = URL(string: "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest") {
+                    if !self.isAutomaticInstall, let releaseURL = URL(string: "https://github.com/\(self.repoOwner)/\(self.repoName)/releases/latest") {
                         NSWorkspace.shared.open(releaseURL)
                     }
                 }
@@ -389,6 +441,8 @@ public final class UpdateChecker: NSObject {
             let errCopyFailed = NSLocalizedString("复制新版本到临时目录失败", comment: "update error")
             let errBackupFailed = NSLocalizedString("备份旧版本失败", comment: "update error")
             let errMoveFailed = NSLocalizedString("移动新版本到目标目录失败，已回滚旧版本", comment: "update error")
+            let relaunchArgument = isAutomaticInstall ? LaunchPresentation.backgroundArgument : LaunchPresentation.showSettingsArgument
+            let openOptions = isAutomaticInstall ? "-g -a" : "-a"
             let scriptContent = """
             #!/bin/bash
             # 等待原进程退出
@@ -445,7 +499,7 @@ public final class UpdateChecker: NSObject {
             # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，
             # 残留的旧扩展进程仍指向已删除的旧包，需由系统按新包重新拉起
             /usr/bin/killall FinderRightSync 2>/dev/null || true
-            /usr/bin/open -a "$TARGET" --args \(LaunchPresentation.showSettingsArgument)
+            /usr/bin/open \(openOptions) "$TARGET" --args \(relaunchArgument)
 
             # 清理下载解压临时文件
             /bin/rm -rf "\(baseDir.path)"

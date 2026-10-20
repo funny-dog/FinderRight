@@ -20,6 +20,13 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -o "$KIT_BUILD_DIR/test-launch-presentation"
 "$KIT_BUILD_DIR/test-launch-presentation"
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Services/LaunchPresentation.swift FinderRight/Services/UpdateChecker.swift \
+  scripts/test-automatic-updates.swift -o "$KIT_BUILD_DIR/test-automatic-updates"
+"$KIT_BUILD_DIR/test-automatic-updates"
+
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

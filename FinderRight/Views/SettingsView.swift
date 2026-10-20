@@ -171,6 +171,7 @@ private struct SidebarItem: View {
 // MARK: - 通用 Tab
 
 struct GeneralTab: View {
+    @AppStorage(UpdateChecker.automaticUpdatesKey) private var automaticUpdates = false
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showRecentActivity") private var showRecentActivity = false
@@ -185,6 +186,7 @@ struct GeneralTab: View {
     var body: some View {
         FRPage(title: "通用", subtitle: "启动、显示与外观") {
             launchSection
+            updateSection
             displaySection
         }
         .onAppear {
@@ -238,6 +240,18 @@ struct GeneralTab: View {
                     .padding(.vertical, 10)
                 }
             }
+        }
+    }
+
+    private var updateSection: some View {
+        FRSection("更新") {
+            FRCard {
+                FRRow(title: Text("自动检查并安装更新"),
+                      subtitle: Text("开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。")) {
+                    FRSwitch(label: "自动检查并安装更新", isOn: $automaticUpdates)
+                }
+            }
+            FRFootnote(Text("关闭后不再发起自动更新；已经开始的更新仍会完成。"))
         }
     }
 

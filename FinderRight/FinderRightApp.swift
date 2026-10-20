@@ -126,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(openOnboarding),
             name: .openOnboarding, object: nil)
 
+        UpdateChecker.shared.configureAutomaticUpdates()
+
         let showSettings = LaunchPresentation.shouldShowSettings(
             isDefaultLaunch: notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? false,
             event: NSAppleEventManager.shared().currentAppleEvent,
@@ -687,13 +689,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 退出前等待后台任务
 
     /// 菜单退出、自动更新、切换语言重启都会走到这里。有压缩 / 解压 / 粘贴在途时延后退出，
-    /// 最多等 30 秒：粘贴另有 in-flight 崩溃恢复兜底，超时后照常退出
+    /// 手动退出最多等 30 秒（粘贴另有崩溃恢复兜底）；自动安装则等待任务完成。
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let jobs = FinderRightService.backgroundJobs
         guard !jobs.isIdle else { return .terminateNow }
         NSLog("[AppDelegate] 有后台任务进行中，等待完成后再退出")
         DispatchQueue.global(qos: .userInitiated).async {
-            let finished = jobs.waitUntilIdle(timeout: 30)
+            // 自动安装不打断耗时文件操作；手动退出沿用原有 30 秒上限。
+            let automaticInstall = UpdateChecker.shared.isAutomaticInstall
+            var finished: Bool
+            repeat {
+                finished = jobs.waitUntilIdle(timeout: 30)
+            } while automaticInstall && !finished
             NSLog("[AppDelegate] 后台任务\(finished ? "已完成" : "等待超时（30s）")，继续退出")
             DispatchQueue.main.async {
                 NSApp.reply(toApplicationShouldTerminate: true)
@@ -730,6 +737,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isUpdatingStatusItemVisibility = false
 
     @objc private func defaultsChanged() {
+        UpdateChecker.shared.configureAutomaticUpdates()
+
         // 「最近操作」开关：关闭时 RecentOperations 自行清空记录并通知刷新图标提示
         let wantRecent = showRecentActivity
         if RecentOperations.shared.isEnabled != wantRecent {
