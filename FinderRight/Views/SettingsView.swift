@@ -1149,7 +1149,7 @@ struct ShortcutsTab: View {
                 if !hasAccessibility {
                     FRCard {
                         FRRow(title: Text("快捷键需要「辅助功能」权限"),
-                              subtitle: Text("授权后在访达中直接按键，任意组合都能用，改完立即生效，空白处也能粘贴。未授权时剪切、粘贴不可用，其他快捷键退回系统服务快捷键，改完要重启访达。")) {
+                              subtitle: Text("授权后任意组合都能用、改完立即生效；未授权时剪切、粘贴不可用，其余快捷键要重启访达才生效。")) {
                             VStack(alignment: .trailing, spacing: 8) {
                                 Button("授权辅助功能…") { requestAccessibility() }
                                     .buttonStyle(.frPrimary)
@@ -1166,7 +1166,7 @@ struct ShortcutsTab: View {
                 if needsFinderRestart && !hasAccessibility {
                     FRCard {
                         FRRow(title: Text("重启访达后新快捷键生效"),
-                              subtitle: Text("访达只在启动时读取服务快捷键。重启会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。")) {
+                              subtitle: Text("访达只在启动时读取服务快捷键；重启会关闭所有访达窗口，可能中断正在进行的拷贝。")) {
                             Button("重启访达") {
                                 FinderRelauncher.relaunch()
                                 needsFinderRestart = false
@@ -1194,13 +1194,13 @@ struct ShortcutsTab: View {
 
                 FRCard {
                     FRRow(title: Text("恢复默认快捷键"),
-                          subtitle: Text("剪切 ⌘X、粘贴 ⌘V、复制路径 ⌥⌘C、切换隐藏文件 ⇧⌘.，与访达一致；其他快捷键清空。")) {
+                          subtitle: Text("恢复与访达一致的默认组合，没有默认的会清空。")) {
                         Button("恢复默认…") { confirmRestoreDefaults() }
                             .buttonStyle(.frSecondary)
                     }
                 }
 
-                FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。默认快捷键与访达一致，升级不会改动你设置过的快捷键。\n授权「辅助功能」后，所有快捷键由 FinderRight 抢在访达之前处理：可以用任意组合（包括访达自带的，如 ⌥⌘C），改完立即生效；重命名或输入文字时不受影响。「剪切」「粘贴」默认是 ⌘X / ⌘V，清除即停用；粘贴会把文件移到当前窗口所在的文件夹，空白处也可以，由访达自己移动、可以撤销；剪切时会把文件放进剪贴板，之后在访达里拷贝了别的内容，剪切会取消。除剪切、粘贴、切换隐藏文件、打开路径外，其他快捷键要先选中文件再按，没有选中项时按键交还访达。\n未授权时剪切、粘贴不可用，与访达自带快捷键相同的组合由访达自己响应；其他快捷键同步为系统服务快捷键（「系统设置 → 键盘 → 键盘快捷键 → 服务 → 文件和文件夹」，以本页为准），改完需重启访达，且不能与访达自带快捷键或系统文本编辑按键（如 ⌃V 翻页）相同。「切换隐藏文件」没有对应的系统服务，未授权时仅在右键菜单展开时生效。"))
+                FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。默认与访达一致，升级不会改动你的设置。\n除剪切、粘贴、切换隐藏文件、打开路径外，其余快捷键需先选中文件。"))
             }
         }
         .onAppear {
