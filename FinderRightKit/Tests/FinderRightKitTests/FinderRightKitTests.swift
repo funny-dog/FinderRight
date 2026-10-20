@@ -2764,6 +2764,69 @@ struct FinderRightKitTestsRunner {
             try assertNil(UndoMenuState.read(from: dir))
         }
 
+        runTest("UndoRecord 移进废纸篓 / 改名 / 换成别的文件的项被剔除，只改了内容的保留") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let dst = root.appendingPathComponent("dst"), trashDir = root.appendingPathComponent("trash")
+            try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+            try fm.createDirectory(at: trashDir, withIntermediateDirectories: true)
+            let names = ["trashed.txt", "renamed.txt", "replaced.txt", "edited.txt"]
+            var items: [UndoRecord.Item] = []
+            for name in names {
+                let url = dst.appendingPathComponent(name)
+                try Data(name.utf8).write(to: url)
+                items.append(.init(current: url, original: nil, fingerprint: FileFingerprint.capture(url)!))
+            }
+            let record = UndoRecord(kind: .copy, name: "dst", items: items, cutQueueBefore: nil,
+                                    finderSnapshot: FinderUndoSnapshot(title: "撤销拷贝", enabled: true))
+            try assertEqual(record.pruningRemovedItems(cutQueue: []), record, "都还在时原样返回")
+
+            try fm.moveItem(at: items[0].current, to: trashDir.appendingPathComponent("trashed.txt"))
+            try fm.moveItem(at: items[1].current, to: dst.appendingPathComponent("renamed 2.txt"))
+            try fm.removeItem(at: items[2].current)
+            try Data("新文件".utf8).write(to: items[2].current)
+            try Data("改过了".utf8).write(to: items[3].current)
+            guard let pruned = record.pruningRemovedItems(cutQueue: []) else {
+                throw TestFailure(message: "还有项在原处，不应作废")
+            }
+            try assertEqual(pruned.items.map(\.current), [items[3].current], "只留下原处仍是同一个项目的")
+            try assertEqual(pruned.count, 1, "菜单显示的项数随之减少")
+            try assertEqual(pruned.finderSnapshot, record.finderSnapshot, "⌘Z 归属比对不受影响")
+
+            try fm.moveItem(at: items[3].current, to: trashDir.appendingPathComponent("edited.txt"))
+            try assertNil(record.pruningRemovedItems(cutQueue: []), "全部移走后作废")
+        }
+
+        runTest("UndoRecord 剪切新增的项都已离开剪切队列时作废") {
+            let record = UndoRecord(kind: .cut, name: "", items: [], cutQueueBefore: ["/a", "/b"],
+                                    finderSnapshot: nil, displayCount: 2)
+            try assertEqual(record.pruningRemovedItems(cutQueue: ["/a", "/b", "/c", "/d"]), record, "都还在时不变")
+            let pruned = record.pruningRemovedItems(cutQueue: ["/a", "/d"])
+            try assertEqual(pruned?.count, 1, "新增项只剩一个")
+            try assertEqual(pruned?.cutQueueBefore, ["/a"], "已移走的旧项撤销时不再写回队列")
+            try assertNil(record.pruningRemovedItems(cutQueue: ["/a", "/b"]), "新增项全被移走")
+            try assertNil(record.pruningRemovedItems(cutQueue: []))
+        }
+
+        runTest("UndoCenter 按修订结果更新或清除状态文件") {
+            let dir = makeTempDirectory()
+            let center = UndoCenter(stateDirectory: dir)
+            try assertTrue(!center.revalidate { _ in nil }, "没有记录时无事可做")
+            let fp = FileFingerprint(fileNumber: 1, device: 1, isDirectory: false, modificationDate: nil, size: 0)
+            let a = UndoRecord.Item(current: URL(fileURLWithPath: "/tmp/dst/a"), original: nil, fingerprint: fp)
+            let b = UndoRecord.Item(current: URL(fileURLWithPath: "/tmp/dst/b"), original: nil, fingerprint: fp)
+            let copy = UndoRecord(kind: .copy, name: "dst", items: [a, b], cutQueueBefore: nil, finderSnapshot: nil)
+            center.register(copy)
+            try assertTrue(!center.revalidate { $0 }, "没变化时不重写")
+            let one = UndoRecord(kind: .copy, name: "dst", items: [a], cutQueueBefore: nil, finderSnapshot: nil)
+            try assertTrue(center.revalidate { _ in one })
+            try assertEqual(center.current, one)
+            try assertEqual(UndoMenuState.read(from: dir), UndoMenuState(kind: .copy, count: 1, name: "dst"))
+            try assertTrue(center.revalidate { _ in nil })
+            try assertNil(center.current)
+            try assertNil(UndoMenuState.read(from: dir), "作废后扩展不再显示撤销项")
+        }
+
         runTest("UndoText 菜单标题与提示文案") {
             let id: (String) -> String = { $0 }
             try assertEqual(UndoText.menuTitle(for: UndoMenuState(kind: .move, count: 3, name: "Projects"), localize: id),

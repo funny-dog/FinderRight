@@ -38,6 +38,12 @@ public struct FileFingerprint: Equatable {
         fileNumber == other.fileNumber && device == other.device && isDirectory == other.isDirectory
             && modificationDate == other.modificationDate && size == other.size
     }
+
+    /// 只比编号与设备：是不是同一个项目，不管内容改没改。
+    /// 用来区分「被移走 / 删掉后原路径换成了别的项目」与「还在原处只是被改过」
+    public func isSameItem(as other: FileFingerprint) -> Bool {
+        fileNumber == other.fileNumber && device == other.device
+    }
 }
 
 /// 操作完成时访达「编辑 → 撤销」项的样子。之后访达每做一次可撤销操作，标题都会变；
@@ -100,5 +106,31 @@ public struct UndoRecord: Equatable {
     /// 撤销方式：移动类移回原处，其余（复制品、新建的文件、压缩包、解压产物）送进废纸篓
     public var restoresByMoving: Bool {
         kind == .move || kind == .paste
+    }
+
+    /// 去掉已经不在原处的项（被移进废纸篓、删除、改名或挪走）后的记录；没有可撤销的内容时返回 nil。
+    /// 原处只是被改过的项保留，撤销时照常跳过并说明原因。
+    ///
+    /// - cutQueue: 当前剪切队列，须已剔除不存在的路径；只用于剪切记录。
+    ///   剪切新增的项都已不在队列里时，撤销剪切不会再改变什么，记录作废
+    /// - locate: 读取路径上项目的指纹（主 App 传 `FileFingerprint.capture`）
+    public func pruningRemovedItems(cutQueue: [String],
+                                    locate: (URL) -> FileFingerprint? = FileFingerprint.capture) -> UndoRecord? {
+        if kind == .cut {
+            let before = cutQueueBefore ?? []
+            let added = cutQueue.filter { !before.contains($0) }
+            guard !added.isEmpty else { return nil }
+            // 之前就在队列里、后来被移走的项也不能在撤销时被写回队列
+            let keptBefore = before.filter { cutQueue.contains($0) }
+            return UndoRecord(kind: kind, name: name, items: items, cutQueueBefore: keptBefore,
+                              finderSnapshot: finderSnapshot, displayCount: added.count)
+        }
+        let kept = items.filter { item in
+            locate(item.current).map { $0.isSameItem(as: item.fingerprint) } ?? false
+        }
+        guard !kept.isEmpty else { return nil }
+        guard kept.count != items.count else { return self }
+        return UndoRecord(kind: kind, name: name, items: kept, cutQueueBefore: cutQueueBefore,
+                          finderSnapshot: finderSnapshot, displayCount: displayCount)
     }
 }

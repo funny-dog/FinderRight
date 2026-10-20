@@ -86,6 +86,24 @@ public final class UndoCenter {
         }
     }
 
+    /// 按当前文件状态修订记录（见 `UndoRecord.pruningRemovedItems`）。transform 在锁内执行，
+    /// 修订与登记新记录互斥，不会把刚登记的新记录覆盖成旧记录的修订版。返回记录是否有变化
+    @discardableResult
+    public func revalidate(_ transform: (UndoRecord) -> UndoRecord?) -> Bool {
+        locked {
+            guard let old = record else { return false }
+            let new = transform(old)
+            guard new != old else { return false }
+            record = new
+            if let new {
+                writeState(UndoMenuState(kind: new.kind, count: new.count, name: new.name))
+            } else {
+                removeState()
+            }
+            return true
+        }
+    }
+
     /// 清空记录与状态文件。App 启动与退出时调用，避免崩溃后残留的状态文件让扩展显示无效菜单项
     public func clear() {
         locked {

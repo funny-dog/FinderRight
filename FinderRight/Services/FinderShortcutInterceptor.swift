@@ -390,6 +390,19 @@ final class FinderShortcutInterceptor {
         locked { mirror.record(changeCount: changeCount) }
     }
 
+    /// 剪切队列里有项被移进废纸篓、删除或改名后调用：剪贴板仍是剪切镜像时按剩下的队列重写，
+    /// 队列空了就清掉，免得按粘贴键交给访达时拿着已不存在的文件。之后复制过别的就不碰剪贴板
+    func refreshCutQueueMirror(_ paths: [String]) {
+        let pasteboard = NSPasteboard.general
+        guard locked({ mirror.matches(currentChangeCount: pasteboard.changeCount) }) else { return }
+        if paths.isEmpty {
+            pasteboard.clearContents()
+            locked { mirror.reset() }
+        } else {
+            mirrorCutQueue(paths)
+        }
+    }
+
     // MARK: - 键码换算（主线程）
 
     /// 录制的快捷键 → 当前键盘布局下的键码。TIS / UCKeyTranslate 只在主线程调用。

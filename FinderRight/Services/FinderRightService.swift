@@ -823,7 +823,10 @@ final class FinderRightService {
             do {
                 let retryPaths = generation == Self.cutCancelGeneration ? failedPaths : []
                 try cutQueue.finish(batchID, retrying: retryPaths)
-                if !retryPaths.isEmpty { CutQueueChangeNotifier.post() }
+                if !retryPaths.isEmpty {
+                    CutQueueChangeNotifier.post()
+                    Self.scheduleRemovalCheck()
+                }
             } catch {
                 serviceLog("粘贴结算失败，保留本批恢复记录: \(error.localizedDescription)")
             }
@@ -1005,6 +1008,7 @@ final class FinderRightService {
                                               cutQueueBefore: cutQueueBefore, finderSnapshot: snapshot),
                                    displayCount: displayCount)
         serviceLog("undo registered: \(kind.rawValue) items=\(recorded.count) finder=\(snapshot.map { "\($0.title)/\($0.enabled)" } ?? "nil")")
+        Self.scheduleRemovalCheck()
     }
 
     /// 撤销 FinderRight 记录的上一次操作。来源：⌘Z 拦截、扩展右键菜单、菜单栏。
@@ -1051,6 +1055,8 @@ final class FinderRightService {
             }
             CutQueueChangeNotifier.post()
             FinderShortcutInterceptor.shared.mirrorCutQueue(before)
+            // 写回的队列里可能有剪切之后才被移走的项，交给核对剔除，并改为监视写回后的这些文件夹
+            Self.scheduleRemovalCheck()
             return UndoOutcome()
         }
     }
@@ -1141,5 +1147,56 @@ final class FinderRightService {
         } catch {
             NSLog("[FinderRightService] 剪切队列恢复失败，保留恢复记录: \(error)")
         }
+        // 上次退出后剪切队列里的文件可能已被删除或移进废纸篓
+        scheduleRemovalCheck()
+    }
+
+    // MARK: - 跟进被外部移走的项
+
+    /// 核对专用串行队列，FSEvents 回调也在这里执行
+    private static let removalQueue = DispatchQueue(label: "com.finderright.app.removal", qos: .utility)
+
+    /// 监视剪切队列与撤销记录涉及的文件夹
+    private static let removalWatcher = DirectoryWatcher(queue: removalQueue) { reconcileRemovedItems() }
+
+    /// 剪切队列或撤销记录变化后调用：马上核对一次，并改为监视它们现在涉及的文件夹
+    static func scheduleRemovalCheck() {
+        removalQueue.async { reconcileRemovedItems() }
+    }
+
+    /// 剪切队列与撤销记录里的项被移进废纸篓、删除、改名或挪走后，把它们剔除。
+    /// 否则角标、「粘贴（已剪切 N 项）」与「撤销…」菜单都还在，点了才发现什么也做不了。
+    /// 只能在 removalQueue 上执行
+    private static func reconcileRemovedItems() {
+        let fileManager = FileManager.default
+        let store = CutQueueStore()
+        let queue: [String] = cutPasteQueue.sync {
+            let stored = store.read()
+            var queue = stored
+            let existing = stored.filter { fileManager.fileExists(atPath: $0) }
+            if existing != stored {
+                do {
+                    try store.write(existing)
+                    queue = existing
+                    CutQueueChangeNotifier.post()
+                    FinderShortcutInterceptor.shared.refreshCutQueueMirror(existing)
+                    NSLog("[FinderRightService] 剪切队列剔除已不存在的项: \(stored.count - existing.count) 项")
+                } catch {
+                    NSLog("[FinderRightService] 剪切队列剔除失败: \(error.localizedDescription)")
+                }
+            }
+            // 必须与读写剪切队列在同一个事务里：剪切总是先写队列再登记记录，
+            // 这样修订剪切记录时读到的队列一定包含它新增的项，不会误判为「已全部移走」
+            if UndoCenter.shared.revalidate({ $0.pruningRemovedItems(cutQueue: queue) }) {
+                NSLog("[FinderRightService] 撤销记录已按现有文件修订: \(UndoCenter.shared.current.map { "\($0.kind.rawValue) \($0.count)" } ?? "已作废")")
+            }
+            return queue
+        }
+
+        var directories = Set(queue.map { ($0 as NSString).deletingLastPathComponent })
+        for item in UndoCenter.shared.current?.items ?? [] {
+            directories.insert(item.current.deletingLastPathComponent().path)
+        }
+        removalWatcher.watch(directories)
     }
 }
