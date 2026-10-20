@@ -59,11 +59,14 @@ public final class SharedConfig {
         static let favoriteDirectories = "favoriteDirectories"
         static let appTheme = "appTheme"
         static let copyFileContentMaxSizeKB = "copyFileContentMaxSizeKB"
+        /// 一次性迁移标记：图标风格默认值已按「老用户保持单色线条」处理过
+        static let iconStyleDefaultMigrated = "iconStyleDefaultMigrated"
     }
 
     public init(fileURL: URL = SharedConfig.sharedFileURL) {
         self.configFileURL = fileURL
         load()
+        migrateIconStyleDefaultIfNeeded()
     }
 
     private func load() {
@@ -143,7 +146,7 @@ public final class SharedConfig {
 
     // MARK: - Menu Icon Style
 
-    /// 右键菜单图标风格（默认简洁：SF Symbols）
+    /// 右键菜单图标风格（默认彩色线条）
     public var menuIconStyle: MenuIconStyle {
         get {
             lock.lock()
@@ -152,7 +155,7 @@ public final class SharedConfig {
                let style = MenuIconStyle(storedValue: raw) {
                 return style
             }
-            return .modern
+            return .tinted
         }
         set {
             lock.lock()
@@ -160,6 +163,25 @@ public final class SharedConfig {
             store[Keys.menuIconStyle] = newValue.rawValue
             save()
         }
+    }
+
+    /// 图标风格默认值从「单色线条」改成「彩色线条」：
+    /// - **老用户**（升级前就存在配置文件）从没选过样式的，显式落盘旧的默认值「单色线条」，看到的菜单保持不变；
+    /// - **新用户**（没有配置文件）不落盘，直接拿到新的默认值。
+    ///
+    /// 必须用独立的标记位而不是「文件是否存在」判断：新用户首次运行后配置文件可能因改别的设置而生成，
+    /// 那时若再按「文件已存在」判断就会把他们的默认样式误钉成单色线条。
+    private func migrateIconStyleDefaultIfNeeded() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard store[Keys.iconStyleDefaultMigrated] as? Bool != true else { return }
+
+        if FileManager.default.fileExists(atPath: configFileURL.path),
+           store[Keys.menuIconStyle] == nil {
+            store[Keys.menuIconStyle] = MenuIconStyle.modern.rawValue
+        }
+        store[Keys.iconStyleDefaultMigrated] = true
+        save()
     }
 
     // MARK: - Preferred Terminal
