@@ -17,6 +17,18 @@ Xcode 构建、签名和安装说明见 [README](README.md)。不要提交签名
 
 改动应保持范围集中；按风险执行相关验证，提交前说明无法完成的检查。修改应用功能、系统要求或安装步骤时，同步更新 README 中英文内容及官网 `website/dist/`；仅修改网站时，按 [网站说明](website/README.md) 执行轻量检查。
 
+## 发版
+
+版本号分散在三个 Info.plist（`FinderRight`、`FinderRightSync`、`FinderRightPreview`），必须一致；`CFBundleVersion` 每次发版递增。
+
+```bash
+bash scripts/release.sh --check         # 只校验：分支、工作区、三处版本号、CI 状态
+bash scripts/release.sh 1.9.0           # bump → ci.sh → 提交 → 打 tag → RELEASE=1 构建
+bash scripts/release.sh 1.9.0 --publish # 继续推送 master 与 tag，并创建 draft Release
+```
+
+日常 `bash scripts/build.sh` 只写 `build/`，不会碰仓库根目录已发布的 `FinderRight.dmg` 与 `FinderRight-v<版本>.zip`；`RELEASE=1` 或经 `release.sh` 才会生成发布件。Release 资产名必须保持 `FinderRight.dmg`、`FinderRight-v<版本>.zip`、`FinderRight-v<版本>.zip.sha256`：`UpdateChecker` 按前者下载、按后者校验。draft Release 建好后补完更新说明再点 Publish。
+
 ## English
 
 Please use [Issues](https://github.com/funny-dog/FinderRight/issues) for bugs and suggestions. Chinese and English are welcome. Maintainers currently commit directly to `master`; the project does not use a PR workflow. Discuss larger changes in an issue first. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
@@ -24,3 +36,5 @@ Please use [Issues](https://github.com/funny-dog/FinderRight/issues) for bugs an
 Development requires macOS 13+, Apple Silicon, and the Swift toolchain. Run `bash scripts/ci.sh` for application checks. Run `bash scripts/build.sh` when packaging needs verification; it writes to `build/` without installing the app. See the README for Xcode and signing instructions.
 
 Keep changes focused and verification proportional to risk. State any checks you could not run. Keep both README languages and the website consistent when changing user-facing behavior. Follow `website/README.md` for website-only checks. Never commit signing keys, exported certificates, tokens, personal logs, or build artifacts.
+
+For releases: the version lives in three Info.plist files (`FinderRight`, `FinderRightSync`, `FinderRightPreview`) and must match, with `CFBundleVersion` bumped every time. `scripts/release.sh --check` verifies the branch, a clean tree, the three plists and CI; `scripts/release.sh <x.y.z>` bumps, runs CI, commits, tags and builds with `RELEASE=1`; add `--publish` to push and open a draft release. A plain `scripts/build.sh` only writes to `build/` and never touches published artifacts. Keep the asset names `FinderRight.dmg`, `FinderRight-v<version>.zip` and its `.sha256` — the updater downloads and verifies exactly those.

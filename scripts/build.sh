@@ -205,16 +205,29 @@ echo "=== 6. 创建 Applications 软链接 ==="
 ln -shf /Applications "$STAGE_DIR/Applications"
 
 echo "=== 7. 打包 DMG 与 ZIP ==="
+# 默认只写 build/：本地验证不应该改动仓库根目录的已发布产物。
+# 需要生成可直接上传的发布件时用 RELEASE=1（scripts/release.sh 会带上）。
 mkdir -p "$PROJECT_DIR/build"
-rm -f "$PROJECT_DIR/build/FinderRight-$VERSION.dmg" "$PROJECT_DIR/FinderRight.dmg" "$PROJECT_DIR/FinderRight-v$VERSION.zip" "$PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
+DMG_PATH="$PROJECT_DIR/build/FinderRight-$VERSION.dmg"
+ZIP_PATH="$PROJECT_DIR/build/FinderRight-v$VERSION.zip"
+rm -f "$DMG_PATH" "$ZIP_PATH" "$ZIP_PATH.sha256"
 
-hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "$PROJECT_DIR/build/FinderRight-$VERSION.dmg"
-cp "$PROJECT_DIR/build/FinderRight-$VERSION.dmg" "$PROJECT_DIR/FinderRight.dmg"
+hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG_PATH"
 
-(cd "$STAGE_DIR" && zip -ry "$PROJECT_DIR/FinderRight-v$VERSION.zip" FinderRight.app)
-(cd "$PROJECT_DIR" && shasum -a 256 "FinderRight-v$VERSION.zip" > "FinderRight-v$VERSION.zip.sha256")
+(cd "$STAGE_DIR" && zip -ry "$ZIP_PATH" FinderRight.app)
+(cd "$PROJECT_DIR/build" && shasum -a 256 "FinderRight-v$VERSION.zip" > "FinderRight-v$VERSION.zip.sha256")
+
+if [ "${RELEASE:-0}" = "1" ]; then
+  echo "=== 8. 复制发布件到仓库根目录（RELEASE=1）==="
+  cp "$DMG_PATH" "$PROJECT_DIR/FinderRight.dmg"
+  cp "$ZIP_PATH" "$PROJECT_DIR/FinderRight-v$VERSION.zip"
+  cp "$ZIP_PATH.sha256" "$PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
+  echo "发布件：FinderRight.dmg / FinderRight-v$VERSION.zip（含 .sha256）"
+else
+  echo "提示：本次为本地验证构建，仓库根目录的发布件未被改动；需要发布件请用 RELEASE=1 bash scripts/build.sh"
+fi
 
 echo "=== 构建完成！==="
-echo "DMG 产物: $PROJECT_DIR/FinderRight.dmg (及 build/FinderRight-$VERSION.dmg)"
-echo "ZIP 产物: $PROJECT_DIR/FinderRight-v$VERSION.zip"
-echo "SHA256:  $PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
+echo "DMG 产物: $DMG_PATH"
+echo "ZIP 产物: $ZIP_PATH"
+echo "SHA256:  $ZIP_PATH.sha256"
