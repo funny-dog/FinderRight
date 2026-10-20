@@ -164,7 +164,7 @@ if [ "$PUBLISH" = "1" ]; then
     git log --pretty='- %s' "$RANGE"
   } > "$NOTES_FILE"
   gh release create "v$VERSION_ARG" --draft --title "v$VERSION_ARG" --notes-file "$NOTES_FILE" \
-    "FinderRight.dmg" "FinderRight-v$VERSION.zip" "FinderRight-v$VERSION.zip.sha256"
+    "FinderRight.dmg" "FinderRight-v$VERSION_ARG.zip" "FinderRight-v$VERSION_ARG.zip.sha256"
   rm -f "$NOTES_FILE"
   echo "draft Release v$VERSION_ARG 已创建，补完更新说明后在 GitHub 上点 Publish。"
 else
@@ -172,5 +172,5 @@ else
   echo "  git push origin main"
   echo "  git push origin v$VERSION_ARG"
   echo "  gh release create v$VERSION_ARG --draft --title v$VERSION_ARG \\"
-  echo "    FinderRight.dmg FinderRight-v$VERSION.zip FinderRight-v$VERSION.zip.sha256"
+  echo "    FinderRight.dmg FinderRight-v$VERSION_ARG.zip FinderRight-v$VERSION_ARG.zip.sha256"
 fi
