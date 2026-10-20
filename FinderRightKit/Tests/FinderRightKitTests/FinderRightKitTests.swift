@@ -206,9 +206,9 @@ struct FinderRightKitTestsRunner {
 
             let config = SharedConfig(fileURL: tempURL)
 
-            // 默认值
+            // 默认值（图标风格默认彩色线条，见「图标风格默认值按安装方式区分」那条）
             try assertEqual(config.preferredTerminal, "com.apple.Terminal")
-            try assertEqual(config.menuIconStyle, .modern)
+            try assertEqual(config.menuIconStyle, .tinted)
             try assertTrue(config.customFileTemplates.isEmpty)
             try assertNil(config.shortcut(forActionId: "shortcut.cut"))
 
@@ -701,6 +701,16 @@ struct FinderRightKitTestsRunner {
                            "非 -v 输出无法确认路径，调用方必须使用 -m -v")
         }
 
+        // 16b. App Translocation（从下载目录直接运行）时不做定向唤醒
+        runTest("App Translocation 下不返回定向唤醒路径") {
+            let translocated = URL(fileURLWithPath: "/private/var/folders/q9/x1/T/AppTranslocation/0FDF1F-8FB-468A-A9E3-465A2870D83B/d/FinderRight.app/Contents/PlugIns/FinderRightSync.appex")
+            try assertTrue(IPCBridge.containingAppURL(forExtensionAt: translocated) == nil,
+                           "只读随机挂载副本不能用作定向唤醒目标，应退回通用 open")
+
+            let normal = URL(fileURLWithPath: "/Applications/FinderRight.app/Contents/PlugIns/FinderRightSync.appex")
+            try assertEqual(IPCBridge.containingAppURL(forExtensionAt: normal)?.path, "/Applications/FinderRight.app")
+        }
+
         // 17. 设置：角标冲突自动处理默认开启
         runTest("SharedConfig badgeOwnershipReclaim 默认开启且可持久化") {
             let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-badge-\(UUID().uuidString).plist")
@@ -710,6 +720,32 @@ struct FinderRightKitTestsRunner {
             try assertTrue(config.badgeOwnershipReclaim, "默认应开启")
             config.badgeOwnershipReclaim = false
             try assertTrue(!SharedConfig(fileURL: tempURL).badgeOwnershipReclaim, "关闭应持久化")
+        }
+
+        // 17b. 图标风格默认值：新安装为彩色线条，老用户保持单色线条
+        runTest("图标风格默认值按安装方式区分") {
+            let fresh = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("test-icon-style-fresh-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: fresh) }
+            try assertEqual(SharedConfig(fileURL: fresh).menuIconStyle, .tinted, "全新安装的默认样式应为彩色线条")
+
+            // 老用户：升级前已有配置文件，但从没选过图标样式 → 必须保持旧的默认值
+            let legacy = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("test-icon-style-legacy-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: legacy) }
+            let legacyStore: [String: Any] = ["badgeOwnershipReclaim": false]
+            try PropertyListSerialization.data(fromPropertyList: legacyStore, format: .xml, options: 0)
+                .write(to: legacy)
+            try assertEqual(SharedConfig(fileURL: legacy).menuIconStyle, .modern, "老用户的样式不应被新默认值改变")
+
+            // 老用户显式选过的样式必须原样保留
+            let chosen = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("test-icon-style-chosen-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: chosen) }
+            let chosenStore: [String: Any] = ["menuIconStyle": "tile"]
+            try PropertyListSerialization.data(fromPropertyList: chosenStore, format: .xml, options: 0)
+                .write(to: chosen)
+            try assertEqual(SharedConfig(fileURL: chosen).menuIconStyle, .tile, "显式选择必须保留")
         }
 
         // 18. 新建文件名校验：baseName / ext 会直接拼进路径，必须拦住路径穿越
