@@ -5,7 +5,7 @@ set -euo pipefail
 #
 #   scripts/release.sh --check          # 只做发版前校验，不改任何文件
 #   scripts/release.sh 1.9.0            # 校验 → bump → 提交 → 打 tag → RELEASE=1 构建，停在这里
-#   scripts/release.sh 1.9.0 --publish  # 继续推送 master 与 tag，并创建 draft Release 上传三个资产
+#   scripts/release.sh 1.9.0 --publish  # 继续推送 main 与 tag，并创建 draft Release 上传三个资产
 #
 # 推送与发布默认不做：draft Release 建好后到 GitHub 上补更新说明再点 Publish。
 
@@ -56,24 +56,24 @@ check_versions_consistent() {
 check_git_state() {
   local branch
   branch="$(git rev-parse --abbrev-ref HEAD)"
-  [ "$branch" = "master" ] || fail "发版请在 master 上进行，当前是 $branch"
+  [ "$branch" = "main" ] || fail "发版请在 main 上进行，当前是 $branch"
   [ -z "$(git status --porcelain)" ] || fail "工作区不干净，先提交或清理改动：
 $(git status --short)"
-  git fetch --quiet origin master
-  if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/master)" ]; then
-    fail "本地 master 与 origin/master 不一致，先 push 或 pull"
+  git fetch --quiet origin main
+  if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+    fail "本地 main 与 origin/main 不一致，先 push 或 pull"
   fi
-  echo "Git 状态：master 干净，且与 origin/master 同步"
+  echo "Git 状态：main 干净，且与 origin/main 同步"
 }
 
 check_ci_state() {
   command -v gh >/dev/null 2>&1 || { echo "提示：未安装 gh，跳过 CI 状态检查"; return 0; }
   local conclusion
-  conclusion="$(gh run list --branch master --workflow CI --limit 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || true)"
+  conclusion="$(gh run list --branch main --workflow CI --limit 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || true)"
   case "$conclusion" in
-    success) echo "CI 状态：master 最新一次运行成功" ;;
+    success) echo "CI 状态：main 最新一次运行成功" ;;
     "") echo "提示：读不到 CI 运行记录，跳过检查" ;;
-    *) echo "警告：master 最新一次 CI 结果是 $conclusion，确认无误再继续" >&2 ;;
+    *) echo "警告：main 最新一次 CI 结果是 $conclusion，确认无误再继续" >&2 ;;
   esac
 }
 
@@ -153,7 +153,7 @@ echo "已就绪：v$VERSION_ARG (build $(current_build)) 的提交、tag 与发�
 
 if [ "$PUBLISH" = "1" ]; then
   echo "=== 推送并创建 draft Release ==="
-  git push origin master
+  git push origin main
   git push origin "v$VERSION_ARG"
   NOTES_FILE="$(mktemp)"
   PREV_TAG="$(git describe --tags --abbrev=0 "v$VERSION_ARG^" 2>/dev/null || true)"
@@ -169,7 +169,7 @@ if [ "$PUBLISH" = "1" ]; then
   echo "draft Release v$VERSION_ARG 已创建，补完更新说明后在 GitHub 上点 Publish。"
 else
   echo "下一步（确认无误后手动执行）："
-  echo "  git push origin master"
+  echo "  git push origin main"
   echo "  git push origin v$VERSION_ARG"
   echo "  gh release create v$VERSION_ARG --draft --title v$VERSION_ARG \\"
   echo "    FinderRight.dmg FinderRight-v$VERSION.zip FinderRight-v$VERSION.zip.sha256"
