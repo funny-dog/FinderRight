@@ -702,16 +702,39 @@ struct ToolsTab: View {
     @FRState private var availableTerminals: [KnownTerminal] = []
     @FRState private var selectedTerminalBundleId: String = "com.apple.Terminal"
     @FRState private var defaultSystemTerminalId: String = "com.apple.Terminal"
+    @FRState private var selectedTerminalIds: Set<String> = []
 
     var body: some View {
         FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
             FRSection("默认终端") {
+                FRCard {
+                    FRRow(title: Text("默认终端"), subtitle: Text("通过服务菜单或快捷键打开终端时使用")) {
+                        FRPicker(label: "默认终端", selection: Binding(
+                            get: { selectedTerminalBundleId },
+                            set: { newValue in
+                                if selectedTerminalIds == [selectedTerminalBundleId] {
+                                    selectedTerminalIds = [newValue]
+                                    SharedConfig.shared.selectedTerminals = selectedTerminalIds
+                                }
+                                selectedTerminalBundleId = newValue
+                                SharedConfig.shared.preferredTerminal = newValue
+                            }
+                        )) {
+                            ForEach(availableTerminals) { terminal in
+                                Text(NSLocalizedString(terminal.name, comment: "")).tag(terminal.bundleIdentifier)
+                            }
+                        }
+                    }
+                }
+            }
+            FRSection("右键菜单中显示") {
                 FRCard {
                     ForEach(Array(availableTerminals.enumerated()), id: \.element.id) { index, terminal in
                         if index > 0 { FRDivider() }
                         terminalRow(terminal)
                     }
                 }
+                FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。"))
             }
         }
         .onAppear {
@@ -730,35 +753,38 @@ struct ToolsTab: View {
                 selectedTerminalBundleId = availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal"
             }
             SharedConfig.shared.preferredTerminal = selectedTerminalBundleId
+            selectedTerminalIds = Set(TerminalCatalog.menuTerminals(
+                selected: SharedConfig.shared.selectedTerminals, preferred: selectedTerminalBundleId,
+                isInstalled: { id in availableTerminals.contains { $0.bundleIdentifier == id } }
+            ).map(\.bundleIdentifier))
         }
     }
 
     private func terminalRow(_ terminal: KnownTerminal) -> some View {
-        let isSelected = terminal.bundleIdentifier == selectedTerminalBundleId
         let isDefault = terminal.bundleIdentifier == defaultSystemTerminalId
-        return Button {
-            selectedTerminalBundleId = terminal.bundleIdentifier
-            SharedConfig.shared.preferredTerminal = terminal.bundleIdentifier
-        } label: {
-            HStack(spacing: 12) {
-                FRIconChip(systemName: terminal.icon)
-                Text(NSLocalizedString(terminal.name, comment: ""))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(FRTheme.text)
-                if isDefault {
-                    FRChip(text: Text("系统默认"))
-                }
-                Spacer(minLength: 0)
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17))
-                    .foregroundColor(isSelected ? FRTheme.accentText : FRTheme.mute.opacity(0.5))
+        return HStack(spacing: 12) {
+            FRIconChip(systemName: terminal.icon)
+            Text(NSLocalizedString(terminal.name, comment: ""))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(FRTheme.text)
+            if isDefault {
+                FRChip(text: Text("系统默认"))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            FRSwitch(label: "右键菜单中显示", isOn: Binding(
+                get: { selectedTerminalIds.contains(terminal.bundleIdentifier) },
+                set: { visible in
+                    if visible {
+                        selectedTerminalIds.insert(terminal.bundleIdentifier)
+                    } else {
+                        selectedTerminalIds.remove(terminal.bundleIdentifier)
+                    }
+                    SharedConfig.shared.selectedTerminals = selectedTerminalIds
+                }
+            ))
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private func detectInstalledApps() {
@@ -766,14 +792,15 @@ struct ToolsTab: View {
             NSWorkspace.shared.urlForApplication(withBundleIdentifier: terminal.bundleIdentifier) != nil
         }
         let sysDefault = TerminalCatalog.defaultTerminalBundleIdentifier()
-        // 若系统默认终端未在预设清单中（如第三方冷门终端），但系统内确实已安装，则动态加入
-        if !installed.contains(where: { $0.bundleIdentifier == sysDefault }),
-           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: sysDefault) {
+        // 保留预设清单之外的系统默认终端和用户已选终端。
+        for id in SharedConfig.shared.selectedTerminals.union([sysDefault, SharedConfig.shared.preferredTerminal]).sorted() {
+            guard !installed.contains(where: { $0.bundleIdentifier == id }),
+                  let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { continue }
             let name = Bundle(url: appURL)?.localizedInfoDictionary?["CFBundleDisplayName"] as? String
                 ?? Bundle(url: appURL)?.infoDictionary?["CFBundleDisplayName"] as? String
                 ?? Bundle(url: appURL)?.infoDictionary?["CFBundleName"] as? String
                 ?? appURL.deletingPathExtension().lastPathComponent
-            installed.append(KnownTerminal(id: sysDefault, name: name, bundleIdentifier: sysDefault, icon: "terminal.fill"))
+            installed.append(KnownTerminal(id: id, name: name, bundleIdentifier: id, icon: "terminal.fill"))
         }
         if installed.isEmpty {
             installed = [TerminalCatalog.all[0]] // 系统终端兜底

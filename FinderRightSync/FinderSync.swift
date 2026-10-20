@@ -663,7 +663,12 @@ class FinderSync: FIFinderSync {
                 menu.addItem(self.makeItem(titleKey: "打开路径…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
             },
             MenuFeatureCatalog.openTerminal: {
-                menu.addItem(self.makeItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", action: #selector(self.openTerminal(_:)), shortcutId: "shortcut.openTerminal", style: style))
+                let config = SharedConfig.shared
+                let terminals = TerminalCatalog.menuTerminals(
+                    selected: config.selectedTerminals, preferred: config.preferredTerminal,
+                    isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
+                guard !terminals.isEmpty else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", shortcutId: "shortcut.openTerminal", style: style, build: { self.buildTerminalMenu(terminals, style: style) }))
             },
             MenuFeatureCatalog.openEditor: {
                 guard hasSelection else { return }
@@ -825,7 +830,7 @@ class FinderSync: FIFinderSync {
         build: () -> NSMenu
     ) -> NSMenuItem {
         let i = makeItem(titleKey: titleKey, tint: tint, systemImage: systemImage, shortcutId: shortcutId, style: style)
-        i.submenu = build()
+        i.setSubmenuOrSingleAction(build())
         return i
     }
 
@@ -919,12 +924,26 @@ class FinderSync: FIFinderSync {
         }
     }
 
+    private var terminalMenuIds: [String] = []
+
+    private func buildTerminalMenu(_ terminals: [KnownTerminal], style: MenuIconStyle) -> NSMenu {
+        let menu = NSMenu(title: L("打开终端"))
+        terminalMenuIds = terminals.map(\.bundleIdentifier)
+        for (index, terminal) in terminals.enumerated() {
+            menu.addItem(makeItem(titleKey: terminal.name, tint: .graphite, systemImage: terminal.icon,
+                                  action: #selector(openTerminal(_:)), tag: index, style: style))
+        }
+        return menu
+    }
+
     @objc func openTerminal(_ sender: NSMenuItem) {
         guard let dir = resolveWorkingDirectory() else {
             logToFile("openTerminal: no dir"); return
         }
-        // 使用 SharedConfig 中配置的终端
-        let bundleId = SharedConfig.shared.preferredTerminal
+        guard terminalMenuIds.indices.contains(sender.tag) else {
+            logToFile("openTerminal: bad tag \(sender.tag)"); return
+        }
+        let bundleId = terminalMenuIds[sender.tag]
         logToFile("openTerminal ipc (async) → dir=\(dir.lastPathComponent) bundle=\(bundleId)")
         IPCClient.shared.callAsync(action: "openTerminal", payload: [
             "directory": .string(dir.path),

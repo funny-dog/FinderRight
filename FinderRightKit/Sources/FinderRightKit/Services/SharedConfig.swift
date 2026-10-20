@@ -47,6 +47,7 @@ public final class SharedConfig {
         static let enabledActions = "enabledActions"
         static let menuIconStyle = "menuIconStyle"
         static let preferredTerminal = "preferredTerminal"
+        static let selectedTerminals = "selectedTerminals"
         static let preferredEditor = "preferredEditor"
         static let customEditors = "customEditors"
         static let hiddenEditors = "hiddenEditors"
@@ -203,6 +204,24 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.preferredTerminal] = newValue
+            save()
+        }
+    }
+
+    /// 右键菜单启用的终端；未配置时只启用已有的默认终端。
+    public var selectedTerminals: Set<String> {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let saved = store[Keys.selectedTerminals] as? [String] else {
+                return [preferredTerminal]
+            }
+            return Set(saved)
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.selectedTerminals] = newValue.sorted()
             save()
         }
     }

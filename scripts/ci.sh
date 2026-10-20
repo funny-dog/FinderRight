@@ -37,6 +37,11 @@ swiftc -parse-as-library \
 "$KIT_BUILD_DIR/test-preview-settings"
 
 echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  FinderRightSync/SingleOptionMenu.swift scripts/test-single-option-menu.swift \
+  -o "$KIT_BUILD_DIR/test-single-option-menu"
+"$KIT_BUILD_DIR/test-single-option-menu"
+
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

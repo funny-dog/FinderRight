@@ -632,3 +632,6 @@
 "已移除的内置类型" = "Removed Built-in Types";
 "恢复" = "Restore";
 "恢复后重新出现在上方列表中，并处于开启状态。" = "Restored types return to the list above and are turned on.";
+
+"通过服务菜单或快捷键打开终端时使用" = "Used when opening a terminal through Services or keyboard shortcuts";
+"默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry.";

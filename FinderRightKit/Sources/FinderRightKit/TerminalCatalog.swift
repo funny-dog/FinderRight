@@ -33,6 +33,25 @@ public enum TerminalCatalog {
         KnownTerminal(id: "kitty",      name: "Kitty",     bundleIdentifier: "net.kovidgoyal.kitty", icon: "terminal.fill"),
     ]
 
+    /// 只显示已选择且仍安装的终端；选择失效时回退到默认终端或系统终端。
+    public static func menuTerminals(
+        selected: Set<String>, preferred: String, isInstalled: (String) -> Bool
+    ) -> [KnownTerminal] {
+        guard !selected.isEmpty else { return [] }
+        var candidates = all
+        let known = Set(all.map(\.bundleIdentifier))
+        for id in selected.union([preferred]).subtracting(known).sorted() {
+            candidates.append(KnownTerminal(id: id, name: id, bundleIdentifier: id))
+        }
+        let visible = candidates.filter { selected.contains($0.bundleIdentifier) && isInstalled($0.bundleIdentifier) }
+        if !visible.isEmpty { return visible }
+        if let fallback = candidates.first(where: { $0.bundleIdentifier == preferred && isInstalled($0.bundleIdentifier) })
+            ?? candidates.first(where: { isInstalled($0.bundleIdentifier) }) {
+            return [fallback]
+        }
+        return []
+    }
+
     /// 检测系统当前默认的终端 Bundle Identifier
     public static func defaultTerminalBundleIdentifier() -> String {
         // macOS 12+，通过 UTType("com.apple.terminal.shell-script") 获取默认关联应用

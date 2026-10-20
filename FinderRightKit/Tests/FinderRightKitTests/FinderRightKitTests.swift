@@ -2176,6 +2176,40 @@ struct FinderRightKitTestsRunner {
             try assertEqual(SharedConfig(fileURL: url).favoriteDirectories, ["/Users/me/Downloads", "/Volumes/E"])
         }
 
+        runTest("终端菜单：单选、多选、卸载回退与全部关闭") {
+            let terminal = "com.apple.Terminal"
+            let ghostty = "com.mitchellh.ghostty"
+            let installed: Set<String> = [terminal, ghostty, "com.example.Terminal"]
+            func ids(_ selected: Set<String>, preferred: String = "com.apple.Terminal") -> [String] {
+                TerminalCatalog.menuTerminals(selected: selected, preferred: preferred,
+                                             isInstalled: installed.contains).map(\.bundleIdentifier)
+            }
+            try assertEqual(ids([ghostty]), [ghostty])
+            try assertEqual(ids([ghostty, terminal]), [terminal, ghostty])
+            try assertEqual(ids(["removed"], preferred: ghostty), [ghostty])
+            try assertEqual(ids(["removed"], preferred: "removed"), [terminal])
+            try assertEqual(ids(["com.example.Terminal"]), ["com.example.Terminal"])
+            try assertTrue(ids([]).isEmpty, "全部关闭时不显示入口")
+            try assertTrue(TerminalCatalog.menuTerminals(selected: [terminal], preferred: terminal,
+                                                        isInstalled: { _ in false }).isEmpty)
+        }
+
+        runTest("终端偏好：兼容旧单选、多选与空选择持久化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            try assertEqual(config.selectedTerminals, [config.preferredTerminal])
+            config.preferredTerminal = "com.mitchellh.ghostty"
+            try assertEqual(SharedConfig(fileURL: url).selectedTerminals, ["com.mitchellh.ghostty"])
+            config.selectedTerminals = ["com.apple.Terminal", "com.mitchellh.ghostty"]
+            let reloaded = SharedConfig(fileURL: url)
+            try assertEqual(reloaded.selectedTerminals, config.selectedTerminals)
+            try assertEqual(reloaded.preferredTerminal, "com.mitchellh.ghostty")
+            reloaded.selectedTerminals = []
+            try assertTrue(SharedConfig(fileURL: url).selectedTerminals.isEmpty)
+        }
+
         runTest("EditorCatalog 清单无重复且以文本编辑兜底") {
             let ids = EditorCatalog.all.map(\.id)
             try assertEqual(Set(ids).count, ids.count, "bundle id 不应重复")
