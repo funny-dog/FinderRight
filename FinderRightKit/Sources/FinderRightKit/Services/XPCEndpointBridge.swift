@@ -78,6 +78,14 @@ extension IPCBridge {
               app.pathExtension == "app" else {
             return nil
         }
+        // 从「下载」目录直接运行会被 App Translocation 接管：进程实际跑在
+        // /private/var/folders/…/AppTranslocation/<uuid>/d/<App>.app 这个只读随机挂载副本里，
+        // 用推导出的路径定向唤醒会被 LaunchServices 拒绝（弹「未能开启应用程序 XXX」），
+        // 而兜底的通用 open 反而能成功 —— 用户看到弹框但功能其实生效。
+        // 这种情况返回 nil，让调用方直接走通用 open。
+        if app.path.contains("/AppTranslocation/") {
+            return nil
+        }
         return app
     }
 }

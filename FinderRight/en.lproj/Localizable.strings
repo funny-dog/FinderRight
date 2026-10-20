@@ -583,3 +583,6 @@
 "撤销未完成：%@" = "Undo incomplete: %@";
 "撤销 FinderRight 的上一次文件操作，只在可撤销时出现" = "Undo FinderRight’s last file operation; shown only when something can be undone";
 "剪切队列" = "Cut queue";
+"FinderRight 正在以临时副本运行" = "FinderRight is running as a temporary copy";
+"当前是从下载目录直接打开的，macOS 会把它挂载到只读的临时路径下运行，扩展状态判断与「新建文件」等操作可能表现异常。把 FinderRight 拖到「应用程序」文件夹后再打开即可恢复正常。" = "It was opened straight from the Downloads folder, so macOS is running it from a read-only temporary location. Extension status checks and actions such as New File may behave oddly. Drag FinderRight into the Applications folder and open it again to fix this.";
+"打开应用程序文件夹" = "Open Applications Folder";
