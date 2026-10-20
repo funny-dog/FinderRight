@@ -17,13 +17,13 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.3</string>
+	<string>1.9.0</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>MacOSX</string>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>34</string>
+	<string>35</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSExtension</key>
