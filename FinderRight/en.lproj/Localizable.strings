@@ -586,3 +586,23 @@
 "FinderRight 正在以临时副本运行" = "FinderRight is running as a temporary copy";
 "当前是从下载目录直接打开的，macOS 会把它挂载到只读的临时路径下运行，扩展状态判断与「新建文件」等操作可能表现异常。把 FinderRight 拖到「应用程序」文件夹后再打开即可恢复正常。" = "It was opened straight from the Downloads folder, so macOS is running it from a read-only temporary location. Extension status checks and actions such as New File may behave oddly. Drag FinderRight into the Applications folder and open it again to fix this.";
 "打开应用程序文件夹" = "Open Applications Folder";
+
+/* 诊断信息 */
+"复制诊断信息" = "Copy Diagnostics";
+"已复制诊断信息" = "Diagnostics Copied";
+"复制版本、系统、权限与扩展状态，反馈问题时附上" = "Copies the version, system, permission and extension state to attach to a bug report";
+"系统：%@" = "System: %@";
+"芯片：%@（%@）" = "Chip: %@ (%@)";
+"辅助功能：%@" = "Accessibility: %@";
+"完全磁盘访问：%@" = "Full Disk Access: %@";
+"Finder 扩展：%@" = "Finder extension: %@";
+"快速查看扩展：%@" = "Quick Look extension: %@";
+"剪切队列：%d 项" = "Cut queue: %d item(s)";
+"最近操作记录：%@" = "Recent activity: %@";
+"最近失败：%@" = "Last failure: %@";
+"未授权" = "Not granted";
+"未启用" = "Disabled";
+"未知" = "Unknown";
+"已开启" = "On";
+"已关闭" = "Off";
+"无法读取：不是普通文件" = "Can't read: not a regular file";

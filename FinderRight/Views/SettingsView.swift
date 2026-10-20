@@ -950,6 +950,7 @@ struct AboutTab: View {
     private let appVersion = UpdateChecker.shared.currentAppVersion
 
     @FRState private var updateStatus: UpdateCheckStatus = UpdateChecker.shared.currentStatus
+    @FRState private var didCopyDiagnostics = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1001,6 +1002,26 @@ struct AboutTab: View {
                 .help("在仓库页右上角点击 Star")
             }
             .padding(.top, 24)
+
+            // 反馈入口：一次带齐版本、系统、权限与扩展状态，省掉 issue 里反复问环境
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(DiagnosticsReport.make(), forType: .string)
+                didCopyDiagnostics = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    didCopyDiagnostics = false
+                }
+            } label: {
+                if didCopyDiagnostics {
+                    Label("已复制诊断信息", systemImage: "checkmark")
+                } else {
+                    Label("复制诊断信息", systemImage: "doc.on.doc")
+                }
+            }
+            .buttonStyle(.frLink)
+            .help("复制版本、系统、权限与扩展状态，反馈问题时附上")
+            .padding(.top, 12)
 
             Spacer(minLength: 0)
 
