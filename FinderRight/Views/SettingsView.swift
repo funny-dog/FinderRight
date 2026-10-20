@@ -16,6 +16,7 @@ struct SettingsView: View {
     enum SettingsTab: String, CaseIterable {
         case general = "通用"
         case features = "功能"
+        case newFile = "文件模板"
         case favorites = "常用目录"
         case shortcuts = "快捷键"
         case tools = "终端"
@@ -29,6 +30,7 @@ struct SettingsView: View {
             case .features: return "slider.horizontal.3"
             case .favorites: return "folder"
             case .shortcuts: return "keyboard"
+            case .newFile: return "doc.badge.plus"
             case .tools: return "terminal"
             case .editors: return "curlybraces"
             case .permissions: return "checkmark.shield"
@@ -43,6 +45,7 @@ struct SettingsView: View {
             case .features: return "features"
             case .favorites: return "favorites"
             case .shortcuts: return "shortcuts"
+            case .newFile: return "newfile"
             case .tools: return "tools"
             case .editors: return "editors"
             case .permissions: return "permissions"
@@ -80,6 +83,7 @@ struct SettingsView: View {
         case .features: FeaturesTab()
         case .favorites: FavoritesTab()
         case .shortcuts: ShortcutsTab()
+        case .newFile: NewFileTab()
         case .tools: ToolsTab()
         case .editors: EditorsTab()
         case .permissions: PermissionsTab()
@@ -512,8 +516,6 @@ struct PermissionsTab: View {
 // MARK: - 功能 Tab
 
 struct FeaturesTab: View {
-    @FRState private var customTemplates: [FileTemplate] = SharedConfig.shared.customFileTemplates
-    @FRState private var showingAddSheet = false
     @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
     @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
     @FRState private var copyFileContentMaxSizeKB: Int = SharedConfig.shared.copyFileContentMaxSizeKB
@@ -547,19 +549,6 @@ struct FeaturesTab: View {
             copyPathSection
             copyContentSection
             badgeSection
-            templateSection
-        }
-        .sheet(isPresented: $showingAddSheet) {
-            AddTemplateSheet(
-                isPresented: $showingAddSheet,
-                onAdd: { template in
-                    SharedConfig.shared.addFileTemplate(template)
-                    customTemplates = SharedConfig.shared.customFileTemplates
-                }
-            )
-        }
-        .onAppear {
-            customTemplates = SharedConfig.shared.customFileTemplates
         }
     }
 
@@ -705,158 +694,7 @@ struct FeaturesTab: View {
         }
     }
 
-    // MARK: 自定义文件模板
-
-    private var templateSection: some View {
-        FRSection("自定义文件模板") {
-            FRCard {
-                if customTemplates.isEmpty {
-                    Text("暂无自定义模板")
-                        .font(.system(size: 12.5))
-                        .foregroundColor(FRTheme.mute)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                } else {
-                    ForEach(Array(customTemplates.enumerated()), id: \.element.id) { index, tmpl in
-                        if index > 0 { FRDivider() }
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tmpl.name.isEmpty ? ".\(tmpl.fileExtension)" : tmpl.name)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(FRTheme.text)
-                                Text(".\(tmpl.fileExtension)")
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .foregroundColor(FRTheme.mute)
-                            }
-                            Spacer()
-                            Button {
-                                deleteTemplate(tmpl)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(FRTheme.danger)
-                            }
-                            .buttonStyle(.plain)
-                            .help("删除")
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                    }
-                }
-
-                FRDivider()
-
-                HStack {
-                    Button {
-                        showingAddSheet = true
-                    } label: {
-                        Label("添加自定义模板...", systemImage: "plus")
-                    }
-                    .buttonStyle(.frSecondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 11)
-            }
-
-            FRFootnote(Text("添加的模板将显示在 Finder 右键「新建文件」子菜单底部。"))
-        }
-    }
-
-    private func deleteTemplate(_ tmpl: FileTemplate) {
-        SharedConfig.shared.removeFileTemplate(withId: tmpl.id)
-        customTemplates = SharedConfig.shared.customFileTemplates
-    }
 }
-
-// MARK: - 添加自定义模板弹窗
-
-struct AddTemplateSheet: View {
-    @Binding var isPresented: Bool
-    let onAdd: (FileTemplate) -> Void
-
-    @FRState private var name: String = ""
-    @FRState private var fileExtension: String = ""
-    @FRState private var content: String = ""
-    @FRState private var errorMessage: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("新建文件模板")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundColor(FRTheme.text)
-
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("模板名称 (例如: 配置文件)", text: $name)
-                    .textFieldStyle(.roundedBorder)
-                TextField("文件后缀 (例如: conf，无需带点)", text: $fileExtension)
-                    .textFieldStyle(.roundedBorder)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("默认内容 (可选):")
-                        .font(.system(size: 12))
-                        .foregroundColor(FRTheme.mute)
-                    TextEditor(text: $content)
-                        .font(.system(size: 12.5, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .frame(height: 100)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(FRTheme.field))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(FRTheme.fieldBorder, lineWidth: 1)
-                        )
-                }
-            }
-
-            if let err = errorMessage {
-                // Text(String) 走的是「原样显示」，不会查 Localizable.strings；
-                // 包成 LocalizedStringKey 才能让「文件后缀不能为空」的英文条目生效
-                Text(LocalizedStringKey(err))
-                    .font(.system(size: 12))
-                    .foregroundColor(FRTheme.danger)
-            }
-
-            HStack(spacing: 8) {
-                Spacer()
-                Button("取消") {
-                    isPresented = false
-                }
-                .keyboardShortcut(.cancelAction)
-                .buttonStyle(.frSecondary)
-
-                Button("添加") {
-                    submit()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.frPrimary)
-            }
-        }
-        .padding(22)
-        .frame(width: 440, height: 340)
-        .background(FRTheme.window)
-    }
-
-    private func submit() {
-        let cleanExt = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanExt.isEmpty else {
-            errorMessage = "文件后缀不能为空"
-            return
-        }
-        // 与主 App createFile 的校验一致（新建文件名为 untitled.<后缀>），提前在录入时拦下
-        guard SafeFileName.isValid(baseName: "untitled", ext: cleanExt) else {
-            errorMessage = "文件后缀不能包含 / 或控制字符"
-            return
-        }
-        let tmpl = FileTemplate(name: cleanName.isEmpty ? cleanExt : cleanName,
-                                fileExtension: cleanExt,
-                                content: content)
-        onAdd(tmpl)
-        isPresented = false
-    }
-}
-
 
 // MARK: - 终端 Tab
 

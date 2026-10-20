@@ -51,6 +51,8 @@ public final class SharedConfig {
         static let customEditors = "customEditors"
         static let hiddenEditors = "hiddenEditors"
         static let customFileTemplates = "customFileTemplates"
+        static let newFileOrder = "newFileOrder"
+        static let hiddenNewFileTemplates = "hiddenNewFileTemplates"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
@@ -289,6 +291,17 @@ public final class SharedConfig {
         customFileTemplates = templates
     }
 
+    /// 更新已存在的自定义文件模板
+    public func updateFileTemplate(_ template: FileTemplate) {
+        lock.lock()
+        defer { lock.unlock() }
+        var templates = customFileTemplates
+        if let idx = templates.firstIndex(where: { $0.id == template.id }) {
+            templates[idx] = template
+            customFileTemplates = templates
+        }
+    }
+
     /// 删除自定义文件模板
     public func removeFileTemplate(withId id: String) {
         lock.lock()
@@ -296,6 +309,75 @@ public final class SharedConfig {
         var templates = customFileTemplates
         templates.removeAll { $0.id == id }
         customFileTemplates = templates
+
+        if newFileOrder.contains(id) {
+            newFileOrder = newFileOrder.filter { $0 != id }
+        }
+        if hiddenNewFileTemplates.contains(id) {
+            var hidden = hiddenNewFileTemplates
+            hidden.remove(id)
+            hiddenNewFileTemplates = hidden
+        }
+    }
+
+    // MARK: - New File Order
+
+    /// 新建文件子菜单项顺序（文件模板 id 列表）。未设置或为空时表示默认顺序
+    public var newFileOrder: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.newFileOrder] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if newValue.isEmpty {
+                store.removeValue(forKey: Keys.newFileOrder)
+            } else {
+                store[Keys.newFileOrder] = newValue
+            }
+            save()
+        }
+    }
+
+    // MARK: - Hidden New File Templates
+
+    /// 在新建文件子菜单中隐藏的文件模板 id 集合
+    public var hiddenNewFileTemplates: Set<String> {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return Set(store[Keys.hiddenNewFileTemplates] as? [String] ?? [])
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if newValue.isEmpty {
+                store.removeValue(forKey: Keys.hiddenNewFileTemplates)
+            } else {
+                store[Keys.hiddenNewFileTemplates] = newValue.sorted()
+            }
+            save()
+        }
+    }
+
+    /// 检查指定模板是否启用
+    public func isNewFileTemplateEnabled(_ id: String) -> Bool {
+        return !hiddenNewFileTemplates.contains(id)
+    }
+
+    /// 设置指定模板的启用状态
+    public func setNewFileTemplateEnabled(_ id: String, enabled: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        var hidden = hiddenNewFileTemplates
+        if enabled {
+            hidden.remove(id)
+        } else {
+            hidden.insert(id)
+        }
+        hiddenNewFileTemplates = hidden
     }
 
 

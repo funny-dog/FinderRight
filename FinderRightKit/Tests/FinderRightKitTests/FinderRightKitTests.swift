@@ -2866,6 +2866,69 @@ struct FinderRightKitTestsRunner {
                             "老用户保存的顺序里没有它时也放最前")
         }
 
+        runTest("NewFileTemplateCatalog 内置项与默认顺序") {
+            let items = NewFileTemplateCatalog.builtInItems
+            try assertEqual(items.count, 13)
+            try assertEqual(items.map(\.id), NewFileTemplateCatalog.defaultOrder)
+            try assertTrue(items.contains(where: { $0.id == "txt" && !$0.isOffice && !$0.isCustom }))
+            try assertTrue(items.contains(where: { $0.id == "docx" && $0.isOffice && !$0.isCustom }))
+        }
+
+        runTest("NewFileTemplateCatalog.resolvedTemplates 排序与合并") {
+            let custom1 = FileTemplate(id: "c1", name: "Custom 1", fileExtension: "conf", content: "port=8080")
+            let custom2 = FileTemplate(id: "c2", name: "Custom 2", fileExtension: "log", content: "")
+
+            // 1. 空 order：返回默认内置 + 自定义项
+            let defaultResolved = NewFileTemplateCatalog.resolvedTemplates(order: [], customTemplates: [custom1, custom2])
+            try assertEqual(defaultResolved.count, 15)
+            try assertEqual(defaultResolved.prefix(13).map(\.id), NewFileTemplateCatalog.defaultOrder)
+            try assertEqual(defaultResolved.suffix(2).map(\.id), ["c1", "c2"])
+
+            // 2. 自定义 order：按指定顺序排列，未提及的自动追加
+            let customOrder = ["c1", "docx", "md"]
+            let resolved = NewFileTemplateCatalog.resolvedTemplates(order: customOrder, customTemplates: [custom1, custom2])
+            try assertEqual(resolved.count, 15)
+            try assertEqual(Array(resolved.prefix(3).map(\.id)), ["c1", "docx", "md"])
+            // 其余未列出的项应追加在后
+            try assertTrue(resolved.contains(where: { $0.id == "c2" }))
+            try assertTrue(resolved.contains(where: { $0.id == "txt" }))
+        }
+
+        runTest("SharedConfig 新建文件模板顺序、隐藏与编辑持久化") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let configURL = tempDir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: configURL)
+
+            try assertEqual(config.newFileOrder, [])
+            try assertEqual(config.hiddenNewFileTemplates, Set())
+            try assertTrue(config.isNewFileTemplateEnabled("txt"))
+
+            config.newFileOrder = ["docx", "txt"]
+            config.setNewFileTemplateEnabled("md", enabled: false)
+            try assertTrue(!config.isNewFileTemplateEnabled("md"))
+            try assertEqual(config.newFileOrder, ["docx", "txt"])
+            try assertEqual(config.hiddenNewFileTemplates, ["md"])
+
+            // 测试添加与更新自定义模板
+            let tmpl = FileTemplate(id: "custom_tpl", name: "Old", fileExtension: "txt", content: "old")
+            config.addFileTemplate(tmpl)
+            try assertEqual(config.customFileTemplates.first?.name, "Old")
+
+            let updatedTmpl = FileTemplate(id: "custom_tpl", name: "New", fileExtension: "txt", content: "new")
+            config.updateFileTemplate(updatedTmpl)
+            try assertEqual(config.customFileTemplates.first?.name, "New")
+            try assertEqual(config.customFileTemplates.first?.content, "new")
+
+            // 加入 order 和 hidden 后删除，测试自动清理
+            config.newFileOrder = ["custom_tpl", "txt"]
+            config.setNewFileTemplateEnabled("custom_tpl", enabled: false)
+            config.removeFileTemplate(withId: "custom_tpl")
+            try assertTrue(config.customFileTemplates.isEmpty)
+            try assertEqual(config.newFileOrder, ["txt"])
+            try assertTrue(!config.hiddenNewFileTemplates.contains("custom_tpl"))
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

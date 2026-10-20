@@ -251,24 +251,32 @@ final class ServicesProvider: NSObject {
             showAlert(NSLocalizedString("请选择一个目标文件夹，再调用新建文件服务", comment: "service"))
             return
         }
-        // 同步读取服务剪贴板，返回派发后再显示交互界面，避免占用 Services 的同步超时。
         DispatchQueue.main.async { [self] in
             SharedConfig.shared.reload()
             let customTemplates = SharedConfig.shared.customFileTemplates
-            let textTemplates = BuiltInFileTemplates.text + customTemplates
-            let officeTemplates = OfficeTemplate.allCases
-            let choices = BuiltInFileTemplates.text.map { NSLocalizedString($0.name, comment: "service") }
-                + customTemplates.map { $0.name.isEmpty ? ".\($0.fileExtension)" : "\($0.name) (.\($0.fileExtension))" }
-                + officeTemplates.map { NSLocalizedString($0.titleKey, comment: "service") }
+            let order = SharedConfig.shared.newFileOrder
+            let hidden = SharedConfig.shared.hiddenNewFileTemplates
+            let allTemplates = NewFileTemplateCatalog.resolvedTemplates(order: order, customTemplates: customTemplates)
+            let activeTemplates = allTemplates.filter { !hidden.contains($0.id) }
+            guard !activeTemplates.isEmpty else {
+                showAlert(NSLocalizedString("未启用任何新建文件模板，请在设置中开启", comment: "service"))
+                return
+            }
+            let choices = activeTemplates.map { item -> String in
+                if item.isCustom {
+                    return item.name.isEmpty ? ".\(item.fileExtension)" : "\(item.name) (.\(item.fileExtension))"
+                }
+                return NSLocalizedString(item.name, comment: "service")
+            }
             guard let index = chooseFileAction(title: "在此文件夹新建文件…", symbol: "doc.badge.plus", details: destination.path,
                                               choices: choices, button: "创建") else { return }
+            let item = activeTemplates[index]
             var payload: [String: AnyJSON] = ["directory": .string(destination.path), "baseName": .string("untitled")]
-            if textTemplates.indices.contains(index) {
-                let template = textTemplates[index]
-                payload["ext"] = .string(template.fileExtension)
-                payload["content"] = .string(template.content)
+            if item.isOffice {
+                payload["template"] = .string(item.fileExtension)
             } else {
-                payload["template"] = .string(officeTemplates[index - textTemplates.count].rawValue)
+                payload["ext"] = .string(item.fileExtension)
+                payload["content"] = .string(item.content)
             }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "createFile", payload: payload), feature: MenuFeatureCatalog.newFile)
         }

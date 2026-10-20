@@ -34,7 +34,7 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 
 ### ✨ 功能
 
-- 📄 **新建文件** —— 一键新建 txt / Markdown / Python / Shell / JSON / Swift / JS 等十种文件，以及空白的 Word / Excel / PowerPoint 文档；还可在设置中添加自定义文本模板
+- 📄 **新建文件** —— 一键新建 txt / Markdown / Python / Shell / JSON / Swift / JS 等十种文件，以及空白的 Word / Excel / PowerPoint 文档；在设置的「文件模板」页可开关各类型、拖动调整顺序，并添加自定义文本模板
 - 📋 **复制路径** —— 复制选中文件/文件夹的完整路径；可在设置中改为 `~` 路径、仅文件名、终端转义路径或文件 URL
 - 📋 **复制文件名** —— 独立复制完整文件名（含扩展名），多选时每行一项
 - 📂 **打开路径** —— 输入或粘贴文件、文件夹路径（绝对路径或 `~/`），回车在 Finder 中显示（文件会在所在文件夹中选中），也可直接用默认 App 打开文件；自动清理复制来的引号、首尾空白、`file://` 链接和终端转义
@@ -197,7 +197,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 
 ### ✨ Features
 
-- 📄 **New File** — create txt / Markdown / Python / Shell / JSON / Swift / JS and more with one click, plus blank Word / Excel / PowerPoint documents; add your own text templates in Settings
+- 📄 **New File** — create txt / Markdown / Python / Shell / JSON / Swift / JS and more with one click, plus blank Word / Excel / PowerPoint documents; the File Templates page in Settings lets you turn types on or off, drag to reorder them, and add your own text templates
 - 📋 **Copy Path** — copy the full path of selected files/folders; switch to a `~` path, file name only, shell-escaped path or file URL in Settings
 - 📋 **Copy File Name** — copy full file names including extensions; multiple selections are copied one per line
 - 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder

@@ -377,10 +377,6 @@
 "添加自定义模板..." = "Add Custom Template…";
 "添加的模板将显示在 Finder 右键「新建文件」子菜单底部。" = "Added templates will appear at the bottom of the Finder \"New File\" submenu.";
 "新建文件模板" = "New File Template";
-"模板名称 (例如: 配置文件)" = "Template Name (e.g., Config File)";
-"文件后缀 (例如: conf，无需带点)" = "File Extension (e.g., conf, without dot)";
-"默认内容 (可选):" = "Default Content (Optional):";
-"文件后缀不能为空" = "File extension cannot be empty";
 "取消" = "Cancel";
 "添加" = "Add";
 
@@ -606,3 +602,29 @@
 "已开启" = "On";
 "已关闭" = "Off";
 "无法读取：不是普通文件" = "Can't read: not a regular file";
+
+/* 新建文件与模板管理 */
+"文件类型与模板" = "File Types & Templates";
+"未启用任何新建文件模板，请在设置中开启" = "No new file templates are enabled. Please enable them in Settings.";
+"添加自定义模板…" = "Add Custom Template…";
+"自定义" = "Custom";
+"编辑文件模板" = "Edit File Template";
+"编辑模板" = "Edit Template";
+"文件模板" = "File Templates";
+"右键「新建文件」子菜单里可以新建的文件类型，拖动调整顺序" = "File types you can create from the right-click \"New File\" submenu; drag to reorder";
+"已启用的类型数" = "Enabled types";
+"关闭的类型不会出现在访达右键「新建文件」子菜单中。拖动左侧的 ≡ 可调整顺序，双击自定义模板可编辑。" = "Types that are off won't appear in Finder's \"New File\" submenu. Drag ≡ on the left to reorder; double-click a custom template to edit it.";
+"空白 Office 文档" = "Blank Office document";
+"空白文件" = "Empty file";
+"删除模板「%@」？" = "Delete template \"%@\"?";
+"删除后它不再出现在右键「新建文件」中，已经新建的文件不受影响。" = "It will no longer appear under \"New File\". Files you've already created are not affected.";
+"出现在访达右键「新建文件」子菜单中" = "Appears in Finder's right-click \"New File\" submenu";
+"名称" = "Name";
+"可留空，留空时菜单里显示后缀名" = "Optional. If empty, the menu shows the extension";
+"例如：配置文件" = "e.g. Config File";
+"后缀" = "Extension";
+"默认内容" = "Default Content";
+"新建的文件会写入这些文字；留空则新建空白文件" = "New files start with this text; leave empty for an empty file";
+"新建出的文件名" = "New file name";
+"已有同后缀的「%@」，两者都会出现在子菜单中" = "\"%@\" uses the same extension; both will appear in the submenu";
+"保存" = "Save";

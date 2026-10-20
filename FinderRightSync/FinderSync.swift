@@ -322,6 +322,8 @@ class FinderSync: FIFinderSync {
     /// 冷启动打点：init 入口时间（进程被拉起后尽早记录）
     private static var initStartUptime: TimeInterval = 0
     private var didDeferredSetup = false
+    /// 当前构建的新建文件菜单项缓存，供 newFile(_ sender:) 按 tag 索引
+    private var activeNewFileTemplates: [NewFileTemplateItem] = []
 
     override init() {
         Self.initStartUptime = ProcessInfo.processInfo.systemUptime
@@ -829,42 +831,17 @@ class FinderSync: FIFinderSync {
 
     private func buildNewFileMenu(style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("新建文件"))
-        // 与 BuiltInFileTemplates.text 顺序一一对应：txt md html py sh json xml csv swift js
-        let icons: [(MenuTint, String)] = [
-            (.gray, "doc.plaintext"), (.indigo, "number"),
-            (.orange, "chevron.left.forwardslash.chevron.right"), (.blue, "p.square"),
-            (.graphite, "dollarsign.square"), (.yellow, "curlybraces"), (.brown, "doc.text"),
-            (.green, "tablecells"), (.red, "swift"), (.yellow, "j.square"),
-        ]
-        for (tag, template) in BuiltInFileTemplates.text.enumerated() {
-            let (tint, symbol) = icons[tag]
-            let item = makeItem(titleKey: template.name, tint: tint, systemImage: symbol, action: #selector(newFile(_:)), tag: tag, style: style)
-            m.addItem(item)
-        }
-
-        // Office 文档：tag 从 officeTagBase 起，按 OfficeTemplate.allCases 顺序对应
-        m.addItem(.separator())
-        for (index, template) in OfficeTemplate.allCases.enumerated() {
-            let (tint, symbol): (MenuTint, String)
-            switch template {
-            case .docx: (tint, symbol) = (.blue, "doc.richtext")
-            case .xlsx: (tint, symbol) = (.green, "tablecells")
-            case .pptx: (tint, symbol) = (.orange, "play.rectangle")
-            }
-            let item = makeItem(titleKey: template.titleKey, tint: tint, systemImage: symbol, action: #selector(newFile(_:)), tag: Self.officeTagBase + index, style: style)
-            m.addItem(item)
-        }
-
-        // 自定义文件模板（D1）
         let customTemplates = SharedConfig.shared.customFileTemplates
-        if !customTemplates.isEmpty {
-            m.addItem(.separator())
-            for (index, tmpl) in customTemplates.enumerated() {
-                let tag = 1000 + index
-                let title = tmpl.name.isEmpty ? ".\(tmpl.fileExtension)" : "\(tmpl.name) (.\(tmpl.fileExtension))"
-                let item = makeItem(titleKey: title, tint: .gray, systemImage: "doc", action: #selector(newFile(_:)), tag: tag, style: style)
-                m.addItem(item)
-            }
+        let order = SharedConfig.shared.newFileOrder
+        let hidden = SharedConfig.shared.hiddenNewFileTemplates
+        let allTemplates = NewFileTemplateCatalog.resolvedTemplates(order: order, customTemplates: customTemplates)
+        let activeTemplates = allTemplates.filter { !hidden.contains($0.id) }
+        self.activeNewFileTemplates = activeTemplates
+
+        for (index, item) in activeTemplates.enumerated() {
+            let title = item.isCustom ? (item.name.isEmpty ? ".\(item.fileExtension)" : "\(item.name) (.\(item.fileExtension))") : item.name
+            let menuItem = makeItem(titleKey: title, tint: item.tint, systemImage: item.systemImage, action: #selector(newFile(_:)), tag: index, style: style)
+            m.addItem(menuItem)
         }
 
         return m
@@ -872,46 +849,33 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Actions
 
-    /// 新建文件子菜单中 Office 文档项的起始 tag（内置文本类型 0–9，自定义模板 1000 起）
-    private static let officeTagBase = 100
-
     @objc func newFile(_ sender: NSMenuItem) {
         guard let dir = currentContext().directory else {
             logToFile("newFile: no directory"); return
         }
-        // Office 文档：只发送模板 id，由主 App 从自身内置的空白模板复制
-        let officeIndex = sender.tag - Self.officeTagBase
-        if OfficeTemplate.allCases.indices.contains(officeIndex) {
-            let template = OfficeTemplate.allCases[officeIndex]
-            logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) template=\(template.rawValue)")
+        let index = sender.tag
+        guard activeNewFileTemplates.indices.contains(index) else {
+            logToFile("newFile: template index out of bounds (\(index))"); return
+        }
+        let item = activeNewFileTemplates[index]
+        if item.isOffice {
+            logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) template=\(item.fileExtension)")
             IPCClient.shared.callAsync(action: "createFile", payload: [
                 "directory": .string(dir.path),
                 "baseName": .string("untitled"),
-                "template": .string(template.rawValue)
+                "template": .string(item.fileExtension)
             ]) { r in
                 logToFile("newFile ipc result: success=\(r.success) msg=\(r.message ?? "")")
             }
             return
         }
-        let (ext, content): (String, String)
-        if sender.tag >= 1000 {
-            let idx = sender.tag - 1000
-            let customs = SharedConfig.shared.customFileTemplates
-            guard idx >= 0, idx < customs.count else {
-                logToFile("newFile: custom template index out of bounds (\(idx))"); return
-            }
-            let tmpl = customs[idx]
-            ext = tmpl.fileExtension
-            content = tmpl.content
-        } else {
-            (ext, content) = newFileTypeInfo(for: sender.tag)
-        }
-        logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) tag=\(sender.tag) ext=\(ext)")
+
+        logToFile("newFile ipc (async) → dir=\(dir.lastPathComponent) tag=\(sender.tag) ext=\(item.fileExtension)")
         IPCClient.shared.callAsync(action: "createFile", payload: [
             "directory": .string(dir.path),
             "baseName": .string("untitled"),
-            "ext": .string(ext),
-            "content": .string(content)
+            "ext": .string(item.fileExtension),
+            "content": .string(item.content)
         ]) { r in
             logToFile("newFile ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
