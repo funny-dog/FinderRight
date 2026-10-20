@@ -20,9 +20,9 @@
 
 <img src="docs/images/demo.gif" alt="FinderRight demo: new file, cut & paste, open terminal from the Finder right-click menu" width="800" />
 
-如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 点个 Star 支持](https://github.com/funny-dog/FinderRight)，也欢迎反馈使用问题。
+如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 前往 GitHub 点 Star 支持](https://github.com/funny-dog/FinderRight)：登录后手动点击仓库页右上角的 Star。也欢迎反馈使用问题。
 
-If FinderRight makes your daily work easier, [⭐ star the project on GitHub](https://github.com/funny-dog/FinderRight). Feedback is welcome too.
+If FinderRight makes your daily work easier, [⭐ go to GitHub to star the project](https://github.com/funny-dog/FinderRight): sign in, then click Star at the top right of the repository page. Feedback is welcome too.
 
 </div>
 

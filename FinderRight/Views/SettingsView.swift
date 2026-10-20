@@ -901,12 +901,12 @@ struct AboutTab: View {
                 .buttonStyle(.frSecondary)
 
                 Button {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight/stargazers")!)
+                    NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight")!)
                 } label: {
                     Label("觉得好用？去 GitHub 点个 Star", systemImage: "star")
                 }
                 .buttonStyle(.frPrimary)
-                .help("在仓库页右上角点击 Star")
+                .help("打开仓库主页，登录 GitHub 后手动点击右上角 Star")
             }
             .padding(.top, 24)
 

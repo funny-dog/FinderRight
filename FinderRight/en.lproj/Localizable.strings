@@ -412,7 +412,7 @@
 
 /* About: star link */
 "觉得好用？去 GitHub 点个 Star" = "Enjoying it? Star it on GitHub";
-"在仓库页右上角点击 Star" = "Click Star at the top right of the repository page";
+"打开仓库主页，登录 GitHub 后手动点击右上角 Star" = "Open the repository, sign in to GitHub, then click Star at the top right";
 
 /* Onboarding: permission steps */
 "授予完全磁盘访问（推荐）" = "Grant Full Disk Access (Recommended)";
