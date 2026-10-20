@@ -9,17 +9,26 @@ struct NewFileTab: View {
     @FRState private var customTemplates: [FileTemplate] = SharedConfig.shared.customFileTemplates
     @FRState private var newFileOrder: [String] = SharedConfig.shared.newFileOrder
     @FRState private var hiddenTemplates: Set<String> = SharedConfig.shared.hiddenNewFileTemplates
+    @FRState private var removedTemplates: Set<String> = SharedConfig.shared.removedNewFileTemplates
     @FRState private var showingAddSheet = false
     @FRState private var editingTemplate: FileTemplate?
     @FRState private var dropTargetId: String?
 
+    /// 列表中的项：已移除的内置类型不列出
     private var items: [NewFileTemplateItem] {
         NewFileTemplateCatalog.resolvedTemplates(order: newFileOrder, customTemplates: customTemplates)
+            .filter { !removedTemplates.contains($0.id) }
+    }
+
+    /// 已移除的内置类型，按默认顺序列出供恢复
+    private var removedItems: [NewFileTemplateItem] {
+        NewFileTemplateCatalog.builtInItems.filter { removedTemplates.contains($0.id) }
     }
 
     private var isDefaultOrder: Bool {
         let currentIds = items.map(\.id)
-        let defaultIds = NewFileTemplateCatalog.defaultOrder + customTemplates.map(\.id)
+        let defaultIds = (NewFileTemplateCatalog.defaultOrder + customTemplates.map(\.id))
+            .filter { !removedTemplates.contains($0) }
         return currentIds == defaultIds
     }
 
@@ -30,6 +39,9 @@ struct NewFileTab: View {
     var body: some View {
         FRPage(title: "文件模板", subtitle: "右键「新建文件」子菜单里可以新建的文件类型，拖动调整顺序") {
             templatesSection
+            if !removedItems.isEmpty {
+                removedSection
+            }
         }
         .sheet(isPresented: $showingAddSheet) {
             EditTemplateSheet(
@@ -131,6 +143,9 @@ struct NewFileTab: View {
                     RowIconButton(systemName: "pencil", help: "编辑模板") { edit(item) }
                     RowIconButton(systemName: "trash", help: "删除", isDestructive: true) { confirmDelete(item, title: title) }
                 }
+            } else {
+                // 内置类型可以随时从下方「已移除的内置类型」恢复，不必确认
+                RowIconButton(systemName: "minus.circle", help: "从列表移除", isDestructive: true) { removeBuiltIn(item) }
             }
 
             FRSwitch(label: LocalizedStringKey(item.name), isOn: Binding(
@@ -153,6 +168,34 @@ struct NewFileTab: View {
             } else if dropTargetId == item.id {
                 dropTargetId = nil
             }
+        }
+    }
+
+    // MARK: - 已移除的内置类型
+
+    private var removedSection: some View {
+        FRSection("已移除的内置类型") {
+            FRCard {
+                ForEach(Array(removedItems.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { FRDivider() }
+                    HStack(spacing: 12) {
+                        NewFileTemplateIcon(item: item)
+                            .opacity(0.6)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(verbatim: Self.displayTitle(of: item))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(FRTheme.text)
+                            detailLine(item, showsExtension: true)
+                        }
+                        Spacer(minLength: 8)
+                        Button("恢复") { restoreBuiltIn(item) }
+                            .buttonStyle(.frSecondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+            FRFootnote(Text("恢复后重新出现在上方列表中，并处于开启状态。"))
         }
     }
 
@@ -218,6 +261,16 @@ struct NewFileTab: View {
         }
     }
 
+    private func removeBuiltIn(_ item: NewFileTemplateItem) {
+        SharedConfig.shared.removeBuiltInNewFileTemplate(item.id)
+        reload()
+    }
+
+    private func restoreBuiltIn(_ item: NewFileTemplateItem) {
+        SharedConfig.shared.restoreBuiltInNewFileTemplate(item.id)
+        reload()
+    }
+
     private func moveItem(_ id: String, to targetId: String) -> Bool {
         dropTargetId = nil
         guard id != targetId else { return false }
@@ -241,6 +294,7 @@ struct NewFileTab: View {
         customTemplates = SharedConfig.shared.customFileTemplates
         newFileOrder = SharedConfig.shared.newFileOrder
         hiddenTemplates = SharedConfig.shared.hiddenNewFileTemplates
+        removedTemplates = SharedConfig.shared.removedNewFileTemplates
     }
 }
 

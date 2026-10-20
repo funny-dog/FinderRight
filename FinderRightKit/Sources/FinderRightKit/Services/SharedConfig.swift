@@ -53,6 +53,7 @@ public final class SharedConfig {
         static let customFileTemplates = "customFileTemplates"
         static let newFileOrder = "newFileOrder"
         static let hiddenNewFileTemplates = "hiddenNewFileTemplates"
+        static let removedNewFileTemplates = "removedNewFileTemplates"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
@@ -378,6 +379,45 @@ public final class SharedConfig {
             hidden.insert(id)
         }
         hiddenNewFileTemplates = hidden
+    }
+
+    // MARK: - Removed Built-in New File Templates
+
+    /// 从设置的「文件模板」列表里移除的内置类型 id（自定义模板直接删除，不进这里）。
+    /// 移除时同时记入 hiddenNewFileTemplates，访达菜单与服务只看隐藏集合，不必认识这个集合
+    public var removedNewFileTemplates: Set<String> {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return Set(store[Keys.removedNewFileTemplates] as? [String] ?? [])
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if newValue.isEmpty {
+                store.removeValue(forKey: Keys.removedNewFileTemplates)
+            } else {
+                store[Keys.removedNewFileTemplates] = newValue.sorted()
+            }
+            save()
+        }
+    }
+
+    /// 移除内置类型：不再列出，也不出现在菜单中。不是内置类型的 id 忽略
+    public func removeBuiltInNewFileTemplate(_ id: String) {
+        guard NewFileTemplateCatalog.defaultOrder.contains(id) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        removedNewFileTemplates.insert(id)
+        setNewFileTemplateEnabled(id, enabled: false)
+    }
+
+    /// 恢复移除的内置类型，恢复后即为启用状态
+    public func restoreBuiltInNewFileTemplate(_ id: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        removedNewFileTemplates.remove(id)
+        setNewFileTemplateEnabled(id, enabled: true)
     }
 
 

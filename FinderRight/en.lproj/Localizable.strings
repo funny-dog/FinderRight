@@ -628,3 +628,7 @@
 "新建出的文件名" = "New file name";
 "已有同后缀的「%@」，两者都会出现在子菜单中" = "\"%@\" uses the same extension; both will appear in the submenu";
 "保存" = "Save";
+"从列表移除" = "Remove from List";
+"已移除的内置类型" = "Removed Built-in Types";
+"恢复" = "Restore";
+"恢复后重新出现在上方列表中，并处于开启状态。" = "Restored types return to the list above and are turned on.";

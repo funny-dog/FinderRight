@@ -2966,6 +2966,23 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!config.hiddenNewFileTemplates.contains("custom_tpl"))
         }
 
+        runTest("SharedConfig 内置类型移除后不再显示，恢复后重新启用") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let configURL = tempDir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: configURL)
+
+            config.removeBuiltInNewFileTemplate("csv")
+            config.removeBuiltInNewFileTemplate("custom_tpl")
+            try assertEqual(config.removedNewFileTemplates, ["csv"], "只接受内置类型")
+            try assertTrue(!config.isNewFileTemplateEnabled("csv"), "移除即从菜单隐藏，菜单与服务只看隐藏集合")
+            try assertEqual(SharedConfig(fileURL: configURL).removedNewFileTemplates, ["csv"], "写入磁盘")
+
+            config.restoreBuiltInNewFileTemplate("csv")
+            try assertEqual(config.removedNewFileTemplates, Set())
+            try assertTrue(config.isNewFileTemplateEnabled("csv"), "恢复后为启用状态")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
