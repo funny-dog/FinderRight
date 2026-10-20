@@ -703,6 +703,7 @@ struct ToolsTab: View {
     @FRState private var selectedTerminalBundleId: String = "com.apple.Terminal"
     @FRState private var defaultSystemTerminalId: String = "com.apple.Terminal"
     @FRState private var selectedTerminalIds: Set<String> = []
+    @FRState private var dropTargetTerminalId: String?
 
     var body: some View {
         FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
@@ -734,7 +735,7 @@ struct ToolsTab: View {
                         terminalRow(terminal)
                     }
                 }
-                FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。"))
+                FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。"))
             }
         }
         .onAppear {
@@ -763,6 +764,9 @@ struct ToolsTab: View {
     private func terminalRow(_ terminal: KnownTerminal) -> some View {
         let isDefault = terminal.bundleIdentifier == defaultSystemTerminalId
         return HStack(spacing: 12) {
+            FRGrip()
+                .draggable(terminal.bundleIdentifier)
+                .help("拖动调整在右键菜单中的顺序")
             FRIconChip(systemName: terminal.icon)
             Text(NSLocalizedString(terminal.name, comment: ""))
                 .font(.system(size: 13, weight: .semibold))
@@ -785,6 +789,30 @@ struct ToolsTab: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(dropTargetTerminalId == terminal.bundleIdentifier ? FRTheme.selection : Color.clear)
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first else { return false }
+            return moveTerminal(id, to: terminal.bundleIdentifier)
+        } isTargeted: { targeted in
+            if targeted {
+                dropTargetTerminalId = terminal.bundleIdentifier
+            } else if dropTargetTerminalId == terminal.bundleIdentifier {
+                dropTargetTerminalId = nil
+            }
+        }
+    }
+
+    private func moveTerminal(_ id: String, to targetId: String) -> Bool {
+        dropTargetTerminalId = nil
+        guard id != targetId,
+              let from = availableTerminals.firstIndex(where: { $0.bundleIdentifier == id }),
+              let to = availableTerminals.firstIndex(where: { $0.bundleIdentifier == targetId }) else { return false }
+        var order = availableTerminals
+        let moved = order.remove(at: from)
+        order.insert(moved, at: to)
+        availableTerminals = order
+        SharedConfig.shared.terminalOrder = order.map(\.bundleIdentifier)
+        return true
     }
 
     private func detectInstalledApps() {
@@ -805,7 +833,7 @@ struct ToolsTab: View {
         if installed.isEmpty {
             installed = [TerminalCatalog.all[0]] // 系统终端兜底
         }
-        availableTerminals = installed
+        availableTerminals = TerminalCatalog.ordered(installed, by: SharedConfig.shared.terminalOrder)
     }
 }
 

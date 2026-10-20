@@ -33,9 +33,19 @@ public enum TerminalCatalog {
         KnownTerminal(id: "kitty",      name: "Kitty",     bundleIdentifier: "net.kovidgoyal.kitty", icon: "terminal.fill"),
     ]
 
+    public static func ordered(_ terminals: [KnownTerminal], by savedOrder: [String]) -> [KnownTerminal] {
+        var remaining = terminals
+        var result: [KnownTerminal] = []
+        for id in savedOrder {
+            guard let index = remaining.firstIndex(where: { $0.bundleIdentifier == id }) else { continue }
+            result.append(remaining.remove(at: index))
+        }
+        return result + remaining
+    }
+
     /// 只显示已选择且仍安装的终端；选择失效时回退到默认终端或系统终端。
     public static func menuTerminals(
-        selected: Set<String>, preferred: String, isInstalled: (String) -> Bool
+        selected: Set<String>, preferred: String, order: [String] = [], isInstalled: (String) -> Bool
     ) -> [KnownTerminal] {
         guard !selected.isEmpty else { return [] }
         var candidates = all
@@ -44,7 +54,7 @@ public enum TerminalCatalog {
             candidates.append(KnownTerminal(id: id, name: id, bundleIdentifier: id))
         }
         let visible = candidates.filter { selected.contains($0.bundleIdentifier) && isInstalled($0.bundleIdentifier) }
-        if !visible.isEmpty { return visible }
+        if !visible.isEmpty { return ordered(visible, by: order) }
         if let fallback = candidates.first(where: { $0.bundleIdentifier == preferred && isInstalled($0.bundleIdentifier) })
             ?? candidates.first(where: { isInstalled($0.bundleIdentifier) }) {
             return [fallback]

@@ -38,8 +38,8 @@ If FinderRight makes your daily work easier, [⭐ star the project on GitHub](ht
 - 📋 **复制路径** —— 复制选中文件/文件夹的完整路径；可在设置中改为 `~` 路径、仅文件名、终端转义路径或文件 URL
 - 📋 **复制文件名** —— 独立复制完整文件名（含扩展名），多选时每行一项
 - 📂 **打开路径** —— 输入或粘贴文件、文件夹路径（绝对路径或 `~/`），回车在 Finder 中显示（文件会在所在文件夹中选中），也可直接用默认 App 打开文件；自动清理复制来的引号、首尾空白、`file://` 链接和终端转义
-- 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）；默认仅启用一个终端，可在设置中启用多个终端以展开子菜单
-- ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加；新建文件、打开编辑器和打开终端只有一个可用选项时，点击直接执行，不展开子菜单
+- 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）；默认仅启用一个终端，可在设置中启用多个终端以展开子菜单，并拖动调整终端顺序
+- ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加，列表支持拖动排序；新建文件、打开编辑器和打开终端只有一个可用选项时，点击直接执行，不展开子菜单
 - ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动；在访达里直接用 ⌘X 剪切、⌘V 粘贴到当前文件夹（空白处也可以，快捷键可在设置中修改，需「辅助功能」权限）
 - 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去
 - 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
@@ -201,8 +201,8 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 - 📋 **Copy Path** — copy the full path of selected files/folders; switch to a `~` path, file name only, shell-escaped path or file URL in Settings
 - 📋 **Copy File Name** — copy full file names including extensions; multiple selections are copied one per line
 - 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder
-- 💻 **Open in Terminal** — open the current folder in Ghostty / Terminal / iTerm2 / Warp, etc. Only the default terminal is enabled initially; enable several in Settings to show a submenu
-- ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings. New File, Open in Editor, and Open in Terminal execute directly when only one option is available
+- 💻 **Open in Terminal** — open the current folder in Ghostty / Terminal / iTerm2 / Warp, etc. Only the default terminal is enabled initially; enable several in Settings to show a submenu, and drag to reorder them
+- ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings, and the list supports drag-to-reorder. New File, Open in Editor, and Open in Terminal execute directly when only one option is available
 - ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste; cut with ⌘X and paste into the current folder with ⌘V right in Finder (works with nothing selected; the keys can be changed in Settings; requires Accessibility permission)
 - 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu
 - 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)

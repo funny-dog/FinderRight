@@ -48,7 +48,9 @@ public final class SharedConfig {
         static let menuIconStyle = "menuIconStyle"
         static let preferredTerminal = "preferredTerminal"
         static let selectedTerminals = "selectedTerminals"
+        static let terminalOrder = "terminalOrder"
         static let preferredEditor = "preferredEditor"
+        static let editorOrder = "editorOrder"
         static let customEditors = "customEditors"
         static let hiddenEditors = "hiddenEditors"
         static let customFileTemplates = "customFileTemplates"
@@ -226,7 +228,37 @@ public final class SharedConfig {
         }
     }
 
+    /// 终端 bundle identifier 的显示顺序；未配置的终端由清单顺序补到末尾。
+    public var terminalOrder: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.terminalOrder] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.terminalOrder] = newValue
+            save()
+        }
+    }
+
     // MARK: - Editors
+
+    /// 编辑器 bundle identifier 的显示顺序。
+    public var editorOrder: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.editorOrder] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.editorOrder] = newValue
+            save()
+        }
+    }
 
     /// 用户选定的默认编辑器 bundle identifier（服务菜单 / 快捷键使用）。
     /// nil 表示未选择，由 EditorCatalog.resolvedDefault 自动取右键菜单中的第一个

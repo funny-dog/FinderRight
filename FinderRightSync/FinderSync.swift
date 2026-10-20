@@ -666,6 +666,7 @@ class FinderSync: FIFinderSync {
                 let config = SharedConfig.shared
                 let terminals = TerminalCatalog.menuTerminals(
                     selected: config.selectedTerminals, preferred: config.preferredTerminal,
+                    order: config.terminalOrder,
                     isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
                 guard !terminals.isEmpty else { return }
                 menu.addItem(self.makeSubmenuItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", shortcutId: "shortcut.openTerminal", style: style, build: { self.buildTerminalMenu(terminals, style: style) }))
@@ -1057,7 +1058,8 @@ class FinderSync: FIFinderSync {
             snap.installedIds.formUnion(unchecked)
         }
         let installedIds = snap.installedIds
-        return EditorCatalog.menuEditors(custom: custom, hidden: hidden, isInstalled: installedIds.contains)
+        return EditorCatalog.menuEditors(custom: custom, hidden: hidden, order: config.editorOrder,
+                                         isInstalled: installedIds.contains)
     }
 
     /// 构建「打开编辑器」子菜单。

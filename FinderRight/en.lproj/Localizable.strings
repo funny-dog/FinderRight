@@ -529,7 +529,7 @@
 "添加编辑器…" = "Add Editor…";
 "默认" = "Default";
 "手动添加" = "Added Manually";
-"常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。" = "Common editors are detected automatically. Use \"Add Editor…\" to add any other editor or app. Editors that are switched off won't appear in the context submenu.";
+"常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。拖动左侧的 ≡ 可调整编辑器顺序。" = "Common editors are detected automatically. Use \"Add Editor…\" to add any other editor or app. Editors that are switched off won't appear in the context submenu. Drag the handle on the left to reorder editors.";
 "添加编辑器" = "Add Editor";
 "这些应用声明可以编辑代码文件，但不在自动识别清单中" = "These apps can edit code files but aren't detected automatically";
 "正在查找…" = "Searching…";
@@ -634,4 +634,4 @@
 "恢复后重新出现在上方列表中，并处于开启状态。" = "Restored types return to the list above and are turned on.";
 
 "通过服务菜单或快捷键打开终端时使用" = "Used when opening a terminal through Services or keyboard shortcuts";
-"默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry.";
+"默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry. Drag the handle on the left to reorder terminals in the context menu.";

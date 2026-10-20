@@ -393,6 +393,7 @@ final class ServicesProvider: NSObject {
             preferred: config.preferredEditor,
             custom: config.customEditors,
             hidden: config.hiddenEditors,
+            order: config.editorOrder,
             isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
     }
 

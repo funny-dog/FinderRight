@@ -7,13 +7,14 @@ import FinderRightKit
 
 /// 管理「打开编辑器」：默认编辑器（服务菜单 / 快捷键）、右键子菜单中显示哪些编辑器、手动添加清单外的应用。
 struct EditorsTab: View {
-    /// 已安装的编辑器：预置清单在前，手动添加项在后
+    /// 已安装的编辑器，按用户保存的顺序显示
     @FRState private var editors: [KnownEditor] = []
     @FRState private var icons: [String: NSImage] = [:]
     @FRState private var hidden: Set<String> = []
     @FRState private var customIds: Set<String> = []
     @FRState private var defaultId = EditorCatalog.textEditBundleId
     @FRState private var showingAddSheet = false
+    @FRState private var dropTargetEditorId: String?
 
     var body: some View {
         FRPage(title: "编辑器", subtitle: "右键「打开编辑器」与服务菜单使用的编辑器") {
@@ -54,7 +55,7 @@ struct EditorsTab: View {
                         row(editor)
                     }
                 }
-                FRFootnote(Text("常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。"))
+                FRFootnote(Text("常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。拖动左侧的 ≡ 可调整编辑器顺序。"))
             }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -66,6 +67,9 @@ struct EditorsTab: View {
     private func row(_ editor: KnownEditor) -> some View {
         let isCustom = customIds.contains(editor.id)
         return HStack(spacing: 10) {
+            FRGrip()
+                .draggable(editor.id)
+                .help("拖动调整在右键菜单中的顺序")
             if let icon = icons[editor.id] {
                 Image(nsImage: icon)
                     .resizable()
@@ -106,13 +110,38 @@ struct EditorsTab: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(dropTargetEditorId == editor.id ? FRTheme.selection : Color.clear)
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first else { return false }
+            return moveEditor(id, to: editor.id)
+        } isTargeted: { targeted in
+            if targeted {
+                dropTargetEditorId = editor.id
+            } else if dropTargetEditorId == editor.id {
+                dropTargetEditorId = nil
+            }
+        }
+    }
+
+    private func moveEditor(_ id: String, to targetId: String) -> Bool {
+        dropTargetEditorId = nil
+        guard id != targetId,
+              let from = editors.firstIndex(where: { $0.id == id }),
+              let to = editors.firstIndex(where: { $0.id == targetId }) else { return false }
+        var order = editors
+        let moved = order.remove(at: from)
+        order.insert(moved, at: to)
+        editors = order
+        SharedConfig.shared.editorOrder = order.map(\.id)
+        refreshDefault()
+        return true
     }
 
     private func reload() {
         let config = SharedConfig.shared
         let custom = config.customEditors
         var appURLs: [String: URL] = [:]
-        editors = EditorCatalog.installed(custom: custom) { id in
+        editors = EditorCatalog.installed(custom: custom, order: config.editorOrder) { id in
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return false }
             appURLs[id] = url
             return true
@@ -127,6 +156,7 @@ struct EditorsTab: View {
         let config = SharedConfig.shared
         defaultId = EditorCatalog.resolvedDefault(
             preferred: config.preferredEditor, custom: config.customEditors, hidden: hidden,
+            order: config.editorOrder,
             isInstalled: { id in editors.contains(where: { $0.id == id }) })
     }
 

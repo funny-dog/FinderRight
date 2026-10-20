@@ -2194,17 +2194,35 @@ struct FinderRightKitTestsRunner {
                                                         isInstalled: { _ in false }).isEmpty)
         }
 
+        runTest("终端排序：设置与菜单顺序一致，忽略重复和失效项") {
+            let terminal = "com.apple.Terminal"
+            let ghostty = "com.mitchellh.ghostty"
+            let iterm = "com.googlecode.iterm2"
+            let order = [ghostty, "removed", ghostty, terminal]
+            let available = Array(TerminalCatalog.all.prefix(3))
+            try assertEqual(TerminalCatalog.ordered(available, by: order).map(\.bundleIdentifier),
+                            [ghostty, terminal, iterm])
+            try assertEqual(TerminalCatalog.ordered(available, by: []).map(\.bundleIdentifier),
+                            available.map(\.bundleIdentifier))
+            let menu = TerminalCatalog.menuTerminals(selected: [terminal, ghostty], preferred: terminal,
+                                                      order: order, isInstalled: { _ in true })
+            try assertEqual(menu.map(\.bundleIdentifier), [ghostty, terminal])
+        }
+
         runTest("终端偏好：兼容旧单选、多选与空选择持久化") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
             let url = dir.appendingPathComponent("settings.plist")
             let config = SharedConfig(fileURL: url)
             try assertEqual(config.selectedTerminals, [config.preferredTerminal])
+            try assertTrue(config.terminalOrder.isEmpty)
             config.preferredTerminal = "com.mitchellh.ghostty"
             try assertEqual(SharedConfig(fileURL: url).selectedTerminals, ["com.mitchellh.ghostty"])
             config.selectedTerminals = ["com.apple.Terminal", "com.mitchellh.ghostty"]
+            config.terminalOrder = ["com.mitchellh.ghostty", "com.apple.Terminal"]
             let reloaded = SharedConfig(fileURL: url)
             try assertEqual(reloaded.selectedTerminals, config.selectedTerminals)
+            try assertEqual(reloaded.terminalOrder, config.terminalOrder)
             try assertEqual(reloaded.preferredTerminal, "com.mitchellh.ghostty")
             reloaded.selectedTerminals = []
             try assertTrue(SharedConfig(fileURL: url).selectedTerminals.isEmpty)
@@ -2228,6 +2246,21 @@ struct FinderRightKitTestsRunner {
             let menu = EditorCatalog.menuEditors(custom: custom, hidden: ["dev.zed.Zed", "com.apple.TextEdit"],
                                                  isInstalled: installedIds.contains)
             try assertEqual(menu.map(\.id), ["com.microsoft.VSCode", "com.example.Foo"])
+        }
+
+        runTest("EditorCatalog 排序同步设置、菜单和默认回退，兼容手动项") {
+            let custom = [KnownEditor(id: "com.example.Foo", name: "Foo")]
+            let installed: Set<String> = ["dev.zed.Zed", "com.microsoft.VSCode", "com.example.Foo"]
+            let order = ["com.example.Foo", "removed", "com.example.Foo", "com.microsoft.VSCode"]
+            let available = EditorCatalog.installed(custom: custom, order: order, isInstalled: installed.contains)
+            try assertEqual(available.map(\.id), ["com.example.Foo", "com.microsoft.VSCode", "dev.zed.Zed"])
+            let menu = EditorCatalog.menuEditors(custom: custom, hidden: ["com.microsoft.VSCode"],
+                                                 order: order, isInstalled: installed.contains)
+            try assertEqual(menu.map(\.id), ["com.example.Foo", "dev.zed.Zed"])
+            try assertEqual(EditorCatalog.resolvedDefault(preferred: nil, custom: custom, hidden: [],
+                                                          order: order, isInstalled: installed.contains), "com.example.Foo")
+            try assertEqual(EditorCatalog.resolvedDefault(preferred: "dev.zed.Zed", custom: custom, hidden: [],
+                                                          order: order, isInstalled: installed.contains), "dev.zed.Zed")
         }
 
         runTest("EditorCatalog 默认编辑器解析顺序") {
@@ -2279,14 +2312,17 @@ struct FinderRightKitTestsRunner {
             try assertNil(config.preferredEditor)
             try assertTrue(config.customEditors.isEmpty)
             try assertTrue(config.hiddenEditors.isEmpty)
+            try assertTrue(config.editorOrder.isEmpty)
 
             config.preferredEditor = "dev.zed.Zed"
             config.customEditors = [KnownEditor(id: "com.example.Foo", name: "Foo")]
             config.hiddenEditors = ["com.apple.dt.Xcode"]
+            config.editorOrder = ["com.example.Foo", "dev.zed.Zed"]
             let reloaded = SharedConfig(fileURL: url)
             try assertEqual(reloaded.preferredEditor, "dev.zed.Zed")
             try assertEqual(reloaded.customEditors, [KnownEditor(id: "com.example.Foo", name: "Foo")])
             try assertEqual(reloaded.hiddenEditors, ["com.apple.dt.Xcode"])
+            try assertEqual(reloaded.editorOrder, config.editorOrder)
 
             reloaded.preferredEditor = ""
             try assertNil(SharedConfig(fileURL: url).preferredEditor, "空串视为未选定")

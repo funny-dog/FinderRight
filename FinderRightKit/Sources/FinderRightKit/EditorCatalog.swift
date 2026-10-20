@@ -15,7 +15,7 @@ public struct KnownEditor: Identifiable, Equatable, Codable {
 
 /// 已知编辑器清单 —— 右键「打开编辑器」子菜单的数据源（单一事实来源）。
 ///
-/// `all` 的顺序即子菜单展示顺序；扩展会用 NSWorkspace 过滤出实际已安装的项再展示。
+/// `all` 的顺序为默认展示顺序；扩展会用 NSWorkspace 过滤出实际已安装的项再展示。
 /// macOS 没有「这是代码编辑器」的可靠元数据（实测 Antigravity 不声明任何文档类型，
 /// Typora 与 Zed 的声明几乎一致），所以自动识别只靠这份清单，清单外的由用户在设置里手动添加。
 public enum EditorCatalog {
@@ -60,29 +60,39 @@ public enum EditorCatalog {
     /// 系统「文本编辑」：所有编辑器都未安装时的最终兜底
     public static let textEditBundleId = "com.apple.TextEdit"
 
-    /// 所有可用（已安装）的编辑器：清单中已安装的项在前（按清单顺序），手动添加的项在后（按添加顺序）。
+    public static func ordered(_ editors: [KnownEditor], by savedOrder: [String]) -> [KnownEditor] {
+        var remaining = editors
+        var result: [KnownEditor] = []
+        for id in savedOrder {
+            guard let index = remaining.firstIndex(where: { $0.id == id }) else { continue }
+            result.append(remaining.remove(at: index))
+        }
+        return result + remaining
+    }
+
+    /// 所有可用编辑器按已保存顺序展示；未配置顺序的项按清单和手动添加顺序补到末尾。
     /// 手动添加项与清单重复时以清单为准，避免同一应用出现两次。
-    public static func installed(custom: [KnownEditor], isInstalled: (String) -> Bool) -> [KnownEditor] {
+    public static func installed(custom: [KnownEditor], order: [String] = [], isInstalled: (String) -> Bool) -> [KnownEditor] {
         var result = all.filter { isInstalled($0.id) }
         var seen = Set(all.map(\.id))
         for editor in custom where !seen.contains(editor.id) && isInstalled(editor.id) {
             result.append(editor)
             seen.insert(editor.id)
         }
-        return result
+        return ordered(result, by: order)
     }
 
     /// 右键子菜单展示的编辑器：可用编辑器中去掉用户隐藏的项
-    public static func menuEditors(custom: [KnownEditor], hidden: Set<String>,
+    public static func menuEditors(custom: [KnownEditor], hidden: Set<String>, order: [String] = [],
                                    isInstalled: (String) -> Bool) -> [KnownEditor] {
-        installed(custom: custom, isInstalled: isInstalled).filter { !hidden.contains($0.id) }
+        installed(custom: custom, order: order, isInstalled: isInstalled).filter { !hidden.contains($0.id) }
     }
 
     /// 解析默认编辑器（服务菜单 / 快捷键「打开编辑器」使用）：
     /// 用户选定且仍已安装 → 右键菜单中的第一个 → 任一已安装（即使被隐藏）→ 文本编辑。
-    public static func resolvedDefault(preferred: String?, custom: [KnownEditor], hidden: Set<String>,
+    public static func resolvedDefault(preferred: String?, custom: [KnownEditor], hidden: Set<String>, order: [String] = [],
                                        isInstalled: (String) -> Bool) -> String {
-        let available = installed(custom: custom, isInstalled: isInstalled)
+        let available = installed(custom: custom, order: order, isInstalled: isInstalled)
         if let preferred, available.contains(where: { $0.id == preferred }) {
             return preferred
         }
