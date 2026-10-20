@@ -445,7 +445,7 @@ public final class UpdateChecker: NSObject {
             # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，
             # 残留的旧扩展进程仍指向已删除的旧包，需由系统按新包重新拉起
             /usr/bin/killall FinderRightSync 2>/dev/null || true
-            /usr/bin/open "$TARGET"
+            /usr/bin/open -a "$TARGET" --args \(LaunchPresentation.showSettingsArgument)
 
             # 清理下载解压临时文件
             /bin/rm -rf "\(baseDir.path)"

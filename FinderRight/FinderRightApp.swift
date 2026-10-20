@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var receivedLaunchURL = false
     private var directoryDialog: FRDialog?
     /// 菜单打开期间随更新状态刷新标题（检查中 / 下载进度 / 安装中）
     private weak var updateMenuItem: NSMenuItem?
@@ -125,7 +126,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(openOnboarding),
             name: .openOnboarding, object: nil)
 
-        // 首次启动：若尚未完成引导，自动弹出引导设置窗口
+        let showSettings = LaunchPresentation.shouldShowSettings(
+            isDefaultLaunch: notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? false,
+            event: NSAppleEventManager.shared().currentAppleEvent,
+            receivedURL: receivedLaunchURL,
+            arguments: ProcessInfo.processInfo.arguments)
+        NSLog("[AppDelegate] launch presentation: showSettings=\(showSettings)")
+        guard showSettings else { return }
+
+        // 仅主动打开时展示引导或设置，后台唤醒不标记引导完成。
         let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if !hasCompletedOnboarding {
             // 弹出即视为已完成：用户若用红点直接关窗，OnboardingView 的「开始使用」不会执行，
@@ -133,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 都重复弹引导并抢焦。用户已看过引导即视为完成。
             UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             showOnboarding()
+        } else {
+            openSettings()
         }
     }
 
@@ -693,10 +704,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UndoCenter.shared.clear()
     }
 
-    // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复启动时弹出设置的唯一入口）
+    // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复打开）
 
     /// 只在用户主动"重新打开"已运行的 App（双击图标、启动台、Spotlight 回车）时由系统派发；
-    /// Services 派发、finderright:// IPC 唤醒均不会触发，是弹设置的唯一安全入口。
+    /// 首次启动另由 LaunchPresentation 判断来源；Services 和 IPC 唤醒不应弹设置。
     ///
     /// ⚠️ 不要在 applicationDidBecomeActive 或 kAEOpenApplication/kAEReopenApplication
     /// AppleEvent 里弹设置：Services 派发会激活 App、IPC 冷启动会收到 kAEOpenApplication，
@@ -780,15 +791,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReply reply: NSAppleEventDescriptor) {
         guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let url = URL(string: text), url.scheme == IPCBridge.urlScheme else { return }
+        receivedLaunchURL = true
 
-        // 打开设置窗口无副作用，任何来源都可以（切换语言后的重启脚本就靠它）
+        // 打开设置窗口无副作用，任何来源都可以。
         if url.host == "settings" || url.host == "preferences" {
             // 可带页名直达某一页，如 finderright://settings/favorites；未知页名忽略，停留在当前页
             let page = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             if let tab = SettingsView.SettingsTab.allCases.first(where: { $0.urlName == page }) {
                 SettingsNavigation.shared.selectedTab = tab
             }
-            openSettings()
+            // 冷启动时先完成激活策略初始化，再切为 regular 显示窗口。
+            DispatchQueue.main.async { [weak self] in self?.openSettings() }
             return
         }
 

@@ -15,6 +15,11 @@ echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --package-path FinderRightKit FinderRightKitTests
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  FinderRight/Services/LaunchPresentation.swift scripts/test-launch-presentation.swift \
+  -o "$KIT_BUILD_DIR/test-launch-presentation"
+"$KIT_BUILD_DIR/test-launch-presentation"
+
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
