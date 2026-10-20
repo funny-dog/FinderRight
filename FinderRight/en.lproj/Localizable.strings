@@ -91,7 +91,7 @@
 "登录时自动运行 FinderRight" = "Run FinderRight automatically at login";
 "显示菜单栏图标" = "Show Menu Bar Icon";
 "显示最近操作" = "Show Recent Activity";
-"在菜单栏图标中列出压缩、解压、粘贴、移动、复制的结果，失败时图标变红" = "List compress, extract, paste, move and copy results in the menu bar icon; the icon turns red on failures";
+"在菜单栏图标中列出最近操作与「撤销」，失败时图标变红。关闭后撤销仍可用 ⌘Z 或访达右键菜单" = "List recent activity and Undo in the menu bar icon; the icon turns red on failures. When off, you can still undo with ⌘Z or the Finder context menu";
 "关闭后，菜单栏不显示 FinderRight 图标" = "When off, FinderRight won't appear in the menu bar";
 "显示程序坞图标" = "Show Dock Icon";
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";

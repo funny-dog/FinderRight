@@ -311,7 +311,7 @@ struct GeneralTab: View {
 
                 FRDivider()
 
-                FRRow(title: Text("显示最近操作"), subtitle: Text("在菜单栏图标中列出压缩、解压、粘贴、移动、复制的结果，失败时图标变红")) {
+                FRRow(title: Text("显示最近操作"), subtitle: Text("在菜单栏图标中列出最近操作与「撤销」，失败时图标变红。关闭后撤销仍可用 ⌘Z 或访达右键菜单")) {
                     FRSwitch(label: "显示最近操作", isOn: $showRecentActivity)
                 }
                 .disabled(!showMenuBarIcon)

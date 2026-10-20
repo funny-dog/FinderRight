@@ -296,8 +296,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        // 只在有可撤销的记录时出现；菜单栏入口不比对访达撤销项，点了就撤销 FinderRight 的记录
-        if let record = UndoCenter.shared.current {
+        // 只在有可撤销的记录时出现；菜单栏入口不比对访达撤销项，点了就撤销 FinderRight 的记录。
+        // 归在「显示最近操作」开关下：关掉后菜单栏不再出现撤销项，避免用户以为还有操作记录可看。
+        // ⌘Z 拦截与访达右键菜单里的「撤销」不读这个开关，照常可用
+        if showRecentActivity, let record = UndoCenter.shared.current {
             let state = UndoMenuState(kind: record.kind, count: record.count, name: record.name)
             let undo = NSMenuItem(title: UndoText.menuTitle(for: state, localize: L), action: #selector(undoLast), keyEquivalent: "")
             undo.target = self
