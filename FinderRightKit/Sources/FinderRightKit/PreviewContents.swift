@@ -24,7 +24,16 @@ public enum PreviewError: String, LocalizedError {
 }
 
 /// 预览只读取元数据，不解压；文件夹按层读取，不跟随链接或进入文件包。
+///
+/// 访达元数据（`.DS_Store`）与 AppleDouble 资源叉（`._*`、ZIP 里的 `__MACOSX/`）始终不展示，
+/// 其余点文件照常展示，与访达「显示隐藏文件」开关无关（访达 ⌘⇧. 不写回偏好，跨进程读不到真实状态）。
+/// 数量上限按过滤后的可见项计算。
 public enum PreviewContents {
+    /// 预览始终不展示的系统杂项
+    public static func isClutter(_ name: some StringProtocol) -> Bool {
+        name == ".DS_Store" || name == "__MACOSX" || name.hasPrefix("._")
+    }
+
     public static func folder(_ url: URL, limit: Int = 2000) throws -> PreviewListing {
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey,
                                         .fileSizeKey, .contentModificationDateKey]
@@ -42,6 +51,7 @@ public enum PreviewContents {
         var entries: [PreviewEntry] = []
         var truncated = false
         for case let item as URL in enumerator {
+            if isClutter(item.lastPathComponent) { continue }
             if entries.count >= max(0, limit) { truncated = true; break }
             let values = try item.resourceValues(forKeys: keys)
             let link = values.isSymbolicLink == true
@@ -57,7 +67,9 @@ public enum PreviewContents {
 
     public static func zip(_ url: URL, limit: Int = 10000) throws -> PreviewListing {
         let raw = try ZipProbe.parseCentralDirectory(of: url)
-        let entries = try raw.prefix(max(0, limit)).map { entry -> PreviewEntry in
+        var entries: [PreviewEntry] = []
+        var truncated = false
+        for entry in raw {
             let name = try decodeName(entry)
             let components = name.split(separator: "/", omittingEmptySubsequences: false)
             let parts = name.hasSuffix("/") ? components.dropLast() : components[...]
@@ -67,14 +79,17 @@ public enum PreviewContents {
                   !(name.count >= 2 && name[name.index(after: name.startIndex)] == ":") else {
                 throw PreviewError.invalidPath
             }
+            // 任一层是杂项（如 __MACOSX/），整棵子树都不展示
+            if parts.contains(where: isClutter) { continue }
+            if entries.count >= max(0, limit) { truncated = true; break }
             let mode = (entry.externalAttributes >> 16) & 0o170000
             let link = mode == 0o120000
             let directory = !link && (name.hasSuffix("/") || mode == 0o040000 || entry.externalAttributes & 0x10 != 0)
-            return PreviewEntry(path: name, isDirectory: directory, isSymbolicLink: link,
-                                size: directory ? nil : Int64(entry.uncompressedSize),
-                                modificationDate: modificationDate(entry))
+            entries.append(PreviewEntry(path: name, isDirectory: directory, isSymbolicLink: link,
+                                        size: directory ? nil : Int64(entry.uncompressedSize),
+                                        modificationDate: modificationDate(entry)))
         }
-        return PreviewListing(entries: entries, truncated: raw.count > entries.count)
+        return PreviewListing(entries: entries, truncated: truncated)
     }
 
     private static func decodeName(_ entry: ZipProbe.Entry) throws -> String {

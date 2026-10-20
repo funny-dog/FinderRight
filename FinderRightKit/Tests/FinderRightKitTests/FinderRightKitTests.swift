@@ -1320,6 +1320,43 @@ struct FinderRightKitTestsRunner {
             } catch is CocoaError {}
         }
 
+        runTest("Preview 文件夹始终过滤 .DS_Store 与 ._*，其余隐藏项照常展示") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            for name in [".DS_Store", "._报告.txt", ".env", "flagged", "报告.txt"] {
+                try Data().write(to: work.appendingPathComponent(name))
+            }
+            try FileManager.default.createDirectory(at: work.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            let chflags = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/chflags"),
+                                                arguments: ["hidden", work.appendingPathComponent("flagged").path])
+            try assertEqual(chflags.status, 0, chflags.stderr)
+            try assertEqual(try PreviewContents.folder(work).entries.map(\.path).sorted(),
+                            [".env", ".git", "flagged", "报告.txt"])
+            // 上限按可见项计算：被过滤的项不占名额，也不触发截断
+            try assertTrue(!(try PreviewContents.folder(work, limit: 4)).truncated)
+            try assertTrue(try PreviewContents.folder(work, limit: 3).truncated)
+        }
+
+        runTest("Preview ZIP 始终过滤 __MACOSX/._*/.DS_Store，其余点文件照常展示") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            for dir in ["资料/.cache", "__MACOSX/资料", ".git"] {
+                try FileManager.default.createDirectory(at: work.appendingPathComponent(dir), withIntermediateDirectories: true)
+            }
+            for file in ["资料/报告.txt", "资料/.env", "资料/.cache/x", "资料/.DS_Store", "__MACOSX/资料/._报告.txt",
+                         "._top", ".git/config", "a.txt"] {
+                try Data("x".utf8).write(to: work.appendingPathComponent(file))
+            }
+            let zip = try makeZip("hidden.zip", in: work, entries: ["资料", "__MACOSX", "._top", ".git", "a.txt"],
+                                  options: ["--options", "zip:hdrcharset=UTF-8"])
+            // tar 可能为扩展属性额外写入 ._* 条目，一并验证被过滤
+            let expected = [".git/", ".git/config", "a.txt", "资料/", "资料/.cache/", "资料/.cache/x",
+                            "资料/.env", "资料/报告.txt"]
+            try assertEqual(try PreviewContents.zip(zip).entries.map(\.path).sorted(), expected)
+            try assertTrue(!(try PreviewContents.zip(zip, limit: expected.count)).truncated)
+            try assertTrue(try PreviewContents.zip(zip, limit: expected.count - 1).truncated)
+        }
+
         runTest("Preview 中文 ZIP 的元数据、GBK、加密目录和数量上限") {
             let work = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: work) }
