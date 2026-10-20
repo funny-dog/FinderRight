@@ -727,6 +727,19 @@ class FinderSync: FIFinderSync {
             builders[feature.id]?()
         }
 
+        // 「取消剪切」平时紧跟「剪切」，但它不能跟着「剪切」开关一起消失：
+        // 用户可能先剪切了一批文件，再到设置里关掉「剪切」，此时队列仍在，
+        // 没有入口就只能靠「粘贴」或重启 App 才能清掉。开关关掉时补在「粘贴」后面。
+        if hasCut, !featureOn(MenuFeatureCatalog.cut) {
+            let item = cancelCutItem()
+            let pasteIndex = menu.items.firstIndex { $0.action == #selector(self.pasteFiles(_:)) }
+            if let pasteIndex {
+                menu.insertItem(item, at: pasteIndex + 1)
+            } else {
+                menu.addItem(item)
+            }
+        }
+
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
         if !didDeferredSetup {
             let sinceInitMs = (menuStart - Self.initStartUptime) * 1000
