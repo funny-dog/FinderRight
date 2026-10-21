@@ -34,6 +34,13 @@ class PageCheck(HTMLParser):
         if tag == "img":
             assert "alt" in attrs, "Missing image alt"
             self.images += 1
+            # 国内直连 Cloudflare 只有几 KB/s，页面图片须压缩后再引用。
+            image = ROOT / urlsplit(attrs.get("src", "")).path
+            if image.is_file():
+                assert image.stat().st_size <= 100 * 1024, f"Image too large: {attrs['src']}"
+        if tag == "video":
+            # 演示视频约 5MB，只在用户点击播放后加载。
+            assert "autoplay" not in attrs and attrs.get("preload") == "none", "Video must not preload"
         if attrs.get("target") == "_blank":
             assert "noopener" in attrs.get("rel", "")
         for attribute in ("src", "href"):

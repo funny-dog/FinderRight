@@ -19,14 +19,6 @@ const translatedLabels = [...document.querySelectorAll('[data-en-label]')].map(e
   english: element.dataset.enLabel,
 }));
 
-// 系统开启「减少动态效果」时不自动播放演示视频，改为显示控件由用户手动播放
-const demoVideo = document.querySelector('.demo video');
-if (demoVideo && matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  demoVideo.removeAttribute('autoplay');
-  demoVideo.pause();
-  demoVideo.controls = true;
-}
-
 const themeButton = document.querySelector('#theme');
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
