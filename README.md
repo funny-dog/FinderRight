@@ -69,6 +69,10 @@ brew install --cask funny-dog/tap/finderright
 xattr -dr com.apple.quarantine /Applications/FinderRight.app
 ```
 
+#### 备用访问
+
+如果主站访问不畅，可以试试[独立展示站](https://finderright-bhnr38evqjb.qoder.zone/)。它只托管展示页面，不含安装包；下载仍请使用上方 DMG 链接或 [Gitee 发行版](https://gitee.com/no_ink_no_book/FinderRight/releases)。
+
 #### 首次启动
 
 按引导完成：启用访达扩展、授予完全磁盘访问、授予辅助功能。
@@ -224,6 +228,10 @@ Download [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/Finde
 ```bash
 xattr -dr com.apple.quarantine /Applications/FinderRight.app
 ```
+
+#### Alternate access
+
+If the main site is slow or unreachable, try the [standalone mirror](https://finderright-bhnr38evqjb.qoder.zone/). It hosts the showcase page only, not installers; use the DMG link above or [Gitee releases](https://gitee.com/no_ink_no_book/FinderRight/releases) for downloads.
 
 #### First launch
 
