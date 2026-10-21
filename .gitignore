@@ -23,3 +23,6 @@ Package.resolved
 *.zip
 *.dmg
 *.sha256
+
+# Cloudflare（在仓库根运行 wrangler 会产生账号缓存）
+.wrangler/

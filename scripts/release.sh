@@ -101,11 +101,14 @@ bump_version() {
 verify_assets() {
   local version="$1"
   [ -f "FinderRight.dmg" ] || fail "缺少 FinderRight.dmg"
+  [ -f "FinderRight.dmg.sha256" ] || fail "缺少校验文件 FinderRight.dmg.sha256"
   [ -f "FinderRight-v$version.zip" ] || fail "缺少 FinderRight-v$version.zip"
   [ -f "FinderRight-v$version.zip.sha256" ] || fail "缺少校验文件 FinderRight-v$version.zip.sha256"
   (cd "$PROJECT_DIR" && shasum -a 256 -c "FinderRight-v$version.zip.sha256" >/dev/null) \
-    || fail "sha256 校验不通过"
-  echo "发布资产校验：dmg / zip / sha256 齐备，校验和匹配"
+    || fail "zip sha256 校验不通过"
+  (cd "$PROJECT_DIR" && shasum -a 256 -c "FinderRight.dmg.sha256" >/dev/null) \
+    || fail "dmg sha256 校验不通过"
+  echo "发布资产校验：dmg / dmg.sha256 / zip / zip.sha256 齐备，校验和匹配"
 }
 
 MODE="release"
@@ -164,7 +167,8 @@ if [ "$PUBLISH" = "1" ]; then
     git log --pretty='- %s' "$RANGE"
   } > "$NOTES_FILE"
   gh release create "v$VERSION_ARG" --draft --title "v$VERSION_ARG" --notes-file "$NOTES_FILE" \
-    "FinderRight.dmg" "FinderRight-v$VERSION_ARG.zip" "FinderRight-v$VERSION_ARG.zip.sha256"
+    "FinderRight.dmg" "FinderRight.dmg.sha256" \
+    "FinderRight-v$VERSION_ARG.zip" "FinderRight-v$VERSION_ARG.zip.sha256"
   rm -f "$NOTES_FILE"
   echo "draft Release v$VERSION_ARG 已创建，补完更新说明后在 GitHub 上点 Publish。"
 else
@@ -172,5 +176,6 @@ else
   echo "  git push origin main"
   echo "  git push origin v$VERSION_ARG"
   echo "  gh release create v$VERSION_ARG --draft --title v$VERSION_ARG \\"
-  echo "    FinderRight.dmg FinderRight-v$VERSION_ARG.zip FinderRight-v$VERSION_ARG.zip.sha256"
+  echo "    FinderRight.dmg FinderRight.dmg.sha256 \\"
+  echo "    FinderRight-v$VERSION_ARG.zip FinderRight-v$VERSION_ARG.zip.sha256"
 fi
