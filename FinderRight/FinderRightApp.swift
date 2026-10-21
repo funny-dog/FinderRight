@@ -59,11 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.object(forKey: "showMenuBarIcon") as? Bool ?? true
     }
 
-    /// 用户是否开启「最近操作」（可选功能，默认关闭）
-    private var showRecentActivity: Bool {
-        UserDefaults.standard.bool(forKey: "showRecentActivity")
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 撤销记录只存内存：清掉上次崩溃或强退残留的状态文件，免得扩展显示无效的撤销菜单项
         UndoCenter.shared.clear()
@@ -83,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FRAppearanceMode.stored.apply()
         SharedConfig.shared.appTheme = FRThemeID.current
 
-        RecentOperations.shared.isEnabled = showRecentActivity
+        RecentOperations.shared.setCapacity(UserDefaults.standard.object(forKey: RecentOperations.capacityKey) as? Int ?? 100)
         setupStatusItem()
 
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
@@ -113,10 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self, selector: #selector(defaultsChanged),
             name: UserDefaults.didChangeNotification, object: nil)
 
-        // 后台操作有新结果：刷新菜单栏图标的失败提示
+        // 失败反馈独立于历史保留条数与菜单栏图标。
         NotificationCenter.default.addObserver(
-            self, selector: #selector(updateStatusIndicator),
-            name: RecentOperations.didChangeNotification, object: nil)
+            self, selector: #selector(operationDidFinish(_:)),
+            name: RecentOperations.didFinishNotification, object: nil)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(updateStatusDidChange),
@@ -275,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        // 每次打开前由 menuNeedsUpdate 重建，「最近操作」区随之更新
+        // 每次打开前重建，更新扩展状态与下载进度。
         menu.delegate = self
         populate(menu)
         return menu
@@ -298,32 +293,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        // 只在有可撤销的记录时出现；菜单栏入口不比对访达撤销项，点了就撤销 FinderRight 的记录。
-        // 归在「显示最近操作」开关下：关掉后菜单栏不再出现撤销项，避免用户以为还有操作记录可看。
-        // ⌘Z 拦截与访达右键菜单里的「撤销」不读这个开关，照常可用
-        if showRecentActivity, let record = UndoCenter.shared.current {
-            let state = UndoMenuState(kind: record.kind, count: record.count, name: record.name)
-            let undo = NSMenuItem(title: UndoText.menuTitle(for: state, localize: L), action: #selector(undoLast), keyEquivalent: "")
-            undo.target = self
-            undo.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
-            menu.addItem(undo)
-            menu.addItem(.separator())
-        }
-
-        let records = RecentOperations.shared.records
-        if !records.isEmpty {
-            let header = NSMenuItem(title: L("最近操作"), action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            for record in records {
-                menu.addItem(recentOperationItem(for: record))
-            }
-            let clear = NSMenuItem(title: L("清除记录"), action: #selector(clearRecentOperations), keyEquivalent: "")
-            clear.target = self
-            menu.addItem(clear)
-            menu.addItem(.separator())
-        }
-
         let settings = NSMenuItem(title: L("设置..."), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -342,9 +311,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
-
-    /// 菜单栏「撤销」走与 ⌘Z、右键菜单相同的 undoLast 处理
-    private let undoService = FinderRightService()
 
     // MARK: - 检查更新
 
@@ -429,98 +395,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                  buttons: [L("好")]).runModal()
     }
 
-    // MARK: - 最近操作
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    /// - Parameter truncated: 菜单项用截断后的名称，避免长文件名把整个菜单撑宽；弹窗用完整名称
-    private func recentOperationTitle(for record: OperationRecord, truncated: Bool = false) -> String {
-        let format: String
-        if record.cancelled {
-            // 目前只有加密包的密码框能取消
-            let subject = truncated ? OperationRecord.truncatedSubject(record.subject) : record.subject
-            return String(format: L("已取消解压 %@"), subject)
-        }
-        switch (record.kind, record.succeeded) {
-        case (.compress, true):    format = L("已压缩 %@")
-        case (.compress, false):   format = L("压缩失败：%@")
-        case (.decompress, true):  format = L("已解压 %@")
-        case (.decompress, false): format = L("解压失败：%@")
-        case (.paste, true):       format = L("已粘贴 %@")
-        case (.paste, false):      format = L("粘贴失败：%@")
-        case (.move, true):        format = L("已移动 %@")
-        case (.move, false):       format = L("移动失败：%@")
-        case (.copy, true):        format = L("已复制 %@")
-        case (.copy, false):       format = L("复制失败：%@")
-        case (.undo, true):        format = L("已撤销 %@")
-        case (.undo, false):       format = L("撤销未完成：%@")
-        }
-        let subject = truncated ? OperationRecord.truncatedSubject(record.subject) : record.subject
-        return String(format: format, subject)
-    }
-
-    private func recentOperationItem(for record: OperationRecord) -> NSMenuItem {
-        let time = Self.timeFormatter.string(from: record.date)
-        let item = NSMenuItem(title: "\(recentOperationTitle(for: record, truncated: true))  ·  \(time)",
-                              action: #selector(recentOperationClicked(_:)), keyEquivalent: "")
-        item.target = self
-        item.representedObject = record
-        if record.cancelled {
-            item.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-            if OperationRecord.truncatedSubject(record.subject) != record.subject {
-                item.toolTip = record.subject
-            }
-        } else if record.succeeded {
-            item.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
-            // 名称被截断时悬停可看完整名称；失败项的 toolTip 留给失败原因，完整名称在弹窗标题里
-            if OperationRecord.truncatedSubject(record.subject) != record.subject {
-                item.toolTip = record.subject
-            }
-        } else {
-            item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(paletteColors: [.systemOrange]))
-            item.toolTip = record.failure
-        }
-        return item
-    }
-
-    /// 成功项：在访达中显示产物；失败项：弹窗说明原因；已取消项：没有产物也没有原因，不做任何事
-    @objc private func recentOperationClicked(_ sender: NSMenuItem) {
-        guard let record = sender.representedObject as? OperationRecord, !record.cancelled else { return }
-        if record.succeeded {
-            let existing = record.results.filter { FileManager.default.fileExists(atPath: $0.path) }
-            if existing.isEmpty {
-                NSSound.beep()
-            } else {
-                NSWorkspace.shared.activateFileViewerSelecting(existing)
-            }
+    @objc private func operationDidFinish(_ notification: Notification) {
+        guard let record = notification.object as? OperationRecord else { return }
+        if let message = OperationHistoryPresentation.transferSuccessMessage(record) {
+            ClipboardToast.show(message: message, style: .success)
             return
         }
-        FRDialog(title: recentOperationTitle(for: record),
-                 message: (record.failure ?? "") + "\n\n" + L("更多信息可在「控制台」App 中搜索 FinderRightService 查看。"),
-                 symbol: "exclamationmark.triangle", tone: .warning, buttons: [L("好")]).runModal()
-    }
-
-    @objc private func undoLast() {
-        _ = undoService.handle(IPCRequest(id: UUID().uuidString, action: "undoLast", payload: [:]))
-    }
-
-    @objc private func clearRecentOperations() {
-        RecentOperations.shared.clear()
-    }
-
-    /// 有未查看的失败时把菜单栏图标染成红色，打开菜单后恢复。
-    /// 用 contentTintColor 而不是自绘红点：模板图保持随明暗菜单栏自动反色
-    @objc private func updateStatusIndicator() {
-        guard let button = statusItem?.button else { return }
-        let hasUnseenFailure = RecentOperations.shared.unseenFailureCount > 0
-        button.contentTintColor = hasUnseenFailure ? .systemRed : nil
-        button.toolTip = hasUnseenFailure ? L("有操作失败，点击查看") : "FinderRight"
+        guard !record.succeeded, !record.cancelled,
+              ![OperationRecord.Kind.undo, .createFile, .cut].contains(record.kind) else { return }
+        // 撤销与同步的新建、剪切已有结果反馈，避免重复。
+        let message = String(format: L("%@未完成：%@。%@"),
+                             OperationHistoryPresentation.actionTitle(record.kind),
+                             OperationRecord.truncatedSubject(record.subject),
+                             OperationHistoryPresentation.failureSummary(record))
+        ClipboardToast.show(message: message, style: record.results.isEmpty ? .failure : .partial)
     }
 
     // 供 Settings scene 的 ⌘, 命令与状态栏菜单共用（@objc 供 #selector 使用）
@@ -739,10 +627,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func defaultsChanged() {
         UpdateChecker.shared.configureAutomaticUpdates()
 
-        // 「最近操作」开关：关闭时 RecentOperations 自行清空记录并通知刷新图标提示
-        let wantRecent = showRecentActivity
-        if RecentOperations.shared.isEnabled != wantRecent {
-            RecentOperations.shared.isEnabled = wantRecent
+        let historyLimit = UserDefaults.standard.object(forKey: RecentOperations.capacityKey) as? Int ?? 100
+        if RecentOperations.shared.capacity != historyLimit {
+            RecentOperations.shared.setCapacity(historyLimit)
         }
 
         // 实时同步菜单栏图标显隐（设置里 showMenuBarIcon 改变时）
@@ -842,10 +729,6 @@ extension AppDelegate: NSMenuDelegate {
         populate(menu)
     }
 
-    /// 用户打开菜单即看到了「最近操作」里的失败项，撤掉图标提示
-    func menuWillOpen(_ menu: NSMenu) {
-        RecentOperations.shared.markFailuresSeen()
-    }
 }
 
 // MARK: - 窗口拖动条

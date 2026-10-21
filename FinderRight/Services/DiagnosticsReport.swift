@@ -34,14 +34,14 @@ enum DiagnosticsReport {
         lines.append(String(format: L("剪切队列：%d 项"), CutQueueStore().read().count))
 
         let recent = RecentOperations.shared
-        if recent.isEnabled {
-            lines.append(String(format: L("最近操作记录：%@"), L("已开启")))
-            for record in recent.records where record.failure != nil {
+        if recent.capacity > 0 {
+            lines.append(String(format: L("操作历史：保留最近 %d 条"), recent.capacity))
+            for record in recent.records.filter({ $0.failure != nil }).prefix(3) {
                 guard let failure = record.failure else { continue }
                 lines.append(String(format: L("最近失败：%@"), "\(record.kind.rawValue) · \(shorten(failure))"))
             }
         } else {
-            lines.append(String(format: L("最近操作记录：%@"), L("已关闭")))
+            lines.append(String(format: L("操作历史：%@"), L("已关闭")))
         }
 
         return lines.joined(separator: "\n")

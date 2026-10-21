@@ -1811,42 +1811,281 @@ struct FinderRightKitTestsRunner {
 
         // MARK: - RecentOperations（最近操作记录）
 
-        runTest("RecentOperations 新记录在前、超出容量丢弃最旧、统计未查看的失败") {
+        runTest("RecentOperations 新记录在前、超出容量丢弃最旧与清空") {
             let ops = RecentOperations(capacity: 3)
             ops.record(OperationRecord(kind: .compress, subject: "a"))
             ops.record(OperationRecord(kind: .decompress, subject: "b", failure: "坏包"))
             ops.record(OperationRecord(kind: .paste, subject: "c"))
             ops.record(OperationRecord(kind: .compress, subject: "d", failure: "磁盘满"))
             try assertEqual(ops.records.map(\.subject), ["d", "c", "b"])
-            try assertEqual(ops.unseenFailureCount, 2)
-            ops.markFailuresSeen()
-            try assertEqual(ops.unseenFailureCount, 0)
-            try assertEqual(ops.records.count, 3, "标记已查看不删除记录")
+            try assertEqual(ops.records.count, 3)
             ops.clear()
             try assertTrue(ops.records.isEmpty)
         }
 
-        runTest("RecentOperations 已取消不算成功，也不计入未查看的失败") {
+        runTest("RecentOperations 已取消不算成功但正常记录") {
             let ops = RecentOperations(capacity: 3)
             let cancelled = OperationRecord(kind: .decompress, subject: "secret.zip", cancelled: true)
             try assertTrue(!cancelled.succeeded, "已取消不算成功")
             ops.record(cancelled)
-            try assertEqual(ops.unseenFailureCount, 0)
             try assertEqual(ops.records.first?.cancelled, true)
+            try assertEqual(ops.records.first?.subject, "secret.zip")
         }
 
-        runTest("RecentOperations 关闭时不记录，关闭即清空已有记录") {
-            try assertTrue(!RecentOperations.shared.isEnabled, "共享实例默认关闭")
-            let ops = RecentOperations(capacity: 3, isEnabled: false)
+        runTest("RecentOperations 容量为0时不保留历史记录") {
+            let ops = RecentOperations(capacity: 0)
+            try assertEqual(ops.capacity, 0)
             ops.record(OperationRecord(kind: .compress, subject: "a", failure: "坏包"))
+            try assertTrue(ops.records.isEmpty, "容量为0不记录到内存")
+        }
+
+        runTest("RecentOperations 排序裁剪与恢复时按日期排序") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history-sort.json")
+            let ops = RecentOperations(capacity: 3, storageURL: fileURL)
+
+            let now = Date()
+            let r1 = OperationRecord(kind: .copy, subject: "1", date: now.addingTimeInterval(-30))
+            let r2 = OperationRecord(kind: .move, subject: "2", date: now.addingTimeInterval(-20))
+            let r3 = OperationRecord(kind: .createFile, subject: "3", date: now.addingTimeInterval(-10))
+            let r4 = OperationRecord(kind: .cut, subject: "4", date: now)
+
+            ops.record(r1)
+            ops.record(r2)
+            ops.record(r3)
+            ops.record(r4)
+            ops.record(OperationRecord(kind: .copy, subject: "older", date: now.addingTimeInterval(-100)))
+
+            try assertEqual(ops.records.map(\.subject), ["4", "3", "2"], "迟到的旧记录不能挤掉较新的记录")
+
+            let restored = RecentOperations(capacity: 2, storageURL: fileURL)
+            try assertEqual(restored.records.map(\.subject), ["4", "3"])
+        }
+
+        runTest("RecentOperations 重启恢复字段及UUID与权限保护") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history-fields.json")
+            let ops = RecentOperations(capacity: 10, storageURL: fileURL)
+
+            let customID = UUID()
+            let locationURL = URL(fileURLWithPath: "/tmp/project")
+            let results = [URL(fileURLWithPath: "/tmp/project/a.txt"), URL(fileURLWithPath: "/tmp/project/b.txt")]
+            let date = Date()
+
+            let record = OperationRecord(
+                id: customID,
+                kind: .createFile,
+                subject: "new-file.swift",
+                failure: "权限不足",
+                results: results,
+                cancelled: false,
+                date: date,
+                location: locationURL
+            )
+            ops.record(record)
+
+            let restored = RecentOperations(capacity: 10, storageURL: fileURL)
+            try assertEqual(restored.records.count, 1)
+            guard let item = restored.records.first else {
+                throw TestFailure(message: "恢复记录为空")
+            }
+            try assertEqual(item.id, customID, "UUID 保持一致")
+            try assertEqual(item.kind, .createFile)
+            try assertEqual(item.subject, "new-file.swift")
+            try assertEqual(item.failure, "权限不足")
+            try assertEqual(item.results, results)
+            try assertEqual(item.cancelled, false)
+            try assertEqual(item.location, locationURL)
+            try assertEqual(item.succeeded, false)
+
+            let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+            if let permissions = attrs[.posixPermissions] as? NSNumber {
+                try assertEqual(permissions.intValue, 0o600, "持久化文件权限必须为仅用户可读写 0o600")
+            }
+        }
+
+        runTest("RecentOperations 容量缩减与设置为0立即清空磁盘与内存") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history-capacity.json")
+            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
+
+            for i in 1...5 {
+                ops.record(OperationRecord(kind: .compress, subject: "item-\(i)"))
+            }
+            try assertEqual(ops.records.count, 5)
+            try assertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+
+            ops.setCapacity(2)
+            try assertEqual(ops.capacity, 2)
+            try assertEqual(ops.records.map(\.subject), ["item-5", "item-4"])
+
+            let reloaded = RecentOperations(capacity: 5, storageURL: fileURL)
+            try assertEqual(reloaded.records.map(\.subject), ["item-5", "item-4"])
+
+            ops.setCapacity(0)
+            try assertEqual(ops.capacity, 0)
             try assertTrue(ops.records.isEmpty)
-            try assertEqual(ops.unseenFailureCount, 0)
-            ops.isEnabled = true
-            ops.record(OperationRecord(kind: .compress, subject: "b", failure: "坏包"))
-            try assertEqual(ops.records.map(\.subject), ["b"])
-            ops.isEnabled = false
-            try assertTrue(ops.records.isEmpty, "关闭时丢弃已有记录")
-            try assertEqual(ops.unseenFailureCount, 0, "关闭时撤掉失败提示")
+            try assertTrue(!FileManager.default.fileExists(atPath: fileURL.path), "容量为0时磁盘文件必须被清空删除")
+        }
+
+        runTest("RecentOperations 清空后重载") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history-clear.json")
+            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
+            ops.record(OperationRecord(kind: .paste, subject: "paste-item"))
+            try assertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+
+            ops.clear()
+            try assertTrue(ops.records.isEmpty)
+            try assertTrue(!FileManager.default.fileExists(atPath: fileURL.path))
+
+            let reloaded = RecentOperations(capacity: 5, storageURL: fileURL)
+            try assertTrue(reloaded.records.isEmpty)
+            try assertNil(reloaded.persistenceError)
+        }
+
+        runTest("RecentOperations 损坏与不可写路径容错") {
+            let dir = makeTempDirectory()
+            let corruptURL = dir.appendingPathComponent("corrupt.json")
+            try "invalid json content".write(to: corruptURL, atomically: true, encoding: .utf8)
+
+            let corruptOps = RecentOperations(capacity: 5, storageURL: corruptURL)
+            try assertTrue(corruptOps.records.isEmpty, "损坏文件加载后内存保持为空")
+            try assertTrue(corruptOps.persistenceError != nil, "损坏文件需记录 persistenceError")
+            corruptOps.setCapacity(5)
+            try assertTrue(corruptOps.persistenceError != nil, "启动时同步相同容量不能抹掉加载失败信息")
+            try assertEqual(try String(contentsOf: corruptURL), "invalid json content")
+
+            let roDir = dir.appendingPathComponent("read-only-folder", isDirectory: true)
+            try FileManager.default.createDirectory(at: roDir, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: roDir.path)
+
+            let roOps = RecentOperations(capacity: 5, storageURL: roDir.appendingPathComponent("history.json"))
+            roOps.record(OperationRecord(kind: .copy, subject: "fallback-item"))
+            try assertEqual(roOps.records.map(\.subject), ["fallback-item"], "不可写时内存仍应保留")
+            try assertTrue(roOps.persistenceError != nil, "写入失败需记录 persistenceError")
+
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: roDir.path)
+        }
+
+        runTest("RecentOperations 无法识别的记录逐条跳过并留底原文件") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history.json")
+            let backupURL = dir.appendingPathComponent("history.unreadable.json")
+            let known = OperationRecord(kind: .copy, subject: "known", date: Date())
+            // 模拟降级：新版本写入了旧版本不认识的操作类型
+            var entries = try JSONSerialization.jsonObject(with: JSONEncoder().encode([known])) as! [[String: Any]]
+            var future = entries[0]
+            future["id"] = UUID().uuidString
+            future["kind"] = "futureKind"
+            future["subject"] = "from-newer-version"
+            entries.insert(future, at: 0)
+            let original = try JSONSerialization.data(withJSONObject: entries)
+            try original.write(to: fileURL)
+
+            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
+            try assertEqual(ops.records.map(\.subject), ["known"], "可识别的记录照常加载")
+            try assertNil(ops.persistenceError)
+            try assertEqual(try Data(contentsOf: backupURL), original, "覆盖前原文件必须留底")
+
+            ops.record(OperationRecord(kind: .paste, subject: "new"))
+            let reloaded = RecentOperations(capacity: 5, storageURL: fileURL)
+            try assertEqual(reloaded.records.map(\.subject), ["new", "known"])
+            try assertEqual(try Data(contentsOf: backupURL), original, "后续写入不能动备份")
+        }
+
+        runTest("RecentOperations 损坏文件先留底再覆盖") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history.json")
+            let backupURL = dir.appendingPathComponent("history.unreadable.json")
+            try "invalid json content".write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
+            try assertEqual(try String(contentsOf: backupURL), "invalid json content")
+            ops.record(OperationRecord(kind: .copy, subject: "after-corrupt"))
+            try assertNil(ops.persistenceError, "留底成功后可以正常保存")
+            try assertEqual(RecentOperations(capacity: 5, storageURL: fileURL).records.map(\.subject), ["after-corrupt"])
+            try assertEqual(try String(contentsOf: backupURL), "invalid json content")
+        }
+
+        runTest("RecentOperations 无法留底时不覆盖原文件") {
+            let dir = makeTempDirectory()
+            let fileURL = dir.appendingPathComponent("history.json")
+            try "invalid json content".write(to: fileURL, atomically: true, encoding: .utf8)
+            // 备份位置被一个删不掉的目录占住，留底必然失败
+            let locked = dir.appendingPathComponent("history.unreadable.json/locked", isDirectory: true)
+            try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try "x".write(to: locked.appendingPathComponent("f"), atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: locked.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
+
+            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
+            ops.record(OperationRecord(kind: .copy, subject: "kept-in-memory"))
+            try assertEqual(ops.records.map(\.subject), ["kept-in-memory"])
+            try assertTrue(ops.persistenceError != nil, "暂停保存需要提示")
+            try assertEqual(try String(contentsOf: fileURL), "invalid json content", "未留底的文件不能被覆盖")
+
+            ops.clear()
+            try assertTrue(!FileManager.default.fileExists(atPath: fileURL.path), "用户主动清空时可以删除")
+            ops.record(OperationRecord(kind: .copy, subject: "after-clear"))
+            try assertEqual(RecentOperations(capacity: 5, storageURL: fileURL).records.map(\.subject), ["after-clear"],
+                            "清空后恢复正常保存")
+        }
+
+        runTest("RecentOperations 容量0仍发完成事件") {
+            var receivedRecord: OperationRecord?
+            var onMainThread = false
+            let observer = NotificationCenter.default.addObserver(
+                forName: RecentOperations.didFinishNotification,
+                object: nil,
+                queue: nil
+            ) { notif in
+                onMainThread = Thread.isMainThread
+                receivedRecord = notif.object as? OperationRecord
+            }
+            defer { NotificationCenter.default.removeObserver(observer) }
+
+            let ops = RecentOperations(capacity: 0, storageURL: nil)
+            let rec = OperationRecord(kind: .cut, subject: "zero-capacity-event.txt")
+            ops.record(rec)
+
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+            try assertTrue(onMainThread, "完成事件必须在主线程发出")
+            try assertEqual(receivedRecord?.subject, "zero-capacity-event.txt")
+            try assertEqual(receivedRecord?.kind, .cut)
+            try assertTrue(ops.records.isEmpty, "容量为0时不保留在内存历史中")
+        }
+
+        runTest("RecentOperations 清空历史不影响独立UndoCenter实例") {
+            let dir = makeTempDirectory()
+            let center = UndoCenter(stateDirectory: dir)
+            let fp = FileFingerprint(fileNumber: 1, device: 1, isDirectory: false, modificationDate: nil, size: 0)
+            let move = UndoRecord(kind: .move, name: "Projects", items: [
+                .init(current: URL(fileURLWithPath: "/tmp/Projects/a"), original: URL(fileURLWithPath: "/tmp/a"), fingerprint: fp)
+            ], cutQueueBefore: nil, finderSnapshot: nil)
+            center.register(move)
+            try assertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(UndoMenuState.fileName).path))
+
+            let historyURL = dir.appendingPathComponent("operation-history.json")
+            let ops = RecentOperations(capacity: 5, storageURL: historyURL)
+            ops.record(OperationRecord(kind: .move, subject: "Projects"))
+            try assertTrue(FileManager.default.fileExists(atPath: historyURL.path))
+
+            ops.clear()
+            try assertTrue(ops.records.isEmpty)
+            try assertTrue(!FileManager.default.fileExists(atPath: historyURL.path), "历史记录文件被删除")
+
+            try assertEqual(center.current, move, "UndoCenter 内存记录保持完整")
+            try assertEqual(UndoMenuState.read(from: dir), UndoMenuState(kind: .move, count: 1, name: "Projects"), "Undo 状态文件保持完整")
+        }
+
+        runTest("RecentOperations capacityKey与范围限制") {
+            try assertEqual(RecentOperations.capacityKey, "operationHistoryLimit")
+            let opsClampMax = RecentOperations(capacity: 999)
+            try assertEqual(opsClampMax.capacity, 500, "容量最多500")
+            let opsClampMin = RecentOperations(capacity: -10)
+            try assertEqual(opsClampMin.capacity, 0, "容量最小为0")
         }
 
         runTest("OperationRecord.summary 压缩长错误输出") {

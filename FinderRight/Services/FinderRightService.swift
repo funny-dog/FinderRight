@@ -125,7 +125,14 @@ final class FinderRightService {
         case "ping":
             return ping(req)
         case "createFile":
-            return createFile(req)
+            let response = createFile(req)
+            if !response.success {
+                RecentOperations.shared.record(OperationRecord(
+                    kind: .createFile, subject: req.payload["baseName"]?.stringValue ?? L("新建文件"),
+                    failure: response.message,
+                    location: req.payload["directory"]?.stringValue.map { URL(fileURLWithPath: $0) }))
+            }
+            return response
         case "compressZip":
             return compressZip(req)
         case "decompress":
@@ -188,6 +195,8 @@ final class FinderRightService {
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
                 registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
+                RecentOperations.shared.record(OperationRecord(kind: .createFile, subject: fileURL.lastPathComponent,
+                                                                results: [fileURL], location: dirURL))
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 return IPCResponse(id: req.id, success: true, message: fileURL.path)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
@@ -237,6 +246,8 @@ final class FinderRightService {
             do {
                 try data.write(to: fileURL, options: .withoutOverwriting)
                 registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
+                RecentOperations.shared.record(OperationRecord(kind: .createFile, subject: fileURL.lastPathComponent,
+                                                                results: [fileURL], location: dirURL))
                 NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 return IPCResponse(id: req.id, success: true, message: fileURL.path)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
@@ -269,11 +280,11 @@ final class FinderRightService {
                     NSWorkspace.shared.activateFileViewerSelecting([zip])
                 }
                 self?.serviceLog("compressZip succeeded: \(zip.path)")
-                RecentOperations.shared.record(OperationRecord(kind: .compress, subject: subject, results: [zip]))
+                RecentOperations.shared.record(OperationRecord(kind: .compress, subject: subject, results: [zip], location: dir))
             } catch {
                 self?.serviceLog("compressZip failed: \(error)")
                 RecentOperations.shared.record(OperationRecord(
-                    kind: .compress, subject: subject, failure: Self.describe(compressError: error)))
+                    kind: .compress, subject: subject, failure: Self.describe(compressError: error), location: dir))
             }
         }
 
@@ -296,18 +307,18 @@ final class FinderRightService {
             switch self.performDecompress(url: url) {
             case .success(let output):
                 self.registerUndo(.decompress, name: output.lastPathComponent, items: [(output, nil)])
-                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, results: [output]))
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, results: [output], location: url.deletingLastPathComponent()))
             case .failure(let failure) where failure.cancelled:
-                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, cancelled: true))
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, cancelled: true, location: url.deletingLastPathComponent()))
             case .failure(let failure):
-                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, failure: failure.message))
+                RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, failure: failure.message, location: url.deletingLastPathComponent()))
             }
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理解压任务，正在后台处理")
     }
 
-    /// 后台操作失败的用户可读原因（进入「最近操作」）
+    /// 后台操作失败的用户可读原因（显示在操作历史中）
     private struct OperationFailure: Error {
         let message: String
         /// 用户主动取消（加密包的密码框点了「取消」），不算失败
@@ -757,6 +768,12 @@ final class FinderRightService {
         // 全是已在队列里的项时没有新动作，不覆盖上一条撤销记录
         if result.added > 0 {
             registerUndo(.cut, name: "", items: [], cutQueueBefore: result.before, displayCount: result.added)
+            RecentOperations.shared.record(OperationRecord(kind: .cut, subject: Self.subject(forPaths: paths),
+                                                            results: paths.map { URL(fileURLWithPath: $0) },
+                                                            location: paths.first.map { URL(fileURLWithPath: $0).deletingLastPathComponent() }))
+        } else if !result.response.success {
+            RecentOperations.shared.record(OperationRecord(kind: .cut, subject: Self.subject(forPaths: paths),
+                                                            failure: result.response.message))
         }
         return result.response
     }
@@ -889,12 +906,12 @@ final class FinderRightService {
             RecentOperations.shared.record(OperationRecord(
                 kind: .paste, subject: subject,
                 failure: String(format: L("%d 项未能移动：%@"), failedPaths.count, err),
-                results: pastedPaths))
+                results: pastedPaths, location: destDir))
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
             // 全部被跳过（源已不存在、或粘贴回原目录）时没有可报告的结果
             if !pastedPaths.isEmpty {
-                RecentOperations.shared.record(OperationRecord(kind: .paste, subject: subject, results: pastedPaths))
+                RecentOperations.shared.record(OperationRecord(kind: .paste, subject: subject, results: pastedPaths, location: destDir))
             }
         }
     }
@@ -924,7 +941,7 @@ final class FinderRightService {
             let subject = Self.subject(forPaths: items)
             RecentOperations.shared.record(OperationRecord(
                 kind: mode == .move ? .move : .copy, subject: subject,
-                failure: String(format: L("常用目录不存在：%@"), destination)))
+                failure: String(format: L("常用目录不存在：%@"), destination), location: URL(fileURLWithPath: destination)))
             return IPCResponse(id: req.id, success: false, message: L("常用目录不存在"))
         }
 
@@ -984,10 +1001,10 @@ final class FinderRightService {
             let format = mode == .move ? L("%d 项未能移动：%@") : L("%d 项未能复制：%@")
             serviceLog("transferItems(\(mode.rawValue)) completed with \(failed) failure(s): \(firstError)")
             RecentOperations.shared.record(OperationRecord(
-                kind: kind, subject: subject, failure: String(format: format, failed, firstError), results: done))
+                kind: kind, subject: subject, failure: String(format: format, failed, firstError), results: done, location: destDir))
         } else if !done.isEmpty {
             serviceLog("transferItems(\(mode.rawValue)) succeeded: \(done.count) item(s) to \(destDir.path)")
-            RecentOperations.shared.record(OperationRecord(kind: kind, subject: subject, results: done))
+            RecentOperations.shared.record(OperationRecord(kind: kind, subject: subject, results: done, location: destDir))
         }
     }
 
@@ -1069,7 +1086,7 @@ final class FinderRightService {
         }
     }
 
-    // MARK: - 最近操作文案
+    // MARK: - 操作对象名称
 
     /// 单项显示文件名，多项显示「N 个项目」
     private static func subject(forPaths paths: [String]) -> String {

@@ -21,6 +21,7 @@ struct SettingsView: View {
         case shortcuts = "快捷键"
         case tools = "终端"
         case editors = "编辑器"
+        case history = "操作历史"
         case permissions = "权限与扩展"
         case about = "关于"
 
@@ -33,6 +34,7 @@ struct SettingsView: View {
             case .newFile: return "doc.badge.plus"
             case .tools: return "terminal"
             case .editors: return "curlybraces"
+            case .history: return "clock.arrow.circlepath"
             case .permissions: return "checkmark.shield"
             case .about: return "info.circle"
             }
@@ -48,6 +50,7 @@ struct SettingsView: View {
             case .newFile: return "newfile"
             case .tools: return "tools"
             case .editors: return "editors"
+            case .history: return "history"
             case .permissions: return "permissions"
             case .about: return "about"
             }
@@ -86,6 +89,7 @@ struct SettingsView: View {
         case .newFile: NewFileTab()
         case .tools: ToolsTab()
         case .editors: EditorsTab()
+        case .history: OperationHistoryView()
         case .permissions: PermissionsTab()
         case .about: AboutTab()
         }
@@ -174,7 +178,6 @@ struct GeneralTab: View {
     @AppStorage(UpdateChecker.automaticUpdatesKey) private var automaticUpdates = false
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-    @AppStorage("showRecentActivity") private var showRecentActivity = false
     @AppStorage("showDockIcon") private var showDockIcon = false
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
@@ -206,7 +209,8 @@ struct GeneralTab: View {
     private var launchSection: some View {
         FRSection("启动") {
             FRCard {
-                FRRow(title: Text("开机自动启动"), subtitle: Text("登录时自动运行 FinderRight")) {
+                // 原说明（仅在项目中保留）：登录时自动运行 FinderRight
+                FRRow(title: Text("开机自动启动")) {
                     FRSwitch(label: "开机自动启动", isOn: Binding(
                         get: { launchAtLogin },
                         set: { updateLaunchAtLogin(to: $0) }
@@ -246,12 +250,12 @@ struct GeneralTab: View {
     private var updateSection: some View {
         FRSection("更新") {
             FRCard {
-                FRRow(title: Text("自动检查并安装更新"),
-                      subtitle: Text("开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。")) {
+                // 原说明（仅在项目中保留）：开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。
+                FRRow(title: Text("自动检查并安装更新")) {
                     FRSwitch(label: "自动检查并安装更新", isOn: $automaticUpdates)
                 }
             }
-            FRFootnote(Text("关闭后不再发起自动更新；已经开始的更新仍会完成。"))
+            // 原说明（仅在项目中保留）：关闭后不再发起自动更新；已经开始的更新仍会完成。
         }
     }
 
@@ -323,16 +327,10 @@ struct GeneralTab: View {
 
                 FRDivider()
 
-                FRRow(title: Text("显示菜单栏图标"), subtitle: Text("关闭后，菜单栏不显示 FinderRight 图标")) {
+                // 原说明（仅在项目中保留）：关闭后，菜单栏不显示 FinderRight 图标
+                FRRow(title: Text("显示菜单栏图标")) {
                     FRSwitch(label: "显示菜单栏图标", isOn: $showMenuBarIcon)
                 }
-
-                FRDivider()
-
-                FRRow(title: Text("显示最近操作"), subtitle: Text("在菜单栏图标中列出最近操作与「撤销」，失败时图标变红。关闭后撤销仍可用 ⌘Z 或访达右键菜单")) {
-                    FRSwitch(label: "显示最近操作", isOn: $showRecentActivity)
-                }
-                .disabled(!showMenuBarIcon)
 
                 FRDivider()
 
@@ -690,10 +688,8 @@ struct FeaturesTab: View {
     private var badgeSection: some View {
         FRSection("剪切角标") {
             FRCard {
-                FRRow(
-                    title: Text("自动解决角标冲突"),
-                    subtitle: Text("其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。")
-                ) {
+                // 原说明（仅在项目中保留）：其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。
+                FRRow(title: Text("自动解决角标冲突")) {
                     FRSwitch(label: "自动解决角标冲突", isOn: Binding(
                         get: { badgeOwnershipReclaim },
                         set: { newValue in
@@ -704,7 +700,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。"))
+            // 原说明（仅在项目中保留）：注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。
         }
     }
 

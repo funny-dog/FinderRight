@@ -27,6 +27,14 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-automatic-updates.swift -o "$KIT_BUILD_DIR/test-automatic-updates"
 "$KIT_BUILD_DIR/test-automatic-updates"
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/Components/FRDialog.swift FinderRight/Views/OperationHistoryView.swift \
+  scripts/test-operation-history.swift -o "$KIT_BUILD_DIR/test-operation-history"
+"$KIT_BUILD_DIR/test-operation-history"
+
 swiftc -typecheck -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

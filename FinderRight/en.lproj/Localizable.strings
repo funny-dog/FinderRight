@@ -90,8 +90,6 @@
 "开机自动启动" = "Launch at Login";
 "登录时自动运行 FinderRight" = "Run FinderRight automatically at login";
 "显示菜单栏图标" = "Show Menu Bar Icon";
-"显示最近操作" = "Show Recent Activity";
-"在菜单栏图标中列出最近操作与「撤销」，失败时图标变红。关闭后撤销仍可用 ⌘Z 或访达右键菜单" = "List recent activity and Undo in the menu bar icon; the icon turns red on failures. When off, you can still undo with ⌘Z or the Finder context menu";
 "关闭后，菜单栏不显示 FinderRight 图标" = "When off, FinderRight won't appear in the menu bar";
 "显示程序坞图标" = "Show Dock Icon";
 "关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
@@ -455,6 +453,8 @@
 "已移动 %@" = "Moved %@";
 "移动失败：%@" = "Move failed: %@";
 "已复制 %@" = "Copied %@";
+"已移动 %d 项到“%@”" = "Moved %d item(s) to “%@”";
+"已复制 %d 项到“%@”" = "Copied %d item(s) to “%@”";
 "复制失败：%@" = "Copy failed: %@";
 "常用目录不存在：%@" = "The favorite folder no longer exists: %@";
 "不能放进它自身内部" = "A folder can't be placed inside itself";
@@ -640,3 +640,78 @@
 "自动检查并安装更新" = "Automatically check for and install updates";
 "开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。" = "Check immediately when enabled, then every 6 hours while running. Download and install when idle, then restart automatically. Off by default.";
 "关闭后不再发起自动更新；已经开始的更新仍会完成。" = "Turning this off stops future automatic updates; an update already in progress will still finish.";
+
+/* Operation history */
+"操作历史" = "Operation History";
+"压缩文件" = "Compress files";
+"解压文件" = "Extract files";
+"粘贴文件" = "Paste files";
+"移动文件" = "Move files";
+"复制文件" = "Copy files";
+"撤销操作" = "Undo an action";
+"已取消" = "Cancelled";
+"已完成" = "Completed";
+"未完成" = "Not completed";
+"部分完成" = "Partially completed";
+"今天" = "Today";
+"昨天" = "Yesterday";
+"无法访问文件或写入目标文件夹。请检查文件夹权限，必要时在设置中授予完全磁盘访问权限。" = "Unable to access the files or write to the destination. Check folder permissions and, if needed, grant Full Disk Access in Settings.";
+"磁盘剩余空间不足。请腾出空间后重试。" = "There is not enough free disk space. Free up space and try again.";
+"压缩包需要正确的密码，或使用了暂不支持的加密方式。请确认密码与压缩包格式。" = "The archive needs the correct password or uses unsupported encryption. Check the password and archive format.";
+"找不到所需的文件或文件夹。它可能已被移动或删除，请确认位置后重试。" = "A required file or folder could not be found. It may have been moved or deleted. Check its location and try again.";
+"目标位置已有同名项目。请处理同名文件后重试。" = "An item with the same name already exists at the destination. Resolve the name conflict and try again.";
+"部分项目已完成，其余项目未能处理。请查看详细信息，确认未完成的文件后再重试。" = "Some items were processed, but others could not be completed. Review the details to identify unfinished files before trying again.";
+"未能解开这个压缩包。请确认文件完整、格式受支持，再重试。" = "The archive could not be extracted. Make sure it is complete and uses a supported format, then try again.";
+"这次操作未能完成。请确认文件仍在原处、目标文件夹可以写入，再重试。" = "The action could not be completed. Check that the files are still in place and the destination is writable, then try again.";
+"查看文件操作的结果，快速找到处理后的文件。" = "Review your file operations and find the resulting files.";
+"保留历史记录" = "Keep operation history";
+"记录新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果" = "Keep results for creating, cutting, pasting, moving, copying, compressing, extracting and undoing files";
+"不保留" = "Do not keep history";
+"最近 50 条" = "Last 50 actions";
+"最近 100 条" = "Last 100 actions";
+"最近 500 条" = "Last 500 actions";
+"仅保存在这台 Mac，重启后仍保留。超出条数时移除最早的记录，不会删除你的文件。" = "Stored only on this Mac and kept after restarting. The oldest entries are removed when the limit is reached; your files are not deleted.";
+"历史记录暂时无法保存到本机，当前记录仍可查看。请检查磁盘空间与文件夹权限。" = "History cannot be saved on this Mac right now. Current entries are still available. Check disk space and folder permissions.";
+"%lld 条" = "%lld entries";
+"清空历史" = "Clear history";
+"历史记录用于回看操作，不代表每条都能撤销。当前仍通过访达右键或 ⌘Z 撤销上一次操作。" = "History is for reviewing actions; not every entry can be undone. Use Finder’s context menu or ⌘Z to undo the last action.";
+"操作历史已关闭" = "Operation history is off";
+"还没有操作记录" = "No actions yet";
+"选择保留条数后，新的文件操作会出现在这里。不保留历史时，操作失败仍会提示。" = "Choose a history limit to see new file operations here. Failed background operations are still reported when history is off.";
+"用 FinderRight 新建、移动或压缩文件后，就能在这里查看结果。" = "Create, move or compress files with FinderRight to see the results here.";
+"减少保留的历史记录？" = "Keep fewer history entries?";
+"超出新条数的较早记录会被移除。这只影响历史记录，不会删除文件或改变撤销状态。" = "Older entries beyond the new limit will be removed. This only affects history; it does not delete files or change what can be undone.";
+"确认调整" = "Change limit";
+"清空操作历史？" = "Clear operation history?";
+"技术信息" = "Technical details";
+"找不到结果文件" = "Result files not found";
+"这些文件可能已被移动、改名或删除。历史记录保留的是操作完成时的位置。" = "These files may have been moved, renamed or deleted. History keeps their location at the time the action finished.";
+"%@未完成：%@。%@" = "%@ was not completed: %@. %@";
+
+"操作历史：保留最近 %d 条" = "Operation history: keep the last %d entries";
+"操作历史：%@" = "Operation history: %@";
+
+"已完成 %lld 项，其余项目未完成" = "%lld items completed; the remaining items could not be completed";
+
+/* History search, filters and layout */
+"全部操作" = "All actions";
+"操作类型" = "Action";
+"操作状态" = "Status";
+"搜索操作、文件名或位置" = "Search actions, files or locations";
+"搜索操作历史" = "Search operation history";
+"可匹配操作名称、文件名、路径和失败说明；多个关键词用空格分隔。" = "Search action names, filenames, paths and failure details. Separate keywords with spaces to match them together.";
+"清除搜索" = "Clear search";
+"重置筛选" = "Reset filters";
+"全部" = "All";
+"完成时间" = "Finished";
+"所在位置" = "Location";
+"结果文件" = "Results";
+"另外 %lld 项" = "and %lld more";
+"打开所在文件夹" = "Open Folder";
+"找不到这个文件夹" = "Folder not found";
+"它可能已被移动、改名或删除。历史记录保留的是操作发生时的位置。" = "It may have been moved, renamed or deleted. History keeps the location at the time of the action.";
+"现有的历史记录会全部移除，之后也不再记录。这只影响历史记录，不会删除文件或改变撤销状态。" = "All existing entries will be removed and new actions will no longer be recorded. This only affects history; it does not delete files or change what can be undone.";
+"没有找到匹配的记录" = "No matching actions";
+"试试其他关键词，或重置操作类型和状态筛选。" = "Try different keywords, or reset the action and status filters.";
+"%lld / %lld 条" = "%lld of %lld entries";
+"会清空所有操作历史，包括未显示的记录。不会删除文件，也不会影响当前可撤销的操作。清空后无法恢复这些记录。" = "All operation history will be cleared, including entries hidden by filters. Your files and the current undo action are unaffected. Cleared entries cannot be restored.";
