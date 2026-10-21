@@ -81,7 +81,7 @@ Homebrew 安装会自动删除此 App 的隔离属性，首次打开不会被 Ga
 
 #### 方式二：DMG 手动安装
 
-1. 从官网镜像下载 **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)**，与 GitHub 正式 Release 使用同一份安装包。
+1. 从官网镜像下载 **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)**，与 GitHub 正式 Release 使用同一份安装包；中国大陆访问会自动转到 [Gitee 发行版](https://gitee.com/no_ink_no_book/FinderRight/releases) 下载。
 2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`。
 3. **首次打开**：当前版本使用自签名证书，未经 Apple 公证。确认下载来自本项目正式 Release 后，尝试打开 App；如被系统拦截，可选择以下任一方式放行：
    - **系统设置放行**：前往 **系统设置 → 隐私与安全性 → 仍要打开**，按提示确认（见 [Apple 说明](https://support.apple.com/zh-cn/102445)）。*macOS 15 起不能通过右键打开绕过此检查。*
@@ -267,7 +267,7 @@ Homebrew automatically removes this App's quarantine attribute upon installation
 
 #### Method 2: DMG Manual Installation
 
-1. Download **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)** from the website mirror, which serves the same installer as the official GitHub release.
+1. Download **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)** from the website mirror, which serves the same installer as the official GitHub release. Visitors from mainland China are redirected to the [Gitee release](https://gitee.com/no_ink_no_book/FinderRight/releases).
 2. Open the DMG and drag `FinderRight.app` into `Applications`.
 3. **First launch**: This release is self-signed and not notarized by Apple. After verifying that it came from this project's official Release, try opening the App. If blocked, choose either option below:
    - **Via System Settings**: Go to **System Settings → Privacy & Security → Open Anyway** and confirm (see [Apple's instructions](https://support.apple.com/en-us/102445)). *Starting with macOS 15, right-clicking Open no longer bypasses this check.*

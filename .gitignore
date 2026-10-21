@@ -23,6 +23,8 @@ Package.resolved
 *.zip
 *.dmg
 *.sha256
+# 官网下载镜像由 sync-website-downloads.sh / sync-gitee-release.sh 生成
+website/dist/download/
 
 # Cloudflare（在仓库根运行 wrangler 会产生账号缓存）
 .wrangler/

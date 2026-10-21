@@ -435,6 +435,57 @@ test("官网镜像优先提供四类资产，GitHub 不可用也能下载", asyn
     }
 });
 
+// Node 的 Request 没有 cf 字段，按 Cloudflare 运行时补上访客国家。
+function requestFrom(country, path, init) {
+    const request = new Request(BASE_URL + path, init);
+    Object.defineProperty(request, "cf", { value: { country } });
+    return request;
+}
+
+function assetsWithMarker(marker) {
+    return { ASSETS: { async fetch(request) {
+        const path = new URL(request.url).pathname;
+        if (path === "/download/gitee-latest.txt") {
+            return marker === null ? new Response("missing", { status: 404 }) : new Response(marker);
+        }
+        return new Response("mirror bytes");
+    } } };
+}
+
+test("国内访客的安装包重定向到已同步的 Gitee 发行版", async () => {
+    fetchHandler = async () => { throw new Error("不应回源 GitHub"); };
+    for (const [path, location] of [
+        ["/download/FinderRight.dmg", "https://gitee.com/no_ink_no_book/FinderRight/releases/download/v1.10.1/FinderRight.dmg"],
+        ["/download/v1.10.1/FinderRight-v1.10.1.zip", "https://gitee.com/no_ink_no_book/FinderRight/releases/download/v1.10.1/FinderRight-v1.10.1.zip"],
+    ]) {
+        for (const method of ["GET", "HEAD"]) {
+            const response = await worker.fetch(requestFrom("CN", path, { method }), assetsWithMarker("v1.10.1\n"));
+            assert.equal(response.status, 302);
+            assert.equal(response.headers.get("Location"), location);
+            assert.equal(response.headers.get("Cache-Control"), "no-store");
+            assert.equal(response.headers.get("X-FinderRight-Download-Source"), "gitee");
+        }
+    }
+});
+
+test("校验和、境外访客、未同步或版本不一致时仍由官网镜像提供", async () => {
+    fetchHandler = async () => { throw new Error("不应回源 GitHub"); };
+    for (const [country, path, marker] of [
+        ["CN", "/download/FinderRight.dmg.sha256", "v1.10.1"],
+        ["CN", "/download/v1.10.1/FinderRight-v1.10.1.zip.sha256", "v1.10.1"],
+        ["US", "/download/FinderRight.dmg", "v1.10.1"],
+        [undefined, "/download/FinderRight.dmg", "v1.10.1"],
+        ["CN", "/download/FinderRight.dmg", null],
+        ["CN", "/download/FinderRight.dmg", "not-a-tag"],
+        ["CN", "/download/v1.10.1/FinderRight-v1.10.1.zip", "v1.10.0"],
+    ]) {
+        const response = await worker.fetch(requestFrom(country, path), assetsWithMarker(marker));
+        assert.equal(response.status, 200, `${country} ${path} ${marker}`);
+        assert.equal(response.headers.get("X-FinderRight-Download-Source"), "cloudflare-assets");
+        assert.equal(await response.text(), "mirror bytes");
+    }
+});
+
 test("镜像 HEAD 原样返回，镜像缺失或异常仍可回退 GitHub", async () => {
     let githubCalls = 0;
     fetchHandler = async () => {

@@ -51,6 +51,8 @@ else:
     history = mirror / "v0.9.0/old.zip"
     history.parent.mkdir(parents=True)
     history.write_bytes(b"keep old version")
+    marker = mirror / "gitee-latest.txt"
+    marker.write_text("v1.9.0\n")
 
     def run():
         return subprocess.run(["bash", str(script)], env=env, cwd=root, capture_output=True, text=True)
@@ -60,6 +62,10 @@ else:
     for name, content in payloads.items():
         destination = mirror / name if name.startswith("FinderRight.dmg") else mirror / "v1.10.1" / name
         assert destination.read_bytes() == content
+    # 旧版本的 Gitee 标记要撤掉；同版本标记保留。
+    assert not marker.exists()
+    marker.write_text("v1.10.1\n")
+    assert run().returncode == 0 and marker.read_text() == "v1.10.1\n"
     before = {p.relative_to(mirror): p.read_bytes() for p in mirror.rglob("*") if p.is_file()}
     cases = ["checksum", "filename", "digest", "size", "oversized", "draft", "prerelease", "tag", "state", "missing"]
     for case in cases:
@@ -84,5 +90,5 @@ else:
         assert result.returncode != 0, case
         after = {p.relative_to(mirror): p.read_bytes() for p in mirror.rglob("*") if p.is_file()}
         assert after == before, f"{case}: existing mirror changed"
-    print("✓ 镜像同步：原始字节、历史版本保留与 10 类校验失败保护均通过")
+    print("✓ 镜像同步：原始字节、历史版本保留、Gitee 标记更新与 10 类校验失败保护均通过")
 PY

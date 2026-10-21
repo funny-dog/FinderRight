@@ -72,5 +72,9 @@ with tempfile.TemporaryDirectory(prefix="finderright-mirror-") as folder:
     finally:
         for temporary, _ in staged:
             temporary.unlink(missing_ok=True)
+# 新版本尚未同步到 Gitee 时撤掉旧标记，国内下载先回到官网镜像，由 sync-gitee-release.sh 重新写入。
+marker = destination / "gitee-latest.txt"
+if marker.exists() and marker.read_text().strip() != tag:
+    marker.unlink()
 print(f"已同步 {tag} 的四个原始发布资产，SHA-256 校验通过")
 PY

@@ -25,7 +25,7 @@ node worker/test.mjs
 
 深浅色主题由 `<html data-theme>` 控制：`dist/index.html` 的内联脚本在首次绘制前按本地记录或系统偏好设置主题，颜色全部定义为 `dist/style.css` 顶部的 CSS 变量，新增颜色时两套主题都要补齐。
 
-下载入口是站内路径 `/download/FinderRight.dmg`，优先由 Cloudflare Static Assets 提供已发布安装包，无需为每次下载回源 GitHub；`/download/FinderRight.dmg.sha256` 提供对应校验和。镜像缺失或服务异常时，才使用 GitHub 代理及原有兜底。发版时必须一并上传 `FinderRight.dmg.sha256`（`scripts/build.sh` 生成，`scripts/release.sh` 校验并上传），正式发布后执行下方镜像同步和部署步骤。应用功能、系统要求和安装说明更新时，应同步核实主仓库 README。
+下载入口是站内路径 `/download/FinderRight.dmg`，优先由 Cloudflare Static Assets 提供已发布安装包，无需为每次下载回源 GitHub；`/download/FinderRight.dmg.sha256` 提供对应校验和。镜像缺失或服务异常时，才使用 GitHub 代理及原有兜底。中国大陆访客的安装包请求会重定向到 Gitee 发行版，见下方「国内下载」。发版时必须一并上传 `FinderRight.dmg.sha256`（`scripts/build.sh` 生成，`scripts/release.sh` 校验并上传），正式发布后执行下方镜像同步和部署步骤。应用功能、系统要求和安装说明更新时，应同步核实主仓库 README。
 
 ## 下载与更新通道代理
 
@@ -38,6 +38,13 @@ node worker/test.mjs
 - 镜像缺失或异常才回源 GitHub；GitHub 上游超时（30 秒）、抛错或返回非 2xx 时，`302` 跳回同名资产。
 - GET 响应头 `X-FinderRight-Download-Source` 标明 `cloudflare-assets` 或 `github`，DMG 使用 `application/x-apple-diskimage` 类型。HEAD 原样返回资产响应；平台可能省略其 `Content-Length`，文件大小可从 GET 或分片响应的 `Content-Range` 获取。
 - 固定文件名内容随版本变化，`Cache-Control` 只给 5 分钟（`public, max-age=300`），避免发版后长时间拿到旧包。
+
+### 国内下载（Gitee）
+
+- 国内直连 Cloudflare 的实测速度只有几 KB/s，Gitee 发行版直连可达 MB/s 级。`request.cf.country` 为 `CN` 时，DMG 与固定版本 ZIP 返回 `302` 到 `https://gitee.com/no_ink_no_book/FinderRight/releases/download/<tag>/<文件名>`，响应头 `X-FinderRight-Download-Source: gitee`、`Cache-Control: no-store`。
+- 只有 `dist/download/gitee-latest.txt` 中的标签与请求版本一致时才重定向；标记缺失、格式不对或版本不同都照常走官网镜像。`.sha256` 始终由官网提供，与安装包来自不同主机；App 更新另有 SHA-256 与同证书签名校验。
+- 标记由 `scripts/sync-gitee-release.sh` 在四个资产经 Gitee 公开地址回读、摘要一致后写入；`sync-website-downloads.sh` 同步到新版本时会删除旧标记。需临时停用 Gitee 时删除标记后重新部署即可。
+- 脚本需要环境变量 `GITEE_TOKEN`（Gitee 私人令牌，只放请求头，不写入仓库）；仓库默认 `no_ink_no_book/FinderRight`，可用 `GITEE_REPO` 覆盖。Gitee 仓库需先从 GitHub 同步到包含对应标签。
 
 ### 固定版本资产代理
 
@@ -62,6 +69,7 @@ node worker/test.mjs
 ```sh
 npx --yes wrangler@4.147.0 login --scopes account:read user:read workers_scripts:write
 bash ../scripts/sync-website-downloads.sh
+GITEE_TOKEN=<令牌> bash ../scripts/sync-gitee-release.sh
 npx --yes wrangler@4.147.0 deploy --dry-run
 npx --yes wrangler@4.147.0 deploy
 ```

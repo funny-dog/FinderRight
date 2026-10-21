@@ -4,6 +4,7 @@ const RELEASE_API = "https://api.github.com/repos/funny-dog/FinderRight/releases
 const DMG_FILES = new Set(["FinderRight.dmg", "FinderRight.dmg.sha256"]);
 const VERSIONED_ZIP = /^\/download\/(v\d+\.\d+\.\d+)\/FinderRight-(v\d+\.\d+\.\d+)\.zip(\.sha256)?$/;
 const UPSTREAM_TIMEOUT_MS = 30_000;
+const GITEE = "https://gitee.com/no_ink_no_book/FinderRight";
 
 function gatewayError(error) {
     const timedOut = error?.name === "AbortError" || error?.name === "TimeoutError";
@@ -94,7 +95,33 @@ async function latestRelease(request, url, ctx) {
     return request.method === "HEAD" ? new Response(null, response) : response;
 }
 
+// 国内直连 Cloudflare 只有几 KB/s；已同步到 Gitee 的安装包改由 Gitee 发行版提供。
+// 校验和仍由官网提供，与安装包来自不同主机；标记缺失或版本不一致时照常走官网镜像。
+async function giteeDownloadURL(request, name, version, env) {
+    if (request.cf?.country !== "CN" || name.endsWith(".sha256") || !env?.ASSETS) return null;
+    try {
+        const marker = await env.ASSETS.fetch(new Request(new URL("/download/gitee-latest.txt", request.url)));
+        if (!marker.ok) {
+            await marker.body?.cancel();
+            return null;
+        }
+        const tag = (await marker.text()).trim();
+        if (!/^v\d+\.\d+\.\d+$/.test(tag) || (version && version !== tag)) return null;
+        return `${GITEE}/releases/download/${tag}/${name}`;
+    } catch (error) {
+        console.error("gitee marker failed", error);
+        return null;
+    }
+}
+
 async function download(request, name, version, env) {
+    const gitee = await giteeDownloadURL(request, name, version, env);
+    if (gitee) {
+        return new Response(null, {
+            status: 302,
+            headers: { Location: gitee, "Cache-Control": "no-store", "X-FinderRight-Download-Source": "gitee" },
+        });
+    }
     const upstreamURL = version ? `${REPO}/releases/download/${version}/${name}` : `${REPO}/releases/latest/download/${name}`;
     // 固定版本错误交给 App 切换；网页 DMG 保留现有 302 降级。
     const failure = error => version ? gatewayError(error) : new Response(null, {
