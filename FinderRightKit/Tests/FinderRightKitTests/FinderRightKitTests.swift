@@ -1781,6 +1781,26 @@ struct FinderRightKitTestsRunner {
             try assertEqual(placedEmpty.lastPathComponent, "empty")
         }
 
+        runTest("ExtractedOutput 以 ._ 开头的普通文件计入顶层项，不随暂存目录丢失") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let root = try makeExtractedRoot(in: work, ["foo/", "._notes.txt"])
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "pack")
+            try assertEqual(placed.lastPathComponent, "pack", "两项应整体放入文件夹")
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("._notes.txt").path))
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("foo/inner.txt").path))
+        }
+
+        runTest("ExtractedOutput 顶层 AppleDouble 与 __MACOSX 一样忽略") {
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let root = try makeExtractedRoot(in: work, ["foo/"])
+            try Data([0x00, 0x05, 0x16, 0x07, 0x00, 0x02, 0x00, 0x00]).write(to: root.appendingPathComponent("._foo"))
+            let placed = try ExtractedOutput.place(extractedRoot: root, into: work, folderName: "foo")
+            try assertEqual(placed.lastPathComponent, "foo")
+            try assertTrue(FileManager.default.fileExists(atPath: placed.appendingPathComponent("inner.txt").path), "不应出现 foo/foo 嵌套")
+        }
+
         runTest("ExtractedOutput 真实 ditto 往返：foo.zip 解出 foo 而非 foo/foo") {
             let work = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: work) }

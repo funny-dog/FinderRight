@@ -3,7 +3,7 @@ import Foundation
 /// 解压产物的落位规则（对齐系统「归档实用工具」）。
 ///
 /// 压缩包先解到同卷的暂存目录，再按顶层内容决定放出什么：
-/// - 顶层只有一项（忽略 `__MACOSX`、`.DS_Store`）→ 直接把这一项放到压缩包旁边，
+/// - 顶层只有一项（忽略 `__MACOSX`、`.DS_Store` 与 AppleDouble `._*`）→ 直接把这一项放到压缩包旁边，
 ///   避免 `foo.zip` 里本就有 `foo/` 时解出 `foo/foo/…` 的双层嵌套；
 /// - 否则（多项、空包、唯一项是隐藏文件）→ 整个暂存目录改名为与压缩包同名的文件夹。
 /// 重名时依次尝试 `name-2`、`name-3`…（文件与包保留扩展名：`report-2.pdf`、`Foo-2.app`）。
@@ -18,9 +18,12 @@ public enum ExtractedOutput {
     ///   - folderName: 需要整体放出时使用的文件夹名（压缩包去掉扩展名）
     /// - Returns: 最终放出的文件或文件夹
     public static func place(extractedRoot: URL, into directory: URL, folderName: String) throws -> URL {
-        let entries = try FileManager.default
-            .contentsOfDirectory(at: extractedRoot, includingPropertiesForKeys: [.isDirectoryKey, .isPackageKey])
-            .filter { !ignoredNames.contains($0.lastPathComponent) }
+        // 不能用 FileManager 列目录：它会藏起所有 ._ 开头的文件，「文件夹 + ._notes.txt」会被当成单项，
+        // ._notes.txt 随暂存目录一起删掉。AppleDouble 按魔数识别，与 __MACOSX 一样视为杂项
+        let entries = try DirectoryEntries.names(in: extractedRoot)
+            .filter { !ignoredNames.contains($0) }
+            .map { extractedRoot.appendingPathComponent($0) }
+            .filter { !($0.lastPathComponent.hasPrefix("._") && ZipCompressor.isAppleDouble($0)) }
 
         // 唯一项是隐藏文件时不单独放出：用户在访达里会看不到解压结果
         if entries.count == 1, let only = entries.first, !only.lastPathComponent.hasPrefix(".") {

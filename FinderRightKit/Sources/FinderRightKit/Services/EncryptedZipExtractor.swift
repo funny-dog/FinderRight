@@ -41,15 +41,7 @@ public enum EncryptedZipExtractor {
     private static func emptyDirectory(_ directory: URL) throws {
         let fm = FileManager.default
         // 用 POSIX 列目录：FileManager 会把 ._ 开头的文件藏起来，清不干净
-        guard let dir = opendir(directory.path) else { return }
-        var names: [String] = []
-        while let entry = readdir(dir) {
-            let name = withUnsafePointer(to: entry.pointee.d_name) {
-                $0.withMemoryRebound(to: CChar.self, capacity: Int(entry.pointee.d_namlen) + 1) { String(cString: $0) }
-            }
-            if name != "." && name != ".." { names.append(name) }
-        }
-        closedir(dir)
+        guard let names = try? DirectoryEntries.names(in: directory) else { return }
         for name in names {
             try fm.removeItem(at: directory.appendingPathComponent(name))
         }
