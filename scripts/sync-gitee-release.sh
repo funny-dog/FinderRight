@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[ "$#" -eq 0 ] || { echo "用法：GITEE_TOKEN=... sync-gitee-release.sh（无参数，先执行 sync-website-downloads.sh）" >&2; exit 2; }
-[ -n "${GITEE_TOKEN:-}" ] || { echo "错误：缺少环境变量 GITEE_TOKEN（Gitee 私人令牌，勿写入仓库）" >&2; exit 2; }
+[ "$#" -eq 0 ] || { echo "用法：sync-gitee-release.sh（无参数，先执行 sync-website-downloads.sh）" >&2; exit 2; }
+# 令牌优先取环境变量，否则读登录钥匙串；存入方式：
+#   security add-generic-password -U -s finderright-gitee -a gitee -w
+KEYCHAIN_SERVICE="finderright-gitee"
+if [ -z "${GITEE_TOKEN:-}" ]; then
+  GITEE_TOKEN="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null || true)"
+fi
+[ -n "$GITEE_TOKEN" ] || {
+  echo "错误：缺少 Gitee 私人令牌。设置环境变量 GITEE_TOKEN，或存入钥匙串：" >&2
+  echo "  security add-generic-password -U -s $KEYCHAIN_SERVICE -a gitee -w" >&2
+  exit 2
+}
+export GITEE_TOKEN
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 - "$PROJECT_DIR" <<'PY'
 """把官网镜像中已校验的发布资产同步到 Gitee 发行版，供国内下载。
 
-只上传 sync-website-downloads.sh 校验过的本地镜像；全部资产经公开地址回读并核对
+先把 GitHub 的 main 与本次标签推到 Gitee（不强推），再只上传 sync-website-downloads.sh 校验过的本地镜像；全部资产经公开地址回读并核对
 SHA-256 后，才写入 gitee-latest.txt，让官网 Worker 开始把国内下载重定向到 Gitee。
 """
+import base64
 import hashlib
 import json
 import os
@@ -30,8 +42,10 @@ def require(condition, message):
 project = Path(sys.argv[1])
 repo = os.environ.get("GITEE_REPO", "no_ink_no_book/FinderRight")
 require(re.fullmatch(r"[\w.-]+/[\w.-]+", repo), "GITEE_REPO 必须形如 owner/repo")
-api = os.environ.get("GITEE_API", "https://gitee.com/api/v5") + f"/repos/{repo}"
-web = os.environ.get("GITEE_WEB", "https://gitee.com") + f"/{repo}"
+api_root = os.environ.get("GITEE_API", "https://gitee.com/api/v5")
+api = api_root + f"/repos/{repo}"
+web_root = os.environ.get("GITEE_WEB", "https://gitee.com")
+web = web_root + f"/{repo}"
 # 令牌只放请求头，避免出现在 URL、错误信息或日志里。
 auth = {"Authorization": "token " + os.environ["GITEE_TOKEN"], "User-Agent": "FinderRight-Release"}
 
@@ -76,9 +90,25 @@ for name in ["FinderRight.dmg", zip_name]:
     require(files[name + ".sha256"].read_text().split() == [hashes[name], name], f"{name} 与镜像校验文件不符，请重新同步官网镜像")
 
 commit = subprocess.check_output(["git", "-C", str(project), "rev-parse", f"{tag}^{{commit}}"], text=True).strip()
+subprocess.run(["git", "-C", str(project), "fetch", "--quiet", "origin", "main"], check=True)
+require(subprocess.run(["git", "-C", str(project), "merge-base", "--is-ancestor", commit, "origin/main"]).returncode == 0,
+        f"{tag} 不在 GitHub main 上")
+status, body = call("GET", api_root + "/user")
+require(status == 200, f"Gitee 令牌无效或已撤销（HTTP {status}）")
+credential = base64.b64encode(f"{json.loads(body)['login']}:{os.environ['GITEE_TOKEN']}".encode()).decode()
+# 认证头经 GIT_CONFIG_* 环境变量传给 git，不进入命令行参数、远端地址或 .git/config。
+git_env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_COUNT="2",
+               GIT_CONFIG_KEY_0="credential.helper", GIT_CONFIG_VALUE_0="",
+               GIT_CONFIG_KEY_1=f"http.{web_root}/.extraheader", GIT_CONFIG_VALUE_1="Authorization: Basic " + credential)
+# 以 GitHub 上的 main 为准，省去 Gitee 网页上的手动强制同步；分叉或标签冲突时拒绝而不覆盖。
+push = subprocess.run(["git", "-C", str(project), "push", "--quiet", web + ".git",
+                       "refs/remotes/origin/main:refs/heads/main", f"refs/tags/{tag}:refs/tags/{tag}"],
+                      env=git_env, capture_output=True, text=True)
+error = push.stderr.replace(os.environ["GITEE_TOKEN"], "***").replace(credential, "***").strip()
+require(push.returncode == 0, f"推送 main 与 {tag} 到 Gitee 失败：{error}")
 tags = call_json("GET", "/tags?per_page=100&sort=updated&direction=desc")
 remote = next((t for t in tags if t.get("name") == tag), None)
-require(remote, f"Gitee 仓库缺少标签 {tag}，请先在 Gitee 仓库页面从 GitHub 强制同步")
+require(remote, f"推送后 Gitee 仍缺少标签 {tag}")
 require(remote["commit"]["sha"] == commit, f"Gitee 标签 {tag} 指向的提交与本地不同")
 
 status, body = call("GET", f"{api}/releases/tags/{tag}")

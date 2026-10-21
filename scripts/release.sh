@@ -172,7 +172,7 @@ if [ "$PUBLISH" = "1" ]; then
   rm -f "$NOTES_FILE"
   echo "draft Release v$VERSION_ARG 已创建，补完更新说明后在 GitHub 上点 Publish。"
   echo "正式公开后同步官网镜像：在 website/ 执行 bash ../scripts/sync-website-downloads.sh，"
-  echo "再执行 GITEE_TOKEN=... bash ../scripts/sync-gitee-release.sh 同步国内下载，然后按 website/README.md 部署。"
+  echo "再执行 bash ../scripts/sync-gitee-release.sh（自动推送 main 与标签到 Gitee 并上传资产），然后按 website/README.md 部署。"
 else
   echo "下一步（确认无误后手动执行）："
   echo "  git push origin main"

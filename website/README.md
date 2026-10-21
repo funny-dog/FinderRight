@@ -44,7 +44,8 @@ node worker/test.mjs
 - 国内直连 Cloudflare 的实测速度只有几 KB/s，Gitee 发行版直连可达 MB/s 级。`request.cf.country` 为 `CN` 时，DMG 与固定版本 ZIP 返回 `302` 到 `https://gitee.com/no_ink_no_book/FinderRight/releases/download/<tag>/<文件名>`，响应头 `X-FinderRight-Download-Source: gitee`、`Cache-Control: no-store`。
 - 只有 `dist/download/gitee-latest.txt` 中的标签与请求版本一致时才重定向；标记缺失、格式不对或版本不同都照常走官网镜像。`.sha256` 始终由官网提供，与安装包来自不同主机；App 更新另有 SHA-256 与同证书签名校验。
 - 标记由 `scripts/sync-gitee-release.sh` 在四个资产经 Gitee 公开地址回读、摘要一致后写入；`sync-website-downloads.sh` 同步到新版本时会删除旧标记。需临时停用 Gitee 时删除标记后重新部署即可。
-- 脚本需要环境变量 `GITEE_TOKEN`（Gitee 私人令牌，只放请求头，不写入仓库）；仓库默认 `no_ink_no_book/FinderRight`，可用 `GITEE_REPO` 覆盖。Gitee 仓库需先从 GitHub 同步到包含对应标签。
+- 脚本先把 GitHub 的 `main`（`origin/main`）与本次标签推到 Gitee，无需在 Gitee 网页手动强制同步；不强推，Gitee 分叉或同名标签指向其他提交时报错停止。
+- 令牌取环境变量 `GITEE_TOKEN`，未设置时读登录钥匙串条目 `finderright-gitee`（`security add-generic-password -U -s finderright-gitee -a gitee -w` 存入或更新）。令牌只放 HTTP 请求头，git 推送经 `GIT_CONFIG_*` 环境变量传入认证头，不写入命令行、远端地址或 `.git/config`。仓库默认 `no_ink_no_book/FinderRight`，可用 `GITEE_REPO` 覆盖。
 
 ### 固定版本资产代理
 
@@ -69,7 +70,7 @@ node worker/test.mjs
 ```sh
 npx --yes wrangler@4.147.0 login --scopes account:read user:read workers_scripts:write
 bash ../scripts/sync-website-downloads.sh
-GITEE_TOKEN=<令牌> bash ../scripts/sync-gitee-release.sh
+bash ../scripts/sync-gitee-release.sh
 npx --yes wrangler@4.147.0 deploy --dry-run
 npx --yes wrangler@4.147.0 deploy
 ```

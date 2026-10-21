@@ -31,11 +31,11 @@ bash scripts/release.sh 1.9.0 --publish # 继续推送 main 与 tag，并创建 
 
 正式 Release 发布后，同步维护 [Homebrew Tap](https://github.com/funny-dog/homebrew-tap#维护-cask)：下载该版本 ZIP 和 `.sha256` 并校验，更新 `Casks/finderright.rb` 的 `version` 与 ZIP 的 `sha256`，复核签名、架构和系统要求，运行 Tap README 中的 style、audit、fetch 检查后提交推送。Tap 直接安装同一份正式 ZIP，保持发布证书不变；此步骤不需要重新打包 App。不要在正式 Release 公开前让 Tap 指向新版本。
 
-正式 Release 公开后，在 `website/` 执行 `bash ../scripts/sync-website-downloads.sh`，再用 `GITEE_TOKEN=<令牌> bash ../scripts/sync-gitee-release.sh` 把同一批资产同步到 Gitee 发行版（国内下载），最后按 [官网部署说明](website/README.md#cloudflare-部署) 部署。镜像同步会校验原始发布资产，不能跳过同步后直接部署空目录；Gitee 同步失败时可照常部署，国内下载会留在官网镜像。
+正式 Release 公开后，在 `website/` 执行 `bash ../scripts/sync-website-downloads.sh`，再执行 `bash ../scripts/sync-gitee-release.sh`：自动把 GitHub 的 `main` 与本次标签推到 Gitee，并把同一批资产同步到 Gitee 发行版（国内下载）。令牌取环境变量 `GITEE_TOKEN`，未设置时读钥匙串（`security add-generic-password -U -s finderright-gitee -a gitee -w` 存入一次即可），最后按 [官网部署说明](website/README.md#cloudflare-部署) 部署。镜像同步会校验原始发布资产，不能跳过同步后直接部署空目录；Gitee 同步失败时可照常部署，国内下载会留在官网镜像。
 
 ## English
 
-After publishing a release, run `bash ../scripts/sync-website-downloads.sh` from `website/`, then `GITEE_TOKEN=<token> bash ../scripts/sync-gitee-release.sh` to copy the same assets to the Gitee release used for downloads in mainland China, then deploy as described in the website README. Sync verifies the official assets before updating the mirror. Run it before every deployment so an empty or outdated local download directory cannot replace the live mirror.
+After publishing a release, run `bash ../scripts/sync-website-downloads.sh` from `website/`, then `bash ../scripts/sync-gitee-release.sh`, which pushes GitHub's `main` and the release tag to Gitee and copies the same assets to the Gitee release used for downloads in mainland China (the token comes from `GITEE_TOKEN` or the login keychain item `finderright-gitee`), then deploy as described in the website README. Sync verifies the official assets before updating the mirror. Run it before every deployment so an empty or outdated local download directory cannot replace the live mirror.
 
 Please use [Issues](https://github.com/funny-dog/FinderRight/issues) for bugs and suggestions. Chinese and English are welcome. Maintainers currently commit directly to `main`; the project does not use a PR workflow. Discuss larger changes in an issue first. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
