@@ -29,3 +29,6 @@ website/dist/download/
 # Cloudflare（在仓库根运行 wrangler 会产生账号缓存）
 .wrangler/
 .playwright-cli/
+
+# Qoder Sites 本地发布副本（从 website/dist 生成，不提交）
+qoder-site/
