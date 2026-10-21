@@ -144,7 +144,7 @@ bash scripts/ci.sh
 
 echo "=== 提交并打 tag ==="
 git add "${PLISTS[@]}"
-git commit -m "chore: 发布 v$VERSION_ARG（构建号 $(current_build)）"
+git commit -m "chore: 发布 v${VERSION_ARG}（构建号 $(current_build)）"
 git tag -a "v$VERSION_ARG" -m "v$VERSION_ARG"
 
 echo "=== 构建发布件（RELEASE=1）==="
