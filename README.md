@@ -8,21 +8,16 @@
 
 免费开源 · 文件操作在本地完成 / Free & open source · File operations stay on your Mac
 
-[English](#english) · [中文](#中文)
-
-[参与贡献 / Contributing](CONTRIBUTING.md) · [安全说明 / Security](SECURITY.md)
+[English](#english) · [中文](#中文) · [参与贡献 / Contributing](CONTRIBUTING.md) · [安全说明 / Security](SECURITY.md)
 
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B%20(Apple%20Silicon)-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 <br/>
-<br/>
 
 <img src="docs/images/demo.gif" alt="FinderRight demo: new file, cut & paste, open terminal from the Finder right-click menu" width="800" />
 
-如果 FinderRight 让你的日常操作更顺手，欢迎 [⭐ 前往 GitHub 点 Star 支持](https://github.com/funny-dog/FinderRight)：登录后手动点击仓库页右上角的 Star。也欢迎反馈使用问题。
-
-If FinderRight makes your daily work easier, [⭐ go to GitHub to star the project](https://github.com/funny-dog/FinderRight): sign in, then click Star at the top right of the repository page. Feedback is welcome too.
+觉得好用欢迎 [⭐ Star](https://github.com/funny-dog/FinderRight) 和反馈 / If it helps, a [⭐ Star](https://github.com/funny-dog/FinderRight) or feedback is appreciated.
 
 </div>
 
@@ -30,25 +25,21 @@ If FinderRight makes your daily work easier, [⭐ go to GitHub to star the proje
 
 ## 中文
 
-给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。适合经常管理项目文件的 Mac 开发者。
-
 ### ✨ 功能
 
-- 📄 **新建文件** —— 一键新建 txt / Markdown / Python / Shell / JSON / Swift / JS 等十种文件，以及空白的 Word / Excel / PowerPoint 文档；在设置的「文件模板」页可开关各类型、拖动调整顺序，并添加自定义文本模板
-- 📋 **复制路径** —— 复制选中文件/文件夹的完整路径；可在设置中改为 `~` 路径、仅文件名、终端转义路径或文件 URL
-- 📋 **复制文件名** —— 独立复制完整文件名（含扩展名），多选时每行一项
-- 📂 **打开路径** —— 输入或粘贴文件、文件夹路径（绝对路径或 `~/`），回车在 Finder 中显示（文件会在所在文件夹中选中），也可直接用默认 App 打开文件；自动清理复制来的引号、首尾空白、`file://` 链接和终端转义
-- 💻 **打开终端** —— 在当前目录打开终端（支持系统默认终端，以及 Ghostty / Terminal / iTerm2 / Warp 等）；默认仅启用一个终端，可在设置中启用多个终端以展开子菜单，并拖动调整终端顺序
-- ✏️ **打开编辑器** —— 用 Zed / VS Code / Cursor / Sublime / Xcode / JetBrains 等打开，自动识别常见编辑器，其他应用可在设置里手动添加，列表支持拖动排序；新建文件、打开编辑器和打开终端只有一个可用选项时，点击直接执行，不展开子菜单
-- ✂️ **剪切 / 粘贴** —— Finder 原生没有的"剪切文件"，剪切后的文件带角标，粘贴时才真正移动；在访达里直接用 ⌘X 剪切、⌘V 粘贴到当前文件夹（空白处也可以，快捷键可在设置中修改，需「辅助功能」权限）
-- 📁 **移动到 / 复制到** —— 在设置中添加常用目录后，右键即可把选中项移动或复制过去；完成后短提示显示实际处理数量和目标文件夹，部分失败或失败也会提示，不受操作历史保留条数影响
-- 📦 **压缩 / 解压**（默认关闭，可在设置中开启）—— 压缩为 ZIP；选中压缩包可解压到当前目录（包内只有一个顶层文件夹时直接解出，不再套两层同名文件夹）
-- ↩️ **撤销上一次操作** —— 移动到 / 复制到、剪切、右键粘贴、新建文件、压缩 / 解压之后，按 ⌘Z（需「辅助功能」）或从右键菜单撤销最近一次操作；与访达自己的撤销按先后顺序共存，文件被改过或原位置有同名项目时跳过并提示，删除一律进废纸篓
-- 👀 **文件夹 / ZIP 快速查看** —— 选中文件夹或 ZIP 后按空格，或右键选择系统「快速查看」，以可展开列表查看名称、修改日期、大小和类型；ZIP 只读目录，不解压文件。需启用独立的 FinderRight Preview 快速查看扩展
-- 👁 **切换隐藏文件** —— 即时显示/隐藏隐藏文件，**无需重启 Finder，不会关闭窗口或中断拷贝**（需辅助功能权限）
-- ⌨️ **自定义快捷键与顺序** —— 给每个菜单项绑定快捷键，在访达里直接按键即可，无需展开右键菜单（授权「辅助功能」后由 FinderRight 直接处理，任意组合都能用、改完立即生效；未授权时除剪切 / 粘贴外自动退回系统服务快捷键）；默认快捷键与访达一致（⌥⌘C 复制路径、⇧⌘. 切换隐藏文件），升级不覆盖你的设置，可一键恢复默认，并可在设置中拖动调整它们在右键菜单中的顺序
-- 🌗 **中英文双语** —— 默认跟随系统语言；设置里的「语言」可强制中文 / English，右键菜单即时生效（角标文案需重启访达后生效）
-- 🔐 **升级免重新授权** —— 自 1.3.0 起使用固定证书签名，之后的版本升级会自动保留「完全磁盘访问」与「辅助功能」授权；自动更新还会校验新版本与当前版本出自同一证书，拒绝被篡改或冒充的更新包
+- 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板
+- ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动
+- 💻 **打开终端 / 编辑器** —— 在当前目录打开 Ghostty / iTerm2 / Warp 或 VS Code / Cursor / Zed 等
+- 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文本文件可直接复制全文
+- 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
+- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录
+- 📦 **压缩 / 解压** —— 压缩为 ZIP，解压 ZIP / 7z / RAR（默认关闭，可在设置中开启）
+- 👀 **空格预览文件夹 / ZIP** —— 选中后按空格，查看可展开、可排序的内容列表，ZIP 无需解压
+- 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
+- ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
+- 🕘 **操作历史** —— 按日期查看每次操作的结果与失败原因，可搜索、筛选、在访达中定位
+- ☁️ **云盘里也能用** —— iCloud / Google Drive 等目录通过右键「服务」菜单使用
+- ⌨️ **自定义快捷键与菜单顺序**，🌗 **中英双语**，🔄 **应用内自动更新**
 
 ### 📸 截图
 
@@ -58,86 +49,100 @@ If FinderRight makes your daily work easier, [⭐ go to GitHub to star the proje
   <img src="docs/images/settings-shortcuts.png" alt="FinderRight 快捷键设置" height="360" />
 </p>
 
-<p align="center">
-  <img src="docs/images/cut-badge.png" alt="剪切后的演示文件带剪刀角标" width="720" /><br/>
-  <sub>剪切后的文件带剪刀角标，粘贴时才真正移动</sub>
-</p>
-
 ### 📥 安装
 
-> ⚠️ **芯片架构说明**：当前版本仅支持 **Apple Silicon（M 系列芯片，ARM64）**，要求 macOS 13.0+，暂不支持 Intel 架构。两种方式安装的均为同一正式发布的 App。
+要求 **macOS 13+、Apple Silicon**（暂不支持 Intel）。
 
-#### 方式一：Homebrew 安装（推荐）
-
-需已安装 Homebrew，使用[项目维护的个人 Tap](https://github.com/funny-dog/homebrew-tap) 快速安装：
+**Homebrew（推荐）**
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-Homebrew 安装会自动删除此 App 的隔离属性，首次打开不会被 Gatekeeper 拦截。
+**DMG**：下载 [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)（中国大陆自动转到 [Gitee](https://gitee.com/no_ink_no_book/FinderRight/releases)），拖入 `Applications`。当前版本为自签名、未经 Apple 公证，首次打开被拦截时，到 **系统设置 → 隐私与安全性 → 仍要打开**，或执行：
 
-> ⚠️ Homebrew Tap 提供下载安装便利，不代表 Apple 公证或 Homebrew 官方仓库审核。删除隔离属性后，macOS 不再对此 App 做 Gatekeeper 首次打开检查；如希望保留系统检查，请使用 DMG 安装。Finder 扩展及隐私权限仍由用户确认。若未来提供 Developer ID 公证版，DMG 安装也可省去手动放行步骤。
+```bash
+xattr -dr com.apple.quarantine /Applications/FinderRight.app
+```
 
-#### 方式二：DMG 手动安装
+**首次启动**后按引导完成：启用访达扩展、授予完全磁盘访问、授予辅助功能。
 
-1. 从官网镜像下载 **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)**，与 GitHub 正式 Release 使用同一份安装包；中国大陆访问会自动转到 [Gitee 发行版](https://gitee.com/no_ink_no_book/FinderRight/releases) 下载。
-2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`。
-3. **首次打开**：当前版本使用自签名证书，未经 Apple 公证。确认下载来自本项目正式 Release 后，尝试打开 App；如被系统拦截，可选择以下任一方式放行：
-   - **系统设置放行**：前往 **系统设置 → 隐私与安全性 → 仍要打开**，按提示确认（见 [Apple 说明](https://support.apple.com/zh-cn/102445)）。*macOS 15 起不能通过右键打开绕过此检查。*
-   - **终端命令放行**：也可在终端执行以下命令，仅删除此 App 的隔离属性，再双击打开：
-     ```bash
-     xattr -dr com.apple.quarantine /Applications/FinderRight.app
-     ```
+> Homebrew 安装会删除隔离属性、跳过 Gatekeeper 首次检查；若希望保留系统检查，请用 DMG 安装。Tap 由本项目维护，并非 Homebrew 官方仓库。
 
-#### 首次启动与配置
+### 🔄 升级
 
-无论通过哪种方式安装，首次打开后请按引导完成以下配置：
+在「设置 → 关于」检查更新，或在「设置 → 通用」开启自动更新；Homebrew 用户也可以 `brew upgrade --cask --greedy funny-dog/tap/finderright`。**升级后请重启访达**，否则右键菜单可能还是旧版：
 
-- **启用 Finder 扩展**：系统设置 → 隐私与安全性 → 扩展 → 访达扩展 → 勾选 FinderRight
-- **授予完全磁盘访问**（在受保护目录使用所有功能）
-- **授予辅助功能**（让"切换隐藏文件"无需重启 Finder）
+```bash
+killall Finder
+```
 
-### 文件夹与 ZIP 预览
+<details>
+<summary>从 1.2.0 及更早版本升级、自动更新细节</summary>
 
-安装并启动 FinderRight 后，在「设置 → 权限与扩展 → 扩展」中打开 **文件夹与 ZIP 预览**；关闭此开关会停用 FinderRight Preview，恢复系统默认预览。开关与系统扩展设置同步；也可在系统设置中搜索「扩展」，在「快速查看」中管理 **FinderRight Preview**（与「访达扩展」是两个独立开关，入口随 macOS 版本而异）。切换后重新打开快速查看窗口。回到 Finder，选中文件夹或 `.zip`，按空格或右键选择系统「快速查看」即可。只提供只读列表，支持展开子目录及点击列标题排序，不提供包内文件内容预览、拖出或解压操作。
+- **从 1.2.0 及更早版本首次升级**：旧版是 ad-hoc 签名，系统会视为不同的程序，即使开关显示已开启也需重新授权一次。最省事的做法：
+  ```bash
+  tccutil reset SystemPolicyAllFiles com.finderright.app
+  tccutil reset Accessibility com.finderright.app
+  ```
+  然后重新打开 FinderRight 按引导授权。1.3.0 起使用固定证书，后续升级会保留授权。
+- **自动更新**：默认关闭；开启后每 6 小时检查一次，在文件操作空闲时安装并自动重启。更新同时请求官网与 GitHub，下载卡住会切换备用源，全程校验 SHA-256 与签名证书，校验失败不安装。
+- **混用 Homebrew 与应用内更新**：应用内更新不会同步 Homebrew 的版本记录，可能导致重复安装；Cask 声明了 `auto_updates true`，普通 `brew upgrade` 会跳过它。
 
-- 文件夹展开时才读取子目录；包含隐藏项，不展开符号链接或 `.app` 等文件包，也不递归统计目录大小。
-- 每层文件夹最多显示 2,000 项，ZIP 最多显示 10,000 条目录记录；达到上限会提示内容不完整。
-- 第一版支持普通 ZIP，不支持 ZIP64、分卷 ZIP、RAR / 7z 等其他格式；损坏包、读取失败会显示原因。能读取中央目录的加密 ZIP 可显示条目，但不会解密文件内容。
-- 受保护目录、尚未下载的云盘文件是否可读，取决于系统授予预览扩展的访问权限；主 App 的完全磁盘访问权限不会自动授予该扩展。其他 App 若也提供相同类型的 Quick Look 扩展，可能影响系统选择。
+</details>
 
-### 🔄 升级说明
+### 🩺 常见问题
 
-Homebrew 安装后也可使用应用内更新。若选择 Homebrew 管理更新，先退出 FinderRight，再运行 `brew update` 和 `brew upgrade --cask --greedy funny-dog/tap/finderright`。Cask 声明 `auto_updates true`，常规批量升级可能跳过它；应用内更新不会同步 Homebrew 的版本记录，混用时可能重复安装。Homebrew 更新同样会删除隔离属性；更新后仍需重启 Finder。
+| 症状 | 处理 |
+| --- | --- |
+| 右键完全没有 FinderRight 菜单 | 在「设置 → 权限与扩展 → 右键菜单排查」中一键启用访达扩展并重启访达。 |
+| 升级后菜单或角标还是旧的 | 重启访达：`killall Finder`。 |
+| 云盘、`/Applications` 等目录没有菜单 | 系统限制，改用 **右键 → 服务** 子菜单（见下方说明）。 |
+| 菜单里没有压缩 / 解压 | 默认关闭，在「设置 → 功能」中开启。 |
+| 快捷键按了没反应 | 授予「辅助功能」权限；多数快捷键需要先选中文件。 |
+| 剪切后没有剪刀角标 | 可能被其他扩展（如 Keka）占用，不影响粘贴；可在「设置 → 功能」开启「自动解决角标冲突」。 |
+| 操作后看不到结果 | 在「设置 → 操作历史」查看结果或失败原因。 |
+| 打开终端没有切到当前目录 | Ghostty / Alacritty / Kitty 已在运行时无法指定目录，属于终端自身限制。 |
+| 升级后权限开关是开的却不生效 | 从 1.2.0 及更早版本升级需重新授权一次（见「升级」）。 |
+| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件夹与 ZIP 预览」，再重新打开快速查看。 |
 
-可在「设置 → 通用」开启「自动检查并安装更新」（默认关闭）：开启后立即检查，应用运行期间每 6 小时检查一次，发现可安装的新版本后在文件操作空闲时下载安装并自动重启；自动安装退出前会等待进行中的文件操作完成。关闭开关后不再发起自动更新，已经开始的更新仍会完成。也可以通过应用内「关于」页面手动检查并升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
+<details>
+<summary>云盘与「服务」菜单</summary>
 
-更新检查同时请求官网与 GitHub，首个返回有效版本信息的渠道优先用于下载，另一请求会被取消。更新包固定到检查到的版本；首选下载源 3 秒内未收到数据、传输中连续 10 秒无数据或请求失败时，切换同版本备用源一次。全程保留 SHA-256 与签名校验，校验失败不会安装。官网版本信息最多缓存 2 分钟。
+iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Provider 域，目录归云盘自己的扩展管理，第三方 Finder 扩展的右键菜单不会出现，完全磁盘访问也改变不了（见 [Keka #1327 中转述的 Apple DTS 答复](https://github.com/aonez/Keka/issues/1327)）。`/Applications`、`/Users/Shared` 等未注册目录同理。
 
-> 💡 **版本升级注意事项**：
-> 1. **重启访达（重要）**：macOS 系统会缓存 FinderSync 扩展进程。覆盖安装或更新后，**务必在终端执行以下命令重启访达**，以使系统加载最新版本的扩展插件（否则右键菜单或剪切角标可能不会即时刷新）：
->    ```bash
->    killall Finder
->    ```
-> 2. **权限重新授权说明**：自改用固定的自签名证书签名起，新旧版本的签名身份相同，**「完全磁盘访问权限」与「辅助功能权限」在升级后会自动保留**。唯一的例外是从 **1.2.0 及更早版本**（Ad-hoc 签名，`codesign -s -`）**首次升级**到 1.3.0 或更新版本：macOS 的安全管控机制（TCC）会判定其为不同身份的程序，需要按下面的方法重新授权一次。此时系统设置里的开关可能看起来仍显示开启，但底层校验实际已失效。
->    - **完全磁盘访问**：前往「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，将 FinderRight 的开关**关闭再重新开启**（或点 `-` 删除后重新拖入添加）。
->    - **辅助功能权限**：前往「系统设置 → 隐私与安全性 → 辅助功能」，选中 FinderRight 点击底部的 **`-`（减号）删除**，再重新打开应用添加即可。
->    - **终端一键重置法（推荐，最省心）**：
->      ```bash
->      tccutil reset SystemPolicyAllFiles com.finderright.app
->      tccutil reset Accessibility com.finderright.app
->      ```
->      执行后重新打开 FinderRight 即可按引导一次性勾选授权。
-> 3. **先退出旧版**：若旧版正在后台运行，建议先在菜单栏点击图标选择「退出 FinderRight」后再拖动覆盖。
-> 4. **解除拦截**：覆盖后若提示未公证拦截，请重新执行：
->    ```bash
->    xattr -dr com.apple.quarantine /Applications/FinderRight.app
->    ```
+在这些位置，FinderRight 的操作改由 **右键 → 服务** 提供：复制路径 / 复制文件名 / 复制文件内容 / 打开路径 / 新建文件 / 移动到 / 复制到 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
 
-### 🗑️ 完全卸载
+- 粘贴：剪切后在目标目录空白处选「服务 → FinderRight：粘贴到此文件夹」；若空白处没有「服务」，可回到上一级右键目标文件夹。它移动的是 FinderRight 的剪切队列，而不是系统剪贴板。
+- 新建文件、移动到 / 复制到会先弹确认框；取消不会操作文件。
+- 「服务」菜单标题跟随系统语言，不随 FinderRight 的界面语言切换。
 
-若需彻底清理应用及配置残留，可在终端执行：
+</details>
+
+<details>
+<summary>快速查看的范围与限制</summary>
+
+- 只读列表，可展开子目录、点击列标题排序；不预览包内文件内容，不解压。
+- 包含隐藏项；不展开符号链接或 `.app` 等文件包，不递归统计目录大小。
+- 每层文件夹最多 2,000 项，ZIP 最多 10,000 条记录，超出会提示内容不完整。
+- 不支持 ZIP64、分卷 ZIP；加密 ZIP 可显示条目但不解密。
+- 预览扩展有独立的沙箱权限，主 App 的完全磁盘访问不会自动授予它。
+
+</details>
+
+<details>
+<summary>其他已知行为</summary>
+
+- **加密 / 分卷压缩包**：加密 ZIP 会弹密码框；加密的 7z / RAR 和分卷包无法解压，会提示失败并自动清理临时文件。
+- **撤销**：只支持单级撤销，与访达自己的撤销按先后顺序共存；文件被改过或原位置有同名项时跳过，删除一律进废纸篓。
+- **操作历史**：仅保存在本机，默认保留最近 100 条（可选 0 / 50 / 500）；清空历史不影响文件和撤销。
+- **剪切状态**：粘贴过程中主 App 崩溃，未移动的项目会在下次启动时恢复回剪切队列。
+- **语言**：右键菜单即时切换，剪切角标文案需重启访达后生效。
+
+</details>
+
+<details>
+<summary>完全卸载</summary>
 
 ```bash
 killall FinderRight 2>/dev/null || true
@@ -148,63 +153,19 @@ tccutil reset All com.finderright.app 2>/dev/null || true
 killall Finder
 ```
 
+</details>
+
 ### 🛠 从源码构建
 
-网站源码位于 [`website/`](website/)，预览与部署说明见该目录的 README。
-
-方式一（推荐，无需 Xcode，仅需 Command Line Tools）：
+只需 Command Line Tools，无需 Xcode：
 
 ```bash
-bash scripts/setup-signing.sh  # 仅首次：生成自签名证书并导入钥匙串（发布构建必需，请备份私钥）
-bash scripts/ci.sh             # 编译 Kit + 单元测试 + 主程序/扩展静态类型检查
-bash scripts/build.sh          # 产出 FinderRight.app 与 DMG / ZIP（有证书时用证书签名，否则退回 ad-hoc）
+bash scripts/setup-signing.sh  # 仅首次：生成自签名证书（请备份私钥）
+bash scripts/ci.sh             # 编译 + 单元测试 + 类型检查
+bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 ```
 
-方式二（Xcode 工程，需 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)）：
-
-```bash
-brew install xcodegen
-xcodegen generate
-xcodebuild -scheme FinderRight -configuration Release \
-  -derivedDataPath build/release build
-```
-
-### ⚠️ 已知行为与取舍
-
-- **操作历史与失败提示**：在「设置 → 操作历史」查看新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果，按日期分组，可搜索操作名称、文件名、路径和失败说明，并组合筛选操作类型与完成状态（状态标签显示各自数量）；点击记录展开完成时间、所在位置、结果文件与失败原因，可在访达中定位结果文件，失败记录可打开所在文件夹、拷贝技术信息。记录仅保存在本机，重启后仍保留（历史文件损坏或来自更新的版本时，先备份为 `operation-history.unreadable.json` 再继续记录），默认最近 100 条，可选不保留、50、100 或 500 条；超限移除最早记录，清空历史不会删除文件或影响撤销。操作历史仅在设置侧栏中显示，菜单栏不提供历史入口、记录列表或失败红色图标。后台操作失败会独立显示简短提示，不依赖历史保留或菜单栏显隐。历史不等于撤销步骤：当前仍只支持单级撤销。
-- **加密 / 分卷压缩包**：加密的 ZIP 会弹密码框，密码错误可以重试，取消则跳过；系统 bsdtar 能解 `.7z` 与 `.rar`（含 RAR5）。加密的 7z / RAR 和分卷包仍会解压失败，会显示失败提示，也可在「操作历史」中查看原因（解压中途产生的临时文件会被自动清理）。
-- **菜单生效范围**：Finder 扩展只注册用户主目录与已挂载卷；`/Applications`、`/Users/Shared` 等系统目录不会出现右键菜单，云盘目录改由「服务」子菜单提供（见下节）。
-- **终端工作目录**：Ghostty / Alacritty / Kitty 只有在**尚未运行**时才能通过命令行参数指定工作目录（`open --args` 的固有限制）；已在运行时退化为目录 URL 方式，能否换目录取决于各终端自身实现。
-- **剪切状态**：粘贴过程中若主 App 被强退/崩溃，下次启动会自动把未移动完的剪切路径恢复回队列（移动成功的不会回来）。
-
-### 🏗 架构
-
-- **主 App**（未沙箱）：菜单栏 + 设置界面，借用 TCC 权限执行实际文件操作
-- **Finder 扩展**（沙箱）：负责右键菜单
-- **Quick Look 扩展**（只读沙箱）：负责文件夹 / ZIP 内容预览，空格与系统右键「快速查看」共用
-- **IPC**：扩展通过"文件 + URL scheme"唤醒主 App 执行操作，无需 App Group / 付费开发者账号
-
-### ☁️ iCloud / Google Drive 等云盘
-
-iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **File Provider 域**，目录归云盘自己的扩展管理。Apple 技术支持（DTS）的说明是：Finder 扩展按「一个目录只归属一个扩展」设计，第三方扩展在其他云盘提供者管理的目录里本就不应期望生效（见 [Keka #1327 中转述的 DTS 答复](https://github.com/aonez/Keka/issues/1327)）。在 macOS 27 上对 iCloud Drive 与 Google Drive 实测，显式注册目录、授予目录访问权限后右键菜单依然不出现；完全磁盘访问同样改变不了这一点。因此在这些云盘文件夹里，FinderRight 的操作改为出现在 **右键 →「服务」子菜单**：复制路径 / 复制文件名 / 打开路径 / 新建文件（含模板） / 移动到常用目录 / 复制到常用目录 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
-
-使用 FinderRight「剪切」后，在目标目录空白处选择「服务 → FinderRight：粘贴到此文件夹」。本机 Google Drive 实测空白处可传入当前目录；若未显示「服务」，可返回上一级，右键目标文件夹调用同一服务。粘贴服务只接受一个现存目录，不接受普通文件或多选；它移动的是 FinderRight 剪切队列中的文件，不是系统剪贴板里的复制项。若系统在调用时激活 FinderRight，会先展示目标路径，确认后才移动文件；取消不会取走剪切队列。复制文件名保留扩展名，多选时每行一项；打开路径可在选中文件或文件夹后从右键服务调用，弹出路径输入框；选中项不决定要打开的路径，目标由输入内容决定。新建文件服务只接受一个现存文件夹，确认框可选择内置文本类型、Office 空白文档和设置中的自定义模板，默认文件名为 untitled，同名自动编号。移动到／复制到服务支持多选，在确认框中选择设置里的常用目录并查看目标完整路径；取消确认不操作文件。取消剪切尚未提供服务入口。「服务」菜单的标题由 macOS 按系统语言显示（中文系统显示中文，其他语言显示英文），不随 FinderRight 设置里的界面语言切换。
-
-### 🩺 常见问题排查
-
-| 症状 | 原因与处理 |
-| --- | --- |
-| 右键完全没有 FinderRight 菜单 | 确认「系统设置 → 隐私与安全性 → 扩展 → 访达扩展」中已勾选 FinderRight，再重启访达。两者都可在「设置 → 权限与扩展 → 右键菜单排查」中一键完成。 |
-| 升级后菜单或角标还是旧的 | 系统缓存了旧的扩展进程，重启访达即可（见「升级说明」）。 |
-| 云盘文件夹里没有菜单 | 系统限制，改用「右键 → 服务」子菜单（见「iCloud / Google Drive 等云盘」）。 |
-| `/Applications`、`/Users/Shared` 等系统目录没有菜单 | 扩展只注册用户主目录与已挂载卷，这些目录同样通过「右键 → 服务」使用。 |
-| 菜单里没有压缩 / 解压 | 默认关闭，在「设置 → 功能 → 右键菜单功能」中开启。 |
-| 快捷键按了没反应 | 授予「辅助功能」权限。除剪切、粘贴、切换隐藏文件、打开路径外，其他快捷键要先选中文件。未授权时剪切、粘贴不可用，其他快捷键退回系统服务快捷键，改完要重启访达。 |
-| 剪切后没有剪刀角标 | 其他访达扩展（如 Keka）可能占用了该目录的角标显示权。剪切本身不受影响，照常粘贴即可；也可在「设置 → 功能」开启「自动解决角标冲突」。 |
-| 压缩、解压、粘贴后看不到结果 | 打开「设置 → 操作历史」查看结果或失败原因；成功记录可在访达中定位文件。历史选择「不保留」时，后台失败仍会提示。 |
-| 打开终端没有切到当前目录 | Ghostty / Alacritty / Kitty 已在运行时无法通过参数指定目录（见「已知行为与取舍」）。 |
-| 升级后权限开关是开的却不生效 | 从 1.2.0 及更早版本升级需要重新授权一次（见「升级说明」）。 |
-| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件夹与 ZIP 预览」，再重新打开快速查看窗口。 |
+也可以用 [xcodegen](https://github.com/yonaskolb/XcodeGen) 生成 Xcode 工程（`xcodegen generate`）。项目由主 App（未沙箱，执行文件操作）、Finder 扩展（沙箱，提供右键菜单）和 Quick Look 扩展组成，扩展通过「文件 + URL scheme」唤醒主 App，无需 App Group 或付费开发者账号。官网源码见 [`website/`](website/)。
 
 ### 📄 许可证
 
@@ -214,25 +175,21 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘在 macOS 上是 **Fil
 
 ## English
 
-Create files, open a terminal, and cut & paste from Finder’s right-click menu. FinderRight is free and open source, with file operations performed locally on your Mac. Built for Mac developers who work with project files every day.
-
 ### ✨ Features
 
-- 📄 **New File** — create txt / Markdown / Python / Shell / JSON / Swift / JS and more with one click, plus blank Word / Excel / PowerPoint documents; the File Templates page in Settings lets you turn types on or off, drag to reorder them, and add your own text templates
-- 📋 **Copy Path** — copy the full path of selected files/folders; switch to a `~` path, file name only, shell-escaped path or file URL in Settings
-- 📋 **Copy File Name** — copy full file names including extensions; multiple selections are copied one per line
-- 📂 **Go to Folder** — enter an absolute path or a `~/` path to open the folder in Finder
-- 💻 **Open in Terminal** — open the current folder in Ghostty / Terminal / iTerm2 / Warp, etc. Only the default terminal is enabled initially; enable several in Settings to show a submenu, and drag to reorder them
-- ✏️ **Open in Editor** — open with Zed / VS Code / Cursor / Sublime / Xcode / JetBrains IDEs, etc. Common editors are detected automatically; any other app can be added in Settings, and the list supports drag-to-reorder. New File, Open in Editor, and Open in Terminal execute directly when only one option is available
-- ✂️ **Cut / Paste** — the "cut file" that Finder lacks natively; cut files get a badge and are only moved when you paste; cut with ⌘X and paste into the current folder with ⌘V right in Finder (works with nothing selected; the keys can be changed in Settings; requires Accessibility permission)
-- 📁 **Move To / Copy To** — add favorite folders in Settings, then move or copy the selection there from the right-click menu. A completion toast shows the actual item count and destination; partial and failed operations also show feedback, independently of history retention
-- 📦 **Compress / Extract** (off by default, enable in Settings) — compress to ZIP; extract archives in place (an archive with a single top-level folder is extracted as that folder, not nested inside another one)
-- ↩️ **Undo Last Action** — after Move/Copy To, Cut, Paste from the menu, New File, Compress or Extract, press ⌘Z (needs Accessibility) or use the context menu to undo the most recent one; it interleaves with Finder’s own undo in order, skips items that changed or whose original location is taken (with a notice), and only ever moves things to the Trash
-- 👀 **Folder / ZIP Quick Look** — press Space or choose Finder’s native Quick Look context-menu item to browse an expandable, sortable contents list without extracting ZIP files. Toggle it in FinderRight Settings → Permissions & Extensions → Extensions → Folder and ZIP previews. The switch follows the system extension setting; turning it off restores the system default preview. Reopen Quick Look after changing it. Read-only; no file-content preview or extraction. Includes hidden items, loads folders on expansion, and does not follow symbolic links or browse app packages. Limited to 2,000 items per folder and 10,000 ZIP records, with a partial-results notice. ZIP64, split ZIP, and other archive formats are not supported. Access to protected or cloud-only files depends on the extension’s sandbox permissions, independently of the main app’s Full Disk Access.
-- 👁 **Toggle Hidden Files** — instantly show/hide hidden files **without restarting Finder, so windows stay open and copies keep running** (needs Accessibility)
-- ⌨️ **Custom Shortcuts and Order** — bind a keyboard shortcut to any menu item and press it right in Finder without opening the context menu (with Accessibility permission FinderRight handles them directly, so any combination works and changes apply immediately; without it, everything except Cut / Paste falls back to system Services shortcuts); defaults match Finder (⌥⌘C Copy Path, ⇧⌘. Toggle Hidden Files), updates never overwrite your shortcuts, and you can restore the defaults in one click, and drag to reorder them in Settings
-- 🌗 **Bilingual** — follows your system language by default; the in-app "Language" setting can force English / 简体中文 and applies to the context menu immediately (the badge label updates after Finder restarts)
-- 🔐 **No Re-authorization on Upgrade** — signed with a fixed certificate since 1.3.0, so later upgrades keep the Full Disk Access and Accessibility permissions; the auto-updater also verifies that a new version is signed with the same certificate and rejects tampered or impostor packages
+- 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates
+- ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste
+- 💻 **Open in Terminal / Editor** — open the current folder in Ghostty / iTerm2 / Warp or VS Code / Cursor / Zed, etc.
+- 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; copy a text file's full content directly
+- 📂 **Go to Folder** — paste a path to reveal or open it in Finder
+- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click
+- 📦 **Compress / Extract** — compress to ZIP, extract ZIP / 7z / RAR (off by default, enable in Settings)
+- 👀 **Space to preview folders / ZIPs** — press Space for an expandable, sortable contents list, no extraction needed
+- 👁 **Toggle Hidden Files** — instant, no Finder restart
+- ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
+- 🕘 **Operation History** — review each action's result or failure reason by date; search, filter and reveal in Finder
+- ☁️ **Works in cloud folders** — use it in iCloud / Google Drive via the right-click Services menu
+- ⌨️ **Custom shortcuts and menu order**, 🌗 **English & Chinese**, 🔄 **in-app auto-update**
 
 ### 📸 Screenshots
 
@@ -242,79 +199,102 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
   <img src="docs/images/settings-shortcuts.png" alt="FinderRight Settings — Keyboard Shortcuts" height="360" />
 </p>
 
-<p align="center">
-  <img src="docs/images/cut-badge.png" alt="Demo files with scissors badges after cutting" width="720" /><br/>
-  <sub>Cut files get a scissors badge and are only moved when you paste</sub>
-</p>
-
 > The screenshots show the Chinese interface; FinderRight is also fully available in English.
 
 ### 📥 Installation
 
-> ⚠️ **Architecture Requirement**: The pre-built release currently supports **Apple Silicon (M-series, ARM64)** Mac only, running macOS 13.0+. Intel (x86_64) architecture is not supported. Both methods install the same officially released App.
+Requires **macOS 13+ on Apple Silicon** (Intel is not supported).
 
-#### Method 1: Homebrew (Recommended)
-
-Requires Homebrew installed; installs from the [project-maintained third-party tap](https://github.com/funny-dog/homebrew-tap):
+**Homebrew (recommended)**
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-Homebrew automatically removes this App's quarantine attribute upon installation, so the first launch will not be blocked by Gatekeeper.
+**DMG**: download [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg) and drag it into `Applications`. The app is self-signed and not notarized by Apple; if the first launch is blocked, go to **System Settings → Privacy & Security → Open Anyway**, or run:
 
-> ⚠️ The tap simplifies downloading and installation; it does not imply Apple notarization or review by Homebrew's official repository. Without the quarantine attribute, macOS does not run the Gatekeeper first-launch check for this App; to keep that check, install the DMG instead. Finder extension and privacy permissions still require user confirmation. A future Developer ID notarized build would also remove the manual approval steps for DMG installs.
+```bash
+xattr -dr com.apple.quarantine /Applications/FinderRight.app
+```
 
-#### Method 2: DMG Manual Installation
+**On first launch**, follow the onboarding: enable the Finder extension, grant Full Disk Access, and grant Accessibility.
 
-1. Download **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)** from the website mirror, which serves the same installer as the official GitHub release. Visitors from mainland China are redirected to the [Gitee release](https://gitee.com/no_ink_no_book/FinderRight/releases).
-2. Open the DMG and drag `FinderRight.app` into `Applications`.
-3. **First launch**: This release is self-signed and not notarized by Apple. After verifying that it came from this project's official Release, try opening the App. If blocked, choose either option below:
-   - **Via System Settings**: Go to **System Settings → Privacy & Security → Open Anyway** and confirm (see [Apple's instructions](https://support.apple.com/en-us/102445)). *Starting with macOS 15, right-clicking Open no longer bypasses this check.*
-   - **Via Terminal**: Alternatively, run this command in Terminal to remove only this App's quarantine attribute, then double-click to open:
-     ```bash
-     xattr -dr com.apple.quarantine /Applications/FinderRight.app
-     ```
+> Homebrew removes the quarantine attribute and skips the Gatekeeper first-launch check; use the DMG if you want to keep it. The tap is maintained by this project, not Homebrew's official repository.
 
-#### First Launch & Setup
+### 🔄 Upgrading
 
-Regardless of the installation method chosen, follow the onboarding prompts on first launch:
+Check for updates in Settings → About, or turn on automatic updates in Settings → General; Homebrew users can also run `brew upgrade --cask --greedy funny-dog/tap/finderright`. **Restart Finder after upgrading**, or the context menu may stay on the old version:
 
-- **Enable the Finder extension**: System Settings → Privacy & Security → Extensions → Finder Extensions → check FinderRight
-- **Grant Full Disk Access** (to use all features in protected folders)
-- **Grant Accessibility** (so "Toggle Hidden Files" doesn't need to restart Finder)
+```bash
+killall Finder
+```
 
-### 🔄 Upgrading from Older Versions
+<details>
+<summary>Upgrading from 1.2.0 or earlier, auto-update details</summary>
 
-Homebrew installations can also use in-app updates. To update through Homebrew, quit FinderRight, then run `brew update` and `brew upgrade --cask --greedy funny-dog/tap/finderright`. The cask declares `auto_updates true`, so normal bulk upgrades may skip it. In-app updates do not update Homebrew's version record; mixing methods may reinstall an already updated version. Homebrew updates also remove the quarantine attribute. Restart Finder after updating.
+- **First upgrade from 1.2.0 or earlier**: older builds were ad-hoc signed, so macOS treats the new one as a different app; re-grant permissions once even if the toggles look on. The easiest way:
+  ```bash
+  tccutil reset SystemPolicyAllFiles com.finderright.app
+  tccutil reset Accessibility com.finderright.app
+  ```
+  Then reopen FinderRight and follow the onboarding. Since 1.3.0 a fixed certificate is used, so later upgrades keep permissions.
+- **Auto-update**: off by default; when on, it checks every 6 hours and installs while file operations are idle, then restarts. It queries the website and GitHub, switches to the alternate source if a download stalls, and always verifies SHA-256 and the signing certificate before installing.
+- **Mixing Homebrew and in-app updates**: in-app updates don't update Homebrew's version record, which may cause reinstalls; the cask declares `auto_updates true`, so a plain `brew upgrade` skips it.
 
-Enable "Automatically check for and install updates" in Settings → General (off by default) to check immediately and every 6 hours while the app is running. Installable updates download when file operations are idle, then install and restart automatically; the app waits for any ongoing file operations before quitting. Turning the switch off stops future automatic updates; an update already in progress will still finish. You can also check and upgrade manually in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
+</details>
 
-Update checks request the website and GitHub concurrently. The first valid response selects the preferred download source, and the other request is cancelled. Downloads stay pinned to the checked version and switch once to the alternate source on request failure, no data within 3 seconds, or 10 seconds without further data. SHA-256 and signature checks remain required; verification failures stop installation. Website release metadata is cached for up to 2 minutes.
+### 🩺 Troubleshooting
 
-> 💡 **Upgrade Tips**:
-> 1. **Restart Finder (Important)**: macOS caches FinderSync extension processes. After upgrading or overwriting the app, **always restart Finder via Terminal** to ensure the new extension bundle is loaded (otherwise the context menu or badges may not update immediately):
->    ```bash
->    killall Finder
->    ```
-> 2. **Permission Re-authorization Notice**: Builds are now signed with a fixed self-signed certificate, so new versions keep the same code signing identity and **Full Disk Access and Accessibility permissions are preserved across updates**. The only exception is the **first update** from **1.2.0 or earlier** (ad-hoc signed, `codesign -s -`) to 1.3.0 or later: macOS Transparency, Consent, and Control (TCC) treats it as a different app, so re-grant the permissions once as described below, even if the toggle switches in System Settings still appear to be ON.
->    - **Full Disk Access**: Go to System Settings → Privacy & Security → Full Disk Access, toggle FinderRight OFF and back ON (or remove it with `-` and re-add).
->    - **Accessibility**: Go to System Settings → Privacy & Security → Accessibility, select FinderRight, click the **`-` (minus)** button to remove it, then restart the app to re-add.
->    - **One-click Terminal reset (Recommended)**:
->      ```bash
->      tccutil reset SystemPolicyAllFiles com.finderright.app
->      tccutil reset Accessibility com.finderright.app
->      ```
->      Then reopen FinderRight to complete the onboarding permission prompt.
-> 3. **Quit the old version**: If running, select "Quit FinderRight" from the menu bar before overwriting.
-> 4. **Bypass Gatekeeper**: Run:
->    ```bash
->    xattr -dr com.apple.quarantine /Applications/FinderRight.app
->    ```
+| Symptom | Fix |
+| --- | --- |
+| No FinderRight items in the right-click menu | Use Settings → Permissions & Extensions → Troubleshooting to enable the Finder extension and relaunch Finder. |
+| Menu or badges look old after upgrading | Relaunch Finder: `killall Finder`. |
+| No menu in cloud folders, `/Applications`, etc. | A system limitation; use **right-click → Services** instead (see below). |
+| No Compress / Extract in the menu | Off by default; turn it on in Settings → Features. |
+| Shortcuts do nothing | Grant Accessibility; most shortcuts need a selected item. |
+| No scissors badge after cutting | Another extension (such as Keka) may hold the badge; paste still works. Turn on "Resolve Badge Conflicts Automatically" in Settings → Features. |
+| No visible result after an action | Check Settings → Operation History for the result or failure reason. |
+| Open in Terminal doesn't switch folders | Ghostty / Alacritty / Kitty can't take a working directory while already running. |
+| Permissions look on but don't work after upgrading | Upgrading from 1.2.0 or earlier requires re-granting once (see "Upgrading"). |
+| Space on a folder or ZIP still shows the system preview | Turn on "Folder and ZIP previews" in Settings → Permissions & Extensions → Extensions, then reopen Quick Look. |
 
-### 🗑️ Complete Uninstall
+<details>
+<summary>Cloud folders and the Services menu</summary>
 
-To completely remove FinderRight and all associated preferences, staging files, and cache:
+iCloud Drive, Google Drive, OneDrive, Dropbox and similar services are File Provider domains on macOS, owned by the provider's own extension, so third-party Finder extension menus don't appear there, and Full Disk Access doesn't change that (see [the Apple DTS reply quoted in Keka #1327](https://github.com/aonez/Keka/issues/1327)). Unregistered folders such as `/Applications` and `/Users/Shared` behave the same way.
+
+In these places FinderRight's actions are available under **right-click → Services**: Copy Path / Copy File Name / Copy File Content / Go to Folder / New File / Move To / Copy To / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
+
+- Paste: after cutting, right-click empty space in the destination and choose "Services → FinderRight: Paste into This Folder"; if Services is missing there, right-click the destination folder from its parent. It moves FinderRight's cut queue, not the system clipboard.
+- New File and Move To / Copy To show a confirmation dialog first; cancelling does nothing.
+- Service titles follow the system language, not FinderRight's language setting.
+
+</details>
+
+<details>
+<summary>Quick Look scope and limits</summary>
+
+- Read-only list with expandable folders and sortable columns; no file-content preview or extraction.
+- Includes hidden items; doesn't follow symbolic links, browse app packages, or compute folder sizes.
+- Up to 2,000 items per folder and 10,000 ZIP records, with a notice when truncated.
+- ZIP64 and split ZIPs aren't supported; encrypted ZIPs list entries but aren't decrypted.
+- The preview extension has its own sandbox permissions; the main app's Full Disk Access doesn't extend to it.
+
+</details>
+
+<details>
+<summary>Other known behavior</summary>
+
+- **Encrypted / multi-volume archives**: encrypted ZIPs prompt for a password; encrypted 7z / RAR and split archives fail with a message, and temporary files are cleaned up.
+- **Undo**: single-level only, interleaved with Finder's own undo; items that changed or whose original location is taken are skipped, and deletions always go to the Trash.
+- **Operation history**: stored only on this Mac, keeping the latest 100 entries by default (0 / 50 / 500 also available); clearing it doesn't affect files or undo.
+- **Cut state**: if the main app crashes mid-paste, unmoved items return to the cut queue on next launch.
+- **Language**: the context menu switches immediately; the cut badge label updates after Finder restarts.
+
+</details>
+
+<details>
+<summary>Complete uninstall</summary>
 
 ```bash
 killall FinderRight 2>/dev/null || true
@@ -325,62 +305,19 @@ tccutil reset All com.finderright.app 2>/dev/null || true
 killall Finder
 ```
 
+</details>
+
 ### 🛠 Build from Source
 
-Website source lives in [`website/`](website/); see its README for preview and deployment instructions.
-
-Option 1 (recommended, no Xcode needed — Command Line Tools only):
+Command Line Tools only, no Xcode required:
 
 ```bash
-bash scripts/setup-signing.sh  # first time only: create the self-signed certificate (required for release builds; back up the private key)
-bash scripts/ci.sh             # build the Kit + unit tests + type-check app & extension
-bash scripts/build.sh          # produces FinderRight.app plus DMG / ZIP (certificate-signed when available, otherwise ad-hoc)
+bash scripts/setup-signing.sh  # first time only: create the self-signed certificate (back up the private key)
+bash scripts/ci.sh             # build + unit tests + type checks
+bash scripts/build.sh          # produces the .app plus DMG / ZIP
 ```
 
-Option 2 (Xcode project; requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen)):
-
-```bash
-brew install xcodegen
-xcodegen generate
-xcodebuild -scheme FinderRight -configuration Release \
-  -derivedDataPath build/release build
-```
-
-### ⚠️ Known Behavior and Tradeoffs
-
-- **Operation history and failure feedback**: Settings → Operation History groups the results of creating, cutting, pasting, moving, copying, compressing, extracting and undoing files by date. Search action names, filenames, paths and failure details, and combine action-type and completion-status filters (each status shows its count). Click an entry to expand its time, location, output files and failure details; reveal output files in Finder, or open the folder and copy technical details for failed actions. History stays on this Mac across restarts (an unreadable history file, e.g. from a newer version, is backed up as `operation-history.unreadable.json` before new entries are saved), keeping 100 entries by default; choose none, 50, 100 or 500. Older entries are trimmed at the limit, and clearing history never deletes files or changes the current undo action. Operation History is available only in the Settings sidebar; the menu bar has no history entry, inline list or red failure indicator. Background failures show a brief message even when history or the menu-bar icon is off. History entries are not undo steps: undo remains single-level.
-- **Encrypted / multi-volume archives**: encrypted ZIPs prompt for a password, retry on a wrong one and are skipped when cancelled; the system bsdtar handles `.7z` and `.rar` (including RAR5). Encrypted 7z / RAR and split archives still fail, with a failure message and details in Operation History (temporary files from the attempt are cleaned up automatically).
-- **Menu coverage**: the Finder extension only registers your home folder and mounted volumes, so `/Applications`, `/Users/Shared` and similar system folders show no context menu; cloud folders are covered by the Services submenu (see below).
-- **Terminal working directory**: Ghostty / Alacritty / Kitty can only receive a working directory through command-line arguments while they are **not yet running** (an inherent `open --args` limitation). If they are already running, FinderRight falls back to opening the folder URL, and whether the directory changes depends on the terminal itself.
-- **Cut state**: if the main app is force-quit or crashes mid-paste, the paths that were not moved yet are restored into the cut queue on next launch (already-moved ones are not).
-
-### 🏗 Architecture
-
-- **Main app** (non-sandboxed): menu bar + settings UI, runs the actual file operations using its TCC permissions
-- **Finder extension** (sandboxed): provides the right-click menu
-- **IPC**: the extension wakes the main app via a file + URL scheme to perform actions — no App Group or paid developer account required
-
-### ☁️ iCloud / Google Drive and other cloud folders
-
-iCloud Drive, Google Drive, OneDrive, Dropbox and similar cloud storage are **File Provider domains** on macOS, and their folders are owned by the provider's own extension. According to Apple Developer Technical Support (DTS), Finder extensions are designed around a single owning extension per folder, so a third-party extension should not be expected to work inside a folder managed by another cloud provider (see [the DTS reply quoted in Keka #1327](https://github.com/aonez/Keka/issues/1327)). Testing on macOS 27 with iCloud Drive and Google Drive confirmed it: the right-click menu still did not appear after explicitly registering the folders and granting folder access, and Full Disk Access does not change this either. Inside these cloud folders, FinderRight's actions appear under **right-click → Services** instead: Copy Path / Copy File Name / Go to Folder / New File (including templates) / Move to Favorite Folder / Copy to Favorite Folder / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
-
-After using FinderRight's Cut, right-click empty space in the destination folder and choose **Services → FinderRight: Paste into This Folder**. On the tested Mac, Google Drive can pass the current folder for this action. If Services is absent, go to the parent folder and right-click the destination folder instead. Paste requires one existing directory, rejects files and multiple selections, and moves FinderRight's cut queue rather than items copied to the system clipboard. If the system activates FinderRight during invocation, it shows the destination path and asks for confirmation before moving files; cancelling preserves the cut queue. Copy File Name keeps extensions and writes one name per line for multiple selections. Go to Folder is available from the right-click Services menu after selecting a file or folder. It opens a path prompt; the entered path determines the destination, independently of the selection. New File requires one existing folder. Its confirmation dialog offers built-in text types, blank Office documents, and custom templates from Settings; the default name is untitled, with numbering on conflicts. Move/Copy to Favorite Folder supports multiple selections and shows configured favorites with their full paths in a confirmation dialog. Cancelling performs no file operation. Cancel Cut does not yet have a service entry. Service titles are shown by macOS in the system language (Chinese on a Chinese system, English otherwise) and do not follow the interface language chosen in FinderRight's Settings.
-
-### 🩺 Troubleshooting
-
-| Symptom | Cause and fix |
-| --- | --- |
-| No FinderRight items in the right-click menu at all | Make sure FinderRight is checked under System Settings → Privacy & Security → Extensions → Finder Extensions, then relaunch Finder. Both are one click away in Settings → Permissions & Extensions → Troubleshooting. |
-| Menu or badges still look old after upgrading | macOS caches the old extension process; relaunch Finder (see "Upgrading from Older Versions"). |
-| No menu inside cloud folders | A system limitation; use right-click → Services instead (see "iCloud / Google Drive and other cloud folders"). |
-| No menu in `/Applications`, `/Users/Shared` and other system folders | The extension only registers your home folder and mounted volumes; use right-click → Services there as well. |
-| No Compress / Extract in the menu | Off by default; turn them on in Settings → Features → Right-Click Menu Features. |
-| Shortcuts do nothing | Grant Accessibility permission. Apart from Cut, Paste, Toggle Hidden Files and Go to Folder, shortcuts need a selected item. Without Accessibility, Cut and Paste are unavailable and the other shortcuts fall back to system Services shortcuts, which need a Finder relaunch after changes. |
-| No scissors badge after cutting | Another Finder extension (such as Keka) may hold the badge slot for that folder. Cutting still works and you can paste as usual; you can also turn on "Resolve Badge Conflicts Automatically" in Settings → Features. |
-| No visible result after compress / extract / paste | Open Settings → Operation History to review outcomes or failure reasons and reveal output files in Finder. Background failures are still reported when history is off. |
-| Open in Terminal doesn't switch to the folder | Ghostty / Alacritty / Kitty can't receive a working directory while already running (see "Known Behavior and Tradeoffs"). |
-| Permissions look enabled but don't work after upgrading | Upgrading from 1.2.0 or earlier requires authorizing once more (see "Upgrading from Older Versions"). |
-| Pressing Space on a folder or ZIP still shows the system preview | Turn on "Folder and ZIP previews" in Settings → Permissions & Extensions → Extensions, then reopen the Quick Look window. |
+You can also generate an Xcode project with [xcodegen](https://github.com/yonaskolb/XcodeGen) (`xcodegen generate`). The project consists of the main app (non-sandboxed, performs file operations), a Finder extension (sandboxed, provides the menu) and a Quick Look extension; the extensions wake the main app via a file + URL scheme, with no App Group or paid developer account required. Website source lives in [`website/`](website/).
 
 ### 📄 License
 
