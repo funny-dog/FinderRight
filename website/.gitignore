@@ -3,7 +3,6 @@ __pycache__/
 .ruff_cache/
 .sites-runtime/
 .wrangler/
-.openai/
 .env*
 .dev.vars*
 *.log
