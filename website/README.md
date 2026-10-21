@@ -18,6 +18,7 @@ uv run --no-project python check.py
 uvx ruff check check.py
 node --check dist/script.js
 node --check worker/index.js
+node worker/test.mjs
 ```
 
 中文内容在 `dist/index.html`；对应英文在 `data-en` 属性。`dist/script.js` 处理语言切换、深浅色主题切换和安装命令复制，`dist/style.css` 处理桌面与手机布局。
@@ -26,20 +27,38 @@ node --check worker/index.js
 
 下载入口是站内路径 `/download/FinderRight.dmg`，由 `worker/index.js` 代理到 GitHub 最新 Release，不写死版本号；`/download/FinderRight.dmg.sha256` 提供对应校验和，页面下载区链接到它。因为 App 是自签名、未公证，校验和是用户确认安装包未被替换的唯一手段，发版时必须一并上传 `FinderRight.dmg.sha256`（`scripts/build.sh` 生成，`scripts/release.sh` 校验并上传）。应用功能、系统要求和安装说明更新时，应同步核实主仓库 README。
 
-## 下载代理
+## 下载与更新通道代理
 
-`worker/index.js` 只处理 `/download/*`。`wrangler.jsonc` 用 `assets.run_worker_first` 把入口限定在这个前缀，其余路径仍由静态资源直接响应，因此 Worker 出错或超额时网站本身照常可用，只有下载受影响。
+`worker/index.js` 处理 `/download/*` 与 `/update/*`。`wrangler.jsonc` 用 `assets.run_worker_first` 把入口限定在这两个前缀，其余路径仍由静态资源直接响应，因此 Worker 出错或超额时网站本身照常可用。
 
-- 文件名白名单 `FinderRight.dmg` / `FinderRight.dmg.sha256`，避免变成开放代理；只接受 `GET`/`HEAD`。
+### 最新 DMG 下载
+
+打包时将 FinderRight 卷图标写入镜像内部，普通下载也会保留；双击 DMG 后挂载的磁盘显示应用图标，下载目录中的 `.dmg` 文件本身仍使用 macOS 默认磁盘映像图标。
+
+- 路径白名单 `/download/FinderRight.dmg` 与 `/download/FinderRight.dmg.sha256`，避免变成开放代理；只接受 `GET`/`HEAD`。
 - 转发 `Range`，保留断点续传（GitHub 资产返回 `206`）。
 - 上游超时（30 秒）、抛错或返回非 2xx 时，`302` 跳回 GitHub 的同名资产，下载降级为慢而不是不可用。
-- 固定文件名内容随版本变化，`Cache-Control` 只给 5 分钟，避免发版后长时间拿到旧包。
+- 固定文件名内容随版本变化，`Cache-Control` 只给 5 分钟（`public, max-age=300`），避免发版后长时间拿到旧包。
+
+### 固定版本资产代理
+
+- 严格白名单匹配 `/download/vX.Y.Z/FinderRight-vX.Y.Z.zip` 与同名 `.zip.sha256`（严格三段纯数字版本，路径版本与文件名版本必须一致）；只接受 `GET`/`HEAD`。
+- 回源到 GitHub Release 固定版本资产，流式透传 `Range` 及响应状态码（支持 `206` 断点续传）。
+- 成功固定版本设置不可变长缓存（`public, max-age=31536000, immutable`）；提供正确的 `Content-Type`、`Content-Length` 与 `Content-Disposition`；错误不缓存。
+- 上游超时或失败返回 `502`/`504`，不 `302` 回退到 GitHub（由 App 客户端自行切换或处理故障）。
+
+### 版本更新检查
+
+- 固定接口 `GET`/`HEAD /update/latest.json`，只代理 GitHub 最新 Release API（`https://api.github.com/repos/funny-dog/FinderRight/releases/latest`），不接受任意 URL。
+- 响应兼容 GitHub Release JSON 结构（包含 `tag_name`、`html_url`、`assets`、`browser_download_url`、`digest` 等）。API 返回 403/429 时，改读 GitHub 最新正式 Release 的 302 跳转和该固定版本 ZIP 的 `.sha256`，生成所需版本信息；避免共享出口限流导致官网更新通道不可用，无需保存 GitHub 令牌。
+- 校验响应的基本合法结构后，使用显式 Cache API 缓存 120 秒（`public, max-age=120`），降低 GitHub API 限流风险。
+- 上游超时、网络异常或返回无效 JSON / 非法结构时返回适当的 `502`/`504`，错误不缓存且不 `302` 降级到 GitHub。
 
 改动 `worker/index.js` 后重新执行 `wrangler deploy` 即可生效；`dist/` 与 Worker 在同一次部署中上传。
 
 ## Cloudflare 部署
 
-使用 Workers 静态托管加一个下载代理 Worker，配置在 `wrangler.jsonc`，无需构建步骤。
+使用 Workers 静态托管加一个下载与更新代理 Worker，配置在 `wrangler.jsonc`，无需构建步骤。
 
 ```sh
 npx --yes wrangler@4.147.0 login --scopes account:read user:read workers_scripts:write

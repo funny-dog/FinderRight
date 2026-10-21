@@ -1,96 +1,155 @@
-/**
- * /download/* 下载代理。
- *
- * 目的：让访客只连 finderright.erhuerhu.dpdns.org，不直连 github.com。
- * GitHub 的 Release 资产按固定文件名寻址（FinderRight.dmg 每次发版都被替换），
- * 所以这里不需要知道版本号，永远跟随 latest。
- *
- * 只有 /download/* 会进入本脚本（wrangler.jsonc 里用 run_worker_first 限定），
- * 其余路径仍由静态资源直接响应，Worker 挂掉不影响网站本身。
- */
-
+/** 官网版本接口与下载代理；其他页面由静态资源直接响应。 */
 const REPO = "https://github.com/funny-dog/FinderRight";
-const LATEST = `${REPO}/releases/latest/download`;
-
-/** 允许代理的文件名，白名单避免变成任意 URL 的开放代理。 */
-const FILES = new Set(["FinderRight.dmg", "FinderRight.dmg.sha256"]);
-
-/** 上游拉取超时；超时即降级，避免用户对着空白页等待。 */
+const RELEASE_API = "https://api.github.com/repos/funny-dog/FinderRight/releases/latest";
+const DMG_FILES = new Set(["FinderRight.dmg", "FinderRight.dmg.sha256"]);
+const VERSIONED_ZIP = /^\/download\/(v\d+\.\d+\.\d+)\/FinderRight-(v\d+\.\d+\.\d+)\.zip(\.sha256)?$/;
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
-/**
- * 降级出口：上游出问题时跳回 GitHub 对应资产，让访问者仍能拿到文件。
- * 用同名资产而不是固定 DMG，否则 .sha256 会被跳成安装包。
- */
-function fallback(name) {
-    return new Response(null, {
+function gatewayError(error) {
+    const timedOut = error?.name === "AbortError" || error?.name === "TimeoutError";
+    return new Response(timedOut ? "Gateway Timeout" : "Bad Gateway", {
+        status: timedOut ? 504 : 502,
+        headers: { "Cache-Control": "no-store" },
+    });
+}
+
+function validRelease(data) {
+    return data && /^v\d+\.\d+\.\d+$/.test(data.tag_name)
+        && typeof data.html_url === "string" && data.html_url.length > 0
+        && Array.isArray(data.assets) && data.assets.every(asset =>
+            asset && typeof asset.name === "string" && typeof asset.browser_download_url === "string"
+            && asset.browser_download_url.length > 0);
+}
+
+// API 共享出口可能被 GitHub 限流；正式 Release 跳转与固定校验和不走 API 配额。
+async function releaseFromAssets(signal) {
+    const latest = await fetch(`${REPO}/releases/latest`, { method: "HEAD", redirect: "manual", signal });
+    const location = latest.headers.get("Location");
+    const releaseURL = location && new URL(location, REPO);
+    const match = releaseURL?.pathname.match(/^\/funny-dog\/FinderRight\/releases\/tag\/(v\d+\.\d+\.\d+)$/);
+    if (latest.status !== 302 || releaseURL?.origin !== "https://github.com" || !match) {
+        throw new Error("Invalid latest Release redirect");
+    }
+    const tag = match[1];
+    const name = `FinderRight-${tag}.zip`;
+    const zipURL = `${REPO}/releases/download/${tag}/${name}`;
+    const checksum = await fetch(`${zipURL}.sha256`, { redirect: "follow", signal });
+    if (!checksum.ok) throw new Error(`Release checksum HTTP ${checksum.status}`);
+    const hash = (await checksum.text()).trim().split(/\s+/)[0];
+    if (!/^[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Invalid Release checksum");
+    return JSON.stringify({
+        tag_name: tag, html_url: releaseURL.href,
+        assets: [{ name, browser_download_url: zipURL, digest: `sha256:${hash.toLowerCase()}` }],
+    });
+}
+
+async function latestRelease(request, url, ctx) {
+    // 查询串不改变版本信息，避免相同接口产生大量缓存键。
+    const key = new Request(new URL("/update/latest.json", url.origin), { method: "GET" });
+    const cache = globalThis.caches?.default;
+    let response;
+    try {
+        response = await cache?.match(key);
+    } catch (error) {
+        console.error("release cache read failed", error);
+    }
+    if (!response) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+        try {
+            const upstream = await fetch(RELEASE_API, {
+                headers: { "User-Agent": "FinderRight-Worker", Accept: "application/vnd.github.v3+json" },
+                signal: controller.signal,
+            });
+            let text;
+            if (upstream.status === 403 || upstream.status === 429) {
+                console.error("release API restricted; using fixed assets", upstream.status);
+                await upstream.body?.cancel();
+                text = await releaseFromAssets(controller.signal);
+            } else {
+                if (!upstream.ok) {
+                    console.error("release upstream status", upstream.status);
+                    return gatewayError({ name: upstream.status === 504 ? "TimeoutError" : "Error" });
+                }
+                // 超时覆盖读取 JSON，防止只返回响应头的上游一直挂起。
+                text = await upstream.text();
+            }
+            if (!validRelease(JSON.parse(text))) return gatewayError();
+            response = new Response(text, {
+                headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=120" },
+            });
+            if (cache) {
+                const write = cache.put(key, response.clone()).catch(error => console.error("release cache write failed", error));
+                // 缓存写入不阻塞发给 App 的版本响应。
+                if (ctx) ctx.waitUntil(write);
+                else await write;
+            }
+        } catch (error) {
+            console.error("release upstream failed", error);
+            return gatewayError(error);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    return request.method === "HEAD" ? new Response(null, response) : response;
+}
+
+async function download(request, name, version) {
+    const upstreamURL = version ? `${REPO}/releases/download/${version}/${name}` : `${REPO}/releases/latest/download/${name}`;
+    // 固定版本错误交给 App 切换；网页 DMG 保留现有 302 降级。
+    const failure = error => version ? gatewayError(error) : new Response(null, {
         status: 302,
-        headers: { Location: `${LATEST}/${name}`, "Cache-Control": "no-store" },
+        headers: { Location: upstreamURL, "Cache-Control": "no-store" },
+    });
+    const headers = new Headers();
+    const range = request.headers.get("Range");
+    if (range) headers.set("Range", range);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    let upstream;
+    try {
+        upstream = await fetch(upstreamURL, {
+            method: request.method, headers, redirect: "follow", signal: controller.signal,
+        });
+    } catch (error) {
+        console.error("download upstream failed", error);
+        return failure(error);
+    } finally {
+        clearTimeout(timer);
+    }
+    if (!upstream.ok) return failure({ name: upstream.status === 504 ? "TimeoutError" : "Error" });
+
+    const responseHeaders = new Headers();
+    for (const header of ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"]) {
+        const value = upstream.headers.get(header);
+        if (value) responseHeaders.set(header, value);
+    }
+    if (name.endsWith(".sha256")) responseHeaders.set("Content-Type", "text/plain; charset=utf-8");
+    else {
+        if (version) responseHeaders.set("Content-Type", "application/zip");
+        responseHeaders.set("Content-Disposition", `attachment; filename="${name}"`);
+    }
+    responseHeaders.set("Cache-Control", version ? "public, max-age=31536000, immutable" : "public, max-age=300");
+    // 只透传流，避免将整个安装包读入 Worker 内存。
+    return new Response(request.method === "HEAD" ? null : upstream.body, {
+        status: upstream.status, headers: responseHeaders,
     });
 }
 
 export default {
-    async fetch(request) {
+    async fetch(request, env, ctx) {
         const url = new URL(request.url);
         const name = url.pathname.slice("/download/".length);
-
-        if (!FILES.has(name)) {
-            return new Response("Not Found", { status: 404 });
-        }
-
-        // 只读场景，其余方法直接拒绝，避免被当作写入通道。
+        const versioned = url.pathname.match(VERSIONED_ZIP);
+        const isLatest = url.pathname === "/update/latest.json";
+        const isDmg = url.pathname.startsWith("/download/") && DMG_FILES.has(name);
+        const isVersioned = versioned && versioned[1] === versioned[2];
+        if (!isLatest && !isDmg && !isVersioned) return new Response("Not Found", { status: 404 });
         if (request.method !== "GET" && request.method !== "HEAD") {
-            return new Response("Method Not Allowed", {
-                status: 405,
-                headers: { Allow: "GET, HEAD" },
-            });
+            return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
         }
-
-        // 转发 Range，保留断点续传能力；GitHub 资产实测支持 206。
-        const headers = new Headers();
-        const range = request.headers.get("Range");
-        if (range) headers.set("Range", range);
-
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-
-        let upstream;
-        try {
-            upstream = await fetch(`${LATEST}/${name}`, {
-                method: request.method,
-                headers,
-                redirect: "follow",
-                signal: controller.signal,
-            });
-        } catch (error) {
-            clearTimeout(timer);
-            console.error("download upstream failed", error);
-            return fallback(name);
-        }
-        clearTimeout(timer);
-
-        // 4xx/5xx 一律降级：包括 GitHub 限流、资产缺失、预签名过期等。
-        if (!upstream.ok && upstream.status !== 206) {
-            console.error("download upstream status", upstream.status);
-            return fallback(name);
-        }
-
-        const responseHeaders = new Headers();
-        for (const header of ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"]) {
-            const value = upstream.headers.get(header);
-            if (value) responseHeaders.set(header, value);
-        }
-        // 校验和直接显示更便于对照；安装包才强制下载。
-        if (name.endsWith(".sha256")) {
-            responseHeaders.set("Content-Type", "text/plain; charset=utf-8");
-        } else {
-            responseHeaders.set("Content-Disposition", `attachment; filename="${name}"`);
-        }
-        // 文件名固定、内容随版本变化，只缓存 5 分钟，避免发版后长时间拿到旧包。
-        responseHeaders.set("Cache-Control", "public, max-age=300");
-
-        // 流式透传，不整体读入内存：DMG 有 3.5MB，免费版内存只有 128MB。
-        const body = request.method === "HEAD" ? null : upstream.body;
-        return new Response(body, { status: upstream.status, headers: responseHeaders });
+        if (isLatest) return latestRelease(request, url, ctx);
+        if (isDmg) return download(request, name);
+        return download(request, `FinderRight-${versioned[1]}.zip${versioned[3] || ""}`, versioned[1]);
     },
 };

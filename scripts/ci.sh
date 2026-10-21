@@ -113,6 +113,10 @@ for text in missing:
 sys.exit(1 if missing else 0)
 PY
 
+echo "=== [CI] 7. 校验官网下载与更新代理 ==="
+node --check website/worker/index.js
+node website/worker/test.mjs
+
 echo ""
 echo "========================================="
 echo "  ✓ 本地 CI 全部检查通过 (ALL GREEN)！"

@@ -113,6 +113,8 @@ Homebrew 安装后也可使用应用内更新。若选择 Homebrew 管理更新�
 
 可在「设置 → 通用」开启「自动检查并安装更新」（默认关闭）：开启后立即检查，应用运行期间每 6 小时检查一次，发现可安装的新版本后在文件操作空闲时下载安装并自动重启；自动安装退出前会等待进行中的文件操作完成。关闭开关后不再发起自动更新，已经开始的更新仍会完成。也可以通过应用内「关于」页面手动检查并升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
 
+更新检查同时请求官网与 GitHub，首个返回有效版本信息的渠道优先用于下载，另一请求会被取消。更新包固定到检查到的版本；首选下载源 3 秒内未收到数据、传输中连续 10 秒无数据或请求失败时，切换同版本备用源一次。全程保留 SHA-256 与签名校验，校验失败不会安装。官网版本信息最多缓存 2 分钟。
+
 > 💡 **版本升级注意事项**：
 > 1. **重启访达（重要）**：macOS 系统会缓存 FinderSync 扩展进程。覆盖安装或更新后，**务必在终端执行以下命令重启访达**，以使系统加载最新版本的扩展插件（否则右键菜单或剪切角标可能不会即时刷新）：
 >    ```bash
@@ -287,6 +289,8 @@ Regardless of the installation method chosen, follow the onboarding prompts on f
 Homebrew installations can also use in-app updates. To update through Homebrew, quit FinderRight, then run `brew update` and `brew upgrade --cask --greedy funny-dog/tap/finderright`. The cask declares `auto_updates true`, so normal bulk upgrades may skip it. In-app updates do not update Homebrew's version record; mixing methods may reinstall an already updated version. Homebrew updates also remove the quarantine attribute. Restart Finder after updating.
 
 Enable "Automatically check for and install updates" in Settings → General (off by default) to check immediately and every 6 hours while the app is running. Installable updates download when file operations are idle, then install and restart automatically; the app waits for any ongoing file operations before quitting. Turning the switch off stops future automatic updates; an update already in progress will still finish. You can also check and upgrade manually in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
+
+Update checks request the website and GitHub concurrently. The first valid response selects the preferred download source, and the other request is cancelled. Downloads stay pinned to the checked version and switch once to the alternate source on request failure, no data within 3 seconds, or 10 seconds without further data. SHA-256 and signature checks remain required; verification failures stop installation. Website release metadata is cached for up to 2 minutes.
 
 > 💡 **Upgrade Tips**:
 > 1. **Restart Finder (Important)**: macOS caches FinderSync extension processes. After upgrading or overwriting the app, **always restart Finder via Terminal** to ensure the new extension bundle is loaded (otherwise the context menu or badges may not update immediately):

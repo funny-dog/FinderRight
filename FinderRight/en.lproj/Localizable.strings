@@ -715,3 +715,5 @@
 "试试其他关键词，或重置操作类型和状态筛选。" = "Try different keywords, or reset the action and status filters.";
 "%lld / %lld 条" = "%lld of %lld entries";
 "会清空所有操作历史，包括未显示的记录。不会删除文件，也不会影响当前可撤销的操作。清空后无法恢复这些记录。" = "All operation history will be cleared, including entries hidden by filters. Your files and the current undo action are unaffected. Cleared entries cannot be restored.";
+
+"更新请求超限，请稍后再试" = "Too many update requests. Please try again later.";
