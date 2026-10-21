@@ -75,7 +75,7 @@ languageButton.addEventListener('click', () => {
 });
 
 copyButton.addEventListener('click', async () => {
-  const command = document.querySelector('#launch-command');
+  const command = document.querySelector('#install-command');
   try {
     await navigator.clipboard.writeText(command.textContent);
     copyStatus.textContent = locale === 'en' ? 'Copied' : '已复制';

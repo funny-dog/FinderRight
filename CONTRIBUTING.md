@@ -29,6 +29,8 @@ bash scripts/release.sh 1.9.0 --publish # 继续推送 main 与 tag，并创建 
 
 日常 `bash scripts/build.sh` 只写 `build/`，不会碰仓库根目录已发布的 `FinderRight.dmg` 与 `FinderRight-v<版本>.zip`；`RELEASE=1` 或经 `release.sh` 才会生成发布件。Release 资产名必须保持 `FinderRight.dmg`、`FinderRight-v<版本>.zip`、`FinderRight-v<版本>.zip.sha256`：`UpdateChecker` 按前者下载、按后者校验。draft Release 建好后补完更新说明再点 Publish。
 
+正式 Release 发布后，同步维护 [Homebrew Tap](https://github.com/funny-dog/homebrew-tap#维护-cask)：下载该版本 ZIP 和 `.sha256` 并校验，更新 `Casks/finderright.rb` 的 `version` 与 ZIP 的 `sha256`，复核签名、架构和系统要求，运行 Tap README 中的 style、audit、fetch 检查后提交推送。Tap 直接安装同一份正式 ZIP，保持发布证书不变；此步骤不需要重新打包 App。不要在正式 Release 公开前让 Tap 指向新版本。
+
 ## English
 
 Please use [Issues](https://github.com/funny-dog/FinderRight/issues) for bugs and suggestions. Chinese and English are welcome. Maintainers currently commit directly to `main`; the project does not use a PR workflow. Discuss larger changes in an issue first. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
@@ -38,3 +40,5 @@ Development requires macOS 13+, Apple Silicon, and the Swift toolchain. Run `bas
 Keep changes focused and verification proportional to risk. State any checks you could not run. Keep both README languages and the website consistent when changing user-facing behavior. Follow `website/README.md` for website-only checks. Never commit signing keys, exported certificates, tokens, personal logs, or build artifacts.
 
 For releases: the version lives in three Info.plist files (`FinderRight`, `FinderRightSync`, `FinderRightPreview`) and must match, with `CFBundleVersion` bumped every time. `scripts/release.sh --check` verifies the branch, a clean tree, the three plists and CI; `scripts/release.sh <x.y.z>` bumps, runs CI, commits, tags and builds with `RELEASE=1`; add `--publish` to push and open a draft release. A plain `scripts/build.sh` only writes to `build/` and never touches published artifacts. Keep the asset names `FinderRight.dmg`, `FinderRight-v<version>.zip` and its `.sha256` — the updater downloads and verifies exactly those.
+
+After publishing the final Release, update the [Homebrew tap](https://github.com/funny-dog/homebrew-tap#维护-cask): verify the published ZIP against its `.sha256`, update `version` and the ZIP's `sha256` in `Casks/finderright.rb`, and check signing, architecture and macOS requirements. Run the tap README's style, audit and fetch checks, then commit and push. Use the original release ZIP and the same signing certificate; no separate App build is needed. Publish the Release before updating the tap.

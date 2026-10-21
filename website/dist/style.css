@@ -246,6 +246,7 @@ h2.disp { margin-top: 18px; font-size: 68px; }
   word-break: break-all;
 }
 .copy-row { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+.copy-row + .term-comment { margin-top: 24px; }
 .copy-button { min-height: 40px; padding: 0 18px; background: #4fe3b1; color: #0b1220; border: 0; border-radius: 999px; cursor: pointer; }
 .copy-button:hover { background: #fff; }
 .term :focus-visible { outline-color: #fff; }
