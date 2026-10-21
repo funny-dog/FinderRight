@@ -1,6 +1,6 @@
 # FinderRight 宣传网站
 
-FinderRight 官网源码，与应用在同一仓库维护，独立部署到 Cloudflare Workers。使用静态 HTML/CSS/JavaScript 和真实应用截图，无需构建工具或后端；`dist/` 中的文件就是可直接编辑和发布的源码。
+FinderRight 官网源码，与应用在同一仓库维护，独立部署到 Cloudflare Workers。使用静态 HTML/CSS/JavaScript，产品图是用 HTML/CSS 绘制的 macOS 界面示意图（不用截图），无需构建工具或后端；`dist/` 中的文件就是可直接编辑和发布的源码。
 
 ## 本地预览
 
@@ -21,9 +21,9 @@ node --check worker/index.js
 node worker/test.mjs
 ```
 
-中文内容在 `dist/index.html`；对应英文在 `data-en` 属性。`dist/script.js` 处理语言切换、深浅色主题切换和安装命令复制，`dist/style.css` 处理桌面与手机布局。
+中文内容在 `dist/index.html`；对应英文在 `data-en` 属性。`dist/script.js` 处理语言切换、深浅色主题切换、功能卡片展开示意图和安装命令复制，`dist/style.css` 处理桌面与手机布局。
 
-深浅色主题由 `<html data-theme>` 控制：`dist/index.html` 的内联脚本在首次绘制前按本地记录或系统偏好设置主题，颜色全部定义为 `dist/style.css` 顶部的 CSS 变量，新增颜色时两套主题都要补齐。
+深浅色主题由 `<html data-theme>` 控制：`dist/index.html` 的内联脚本在首次绘制前按本地记录或系统偏好设置主题；默认跟随系统并实时响应系统切换，手动选择只在与系统不同时记住，切回与系统一致即恢复跟随。颜色全部定义为 `dist/style.css` 顶部的 CSS 变量，新增颜色时两套主题都要补齐。
 
 下载入口是站内路径 `/download/FinderRight.dmg`，优先由 Cloudflare Static Assets 提供已发布安装包，无需为每次下载回源 GitHub；`/download/FinderRight.dmg.sha256` 提供对应校验和。镜像缺失或服务异常时，才使用 GitHub 代理及原有兜底。中国大陆访客的安装包请求会重定向到 Gitee 发行版，见下方「国内下载」。发版时必须一并上传 `FinderRight.dmg.sha256`（`scripts/build.sh` 生成，`scripts/release.sh` 校验并上传），正式发布后执行下方镜像同步和部署步骤。应用功能、系统要求和安装说明更新时，应同步核实主仓库 README。
 

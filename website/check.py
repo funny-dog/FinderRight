@@ -19,8 +19,9 @@ class PageCheck(HTMLParser):
         self.ids = set()
         self.fragments = []
         self.downloads = 0
-        self.checksums = 0
         self.images = 0
+        self.mocks = 0
+        self.icons = set()
         self.translations = 0
 
     def handle_starttag(self, tag, attrs):
@@ -38,6 +39,13 @@ class PageCheck(HTMLParser):
             image = ROOT / urlsplit(attrs.get("src", "")).path
             if image.is_file():
                 assert image.stat().st_size <= 100 * 1024, f"Image too large: {attrs['src']}"
+        if "mock" in attrs.get("class", "").split():
+            # 产品示意图用 HTML/CSS 绘制，读屏只能靠中英文描述
+            assert attrs.get("role") == "img", "Mock needs role=img"
+            assert attrs.get("aria-label") and attrs.get("data-en-label"), "Mock needs both labels"
+            self.mocks += 1
+        if tag == "use":
+            self.icons.add(attrs.get("href", ""))
         if tag == "video":
             # 演示视频约 5MB，只在用户点击播放后加载。
             assert "autoplay" not in attrs and attrs.get("preload") == "none", "Video must not preload"
@@ -50,10 +58,7 @@ class PageCheck(HTMLParser):
                     self.fragments.append(value[1:])
             elif value in WORKER_DOWNLOADS:
                 # 镜像文件由发布同步脚本生成，干净检出时也允许这些下载入口。
-                if value.endswith(".sha256"):
-                    self.checksums += 1
-                else:
-                    self.downloads += 1
+                self.downloads += 1
             elif value and not urlsplit(value).scheme:
                 assert (ROOT / urlsplit(value).path).is_file(), value
             elif "releases/latest/download/" in value:
@@ -65,9 +70,12 @@ if __name__ == "__main__":
     page = PageCheck()
     page.feed((ROOT / "index.html").read_text())
     assert set(page.fragments) <= page.ids, "Broken section link"
-    assert page.downloads == 4, page.downloads
-    # 安装指南第 2 步的校验和链接；英文文案嵌在 data-en 属性里，解析器只见到中文那个。
-    assert page.checksums == 1, page.checksums
-    assert page.images >= 6
+    # 顶栏、首屏、页尾三个下载按钮；安装指南不再重复下载入口
+    assert page.downloads == 3, page.downloads
+    # 首屏菜单加九张功能示意图
+    assert page.mocks >= 10, page.mocks
+    for icon in page.icons:
+        sprite, _, symbol = icon.partition("#")
+        assert f'id="{symbol}"' in (ROOT / sprite).read_text(), f"Missing icon: {icon}"
     assert page.translations >= 60
-    print("OK: local assets, navigation, download links, checksum, alt text, translations")
+    print("OK: local assets, navigation, download links, alt text, mocks, icons, translations")
