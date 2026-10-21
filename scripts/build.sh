@@ -227,7 +227,7 @@ if [ "${RELEASE:-0}" = "1" ]; then
   cp "$DMG_PATH" "$PROJECT_DIR/FinderRight.dmg"
   cp "$ZIP_PATH" "$PROJECT_DIR/FinderRight-v$VERSION.zip"
   cp "$ZIP_SHA_PATH" "$PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"
-  cp "$DMG_SHA_PATH" "$PROJECT_DIR/FinderRight.dmg.sha256"
+  (cd "$PROJECT_DIR" && shasum -a 256 "FinderRight.dmg" > "FinderRight.dmg.sha256")
   echo "发布件：FinderRight.dmg / FinderRight.dmg.sha256 / FinderRight-v$VERSION.zip（含 .sha256）"
 else
   echo "提示：本次为本地验证构建，仓库根目录的发布件未被改动；需要发布件请用 RELEASE=1 bash scripts/build.sh"
