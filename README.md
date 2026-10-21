@@ -73,7 +73,7 @@ If FinderRight makes your daily work easier, [⭐ go to GitHub to star the proje
 brew install --cask funny-dog/tap/finderright
 ```
 
-或按以下步骤下载 DMG 安装。两种方式均安装同一正式发布的 App；Homebrew 不自动解除首次打开拦截，安装后均需完成放行和权限配置。
+Homebrew 安装后会自动删除此 App 的隔离属性（等同于下方第 3 步的终端方式），首次打开不再被拦截，可直接从第 4 步开始配置。也可按以下步骤下载 DMG 安装，两种方式安装的是同一正式发布的 App。
 
 1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release
 2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`
@@ -88,7 +88,7 @@ brew install --cask funny-dog/tap/finderright
    - **授予完全磁盘访问**（在受保护目录使用所有功能）
    - **授予辅助功能**（让"切换隐藏文件"无需重启 Finder）
 
-> ⚠️ Homebrew Tap 提供下载安装便利，不代表 Apple 公证或 Homebrew 官方仓库审核；Finder 扩展及隐私权限仍由用户确认。若未来提供 Developer ID 公证版，可省去上述手动放行步骤。
+> ⚠️ Homebrew Tap 提供下载安装便利，不代表 Apple 公证或 Homebrew 官方仓库审核。删除隔离属性后，macOS 不再对此 App 做 Gatekeeper 首次打开检查；如希望保留系统检查，请使用 DMG 安装。Finder 扩展及隐私权限仍由用户确认。若未来提供 Developer ID 公证版，DMG 安装也可省去手动放行步骤。
 
 ### 文件夹与 ZIP 预览
 
@@ -101,7 +101,7 @@ brew install --cask funny-dog/tap/finderright
 
 ### 🔄 升级说明
 
-Homebrew 安装后也可使用应用内更新。若选择 Homebrew 管理更新，先退出 FinderRight，再运行 `brew update` 和 `brew upgrade --cask --greedy funny-dog/tap/finderright`。Cask 声明 `auto_updates true`，常规批量升级可能跳过它；应用内更新不会同步 Homebrew 的版本记录，混用时可能重复安装。更新后仍需重启 Finder，必要时按上方步骤重新放行。
+Homebrew 安装后也可使用应用内更新。若选择 Homebrew 管理更新，先退出 FinderRight，再运行 `brew update` 和 `brew upgrade --cask --greedy funny-dog/tap/finderright`。Cask 声明 `auto_updates true`，常规批量升级可能跳过它；应用内更新不会同步 Homebrew 的版本记录，混用时可能重复安装。Homebrew 更新同样会删除隔离属性；更新后仍需重启 Finder。
 
 可在「设置 → 通用」开启「自动检查并安装更新」（默认关闭）：开启后立即检查，应用运行期间每 6 小时检查一次，发现可安装的新版本后在文件操作空闲时下载安装并自动重启；自动安装退出前会等待进行中的文件操作完成。关闭开关后不再发起自动更新，已经开始的更新仍会完成。也可以通过应用内「关于」页面手动检查并升级，或手动下载最新版 `FinderRight.dmg` 拖入 `Applications` 覆盖。
 
@@ -249,7 +249,7 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 brew install --cask funny-dog/tap/finderright
 ```
 
-Alternatively, install the DMG below. Both methods install the same officially released App. Homebrew does not remove first-launch restrictions; complete the approval and permission setup below after either installation method.
+After installation, Homebrew removes this App's quarantine attribute (the same as the Terminal option in step 3 below), so the first launch is not blocked and you can start at step 4. Alternatively, install the DMG below; both methods install the same officially released App.
 
 1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release
 2. Open the DMG and drag `FinderRight.app` into `Applications`
@@ -264,11 +264,11 @@ Alternatively, install the DMG below. Both methods install the same officially r
    - **Grant Full Disk Access** (to use all features in protected folders)
    - **Grant Accessibility** (so "Toggle Hidden Files" doesn't need to restart Finder)
 
-> ⚠️ The tap simplifies downloading and installation; it does not imply Apple notarization or review by Homebrew's official repository. You still need to enable the Finder extension and grant privacy permissions. A future Developer ID notarized build would remove the manual approval steps above.
+> ⚠️ The tap simplifies downloading and installation; it does not imply Apple notarization or review by Homebrew's official repository. Without the quarantine attribute, macOS does not run the Gatekeeper first-launch check for this App; to keep that check, install the DMG instead. You still need to enable the Finder extension and grant privacy permissions. A future Developer ID notarized build would also remove the manual approval steps for DMG installs.
 
 ### 🔄 Upgrading from Older Versions
 
-Homebrew installations can also use in-app updates. To update through Homebrew, quit FinderRight, then run `brew update` and `brew upgrade --cask --greedy funny-dog/tap/finderright`. The cask declares `auto_updates true`, so normal bulk upgrades may skip it. In-app updates do not update Homebrew's version record; mixing methods may reinstall an already updated version. Restart Finder after updating and approve the app again if macOS blocks it.
+Homebrew installations can also use in-app updates. To update through Homebrew, quit FinderRight, then run `brew update` and `brew upgrade --cask --greedy funny-dog/tap/finderright`. The cask declares `auto_updates true`, so normal bulk upgrades may skip it. In-app updates do not update Homebrew's version record; mixing methods may reinstall an already updated version. Homebrew updates also remove the quarantine attribute. Restart Finder after updating.
 
 Enable "Automatically check for and install updates" in Settings → General (off by default) to check immediately and every 6 hours while the app is running. Installable updates download when file operations are idle, then install and restart automatically; the app waits for any ongoing file operations before quitting. Turning the switch off stops future automatic updates; an update already in progress will still finish. You can also check and upgrade manually in the "About" tab, or manually download the latest `FinderRight.dmg` and drag `FinderRight.app` into `/Applications` to overwrite the existing version.
 
