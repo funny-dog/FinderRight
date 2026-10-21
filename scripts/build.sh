@@ -214,23 +214,8 @@ DMG_SHA_PATH="$PROJECT_DIR/build/FinderRight.dmg.sha256"
 ZIP_SHA_PATH="$PROJECT_DIR/build/FinderRight-v$VERSION.zip.sha256"
 rm -f "$DMG_PATH" "$ZIP_PATH" "$ZIP_SHA_PATH" "$DMG_SHA_PATH"
 
-hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG_PATH" >/dev/null
-
-# 给 DMG 设置应用图标：否则 Finder 里显示的是空白磁盘图标。
-# 图标写入文件资源分支（等价于 Finder「显示简介 → 粘贴图标」），需要一个小工具。
-# 失败不致命：没有图标的 DMG 照样能安装，只提示一句。
-DMG_ICON="FinderRight/Resources/AppIcon.icns"
-if [ -f "$DMG_ICON" ]; then
-  SETICON_BIN="$PROJECT_DIR/build/seticon"
-  if swiftc -O -o "$SETICON_BIN" "$PROJECT_DIR/scripts/seticon.swift" >/dev/null 2>&1 \
-    && "$SETICON_BIN" "$DMG_PATH" "$DMG_ICON"; then
-    echo "已设置 DMG 图标"
-  else
-    echo "提示：未能设置 DMG 图标，产物仍可正常安装" >&2
-  fi
-else
-  echo "提示：缺少 $DMG_ICON，跳过 DMG 图标" >&2
-fi
+bash "$PROJECT_DIR/scripts/package-dmg.sh" "$STAGE_DIR" \
+  "$PROJECT_DIR/FinderRight/Resources/AppIcon.icns" "$DMG_PATH"
 
 (cd "$STAGE_DIR" && zip -ry "$ZIP_PATH" FinderRight.app)
 (cd "$PROJECT_DIR/build" && shasum -a 256 "FinderRight-v$VERSION.zip" > "FinderRight-v$VERSION.zip.sha256")

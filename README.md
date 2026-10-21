@@ -160,6 +160,8 @@ bash scripts/ci.sh             # 编译 Kit + 单元测试 + 主程序/扩展静
 bash scripts/build.sh          # 产出 FinderRight.app 与 DMG / ZIP（有证书时用证书签名，否则退回 ad-hoc）
 ```
 
+DMG 内嵌 FinderRight 卷图标，下载后双击打开，挂载的磁盘会显示应用图标；下载目录中的 `.dmg` 文件本身使用 macOS 默认磁盘映像图标。
+
 方式二（Xcode 工程，需 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)）：
 
 ```bash
@@ -336,6 +338,8 @@ bash scripts/setup-signing.sh  # first time only: create the self-signed certifi
 bash scripts/ci.sh             # build the Kit + unit tests + type-check app & extension
 bash scripts/build.sh          # produces FinderRight.app plus DMG / ZIP (certificate-signed when available, otherwise ad-hoc)
 ```
+
+The DMG embeds the FinderRight volume icon, so the mounted disk shows the app icon after download and opening. The `.dmg` file itself uses the default macOS disk image icon.
 
 Option 2 (Xcode project; requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen)):
 

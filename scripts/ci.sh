@@ -113,7 +113,10 @@ for text in missing:
 sys.exit(1 if missing else 0)
 PY
 
-echo "=== [CI] 7. 校验官网下载与更新代理 ==="
+echo "=== [CI] 7. 校验 DMG 下载后的卷图标 ==="
+bash scripts/test-dmg-icon.sh
+
+echo "=== [CI] 8. 校验官网下载与更新代理 ==="
 node --check website/worker/index.js
 node website/worker/test.mjs
 
