@@ -214,8 +214,7 @@ DMG_SHA_PATH="$PROJECT_DIR/build/FinderRight.dmg.sha256"
 ZIP_SHA_PATH="$PROJECT_DIR/build/FinderRight-v$VERSION.zip.sha256"
 rm -f "$DMG_PATH" "$ZIP_PATH" "$ZIP_SHA_PATH" "$DMG_SHA_PATH"
 
-bash "$PROJECT_DIR/scripts/package-dmg.sh" "$STAGE_DIR" \
-  "$PROJECT_DIR/FinderRight/Resources/AppIcon.icns" "$DMG_PATH"
+hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG_PATH"
 
 (cd "$STAGE_DIR" && zip -ry "$ZIP_PATH" FinderRight.app)
 (cd "$PROJECT_DIR/build" && shasum -a 256 "FinderRight-v$VERSION.zip" > "FinderRight-v$VERSION.zip.sha256")

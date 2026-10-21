@@ -410,6 +410,112 @@ test("现有 DMG 入口行为保留：上游失败时 302 降级到 GitHub", asy
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("Cache-Control"), "public, max-age=300");
     assert.equal(res.headers.get("Content-Disposition"), 'attachment; filename="FinderRight.dmg"');
+    assert.equal(res.headers.get("Content-Type"), "application/x-apple-diskimage");
+});
+
+test("官网镜像优先提供四类资产，GitHub 不可用也能下载", async () => {
+    fetchHandler = async () => { throw new Error("不应回源 GitHub"); };
+    for (const [path, type] of [
+        ["/download/FinderRight.dmg", "application/x-apple-diskimage"],
+        ["/download/FinderRight.dmg.sha256", "text/plain; charset=utf-8"],
+        ["/download/v1.10.1/FinderRight-v1.10.1.zip", "application/zip"],
+        ["/download/v1.10.1/FinderRight-v1.10.1.zip.sha256", "text/plain; charset=utf-8"],
+    ]) {
+        const response = await worker.fetch(new Request(BASE_URL + path), { ASSETS: {
+            async fetch(request) {
+                assert.equal(new URL(request.url).pathname, path);
+                assert.equal(request.headers.get("Accept-Encoding"), "identity");
+                return new Response("original release bytes", { headers: { "Content-Length": "22" } });
+            },
+        } });
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("Content-Type"), type);
+        assert.equal(response.headers.get("X-FinderRight-Download-Source"), "cloudflare-assets");
+        assert.equal(await response.text(), "original release bytes");
+    }
+});
+
+test("镜像 HEAD 保留大小，镜像缺失或异常仍可回退 GitHub", async () => {
+    let githubCalls = 0;
+    fetchHandler = async () => {
+        githubCalls++;
+        return new Response("github bytes");
+    };
+    const response = await worker.fetch(new Request(`${BASE_URL}/download/FinderRight.dmg`, { method: "HEAD" }), { ASSETS: {
+        async fetch(request) {
+            assert.equal(request.method, "HEAD");
+            return new Response(null, { headers: { "Content-Length": "4444266" } });
+        },
+    } });
+    assert.equal(await response.text(), "");
+    assert.equal(response.headers.get("Content-Length"), "4444266");
+    assert.equal(githubCalls, 0);
+    for (const fetch of [
+        async () => new Response("missing", { status: 404 }),
+        async () => new Response("failed", { status: 503 }),
+        async () => { throw new Error("assets unavailable"); },
+    ]) {
+        const fallback = await worker.fetch(new Request(`${BASE_URL}/download/FinderRight.dmg`), { ASSETS: { fetch } });
+        assert.equal(await fallback.text(), "github bytes");
+        assert.equal(fallback.headers.get("X-FinderRight-Download-Source"), "github");
+    }
+    assert.equal(githubCalls, 3);
+});
+
+test("镜像 Range 被 Static Assets 忽略时交给 Cache API 生成 206", async () => {
+    const originalCaches = globalThis.caches;
+    let stored = false;
+    globalThis.caches = { default: {
+        async match(request) {
+            assert.equal(request.headers.get("Range"), "bytes=1-2");
+            assert.equal(new URL(request.url).searchParams.get("asset"), '"current-digest"');
+            if (stored) return new Response("23", { status: 206, headers: { "Content-Range": "bytes 1-2/5", "Content-Length": "2" } });
+        },
+        async put(request, response) {
+            assert.equal(request.headers.get("Range"), null);
+            assert.equal(response.status, 200);
+            assert.equal(response.headers.get("Content-Length"), "5");
+            assert.equal(await response.text(), "12345");
+            stored = true;
+        },
+    } };
+    fetchHandler = async () => { throw new Error("不应回源 GitHub"); };
+    try {
+        const response = await worker.fetch(new Request(`${BASE_URL}/download/FinderRight.dmg`, {
+            headers: { Range: "bytes=1-2" },
+        }), { ASSETS: { async fetch() {
+            return new Response("12345", { headers: { ETag: '"current-digest"', "Content-Length": "5" } });
+        } } });
+        assert.equal(response.status, 206);
+        assert.equal(response.headers.get("Content-Range"), "bytes 1-2/5");
+        assert.equal(await response.text(), "23");
+    } finally {
+        globalThis.caches = originalCaches;
+    }
+});
+
+test("If-Range 与当前镜像不匹配时返回完整文件，避免跨版本拼接", async () => {
+    const response = await worker.fetch(new Request(`${BASE_URL}/download/FinderRight.dmg`, {
+        headers: { Range: "bytes=1-2", "If-Range": '"old-digest"' },
+    }), { ASSETS: { async fetch() {
+        return new Response("12345", { headers: { ETag: '"new-digest"', "Content-Length": "5" } });
+    } } });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "12345");
+    assert.equal(memoryCache.putCalls, 0);
+});
+
+test("镜像 206/416/304 状态保留，不当作 GitHub 故障", async () => {
+    fetchHandler = async () => { throw new Error("不应回源 GitHub"); };
+    for (const status of [206, 416, 304]) {
+        const response = await worker.fetch(new Request(`${BASE_URL}/download/FinderRight.dmg`), { ASSETS: {
+            async fetch() {
+                return new Response(null, { status, headers: { "Content-Range": status === 416 ? "bytes */5" : "bytes 0-1/5" } });
+            },
+        } });
+        assert.equal(response.status, status);
+        if (status === 416) assert.equal(response.headers.get("Cache-Control"), "no-store");
+    }
 });
 
 test("只允许 GET/HEAD，其它 HTTP 方法返回 405 (Allow: GET, HEAD)", async () => {

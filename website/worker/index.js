@@ -94,7 +94,7 @@ async function latestRelease(request, url, ctx) {
     return request.method === "HEAD" ? new Response(null, response) : response;
 }
 
-async function download(request, name, version) {
+async function download(request, name, version, env) {
     const upstreamURL = version ? `${REPO}/releases/download/${version}/${name}` : `${REPO}/releases/latest/download/${name}`;
     // 固定版本错误交给 App 切换；网页 DMG 保留现有 302 降级。
     const failure = error => version ? gatewayError(error) : new Response(null, {
@@ -104,19 +104,72 @@ async function download(request, name, version) {
     const headers = new Headers();
     const range = request.headers.get("Range");
     if (range) headers.set("Range", range);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
     let upstream;
-    try {
-        upstream = await fetch(upstreamURL, {
-            method: request.method, headers, redirect: "follow", signal: controller.signal,
-        });
-    } catch (error) {
-        console.error("download upstream failed", error);
-        return failure(error);
-    } finally {
-        clearTimeout(timer);
+    let source = "github";
+    if (env?.ASSETS) {
+        try {
+            const assetHeaders = new Headers(request.headers);
+            assetHeaders.set("Accept-Encoding", "identity");
+            const asset = await env.ASSETS.fetch(new Request(request, { headers: assetHeaders }));
+            if (asset.ok || asset.status === 304 || asset.status === 416) {
+                // 保留原始 HEAD 响应的长度信息，重建 null-body Response 会被平台去掉长度头。
+                if (request.method === "HEAD") return asset;
+                upstream = asset;
+                source = "cloudflare-assets";
+            } else {
+                await asset.body?.cancel();
+            }
+        } catch (error) {
+            console.error("download mirror failed", error);
+        }
     }
+    if (!upstream) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+        try {
+            upstream = await fetch(upstreamURL, {
+                method: request.method, headers, redirect: "follow", signal: controller.signal,
+            });
+        } catch (error) {
+            console.error("download upstream failed", error);
+            return failure(error);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    // Static Assets 可能忽略 Range；由 Cache API 从完整镜像生成 206，保持下载器续传。
+    const cache = globalThis.caches?.default;
+    const ifRange = request.headers.get("If-Range");
+    if (source === "cloudflare-assets" && upstream.status === 200 && range && request.method === "GET"
+        && cache && (!ifRange || ifRange === upstream.headers.get("ETag"))) {
+        try {
+            const url = new URL(request.url);
+            url.search = "";
+            url.searchParams.set("asset", upstream.headers.get("ETag") || "");
+            const key = new Request(url);
+            const partialKey = new Request(url, { headers: request.headers });
+            let partial = await cache.match(partialKey);
+            if (!partial) {
+                const full = upstream.clone();
+                const fullHeaders = new Headers(full.headers);
+                fullHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
+                await cache.put(key, new Response(full.body, { headers: fullHeaders }));
+                partial = await cache.match(partialKey);
+            }
+            if (partial) {
+                upstream.body?.cancel().catch(error => console.error("unused asset stream failed", error));
+                upstream = partial;
+            }
+        } catch (error) {
+            console.error("download range cache failed", error);
+        }
+    }
+    if (upstream.status === 416) {
+        const errorHeaders = new Headers(upstream.headers);
+        errorHeaders.set("Cache-Control", "no-store");
+        return new Response(upstream.body, { status: 416, headers: errorHeaders });
+    }
+    if (upstream.status === 304) return new Response(null, upstream);
     if (!upstream.ok) return failure({ name: upstream.status === 504 ? "TimeoutError" : "Error" });
 
     const responseHeaders = new Headers();
@@ -126,9 +179,11 @@ async function download(request, name, version) {
     }
     if (name.endsWith(".sha256")) responseHeaders.set("Content-Type", "text/plain; charset=utf-8");
     else {
-        if (version) responseHeaders.set("Content-Type", "application/zip");
+        responseHeaders.set("Content-Type", name.endsWith(".dmg") ? "application/x-apple-diskimage" : "application/zip");
         responseHeaders.set("Content-Disposition", `attachment; filename="${name}"`);
     }
+    if (source === "cloudflare-assets" && cache) responseHeaders.set("Accept-Ranges", "bytes");
+    responseHeaders.set("X-FinderRight-Download-Source", source);
     responseHeaders.set("Cache-Control", version ? "public, max-age=31536000, immutable" : "public, max-age=300");
     // 只透传流，避免将整个安装包读入 Worker 内存。
     return new Response(request.method === "HEAD" ? null : upstream.body, {
@@ -149,7 +204,7 @@ export default {
             return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
         }
         if (isLatest) return latestRelease(request, url, ctx);
-        if (isDmg) return download(request, name);
-        return download(request, `FinderRight-${versioned[1]}.zip${versioned[3] || ""}`, versioned[1]);
+        if (isDmg) return download(request, name, undefined, env);
+        return download(request, `FinderRight-${versioned[1]}.zip${versioned[3] || ""}`, versioned[1], env);
     },
 };

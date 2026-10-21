@@ -171,6 +171,7 @@ if [ "$PUBLISH" = "1" ]; then
     "FinderRight-v$VERSION_ARG.zip" "FinderRight-v$VERSION_ARG.zip.sha256"
   rm -f "$NOTES_FILE"
   echo "draft Release v$VERSION_ARG 已创建，补完更新说明后在 GitHub 上点 Publish。"
+  echo "正式公开后同步官网镜像：在 website/ 执行 bash ../scripts/sync-website-downloads.sh，再按 website/README.md 部署。"
 else
   echo "下一步（确认无误后手动执行）："
   echo "  git push origin main"

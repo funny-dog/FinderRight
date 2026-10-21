@@ -81,7 +81,7 @@ Homebrew 安装会自动删除此 App 的隔离属性，首次打开不会被 Ga
 
 #### 方式二：DMG 手动安装
 
-1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release。
+1. 从官网镜像下载 **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)**，与 GitHub 正式 Release 使用同一份安装包。
 2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`。
 3. **首次打开**：当前版本使用自签名证书，未经 Apple 公证。确认下载来自本项目正式 Release 后，尝试打开 App；如被系统拦截，可选择以下任一方式放行：
    - **系统设置放行**：前往 **系统设置 → 隐私与安全性 → 仍要打开**，按提示确认（见 [Apple 说明](https://support.apple.com/zh-cn/102445)）。*macOS 15 起不能通过右键打开绕过此检查。*
@@ -159,8 +159,6 @@ bash scripts/setup-signing.sh  # 仅首次：生成自签名证书并导入钥�
 bash scripts/ci.sh             # 编译 Kit + 单元测试 + 主程序/扩展静态类型检查
 bash scripts/build.sh          # 产出 FinderRight.app 与 DMG / ZIP（有证书时用证书签名，否则退回 ad-hoc）
 ```
-
-DMG 内嵌 FinderRight 卷图标，下载后双击打开，挂载的磁盘会显示应用图标；下载目录中的 `.dmg` 文件本身使用 macOS 默认磁盘映像图标。
 
 方式二（Xcode 工程，需 Xcode 16+ 和 [xcodegen](https://github.com/yonaskolb/XcodeGen)）：
 
@@ -269,7 +267,7 @@ Homebrew automatically removes this App's quarantine attribute upon installation
 
 #### Method 2: DMG Manual Installation
 
-1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release.
+1. Download **[FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)** from the website mirror, which serves the same installer as the official GitHub release.
 2. Open the DMG and drag `FinderRight.app` into `Applications`.
 3. **First launch**: This release is self-signed and not notarized by Apple. After verifying that it came from this project's official Release, try opening the App. If blocked, choose either option below:
    - **Via System Settings**: Go to **System Settings → Privacy & Security → Open Anyway** and confirm (see [Apple's instructions](https://support.apple.com/en-us/102445)). *Starting with macOS 15, right-clicking Open no longer bypasses this check.*
@@ -338,8 +336,6 @@ bash scripts/setup-signing.sh  # first time only: create the self-signed certifi
 bash scripts/ci.sh             # build the Kit + unit tests + type-check app & extension
 bash scripts/build.sh          # produces FinderRight.app plus DMG / ZIP (certificate-signed when available, otherwise ad-hoc)
 ```
-
-The DMG embeds the FinderRight volume icon, so the mounted disk shows the app icon after download and opening. The `.dmg` file itself uses the default macOS disk image icon.
 
 Option 2 (Xcode project; requires Xcode 16+ and [xcodegen](https://github.com/yonaskolb/XcodeGen)):
 

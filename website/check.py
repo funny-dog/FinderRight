@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).parent / "dist"
 
-# 下载入口由 website/worker 代理到 GitHub，页面里不再出现 github.com 下载直链。
+# 下载入口由 website/worker 优先提供官网镜像，页面不使用 GitHub 下载直链。
 WORKER_DOWNLOADS = {
     "/download/FinderRight.dmg",
     "/download/FinderRight.dmg.sha256",
@@ -42,7 +42,7 @@ class PageCheck(HTMLParser):
                 if value[1:]:
                     self.fragments.append(value[1:])
             elif value in WORKER_DOWNLOADS:
-                # 这些路径由 Worker 提供，磁盘上没有对应文件。
+                # 镜像文件由发布同步脚本生成，干净检出时也允许这些下载入口。
                 if value.endswith(".sha256"):
                     self.checksums += 1
                 else:
