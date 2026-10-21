@@ -700,7 +700,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            // 原说明（仅在项目中保留）：注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。
+            FRFootnote(Text("注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。"))
         }
     }
 
