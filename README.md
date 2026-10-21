@@ -53,21 +53,25 @@
 
 要求 **macOS 13+、Apple Silicon**（暂不支持 Intel）。
 
-**Homebrew（推荐）**
+#### 方式一：Homebrew（推荐）
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-**DMG**：下载 [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)（中国大陆自动转到 [Gitee](https://gitee.com/no_ink_no_book/FinderRight/releases)），拖入 `Applications`。当前版本为自签名、未经 Apple 公证，首次打开被拦截时，到 **系统设置 → 隐私与安全性 → 仍要打开**，或执行：
+> Homebrew 安装会删除隔离属性、跳过 Gatekeeper 首次检查；若希望保留系统检查，请用 DMG 安装。Tap 由本项目维护，并非 Homebrew 官方仓库。
+
+#### 方式二：DMG 手动安装
+
+下载 [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)（中国大陆自动转到 [Gitee](https://gitee.com/no_ink_no_book/FinderRight/releases)），拖入 `Applications`。当前版本为自签名、未经 Apple 公证，首次打开被拦截时，到 **系统设置 → 隐私与安全性 → 仍要打开**，或执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FinderRight.app
 ```
 
-**首次启动**后按引导完成：启用访达扩展、授予完全磁盘访问、授予辅助功能。
+#### 首次启动
 
-> Homebrew 安装会删除隔离属性、跳过 Gatekeeper 首次检查；若希望保留系统检查，请用 DMG 安装。Tap 由本项目维护，并非 Homebrew 官方仓库。
+按引导完成：启用访达扩展、授予完全磁盘访问、授予辅助功能。
 
 ### 🔄 升级
 
@@ -205,21 +209,25 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 Requires **macOS 13+ on Apple Silicon** (Intel is not supported).
 
-**Homebrew (recommended)**
+#### Method 1: Homebrew (recommended)
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-**DMG**: download [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg) and drag it into `Applications`. The app is self-signed and not notarized by Apple; if the first launch is blocked, go to **System Settings → Privacy & Security → Open Anyway**, or run:
+> Homebrew removes the quarantine attribute and skips the Gatekeeper first-launch check; use the DMG if you want to keep it. The tap is maintained by this project, not Homebrew's official repository.
+
+#### Method 2: DMG
+
+Download [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg) and drag it into `Applications`. The app is self-signed and not notarized by Apple; if the first launch is blocked, go to **System Settings → Privacy & Security → Open Anyway**, or run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FinderRight.app
 ```
 
-**On first launch**, follow the onboarding: enable the Finder extension, grant Full Disk Access, and grant Accessibility.
+#### First launch
 
-> Homebrew removes the quarantine attribute and skips the Gatekeeper first-launch check; use the DMG if you want to keep it. The tap is maintained by this project, not Homebrew's official repository.
+Follow the onboarding: enable the Finder extension, grant Full Disk Access, and grant Accessibility.
 
 ### 🔄 Upgrading
 
