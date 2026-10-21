@@ -65,30 +65,38 @@ If FinderRight makes your daily work easier, [⭐ go to GitHub to star the proje
 
 ### 📥 安装
 
-> ⚠️ **芯片架构说明**：当前版本仅支持 **Apple Silicon（M 系列芯片，ARM64）**，要求 macOS 13.0+，暂不支持 Intel 架构。
+> ⚠️ **芯片架构说明**：当前版本仅支持 **Apple Silicon（M 系列芯片，ARM64）**，要求 macOS 13.0+，暂不支持 Intel 架构。两种方式安装的均为同一正式发布的 App。
 
-**Homebrew 安装**（需已安装 Homebrew，使用[项目维护的个人 Tap](https://github.com/funny-dog/homebrew-tap)）：
+#### 方式一：Homebrew 安装（推荐）
+
+需已安装 Homebrew，使用[项目维护的个人 Tap](https://github.com/funny-dog/homebrew-tap) 快速安装：
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-Homebrew 安装后会自动删除此 App 的隔离属性（等同于下方第 3 步的终端方式），首次打开不再被拦截，可直接从第 4 步开始配置。也可按以下步骤下载 DMG 安装，两种方式安装的是同一正式发布的 App。
-
-1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release
-2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`
-3. **首次打开**：当前版本使用自签名证书，未经 Apple 公证。确认下载来自本项目正式 Release 后，尝试打开 App；如被拦截，前往 **系统设置 → 隐私与安全性 → 仍要打开**，按提示确认（见 [Apple 说明](https://support.apple.com/zh-cn/102445)）。macOS 15 起不能通过右键打开绕过此检查。
-
-   如选择终端方式，仅删除此 App 的隔离属性，再双击打开：
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/FinderRight.app
-   ```
-4. 启动后按引导：
-   - **启用 Finder 扩展**：系统设置 → 隐私与安全性 → 扩展 → 访达扩展 → 勾选 FinderRight
-   - **授予完全磁盘访问**（在受保护目录使用所有功能）
-   - **授予辅助功能**（让"切换隐藏文件"无需重启 Finder）
+Homebrew 安装会自动删除此 App 的隔离属性，首次打开不会被 Gatekeeper 拦截。
 
 > ⚠️ Homebrew Tap 提供下载安装便利，不代表 Apple 公证或 Homebrew 官方仓库审核。删除隔离属性后，macOS 不再对此 App 做 Gatekeeper 首次打开检查；如希望保留系统检查，请使用 DMG 安装。Finder 扩展及隐私权限仍由用户确认。若未来提供 Developer ID 公证版，DMG 安装也可省去手动放行步骤。
+
+#### 方式二：DMG 手动安装
+
+1. 下载 **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** —— 此链接始终指向最新 Release。
+2. 打开 DMG，把 `FinderRight.app` 拖到 `Applications`。
+3. **首次打开**：当前版本使用自签名证书，未经 Apple 公证。确认下载来自本项目正式 Release 后，尝试打开 App；如被系统拦截，可选择以下任一方式放行：
+   - **系统设置放行**：前往 **系统设置 → 隐私与安全性 → 仍要打开**，按提示确认（见 [Apple 说明](https://support.apple.com/zh-cn/102445)）。*macOS 15 起不能通过右键打开绕过此检查。*
+   - **终端命令放行**：也可在终端执行以下命令，仅删除此 App 的隔离属性，再双击打开：
+     ```bash
+     xattr -dr com.apple.quarantine /Applications/FinderRight.app
+     ```
+
+#### 首次启动与配置
+
+无论通过哪种方式安装，首次打开后请按引导完成以下配置：
+
+- **启用 Finder 扩展**：系统设置 → 隐私与安全性 → 扩展 → 访达扩展 → 勾选 FinderRight
+- **授予完全磁盘访问**（在受保护目录使用所有功能）
+- **授予辅助功能**（让"切换隐藏文件"无需重启 Finder）
 
 ### 文件夹与 ZIP 预览
 
@@ -241,30 +249,38 @@ Create files, open a terminal, and cut & paste from Finder’s right-click menu.
 
 ### 📥 Installation
 
-> ⚠️ **Architecture Requirement**: The pre-built release currently supports **Apple Silicon (M-series, ARM64)** Mac only, running macOS 13.0+. Intel (x86_64) architecture is not supported.
+> ⚠️ **Architecture Requirement**: The pre-built release currently supports **Apple Silicon (M-series, ARM64)** Mac only, running macOS 13.0+. Intel (x86_64) architecture is not supported. Both methods install the same officially released App.
 
-**Homebrew installation** (requires Homebrew; uses the [project-maintained third-party tap](https://github.com/funny-dog/homebrew-tap)):
+#### Method 1: Homebrew (Recommended)
+
+Requires Homebrew installed; installs from the [project-maintained third-party tap](https://github.com/funny-dog/homebrew-tap):
 
 ```bash
 brew install --cask funny-dog/tap/finderright
 ```
 
-After installation, Homebrew removes this App's quarantine attribute (the same as the Terminal option in step 3 below), so the first launch is not blocked and you can start at step 4. Alternatively, install the DMG below; both methods install the same officially released App.
+Homebrew automatically removes this App's quarantine attribute upon installation, so the first launch will not be blocked by Gatekeeper.
 
-1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release
-2. Open the DMG and drag `FinderRight.app` into `Applications`
-3. **First launch**: this release is self-signed and not notarized by Apple. After verifying that it came from this project's official Release, try opening the App. If blocked, go to **System Settings → Privacy & Security → Open Anyway** and confirm (see [Apple's instructions](https://support.apple.com/en-us/102445)). Starting with macOS 15, right-clicking Open no longer bypasses this check.
+> ⚠️ The tap simplifies downloading and installation; it does not imply Apple notarization or review by Homebrew's official repository. Without the quarantine attribute, macOS does not run the Gatekeeper first-launch check for this App; to keep that check, install the DMG instead. Finder extension and privacy permissions still require user confirmation. A future Developer ID notarized build would also remove the manual approval steps for DMG installs.
 
-   Alternatively, remove only this App's quarantine attribute in Terminal, then double-click to open:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/FinderRight.app
-   ```
-4. Follow the onboarding:
-   - **Enable the Finder extension**: System Settings → Privacy & Security → Extensions → Finder Extensions → check FinderRight
-   - **Grant Full Disk Access** (to use all features in protected folders)
-   - **Grant Accessibility** (so "Toggle Hidden Files" doesn't need to restart Finder)
+#### Method 2: DMG Manual Installation
 
-> ⚠️ The tap simplifies downloading and installation; it does not imply Apple notarization or review by Homebrew's official repository. Without the quarantine attribute, macOS does not run the Gatekeeper first-launch check for this App; to keep that check, install the DMG instead. You still need to enable the Finder extension and grant privacy permissions. A future Developer ID notarized build would also remove the manual approval steps for DMG installs.
+1. Download **[FinderRight.dmg](https://github.com/funny-dog/FinderRight/releases/latest/download/FinderRight.dmg)** — this link always points to the latest release.
+2. Open the DMG and drag `FinderRight.app` into `Applications`.
+3. **First launch**: This release is self-signed and not notarized by Apple. After verifying that it came from this project's official Release, try opening the App. If blocked, choose either option below:
+   - **Via System Settings**: Go to **System Settings → Privacy & Security → Open Anyway** and confirm (see [Apple's instructions](https://support.apple.com/en-us/102445)). *Starting with macOS 15, right-clicking Open no longer bypasses this check.*
+   - **Via Terminal**: Alternatively, run this command in Terminal to remove only this App's quarantine attribute, then double-click to open:
+     ```bash
+     xattr -dr com.apple.quarantine /Applications/FinderRight.app
+     ```
+
+#### First Launch & Setup
+
+Regardless of the installation method chosen, follow the onboarding prompts on first launch:
+
+- **Enable the Finder extension**: System Settings → Privacy & Security → Extensions → Finder Extensions → check FinderRight
+- **Grant Full Disk Access** (to use all features in protected folders)
+- **Grant Accessibility** (so "Toggle Hidden Files" doesn't need to restart Finder)
 
 ### 🔄 Upgrading from Older Versions
 
