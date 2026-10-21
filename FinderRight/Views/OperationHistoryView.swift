@@ -258,7 +258,7 @@ struct OperationHistoryView: View {
                     }
                 }
             }
-            // 原说明（仅在项目中保留）：历史记录用于回看操作，不代表每条都能撤销。当前仍通过访达右键或 ⌘Z 撤销上一次操作。
+            // 历史记录用于回看操作，不代表每条都能撤销。当前仍通过访达右键或 ⌘Z 撤销上一次操作。
         }
         .onReceive(NotificationCenter.default.publisher(for: RecentOperations.didChangeNotification)) { notification in
             guard notification.object as? RecentOperations === store else { return }
@@ -273,7 +273,7 @@ struct OperationHistoryView: View {
 
     private var preferences: some View {
         FRCard {
-            // 原说明（仅在项目中保留）：记录新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果
+            // 记录新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果
             FRRow(title: Text("保留历史记录")) {
                 HStack(spacing: 10) {
                     FRPicker(label: "保留历史记录", selection: Binding(

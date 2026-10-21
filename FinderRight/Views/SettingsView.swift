@@ -209,7 +209,7 @@ struct GeneralTab: View {
     private var launchSection: some View {
         FRSection("启动") {
             FRCard {
-                // 原说明（仅在项目中保留）：登录时自动运行 FinderRight
+                // 登录时自动运行 FinderRight
                 FRRow(title: Text("开机自动启动")) {
                     FRSwitch(label: "开机自动启动", isOn: Binding(
                         get: { launchAtLogin },
@@ -250,12 +250,12 @@ struct GeneralTab: View {
     private var updateSection: some View {
         FRSection("更新") {
             FRCard {
-                // 原说明（仅在项目中保留）：开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。
+                // 开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。
                 FRRow(title: Text("自动检查并安装更新")) {
                     FRSwitch(label: "自动检查并安装更新", isOn: $automaticUpdates)
                 }
             }
-            // 原说明（仅在项目中保留）：关闭后不再发起自动更新；已经开始的更新仍会完成。
+            // 关闭后不再发起自动更新；已经开始的更新仍会完成。
         }
     }
 
@@ -327,7 +327,7 @@ struct GeneralTab: View {
 
                 FRDivider()
 
-                // 原说明（仅在项目中保留）：关闭后，菜单栏不显示 FinderRight 图标
+                // 关闭后，菜单栏不显示 FinderRight 图标
                 FRRow(title: Text("显示菜单栏图标")) {
                     FRSwitch(label: "显示菜单栏图标", isOn: $showMenuBarIcon)
                 }
@@ -688,7 +688,7 @@ struct FeaturesTab: View {
     private var badgeSection: some View {
         FRSection("剪切角标") {
             FRCard {
-                // 原说明（仅在项目中保留）：其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。
+                // 其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。
                 FRRow(title: Text("自动解决角标冲突")) {
                     FRSwitch(label: "自动解决角标冲突", isOn: Binding(
                         get: { badgeOwnershipReclaim },
