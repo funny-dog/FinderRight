@@ -274,21 +274,30 @@ struct AutomaticUpdateChecks {
         ] { precondition(UpdateChecker.alternateAssetURL(for: URL(string: invalid)!) == nil) }
         print("✓ 备用源映射拒绝跨仓库、latest、版本不匹配和任意URL")
 
-        // 直接驱动真实下载代理，验证超时重置、HTTP状态和单次完成，不依赖真实网络。
+        // 手动触发真实代理的计时任务，避免毫秒级 RunLoop 等待受 CI 调度影响。
         let session = URLSession(configuration: .ephemeral)
         let task = session.downloadTask(with: ReleaseProtocol.githubZIP)
         var finishes = 0
-        let delegate = UpdateDownloadDelegate(onProgress: { _ in }, onFinish: { _ in finishes += 1 })
-        delegate.watch(task, firstByteTimeout: 0.08, stallTimeout: 0.15)
+        var timeouts: [(interval: TimeInterval, work: DispatchWorkItem)] = []
+        let delegate = UpdateDownloadDelegate(onProgress: { _ in }, onFinish: { result in
+            guard case .failure(let error) = result, (error as? URLError)?.code == .timedOut else {
+                preconditionFailure("停滞应以超时错误结束")
+            }
+            finishes += 1
+        }, schedule: { timeouts.append(($0, $1)) })
+        delegate.watch(task, firstByteTimeout: 3, stallTimeout: 10)
+        precondition(timeouts.count == 1 && timeouts[0].interval == 3)
         for i in 1...5 {
-            pump(0.03)
+            let previous = timeouts.last!.work
             delegate.urlSession(session, downloadTask: task, didWriteData: 1, totalBytesWritten: Int64(i), totalBytesExpectedToWrite: 10)
+            precondition(previous.isCancelled)
+            previous.perform()
+            precondition(timeouts.count == i + 1 && timeouts.last!.interval == 10)
             precondition(finishes == 0)
         }
-        pump(0.1)
-        precondition(finishes == 0)
-        wait { finishes == 1 }
-        precondition(task.state == .canceling || task.state == .completed)
+        timeouts.last!.work.perform()
+        precondition(finishes == 1)
+        wait { task.state == .canceling || task.state == .completed }
         delegate.urlSession(session, task: task, didCompleteWithError: URLError(.cancelled))
         precondition(finishes == 1)
         print("✓ 持续传输重置停滞计时；停滞后超时且取消回调不重复完成")

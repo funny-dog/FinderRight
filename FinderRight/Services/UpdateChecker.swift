@@ -558,13 +558,18 @@ public final class UpdateChecker: NSObject {
 final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let onProgress: (Double) -> Void
     private let onFinish: (Result<URL, Error>) -> Void
+    private let schedule: (TimeInterval, DispatchWorkItem) -> Void
     private var completed = false
     private var timeout: DispatchWorkItem?
     private var stallTimeout: TimeInterval = 10
 
-    init(onProgress: @escaping (Double) -> Void, onFinish: @escaping (Result<URL, Error>) -> Void) {
+    init(onProgress: @escaping (Double) -> Void, onFinish: @escaping (Result<URL, Error>) -> Void,
+         schedule: @escaping (TimeInterval, DispatchWorkItem) -> Void = { interval, work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: work)
+         }) {
         self.onProgress = onProgress
         self.onFinish = onFinish
+        self.schedule = schedule
         super.init()
     }
 
@@ -581,7 +586,7 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
             self.finish(.failure(URLError(.timedOut)))
         }
         timeout = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: work)
+        schedule(interval, work)
     }
 
     private func finish(_ result: Result<URL, Error>) {
