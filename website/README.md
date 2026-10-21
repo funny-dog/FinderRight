@@ -36,7 +36,7 @@ node worker/test.mjs
 - 路径白名单 `/download/FinderRight.dmg` 与 `/download/FinderRight.dmg.sha256`，避免变成开放代理；只接受 `GET`/`HEAD`。
 - 优先从 `ASSETS` 绑定读取官网镜像；Static Assets 忽略 `Range` 时，使用 Cache API 从完整资产生成 `206`，保留断点续传。缓存键包含资产 ETag，避免新旧版本拼接；`If-Range` 不匹配时返回完整文件。
 - 镜像缺失或异常才回源 GitHub；GitHub 上游超时（30 秒）、抛错或返回非 2xx 时，`302` 跳回同名资产。
-- 响应头 `X-FinderRight-Download-Source` 标明 `cloudflare-assets` 或 `github`，DMG 使用 `application/x-apple-diskimage` 类型。
+- GET 响应头 `X-FinderRight-Download-Source` 标明 `cloudflare-assets` 或 `github`，DMG 使用 `application/x-apple-diskimage` 类型。HEAD 原样返回资产响应；平台可能省略其 `Content-Length`，文件大小可从 GET 或分片响应的 `Content-Range` 获取。
 - 固定文件名内容随版本变化，`Cache-Control` 只给 5 分钟（`public, max-age=300`），避免发版后长时间拿到旧包。
 
 ### 固定版本资产代理

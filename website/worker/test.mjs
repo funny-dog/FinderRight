@@ -435,7 +435,7 @@ test("官网镜像优先提供四类资产，GitHub 不可用也能下载", asyn
     }
 });
 
-test("镜像 HEAD 保留大小，镜像缺失或异常仍可回退 GitHub", async () => {
+test("镜像 HEAD 原样返回，镜像缺失或异常仍可回退 GitHub", async () => {
     let githubCalls = 0;
     fetchHandler = async () => {
         githubCalls++;

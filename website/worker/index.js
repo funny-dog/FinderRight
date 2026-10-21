@@ -112,7 +112,7 @@ async function download(request, name, version, env) {
             assetHeaders.set("Accept-Encoding", "identity");
             const asset = await env.ASSETS.fetch(new Request(request, { headers: assetHeaders }));
             if (asset.ok || asset.status === 304 || asset.status === 416) {
-                // 保留原始 HEAD 响应的长度信息，重建 null-body Response 会被平台去掉长度头。
+                // HEAD 原样返回资产响应，避免构造空响应改变平台元数据。
                 if (request.method === "HEAD") return asset;
                 upstream = asset;
                 source = "cloudflare-assets";
