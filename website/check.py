@@ -6,6 +6,12 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).parent / "dist"
 
+# 下载入口由 website/worker 代理到 GitHub，页面里不再出现 github.com 下载直链。
+WORKER_DOWNLOADS = {
+    "/download/FinderRight.dmg",
+    "/download/FinderRight.dmg.sha256",
+}
+
 
 class PageCheck(HTMLParser):
     def __init__(self):
@@ -13,6 +19,7 @@ class PageCheck(HTMLParser):
         self.ids = set()
         self.fragments = []
         self.downloads = 0
+        self.checksums = 0
         self.images = 0
         self.translations = 0
 
@@ -34,21 +41,25 @@ class PageCheck(HTMLParser):
             if value.startswith("#"):
                 if value[1:]:
                     self.fragments.append(value[1:])
+            elif value in WORKER_DOWNLOADS:
+                # 这些路径由 Worker 提供，磁盘上没有对应文件。
+                if value.endswith(".sha256"):
+                    self.checksums += 1
+                else:
+                    self.downloads += 1
             elif value and not urlsplit(value).scheme:
                 assert (ROOT / urlsplit(value).path).is_file(), value
             elif "releases/latest/download/" in value:
-                assert value == (
-                    "https://github.com/funny-dog/FinderRight/"
-                    "releases/latest/download/FinderRight.dmg"
-                ), value
-                self.downloads += 1
+                # 直连 GitHub 会绕开代理，且国内不可靠；只允许作为降级出口存在于 Worker 里。
+                raise AssertionError(f"downlink should go through /download/: {value}")
 
 
 if __name__ == "__main__":
     page = PageCheck()
     page.feed((ROOT / "index.html").read_text())
     assert set(page.fragments) <= page.ids, "Broken section link"
-    assert page.downloads == 4
+    assert page.downloads == 4, page.downloads
+    assert page.checksums == 1, page.checksums
     assert page.images >= 6
     assert page.translations >= 60
-    print("OK: local assets, navigation, download links, alt text, translations")
+    print("OK: local assets, navigation, download links, checksum, alt text, translations")
