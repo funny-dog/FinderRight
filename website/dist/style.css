@@ -142,10 +142,6 @@ img { max-width: 100%; }
 .hero h1 { max-width: 980px; margin: 32px auto 28px; font-size: clamp(54px, 7.2vw, 104px); }
 .lede { max-width: 620px; margin: 0 auto 40px; font-size: 22px; }
 .acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
-/* 下载区下方的校验和说明：字号小、颜色弱，不抢主按钮 */
-.hero .verify { font-size: 15px; }
-.hero .verify.mute { margin: 20px 0 0; }
-.hero .verify.mono { display: block; margin: 6px 0 0; }
 .panel {
   position: relative;
   z-index: 2;

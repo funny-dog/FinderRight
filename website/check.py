@@ -59,6 +59,7 @@ if __name__ == "__main__":
     page.feed((ROOT / "index.html").read_text())
     assert set(page.fragments) <= page.ids, "Broken section link"
     assert page.downloads == 4, page.downloads
+    # 安装指南第 2 步的校验和链接；英文文案嵌在 data-en 属性里，解析器只见到中文那个。
     assert page.checksums == 1, page.checksums
     assert page.images >= 6
     assert page.translations >= 60
