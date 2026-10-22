@@ -701,7 +701,6 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("复制纯文本文件（UTF-8 / UTF-16）全部内容；建议不超过 10 MB，以避免第三方剪贴板工具出现索引卡顿。"))
         }
     }
 
@@ -743,7 +742,7 @@ struct ToolsTab: View {
         FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
             FRSection("默认终端") {
                 FRCard {
-                    FRRow(title: Text("默认终端"), subtitle: Text("通过服务菜单或快捷键打开终端时使用")) {
+                    FRRow(title: Text("默认终端")) {
                         FRPicker(label: "默认终端", selection: Binding(
                             get: { selectedTerminalBundleId },
                             set: { newValue in
@@ -941,7 +940,7 @@ struct AboutTab: View {
                 .padding(.top, 14)
 
             // 描述
-            Text("增强 macOS Finder 右键菜单的轻量工具。\n新建文件、复制路径、打开终端与编辑器、剪切粘贴、压缩解压。")
+            Text("增强 macOS Finder 右键菜单的轻量工具。")
                 .multilineTextAlignment(.center)
                 .foregroundColor(FRTheme.mute)
                 .font(.system(size: 13.5))

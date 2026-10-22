@@ -20,8 +20,7 @@ struct EditorsTab: View {
         FRPage(title: "编辑器", subtitle: "右键「打开编辑器」与服务菜单使用的编辑器") {
             FRSection("默认编辑器") {
                 FRCard {
-                    FRRow(title: Text("默认编辑器"),
-                          subtitle: Text("通过服务菜单或快捷键「打开编辑器」时直接使用")) {
+                    FRRow(title: Text("默认编辑器")) {
                         FRPicker(label: "默认编辑器", selection: Binding(
                             get: { defaultId },
                             set: { newValue in
