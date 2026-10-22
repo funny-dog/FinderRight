@@ -29,7 +29,7 @@
 
 - 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板
 - ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动
-- 💻 **打开终端 / 编辑器** —— 在当前目录打开 Ghostty / iTerm2 / Warp 或 VS Code / Cursor / Zed 等
+- 💻 **打开终端 / 编辑器** —— 按应用的 Shell 角色声明识别终端（如 iTerm2、cmux），也可手动选择 `.app`，使用同一规则校验；默认终端跟随系统，可自行更改。编辑器支持 VS Code / Cursor / Zed 等
 - 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文本文件可直接复制全文
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录
@@ -190,7 +190,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 - 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates
 - ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste
-- 💻 **Open in Terminal / Editor** — open the current folder in Ghostty / iTerm2 / Warp or VS Code / Cursor / Zed, etc.
+- 💻 **Open in Terminal / Editor** — detect terminals by their declared Shell role (such as iTerm2 and cmux), or select an `.app` manually with the same validation. The default follows the system unless changed. Editors include VS Code / Cursor / Zed, etc.
 - 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; copy a text file's full content directly
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click

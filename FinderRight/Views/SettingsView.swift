@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreServices
 import FinderRightKit
 import ServiceManagement
 
@@ -710,10 +711,12 @@ struct FeaturesTab: View {
 
 struct ToolsTab: View {
     @FRState private var availableTerminals: [KnownTerminal] = []
-    @FRState private var selectedTerminalBundleId: String = "com.apple.Terminal"
+    @FRState private var selectedTerminalBundleId = ""
     @FRState private var defaultSystemTerminalId: String = "com.apple.Terminal"
     @FRState private var selectedTerminalIds: Set<String> = []
     @FRState private var dropTargetTerminalId: String?
+    @FRState private var isSearching = true
+    @FRState private var terminalMessage: String?
 
     var body: some View {
         FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
@@ -723,52 +726,57 @@ struct ToolsTab: View {
                         FRPicker(label: "默认终端", selection: Binding(
                             get: { selectedTerminalBundleId },
                             set: { newValue in
-                                if selectedTerminalIds == [selectedTerminalBundleId] {
-                                    selectedTerminalIds = [newValue]
-                                    SharedConfig.shared.selectedTerminals = selectedTerminalIds
-                                }
+                                let config = SharedConfig.shared
+                                let usedDefault = selectedTerminalIds == [config.preferredTerminal]
                                 selectedTerminalBundleId = newValue
-                                SharedConfig.shared.preferredTerminal = newValue
+                                config.preferredTerminal = newValue
+                                if usedDefault {
+                                    config.resetTerminalMenuToDefault()
+                                    selectedTerminalIds = config.selectedTerminals
+                                }
                             }
                         )) {
+                            Text("跟随系统").tag("")
                             ForEach(availableTerminals) { terminal in
                                 Text(NSLocalizedString(terminal.name, comment: "")).tag(terminal.bundleIdentifier)
                             }
                         }
+                        .disabled(isSearching)
                     }
                 }
             }
-            FRSection("右键菜单中显示") {
+            FRSection {
+                HStack {
+                    FRCaption("右键菜单中显示")
+                    Spacer()
+                    Button(action: chooseTerminalApplications) {
+                        Label("添加终端…", systemImage: "plus")
+                    }
+                    .buttonStyle(.frPrimary)
+                    .disabled(isSearching)
+                }
+            } content: {
                 FRCard {
+                    if isSearching {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("正在查找…")
+                        }
+                        .padding(16)
+                    }
                     ForEach(Array(availableTerminals.enumerated()), id: \.element.id) { index, terminal in
                         if index > 0 { FRDivider() }
                         terminalRow(terminal)
                     }
                 }
+                if let terminalMessage {
+                    FRFootnote(Text(verbatim: terminalMessage))
+                }
+                FRFootnote(Text("自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。"))
                 FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。"))
             }
         }
-        .onAppear {
-            detectInstalledApps()
-            let defaultId = TerminalCatalog.defaultTerminalBundleIdentifier()
-            defaultSystemTerminalId = defaultId
-
-            // 读取已保存偏好；若已保存的 terminal 在可用列表中，则保留；
-            // 否则优先选中系统默认终端（若可用），最后回退到第一个可用项。
-            let savedTerminal = SharedConfig.shared.preferredTerminal
-            if availableTerminals.contains(where: { $0.bundleIdentifier == savedTerminal }) {
-                selectedTerminalBundleId = savedTerminal
-            } else if availableTerminals.contains(where: { $0.bundleIdentifier == defaultId }) {
-                selectedTerminalBundleId = defaultId
-            } else {
-                selectedTerminalBundleId = availableTerminals.first?.bundleIdentifier ?? "com.apple.Terminal"
-            }
-            SharedConfig.shared.preferredTerminal = selectedTerminalBundleId
-            selectedTerminalIds = Set(TerminalCatalog.menuTerminals(
-                selected: SharedConfig.shared.selectedTerminals, preferred: selectedTerminalBundleId,
-                isInstalled: { id in availableTerminals.contains { $0.bundleIdentifier == id } }
-            ).map(\.bundleIdentifier))
-        }
+        .onAppear(perform: detectInstalledApps)
     }
 
     private func terminalRow(_ terminal: KnownTerminal) -> some View {
@@ -826,24 +834,57 @@ struct ToolsTab: View {
     }
 
     private func detectInstalledApps() {
-        var installed = TerminalCatalog.all.filter { terminal in
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: terminal.bundleIdentifier) != nil
+        isSearching = true
+        let config = SharedConfig.shared
+        let additionalIds = config.selectedTerminals.union([config.preferredTerminal])
+        DispatchQueue.global(qos: .userInitiated).async {
+            let installed = TerminalCatalog.installed(additionalBundleIdentifiers: additionalIds)
+            let defaultId = TerminalCatalog.defaultTerminalBundleIdentifier()
+            DispatchQueue.main.async {
+                availableTerminals = TerminalCatalog.ordered(installed, by: config.terminalOrder)
+                defaultSystemTerminalId = defaultId
+                selectedTerminalBundleId = !config.followsSystemTerminal
+                    && installed.contains(where: { $0.bundleIdentifier == config.preferredTerminal })
+                    ? config.preferredTerminal : ""
+                selectedTerminalIds = Set(TerminalCatalog.menuTerminals(
+                    available: availableTerminals, selected: config.selectedTerminals,
+                    preferred: selectedTerminalBundleId.isEmpty ? defaultId : selectedTerminalBundleId
+                ).map(\.bundleIdentifier))
+                isSearching = false
+            }
         }
-        let sysDefault = TerminalCatalog.defaultTerminalBundleIdentifier()
-        // 保留预设清单之外的系统默认终端和用户已选终端。
-        for id in SharedConfig.shared.selectedTerminals.union([sysDefault, SharedConfig.shared.preferredTerminal]).sorted() {
-            guard !installed.contains(where: { $0.bundleIdentifier == id }),
-                  let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { continue }
-            let name = Bundle(url: appURL)?.localizedInfoDictionary?["CFBundleDisplayName"] as? String
-                ?? Bundle(url: appURL)?.infoDictionary?["CFBundleDisplayName"] as? String
-                ?? Bundle(url: appURL)?.infoDictionary?["CFBundleName"] as? String
-                ?? appURL.deletingPathExtension().lastPathComponent
-            installed.append(KnownTerminal(id: id, name: name, bundleIdentifier: id, icon: "terminal.fill"))
+    }
+
+    private func chooseTerminalApplications() {
+        terminalMessage = nil
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = NSLocalizedString("添加", comment: "")
+        guard panel.runModal() == .OK else { return }
+
+        var messages: [String] = []
+        for url in panel.urls {
+            guard let terminal = TerminalCatalog.terminal(at: url),
+                  terminal.bundleIdentifier != Bundle.main.bundleIdentifier else {
+                messages.append(String(format: NSLocalizedString("未识别到终端功能：%@", comment: ""),
+                                       url.lastPathComponent))
+                continue
+            }
+            // 注册手选位置，让主 App 和沙箱扩展都可按 bundle id 定位，不传递可执行路径。
+            guard LSRegisterURL(url as CFURL, true) == noErr else {
+                messages.append(String(format: NSLocalizedString("无法添加以下应用：%@", comment: ""), terminal.name))
+                continue
+            }
+            if !availableTerminals.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier }) {
+                availableTerminals.append(terminal)
+            }
+            selectedTerminalIds.insert(terminal.bundleIdentifier)
+            SharedConfig.shared.selectedTerminals = selectedTerminalIds
         }
-        if installed.isEmpty {
-            installed = [TerminalCatalog.all[0]] // 系统终端兜底
-        }
-        availableTerminals = TerminalCatalog.ordered(installed, by: SharedConfig.shared.terminalOrder)
+        terminalMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
     }
 }
 

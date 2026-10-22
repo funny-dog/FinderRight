@@ -192,6 +192,12 @@ public final class SharedConfig {
 
     // MARK: - Preferred Terminal
 
+    public var followsSystemTerminal: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return (store[Keys.preferredTerminal] as? String ?? "").isEmpty
+    }
+
     /// 首选终端应用 bundle identifier
     public var preferredTerminal: String {
         get {
@@ -226,6 +232,14 @@ public final class SharedConfig {
             store[Keys.selectedTerminals] = newValue.sorted()
             save()
         }
+    }
+
+    /// 默认菜单项随首选终端变化，不将当前系统默认固定保存为某个 bundle id。
+    public func resetTerminalMenuToDefault() {
+        lock.lock()
+        defer { lock.unlock() }
+        store.removeValue(forKey: Keys.selectedTerminals)
+        save()
     }
 
     /// 终端 bundle identifier 的显示顺序；未配置的终端由清单顺序补到末尾。

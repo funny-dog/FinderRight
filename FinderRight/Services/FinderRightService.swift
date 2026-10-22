@@ -536,6 +536,10 @@ final class FinderRightService {
               let bundleId = req.payload["bundleId"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "openTerminal 参数缺失")
         }
+        guard TerminalCatalog.terminal(bundleIdentifier: bundleId) != nil else {
+            return IPCResponse(id: req.id, success: false,
+                               message: NSLocalizedString("所选应用未声明终端功能，无法打开。", comment: ""))
+        }
 
         // 只能用命令行参数指定工作目录的终端（Ghostty / Alacritty / Kitty）。
         //

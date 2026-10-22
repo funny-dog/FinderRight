@@ -119,6 +119,10 @@
 
 /* Tools tab */
 "默认终端" = "Default Terminal";
+"添加终端…" = "Add Terminal…";
+"未识别到终端功能：%@" = "No terminal capability declared: %@";
+"所选应用未声明终端功能，无法打开。" = "The selected app does not declare terminal capabilities and cannot be opened.";
+"自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。" = "Apps that declare terminal capabilities are detected automatically. Use Add Terminal… to select an app manually; the same validation applies. The default terminal follows your system setting unless changed above.";
 "选择右键菜单中「在终端中打开」使用的终端应用" = "Choose the terminal used by \"Open in Terminal\"";
 "终端" = "Terminal";
 "默认编辑器" = "Default Editor";

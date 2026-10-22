@@ -666,8 +666,7 @@ class FinderSync: FIFinderSync {
                 let config = SharedConfig.shared
                 let terminals = TerminalCatalog.menuTerminals(
                     selected: config.selectedTerminals, preferred: config.preferredTerminal,
-                    order: config.terminalOrder,
-                    isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
+                    order: config.terminalOrder)
                 guard !terminals.isEmpty else { return }
                 menu.addItem(self.makeSubmenuItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", shortcutId: "shortcut.openTerminal", style: style, build: { self.buildTerminalMenu(terminals, style: style) }))
             },

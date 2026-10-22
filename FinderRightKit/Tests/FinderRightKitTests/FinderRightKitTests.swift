@@ -200,14 +200,14 @@ struct FinderRightKitTestsRunner {
         }
 
         // 4. SharedConfig 独立读写与默认值测试
-        runTest("SharedConfig 独立读写与默认值") {
+        runTest("终端配置：SharedConfig 独立读写与默认值") {
             let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-settings-\(UUID().uuidString).plist")
             defer { try? FileManager.default.removeItem(at: tempURL) }
 
             let config = SharedConfig(fileURL: tempURL)
 
             // 默认值（图标风格默认彩色线条，见「图标风格默认值按安装方式区分」那条）
-            try assertEqual(config.preferredTerminal, "com.apple.Terminal")
+            try assertEqual(config.preferredTerminal, TerminalCatalog.defaultTerminalBundleIdentifier())
             try assertEqual(config.menuIconStyle, .tinted)
             try assertTrue(config.customFileTemplates.isEmpty)
             try assertNil(config.shortcut(forActionId: "shortcut.cut"))
@@ -2435,13 +2435,70 @@ struct FinderRightKitTestsRunner {
             try assertEqual(SharedConfig(fileURL: url).favoriteDirectories, ["/Users/me/Downloads", "/Volumes/E"])
         }
 
+        runTest("终端识别：仅接受同一文档声明中的 Shell 角色与脚本或可执行类型") {
+            func info(role: String?, types: [String]) -> [String: Any] {
+                var document: [String: Any] = ["LSItemContentTypes": types]
+                document["CFBundleTypeRole"] = role
+                return ["CFBundleDocumentTypes": [document]]
+            }
+            for type in ["com.apple.terminal.shell-script", "public.shell-script", "public.unix-executable"] {
+                try assertTrue(TerminalCatalog.declaresShell(infoDictionary: info(role: "Shell", types: [type])))
+                for role in ["Editor", "Viewer", "None", nil] as [String?] {
+                    try assertTrue(!TerminalCatalog.declaresShell(infoDictionary: info(role: role, types: [type])))
+                }
+            }
+            try assertTrue(!TerminalCatalog.declaresShell(infoDictionary: info(role: "Shell", types: ["public.folder"])))
+            try assertTrue(!TerminalCatalog.declaresShell(infoDictionary: [:]))
+            try assertTrue(!TerminalCatalog.declaresShell(infoDictionary: ["CFBundleDocumentTypes": "invalid"]))
+            try assertTrue(!TerminalCatalog.declaresShell(infoDictionary: ["CFBundleDocumentTypes": [
+                ["CFBundleTypeRole": "Shell", "LSItemContentTypes": ["public.plain-text"]],
+                ["CFBundleTypeRole": "Editor", "LSItemContentTypes": ["public.unix-executable"]],
+            ]]))
+        }
+
+        runTest("终端发现：任意品牌的应用须有 Shell 声明与可执行文件，去重并保留名称") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            func app(_ name: String, id: String, role: String = "Shell", executable: Bool = true) throws -> URL {
+                let url = dir.appendingPathComponent("\(name).app")
+                let contents = url.appendingPathComponent("Contents")
+                try FileManager.default.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+                let info: [String: Any] = [
+                    "CFBundleIdentifier": id, "CFBundleName": name, "CFBundlePackageType": "APPL",
+                    "CFBundleExecutable": "terminal", "CFBundleInfoDictionaryVersion": "6.0",
+                    "CFBundleDocumentTypes": [["CFBundleTypeRole": role, "LSItemContentTypes": ["public.unix-executable"]]],
+                ]
+                try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+                    .write(to: contents.appendingPathComponent("Info.plist"))
+                if executable {
+                    let binary = contents.appendingPathComponent("MacOS/terminal")
+                    try Data("#!/bin/sh\nexit 0\n".utf8).write(to: binary)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+                }
+                return url
+            }
+            let cmux = try app("cmux", id: "com.cmuxterm.app")
+            let unknown = try app("New Terminal", id: "org.example.new-terminal")
+            let editor = try app("Editor", id: "org.example.editor", role: "Editor")
+            let broken = try app("Broken", id: "org.example.broken", executable: false)
+            let found = TerminalCatalog.installed(applicationURLs: [cmux, unknown, editor, broken, cmux, dir])
+            try assertEqual(found.map(\.bundleIdentifier), ["com.cmuxterm.app", "org.example.new-terminal"])
+            try assertEqual(found.first?.name, "cmux")
+            try assertEqual(TerminalCatalog.menuTerminals(available: found, selected: ["com.cmuxterm.app"],
+                                                        preferred: "com.cmuxterm.app").first?.name, "cmux")
+            try assertNil(TerminalCatalog.terminal(at: editor))
+            try assertNil(TerminalCatalog.terminal(at: broken))
+        }
+
         runTest("终端菜单：单选、多选、卸载回退与全部关闭") {
             let terminal = "com.apple.Terminal"
             let ghostty = "com.mitchellh.ghostty"
-            let installed: Set<String> = [terminal, ghostty, "com.example.Terminal"]
+            let available = [terminal, ghostty, "com.example.Terminal"].map {
+                KnownTerminal(id: $0, name: $0, bundleIdentifier: $0)
+            }
             func ids(_ selected: Set<String>, preferred: String = "com.apple.Terminal") -> [String] {
-                TerminalCatalog.menuTerminals(selected: selected, preferred: preferred,
-                                             isInstalled: installed.contains).map(\.bundleIdentifier)
+                TerminalCatalog.menuTerminals(available: available, selected: selected, preferred: preferred)
+                    .map(\.bundleIdentifier)
             }
             try assertEqual(ids([ghostty]), [ghostty])
             try assertEqual(ids([ghostty, terminal]), [terminal, ghostty])
@@ -2449,8 +2506,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(ids(["removed"], preferred: "removed"), [terminal])
             try assertEqual(ids(["com.example.Terminal"]), ["com.example.Terminal"])
             try assertTrue(ids([]).isEmpty, "全部关闭时不显示入口")
-            try assertTrue(TerminalCatalog.menuTerminals(selected: [terminal], preferred: terminal,
-                                                        isInstalled: { _ in false }).isEmpty)
+            try assertTrue(TerminalCatalog.menuTerminals(available: [], selected: [terminal], preferred: terminal).isEmpty)
         }
 
         runTest("终端排序：设置与菜单顺序一致，忽略重复和失效项") {
@@ -2458,13 +2514,13 @@ struct FinderRightKitTestsRunner {
             let ghostty = "com.mitchellh.ghostty"
             let iterm = "com.googlecode.iterm2"
             let order = [ghostty, "removed", ghostty, terminal]
-            let available = Array(TerminalCatalog.all.prefix(3))
+            let available = [terminal, ghostty, iterm].map { KnownTerminal(id: $0, name: $0, bundleIdentifier: $0) }
             try assertEqual(TerminalCatalog.ordered(available, by: order).map(\.bundleIdentifier),
                             [ghostty, terminal, iterm])
             try assertEqual(TerminalCatalog.ordered(available, by: []).map(\.bundleIdentifier),
                             available.map(\.bundleIdentifier))
-            let menu = TerminalCatalog.menuTerminals(selected: [terminal, ghostty], preferred: terminal,
-                                                      order: order, isInstalled: { _ in true })
+            let menu = TerminalCatalog.menuTerminals(available: available, selected: [terminal, ghostty],
+                                                     preferred: terminal, order: order)
             try assertEqual(menu.map(\.bundleIdentifier), [ghostty, terminal])
         }
 
@@ -2473,9 +2529,11 @@ struct FinderRightKitTestsRunner {
             defer { try? FileManager.default.removeItem(at: dir) }
             let url = dir.appendingPathComponent("settings.plist")
             let config = SharedConfig(fileURL: url)
+            try assertTrue(config.followsSystemTerminal)
             try assertEqual(config.selectedTerminals, [config.preferredTerminal])
             try assertTrue(config.terminalOrder.isEmpty)
             config.preferredTerminal = "com.mitchellh.ghostty"
+            try assertTrue(!config.followsSystemTerminal)
             try assertEqual(SharedConfig(fileURL: url).selectedTerminals, ["com.mitchellh.ghostty"])
             config.selectedTerminals = ["com.apple.Terminal", "com.mitchellh.ghostty"]
             config.terminalOrder = ["com.mitchellh.ghostty", "com.apple.Terminal"]
@@ -2485,6 +2543,13 @@ struct FinderRightKitTestsRunner {
             try assertEqual(reloaded.preferredTerminal, "com.mitchellh.ghostty")
             reloaded.selectedTerminals = []
             try assertTrue(SharedConfig(fileURL: url).selectedTerminals.isEmpty)
+            reloaded.preferredTerminal = ""
+            reloaded.resetTerminalMenuToDefault()
+            let following = SharedConfig(fileURL: url)
+            try assertTrue(following.followsSystemTerminal)
+            try assertEqual(following.preferredTerminal, TerminalCatalog.defaultTerminalBundleIdentifier())
+            try assertEqual(following.selectedTerminals, [following.preferredTerminal])
+            try assertEqual(following.terminalOrder, config.terminalOrder)
         }
 
         runTest("EditorCatalog 清单无重复且以文本编辑兜底") {

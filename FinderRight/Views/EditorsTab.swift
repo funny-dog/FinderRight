@@ -305,8 +305,6 @@ struct AddEditorSheet: View {
         let config = SharedConfig.shared
         var excluded = Set(EditorCatalog.all.map(\.id))
         excluded.formUnion(config.customEditors.map(\.id))
-        // 终端会以 Editor 角色声明 .sh，不算编辑器
-        excluded.formUnion(TerminalCatalog.all.map(\.bundleIdentifier))
         if let own = Bundle.main.bundleIdentifier { excluded.insert(own) }
         let home = IPCBridge.realUserHomeDirectory.path
 
@@ -330,7 +328,8 @@ struct AddEditorSheet: View {
                       let bundle = Bundle(url: url), let id = bundle.bundleIdentifier,
                       !seen.contains(id) else { continue }
                 seen.insert(id)
-                guard EditorDiscovery.declaresCodeEditing(infoDictionary: bundle.infoDictionary ?? [:],
+                guard !TerminalCatalog.declaresShell(infoDictionary: bundle.infoDictionary ?? [:]),
+                      EditorDiscovery.declaresCodeEditing(infoDictionary: bundle.infoDictionary ?? [:],
                                                           codeTypeIdentifiers: codeTypeIds) else { continue }
                 result.append(EditorCandidate(editor: KnownEditor(id: id, name: appName(url)), url: url,
                                               icon: NSWorkspace.shared.icon(forFile: url.path)))

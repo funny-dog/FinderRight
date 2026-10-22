@@ -376,7 +376,7 @@ final class ServicesProvider: NSObject {
         let items = fileURLs(from: pboard)
         guard let first = items.first else { return }
         let dir = directory(for: first)
-        let bundleId = SharedConfig.shared.preferredTerminal
+        let bundleId = TerminalCatalog.resolvedDefault(preferred: SharedConfig.shared.preferredTerminal)
         workQueue.async { [service] in
             _ = service.handle(IPCRequest(
                 id: UUID().uuidString,
