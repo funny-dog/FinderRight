@@ -1421,14 +1421,14 @@ private struct PreviewExtensionToggle: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            FRRow(title: Text("文件夹与 ZIP 预览"), subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。")) {
+            FRRow(title: Text("文件与文件夹预览"), subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。")) {
                 HStack(spacing: 8) {
                     if busy {
                         ProgressView()
                             .controlSize(.small)
                             .accessibilityLabel(Text("正在更新预览设置"))
                     }
-                    FRSwitch(label: "文件夹与 ZIP 预览", isOn: Binding(
+                    FRSwitch(label: "文件与文件夹预览", isOn: Binding(
                         get: { enabled ?? false },
                         set: { update(to: $0) }
                     ))

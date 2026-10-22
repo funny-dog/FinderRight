@@ -548,7 +548,7 @@
 "文件夹 · %@" = "Folder · %@";
 "未找到这个路径" = "Path not found";
 "密码" = "Password";
-"文件夹与 ZIP 预览" = "Folder and ZIP previews";
+"文件与文件夹预览" = "File and folder previews";
 "使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。" = "Use FinderRight previews with Space or Finder’s Quick Look menu. Turn off to restore the system default. Reopen the Quick Look window after changing this setting.";
 "正在更新预览设置" = "Updating preview settings";
 "未找到快速查看扩展，请确认 FinderRight 已安装并在系统设置中启用扩展。" = "Quick Look extension not found. Make sure FinderRight is installed and enable the extension in System Settings.";

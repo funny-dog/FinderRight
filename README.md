@@ -34,7 +34,7 @@
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录
 - 📦 **压缩 / 解压** —— 压缩为 ZIP，解压 ZIP / 7z / RAR（默认关闭，可在设置中开启）
-- 👀 **空格预览文件夹 / ZIP** —— 选中后按空格，查看可展开、可排序的内容列表，ZIP 无需解压
+- 👀 **扩展空格预览** —— 文件夹与 ZIP / TAR / TAR.GZ / TAR.XZ / 7z / RAR 目录列表，以及 YAML / TOML / INI、SQLite 和 Jupyter Notebook 内容
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
 - ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
 - 🕘 **操作历史** —— 按日期查看每次操作的结果与失败原因，可搜索、筛选、在访达中定位
@@ -112,7 +112,7 @@ killall Finder
 | 操作后看不到结果 | 在「设置 → 操作历史」查看结果或失败原因。 |
 | 打开终端没有切到当前目录 | Ghostty / Alacritty / Kitty 已在运行时无法指定目录，属于终端自身限制。 |
 | 升级后权限开关是开的却不生效 | 从 1.2.0 及更早版本升级需重新授权一次（见「升级」）。 |
-| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件夹与 ZIP 预览」，再重新打开快速查看。 |
+| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件与文件夹预览」，再重新打开快速查看。 |
 
 <details>
 <summary>云盘与「服务」菜单</summary>
@@ -130,9 +130,12 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 <details>
 <summary>快速查看的范围与限制</summary>
 
-- 只读列表，可展开子目录、点击列标题排序；不预览包内文件内容，不解压。
+- 文件夹与 ZIP / TAR / TAR.GZ / TAR.XZ / 7z / RAR 使用只读目录列表，可展开子目录、点击列标题排序；不预览包内文件内容，不向磁盘解压。
+- YAML / YML / TOML / INI 显示文本，最多 1 MiB，支持 UTF-8 与带 BOM 的 UTF-16。
+- Jupyter Notebook（v4）最多读取 5 MiB、展示 200 个单元；渲染 Markdown、显示代码与已保存的文字输出，不执行代码、不加载外部资源，不显示图片与 HTML 输出。
+- SQLite（`.sqlite` / `.sqlite3`）只读展示最多 20 张普通表的列名、类型和每表前 50 条记录，单元格最多展示 512 字节；跳过视图、虚拟表和生成列。使用主文件快照，不包含尚未合并到主文件的 WAL 数据。
 - 包含隐藏项；不展开符号链接或 `.app` 等文件包，不递归统计目录大小。
-- 每层文件夹最多 2,000 项，ZIP 最多 10,000 条记录，超出会提示内容不完整。
+- 每层文件夹最多 2,000 项，压缩包最多 10,000 条记录，超出会提示内容不完整；其他压缩格式还受扫描资源上限约束。
 - 不支持 ZIP64、分卷 ZIP；加密 ZIP 可显示条目但不解密。
 - 预览扩展有独立的沙箱权限，主 App 的完全磁盘访问不会自动授予它。
 
@@ -192,7 +195,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click
 - 📦 **Compress / Extract** — compress to ZIP, extract ZIP / 7z / RAR (off by default, enable in Settings)
-- 👀 **Space to preview folders / ZIPs** — press Space for an expandable, sortable contents list, no extraction needed
+- 👀 **Extended Quick Look previews** — folder and ZIP / TAR / TAR.GZ / TAR.XZ / 7z / RAR listings, plus YAML / TOML / INI, SQLite and Jupyter Notebook contents
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
 - ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
 - 🕘 **Operation History** — review each action's result or failure reason by date; search, filter and reveal in Finder
@@ -272,7 +275,7 @@ killall Finder
 | No visible result after an action | Check Settings → Operation History for the result or failure reason. |
 | Open in Terminal doesn't switch folders | Ghostty / Alacritty / Kitty can't take a working directory while already running. |
 | Permissions look on but don't work after upgrading | Upgrading from 1.2.0 or earlier requires re-granting once (see "Upgrading"). |
-| Space on a folder or ZIP still shows the system preview | Turn on "Folder and ZIP previews" in Settings → Permissions & Extensions → Extensions, then reopen Quick Look. |
+| Space on a folder or ZIP still shows the system preview | Turn on "File and folder previews" in Settings → Permissions & Extensions → Extensions, then reopen Quick Look. |
 
 <details>
 <summary>Cloud folders and the Services menu</summary>
@@ -290,9 +293,12 @@ In these places FinderRight's actions are available under **right-click → Serv
 <details>
 <summary>Quick Look scope and limits</summary>
 
-- Read-only list with expandable folders and sortable columns; no file-content preview or extraction.
+- Folders and ZIP / TAR / TAR.GZ / TAR.XZ / 7z / RAR archives use read-only, expandable and sortable listings; no archived file-content preview or extraction to disk.
+- YAML / YML / TOML / INI display text up to 1 MiB, using UTF-8 or BOM-marked UTF-16.
+- Jupyter Notebook v4 reads up to 5 MiB and displays up to 200 cells, with rendered Markdown, code and saved text outputs. Code is never executed, external resources are never loaded, and image/HTML outputs are omitted.
+- SQLite (`.sqlite` / `.sqlite3`) displays names and types of columns and up to 50 rows from each of 20 ordinary tables, with a 512-byte cell display limit. Views, virtual tables and generated columns are skipped. Read-only previews use the main database file snapshot and omit uncheckpointed WAL changes.
 - Includes hidden items; doesn't follow symbolic links, browse app packages, or compute folder sizes.
-- Up to 2,000 items per folder and 10,000 ZIP records, with a notice when truncated.
+- Up to 2,000 items per folder and 10,000 archive records, with a notice when truncated; other archive formats also have scan resource limits.
 - ZIP64 and split ZIPs aren't supported; encrypted ZIPs list entries but aren't decrypted.
 - The preview extension has its own sandbox permissions; the main app's Full Disk Access doesn't extend to it.
 

@@ -5,6 +5,8 @@ import FinderRightKit
 
 final class PreviewController: NSViewController, QLPreviewingController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     private let outline = NSOutlineView()
+    private let documentView = DocumentPreviewView()
+    private var showingDocument = false
     private let status = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
     private let queue = DispatchQueue(label: "com.finderright.preview.read", qos: .userInitiated)
@@ -43,7 +45,7 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         outline.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         outline.autoresizingMask = [.width]
         outline.allowsMultipleSelection = false
-        outline.setAccessibilityLabel(text("Folder and ZIP contents"))
+        outline.setAccessibilityLabel(text("Folder and archive contents"))
         for (id, title, width) in [("name", "Name", 340.0), ("date", "Modified", 160.0),
                                     ("size", "Size", 90.0), ("kind", "Kind", 120.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
@@ -69,11 +71,16 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         let footer = NSStackView(views: [progress, status])
         footer.spacing = 8
         footer.alignment = .centerY
-        for item in [scroll, footer] {
+        documentView.isHidden = true
+        for item in [scroll, documentView, footer] {
             item.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(item)
         }
         NSLayoutConstraint.activate([
+            documentView.topAnchor.constraint(equalTo: scroll.topAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            documentView.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            documentView.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
             scroll.topAnchor.constraint(equalTo: container.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -102,6 +109,10 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         let current = UUID()
         generation = current
         roots = []
+        showingDocument = false
+        documentView.clear()
+        documentView.isHidden = true
+        outline.enclosingScrollView?.isHidden = false
         folderURL = nil
         truncated = false
         pendingFolders = 0
@@ -112,13 +123,20 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         queue.async { [weak self] in
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
-            let result = Result { () -> (PreviewListing, Bool) in
+            let result = Result { () -> (PreviewListing?, Bool, PreviewDocument?) in
                 let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
                 guard values.isSymbolicLink != true, values.isPackage != true else {
                     throw CocoaError(.fileReadUnsupportedScheme)
                 }
                 let directory = values.isDirectory == true
-                return (try directory ? PreviewContents.folder(url) : PreviewContents.zip(url), directory)
+                if !directory && PreviewDocument.supports(url) {
+                    return (nil, false, try PreviewDocument.read(url))
+                }
+                let listing: PreviewListing
+                if directory { listing = try PreviewContents.folder(url) }
+                else if url.pathExtension.lowercased() == "zip" { listing = try PreviewContents.zip(url) }
+                else { listing = try PreviewArchive.read(url) }
+                return (listing, directory, nil)
             }
             DispatchQueue.main.async {
                 guard let self, self.generation == current else {
@@ -127,7 +145,17 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                 }
                 self.progress.stopAnimation(nil)
                 do {
-                    let (listing, directory) = try result.get()
+                    let (listing, directory, document) = try result.get()
+                    if let document {
+                        self.showingDocument = true
+                        self.outline.enclosingScrollView?.isHidden = true
+                        self.documentView.isHidden = false
+                        self.documentView.show(document, text: self.text)
+                        self.updateStatus()
+                        handler(nil)
+                        return
+                    }
+                    guard let listing else { throw PreviewDocumentError.invalid }
                     self.folderURL = directory ? url : nil
                     self.roots = try directory
                         ? listing.entries.map { PreviewNode(path: $0.path, entry: $0) }
@@ -156,13 +184,18 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
             status.stringValue = text("Loading…")
             return
         }
+        if showingDocument {
+            status.stringValue = sourceName + " · " + text("Read-only preview")
+            status.toolTip = status.stringValue
+            return
+        }
         let summary = roots.isEmpty ? text("Empty") : String(format: text("%ld top-level items"), roots.count)
         status.stringValue = sourceName + " · " + summary + (truncated ? " · " + text("Item limit reached; showing partial contents") : "")
         status.toolTip = status.stringValue
     }
 
     private func show(_ error: Error) {
-        let reason = (error as? PreviewError).map { text($0.rawValue) } ?? error.localizedDescription
+        let reason = text((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         status.stringValue = text("Unable to read contents") + ": " + reason
         status.toolTip = status.stringValue
     }

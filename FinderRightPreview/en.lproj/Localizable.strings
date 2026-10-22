@@ -1,4 +1,3 @@
-"Folder and ZIP contents" = "Folder and ZIP contents";
 "Preview status" = "Preview status";
 "Name" = "Name";
 "Modified" = "Modified";
@@ -18,3 +17,19 @@
 "The archive contains an unsafe or excessively deep path" = "The archive contains an unsafe or excessively deep path";
 "The ZIP directory is encrypted and cannot be previewed" = "The ZIP directory is encrypted and cannot be previewed";
 "The archive directory is too large to preview" = "The archive directory is too large to preview";
+"Folder and archive contents" = "Folder and archive contents";
+"File contents" = "File contents";
+"Read-only preview" = "Read-only preview";
+"Cell" = "Cell";
+"Image and HTML outputs are not shown" = "Image and HTML outputs are not shown";
+"Empty notebook" = "Empty notebook";
+"Database file snapshot; uncheckpointed WAL changes are not included" = "Database file snapshot; uncheckpointed WAL changes are not included";
+"No ordinary tables" = "No ordinary tables";
+"No records" = "No records";
+"Invalid or unsupported preview document" = "Invalid or unsupported preview document";
+"The file is too large to preview" = "The file is too large to preview";
+"Unable to read the SQLite database" = "Unable to read the SQLite database";
+"Invalid or damaged archive" = "Invalid or damaged archive";
+"Archive format or compression is not supported" = "Archive format or compression is not supported";
+"The archive is encrypted and cannot be previewed" = "The archive is encrypted and cannot be previewed";
+"Archive preview timed out" = "Archive preview timed out";

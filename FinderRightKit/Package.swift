@@ -19,8 +19,13 @@ let package = Package(
         ),
     ],
     targets: [
+        .systemLibrary(
+            name: "CArchive",
+            path: "Sources/CArchive"
+        ),
         .target(
             name: "FinderRightKit",
+            dependencies: ["CArchive"],
             path: "Sources/FinderRightKit"
         ),
         .executableTarget(

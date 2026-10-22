@@ -34,6 +34,29 @@
 			<array>
 				<string>public.folder</string>
 				<string>public.zip-archive</string>
+				<string>public.tar-archive</string>
+				<string>org.gnu.gnu-tar-archive</string>
+				<string>org.gnu.gnu-zip-archive</string>
+				<string>org.gnu.gnu-zip-tar-archive</string>
+				<string>org.tukaani.xz-archive</string>
+				<string>org.tukaani.tar-xz-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+				<string>com.rarlab.rar-archive</string>
+				<string>public.yaml</string>
+				<string>org.toml-lang.toml</string>
+				<string>com.microsoft.ini</string>
+				<string>org.sqlite.sqlite3</string>
+				<string>org.jupyter.ipynb</string>
+				<string>public.sqlite3-database</string>
+				<string>org.jupyter.notebook</string>
+				<string>com.jupyter.notebook</string>
+				<string>public.toml</string>
+				<string>public.ini-settings</string>
+				<string>dyn.ah62d4rv4ge81k55rru</string>
+				<string>dyn.ah62d4rv4ge80w5xm</string>
+				<string>dyn.ah62d4rv4ge81g6pqrf4gn</string>
+				<string>dyn.ah62d4rv4ge81g6pqrf4gnq2</string>
+				<string>dyn.ah62d4rv4ge80w6d3r3va</string>
 			</array>
 			<key>QLSupportsSearchableItems</key>
 			<false/>
@@ -43,5 +66,95 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).PreviewController</string>
 	</dict>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>public.yaml</string>
+			<key>UTTypeDescription</key>
+			<string>YAML</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>yaml</string>
+					<string>yml</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.toml-lang.toml</string>
+			<key>UTTypeDescription</key>
+			<string>TOML</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>toml</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.microsoft.ini</string>
+			<key>UTTypeDescription</key>
+			<string>INI configuration</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ini</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.sqlite.sqlite3</string>
+			<key>UTTypeDescription</key>
+			<string>SQLite database</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>sqlite</string>
+					<string>sqlite3</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.jupyter.ipynb</string>
+			<key>UTTypeDescription</key>
+			<string>Jupyter Notebook</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ipynb</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

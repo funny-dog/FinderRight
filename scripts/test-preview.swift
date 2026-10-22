@@ -1,10 +1,19 @@
 import AppKit
 import FinderRightKit
 
-/// 不开窗口：检查 ZIP 虚拟目录，以及预览控制器的异步加载和目录展开。
+/// 不开窗口：检查目录、压缩包与文档预览，以及异步切换和布局。
 @main
 struct PreviewChecks {
     static func main() throws {
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let plistData = try Data(contentsOf: repository.appendingPathComponent("FinderRightPreview/Info.plist"))
+        let plist = try PropertyListSerialization.propertyList(from: plistData, format: nil) as! [String: Any]
+        let ext = plist["NSExtension"] as! [String: Any]
+        let attributes = ext["NSExtensionAttributes"] as! [String: Any]
+        let types = attributes["QLSupportedContentTypes"] as! [String]
+        precondition(!types.contains("public.text") && !types.contains("public.json") && !types.contains("net.daringfireball.markdown"))
+        let imported = plist["UTImportedTypeDeclarations"] as! [[String: Any]]
+        for type in imported { precondition(types.contains(type["UTTypeIdentifier"] as! String)) }
         _ = NSApplication.shared
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("finderright-preview-\(UUID())", isDirectory: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("目录/子目录"), withIntermediateDirectories: true)
@@ -80,7 +89,68 @@ struct PreviewChecks {
         let footer = controller.view.subviews.compactMap { $0 as? NSStackView }.first!
         precondition(controller.view.bounds.contains(footer.frame), "状态栏必须在预览边界内")
         precondition(footer.frame.maxY < scroll.frame.minY, "状态栏不能与内容区重叠")
-        print("✓ Quick Look 集成检查通过（目录加载、排序、展开、切换、异常包、列宽与底部布局）")
+        let config = root.appendingPathComponent("sample.toml")
+        try Data("name = \"中文\"\n".utf8).write(to: config)
+        prepare(controller, config)
+        let document = controller.view.subviews.compactMap { $0 as? DocumentPreviewView }.first!
+        precondition(!document.isHidden && scroll.isHidden)
+        precondition(!document.textView.isEditable && document.textView.isSelectable)
+        precondition(document.textView.string.contains("中文"))
+        controller.view.layoutSubtreeIfNeeded()
+        document.tile()
+        precondition(document.frame.width > 100 && document.frame.height > 100)
+        precondition(document.textView.frame.width > 100, "文本视图必须具有可见宽度")
+        document.textView.layoutManager?.ensureLayout(for: document.textView.textContainer!)
+        precondition(document.textView.layoutManager!.numberOfGlyphs > 0)
+        precondition(document.textView.frame.height > 20 && document.textView.visibleRect.height > 20,
+                     "文本内容不能位于零高度的文档视图中")
+        let literal = DocumentPreviewView.content(for: .text("<script>bad()</script>"), text: { $0 })
+        precondition(literal.string == "<script>bad()</script>")
+        precondition(literal.attribute(.attachment, at: 0, effectiveRange: nil) == nil)
+        let notebook = root.appendingPathComponent("sample.ipynb")
+        let content: [String: Any] = ["nbformat": 4, "cells": [
+            ["cell_type": "markdown", "source": "# 标题\n\n**加粗**\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n![remote](https://example.com/image.png)\n\n<script>bad()</script>"],
+            ["cell_type": "code", "source": "print(1)", "outputs": [["text": "1\n"]]]
+        ]]
+        try JSONSerialization.data(withJSONObject: content).write(to: notebook)
+        let rendered = DocumentPreviewView.content(for: try PreviewDocument.read(notebook), text: { $0 })
+        precondition(rendered.string.contains("标题") && rendered.string.contains("加粗"))
+        let boldRange = (rendered.string as NSString).range(of: "加粗")
+        let boldFont = rendered.attribute(.font, at: boldRange.location, effectiveRange: nil) as! NSFont
+        precondition(NSFontManager.shared.traits(of: boldFont).contains(.boldFontMask))
+        let cellRange = (rendered.string as NSString).range(of: "A")
+        let tableStyle = rendered.attribute(.paragraphStyle, at: cellRange.location, effectiveRange: nil) as! NSParagraphStyle
+        precondition(tableStyle.textBlocks.first is NSTextTableBlock)
+        rendered.enumerateAttributes(in: NSRange(location: 0, length: rendered.length)) { attributes, _, _ in
+            precondition(attributes[.link] == nil && attributes[.attachment] == nil)
+        }
+        precondition(rendered.string.contains("print(1)"))
+        prepare(controller, notebook)
+        precondition(!document.isHidden && outline.numberOfRows == 0)
+        let database = root.appendingPathComponent("sample.sqlite")
+        let databaseResult = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/sqlite3"),
+            arguments: [database.path, "CREATE TABLE products (name TEXT); INSERT INTO products VALUES ('苹果');"])
+        precondition(databaseResult.status == 0, databaseResult.stderr)
+        prepare(controller, database)
+        precondition(!document.isHidden && document.textView.string.contains("苹果"))
+        precondition(document.textView.string.contains("name · TEXT"))
+        document.textView.layoutManager?.ensureLayout(for: document.textView.textContainer!)
+        let tableBounds = document.textView.layoutManager!.usedRect(for: document.textView.textContainer!)
+        precondition(tableBounds.width > 0 && tableBounds.height > 0, "SQLite 表格必须完成原生排版")
+        prepare(controller, zip)
+        precondition(document.isHidden && !scroll.isHidden && outline.numberOfRows == 1)
+        let tar = root.appendingPathComponent("sample.tar")
+        let tarResult = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/tar"),
+                                              arguments: ["-cf", tar.path, "-C", root.path, "a.txt"])
+        precondition(tarResult.status == 0, tarResult.stderr)
+        prepare(controller, tar)
+        precondition(document.isHidden && outline.numberOfRows == 1)
+        precondition((outline.item(atRow: 0) as? PreviewNode)?.name == "a.txt")
+        prepare(controller, config)
+        try Data([0, 1]).write(to: config)
+        prepare(controller, config)
+        precondition(document.isHidden && !scroll.isHidden, "文档失败不能留下上一个文档的预览")
+        print("✓ Quick Look 集成检查通过（目录/压缩包加载、排序、展开、文档切换、静态内容隔离与布局）")
     }
 
     private static func findOutline(_ view: NSView) -> NSOutlineView? {

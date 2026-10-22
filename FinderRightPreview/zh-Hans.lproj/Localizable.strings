@@ -1,4 +1,3 @@
-"Folder and ZIP contents" = "文件夹与 ZIP 内容";
 "Preview status" = "预览状态";
 "Name" = "名称";
 "Modified" = "修改日期";
@@ -18,3 +17,19 @@
 "The archive contains an unsafe or excessively deep path" = "压缩包包含不安全或层级过深的路径";
 "The ZIP directory is encrypted and cannot be previewed" = "ZIP 中央目录已加密，无法预览";
 "The archive directory is too large to preview" = "压缩包目录过大，无法预览";
+"Folder and archive contents" = "文件夹与压缩包内容";
+"File contents" = "文件内容";
+"Read-only preview" = "只读预览";
+"Cell" = "单元";
+"Image and HTML outputs are not shown" = "不显示图片与 HTML 输出";
+"Empty notebook" = "空 Notebook";
+"Database file snapshot; uncheckpointed WAL changes are not included" = "数据库主文件快照，不含尚未合并的 WAL 数据";
+"No ordinary tables" = "没有可预览的普通数据表";
+"No records" = "没有记录";
+"Invalid or unsupported preview document" = "预览文件无效或格式不受支持";
+"The file is too large to preview" = "文件过大，无法预览";
+"Unable to read the SQLite database" = "无法读取 SQLite 数据库";
+"Invalid or damaged archive" = "压缩包无效或已损坏";
+"Archive format or compression is not supported" = "不支持此压缩包格式或压缩方法";
+"The archive is encrypted and cannot be previewed" = "压缩包已加密，无法预览";
+"Archive preview timed out" = "压缩包预览读取超时";
