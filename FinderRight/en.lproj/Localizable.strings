@@ -62,7 +62,6 @@
 "复制单选文本文件的全部内容到剪贴板" = "Copy the full content of a selected text file to the clipboard";
 "文件大小上限" = "Maximum File Size";
 "仅在单选常规文件且大小在上限内时显示菜单项" = "Only shown when a single regular file is selected and its size is within the limit";
-"复制纯文本文件（UTF-8 / UTF-16）全部内容；建议不超过 10 MB，以避免第三方剪贴板工具出现索引卡顿。" = "Copies the full content of plain text files (UTF-8 / UTF-16). Recommended not to exceed 10 MB to prevent third-party clipboard tools from lagging.";
 "已复制文件内容到剪贴板" = "Copied file content to clipboard";
 "无法复制：非文本文件" = "Cannot copy: not a text file";
 "文件大小超过限制" = "File size exceeds limit";
@@ -133,7 +132,7 @@
 /* About tab */
 "版本 %@" = "Version %@";
 "版本 %@ (%@)" = "Version %@ (%@)";
-"增强 macOS Finder 右键菜单的轻量工具。\n新建文件、复制路径、打开终端与编辑器、剪切粘贴、压缩解压。" = "A lightweight tool that enhances the macOS Finder right-click menu.\nNew files, copy path, open in terminal or editor, cut & paste, compress & extract.";
+"增强 macOS Finder 右键菜单的轻量工具。" = "A lightweight tool that enhances the macOS Finder right-click menu.";
 "GitHub 仓库" = "GitHub Repository";
 
 /* Shortcuts tab */
@@ -528,7 +527,6 @@
 
 /* 编辑器设置 */
 "右键「打开编辑器」与服务菜单使用的编辑器" = "Editors used by \"Open in Editor\" and the Services menu";
-"通过服务菜单或快捷键「打开编辑器」时直接使用" = "Used when opening from the Services menu or a keyboard shortcut";
 "右键菜单中显示" = "Show in Context Menu";
 "添加编辑器…" = "Add Editor…";
 "默认" = "Default";
@@ -641,7 +639,6 @@
 "恢复" = "Restore";
 "恢复后重新出现在上方列表中，并处于开启状态。" = "Restored types return to the list above and are turned on.";
 
-"通过服务菜单或快捷键打开终端时使用" = "Used when opening a terminal through Services or keyboard shortcuts";
 "默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry. Drag the handle on the left to reorder terminals in the context menu.";
 
 "更新" = "Updates";

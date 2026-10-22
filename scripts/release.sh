@@ -51,7 +51,7 @@ check_versions_consistent() {
     [ "$(plist_value "$file" CFBundleVersion)" = "$build" ] \
       || fail "构建号不一致：$file 是 $(plist_value "$file" CFBundleVersion)，主 App 是 $build"
   done
-  echo "版本一致性：v$version (build $build)，三个 Info.plist 全部匹配"
+  echo "版本一致性：v$version (build $build)，四个 Info.plist 全部匹配"
 }
 
 check_git_state() {
@@ -74,7 +74,7 @@ check_ci_state() {
   case "$conclusion" in
     success) echo "CI 状态：main 最新一次运行成功" ;;
     "") echo "提示：读不到 CI 运行记录，跳过检查" ;;
-    *) echo "警告：main 最新一次 CI 结果是 $conclusion，确认无误再继续" >&2 ;;
+    *) echo "警告：main 最新一次 CI 结果是 ${conclusion}，确认无误再继续" >&2 ;;
   esac
 }
 
@@ -82,7 +82,7 @@ check_new_version() {
   local new="$1" current
   current="$(current_version)"
   [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "版本号格式应为 x.y.z，收到：$new"
-  [ "$new" != "$current" ] || fail "新版本号与当前版本相同（$current）"
+  [ "$new" != "$current" ] || fail "新版本号与当前版本相同（${current}）"
   if [ "$(printf '%s\n%s\n' "$current" "$new" | sort -V | tail -1)" != "$new" ]; then
     fail "新版本号 $new 必须大于当前版本 $current"
   fi
