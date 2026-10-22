@@ -554,6 +554,9 @@
 "密码" = "Password";
 "文件与文件夹预览" = "File and folder previews";
 "使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。" = "Use FinderRight previews with Space or Finder’s Quick Look menu. Turn off to restore the system default. Reopen the Quick Look window after changing this setting.";
+"Markdown 渲染预览" = "Rendered Markdown previews";
+"按空格时把 .md 排版成文档：标题、列表、表格、代码块与任务列表；不加载图片和网页内容。关闭后由系统或其他应用预览。" = "Press Space to see .md files as formatted documents with headings, lists, tables, code blocks and task lists. Images and web content are never loaded. Turn off to let the system or another app preview them.";
+"%@ 也提供 Markdown 快速查看，同时开启时系统选用哪个不确定。建议只保留一个：关闭此开关，或在对方应用中关闭它的预览扩展。" = "%@ also provides Markdown Quick Look previews. With both on, macOS may pick either one. Keep only one: turn this off, or disable the other app’s preview extension.";
 "正在更新预览设置" = "Updating preview settings";
 "未找到快速查看扩展，请确认 FinderRight 已安装并在系统设置中启用扩展。" = "Quick Look extension not found. Make sure FinderRight is installed and enable the extension in System Settings.";
 "无法确认快速查看扩展状态，请在系统设置中检查后重新检测。" = "Unable to determine the Quick Look extension state. Check System Settings, then try again.";
@@ -597,6 +600,7 @@
 "完全磁盘访问：%@" = "Full Disk Access: %@";
 "Finder 扩展：%@" = "Finder extension: %@";
 "快速查看扩展：%@" = "Quick Look extension: %@";
+"Markdown 预览扩展：%@" = "Markdown preview extension: %@";
 "剪切队列：%d 项" = "Cut queue: %d item(s)";
 "最近操作记录：%@" = "Recent activity: %@";
 "最近失败：%@" = "Last failure: %@";

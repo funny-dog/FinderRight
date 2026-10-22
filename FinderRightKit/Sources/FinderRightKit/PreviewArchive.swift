@@ -67,11 +67,18 @@ public enum PreviewArchive {
         archive_read_support_format_7zip(archive)
         archive_read_support_format_rar(archive)
         archive_read_support_format_rar5(archive)
+        // deb（ar）、rpm（cpio 负载）、iso、pkg（xar）；只列出顶层成员，不再解开内层包。
+        archive_read_support_format_ar(archive)
+        archive_read_support_format_cpio(archive)
+        archive_read_support_format_iso9660(archive)
+        archive_read_support_format_xar(archive)
 
         // ARCHIVE_WARN 可能表示借助外部程序；预览只允许进程内解码。
         guard archive_read_support_filter_none(archive) == ARCHIVE_OK,
               archive_read_support_filter_gzip(archive) == ARCHIVE_OK,
-              archive_read_support_filter_xz(archive) == ARCHIVE_OK else {
+              archive_read_support_filter_xz(archive) == ARCHIVE_OK,
+              archive_read_support_filter_bzip2(archive) == ARCHIVE_OK,
+              archive_read_support_filter_rpm(archive) == ARCHIVE_OK else {
             throw PreviewArchiveError.unsupportedFormat
         }
 

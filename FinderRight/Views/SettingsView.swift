@@ -452,7 +452,20 @@ struct PermissionsTab: View {
                 FRCard {
                     FinderExtensionView()
                     FRDivider()
-                    PreviewExtensionToggle()
+                    PreviewExtensionToggle(
+                        identifier: PreviewExtensionManager.identifier,
+                        title: Text("文件与文件夹预览"),
+                        subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。"),
+                        switchLabel: "文件与文件夹预览"
+                    )
+                    FRDivider()
+                    PreviewExtensionToggle(
+                        identifier: PreviewExtensionManager.markdownIdentifier,
+                        title: Text("Markdown 渲染预览"),
+                        subtitle: Text("按空格时把 .md 排版成文档：标题、列表、表格、代码块与任务列表；不加载图片和网页内容。关闭后由系统或其他应用预览。"),
+                        switchLabel: "Markdown 渲染预览",
+                        checksMarkdownConflicts: true
+                    )
                 }
             }
 
@@ -1455,21 +1468,29 @@ enum FinderRelauncher {
 }
 
 /// 权限与扩展页中的 Quick Look 开关，直接读取与修改系统的扩展选举。
+/// 文件预览与 Markdown 预览是两个独立扩展，各自一行开关。
 private struct PreviewExtensionToggle: View {
+    let identifier: String
+    let title: Text
+    let subtitle: Text
+    let switchLabel: LocalizedStringKey
+    var checksMarkdownConflicts = false
+
     @FRState private var enabled: Bool? = nil
     @FRState private var busy = false
     @FRState private var errorMessage: String? = nil
+    @FRState private var conflicts: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
-            FRRow(title: Text("文件与文件夹预览"), subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。")) {
+            FRRow(title: title, subtitle: subtitle) {
                 HStack(spacing: 8) {
                     if busy {
                         ProgressView()
                             .controlSize(.small)
                             .accessibilityLabel(Text("正在更新预览设置"))
                     }
-                    FRSwitch(label: "文件与文件夹预览", isOn: Binding(
+                    FRSwitch(label: switchLabel, isOn: Binding(
                         get: { enabled ?? false },
                         set: { update(to: $0) }
                     ))
@@ -1491,6 +1512,17 @@ private struct PreviewExtensionToggle: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             }
+            if enabled == true, !conflicts.isEmpty {
+                FRDivider()
+                Text(verbatim: String(format: NSLocalizedString("%@ 也提供 Markdown 快速查看，同时开启时系统选用哪个不确定。建议只保留一个：关闭此开关，或在对方应用中关闭它的预览扩展。", comment: ""),
+                                      ListFormatter.localizedString(byJoining: conflicts)))
+                    .font(.system(size: 12))
+                    .foregroundColor(FRTheme.mute)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+            }
         }
         .onAppear { update() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in update() }
@@ -1502,11 +1534,13 @@ private struct PreviewExtensionToggle: View {
         errorMessage = nil
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result {
-                if let desired { try PreviewExtensionManager.setEnabled(desired) }
-                return try PreviewExtensionManager.isEnabled()
+                if let desired { try PreviewExtensionManager.setEnabled(desired, identifier: identifier) }
+                return try PreviewExtensionManager.isEnabled(identifier)
             }
+            let found = checksMarkdownConflicts ? PreviewExtensionManager.markdownConflicts() : []
             DispatchQueue.main.async {
                 busy = false
+                conflicts = found
                 switch result {
                 case .success(let value): enabled = value
                 case .failure(let error):

@@ -11,6 +11,7 @@ struct TestPreviewArchives {
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         try testStandardFormats(in: tempDir)
+        try testPackageFormats(in: tempDir)
         try testRar5Fixture(in: tempDir)
         try testDotSlashHandling(in: tempDir)
         try testTruncation(in: tempDir)
@@ -74,7 +75,14 @@ struct TestPreviewArchives {
                                       currentDirectoryURL: workDir)
         precondition(r4.status == 0, "7z 构造失败: \(r4.stderr)")
 
-        for (formatName, url) in [("TAR", tarURL), ("TAR.GZ", targzURL), ("TAR.XZ", tarxzURL), ("7z", sevenZipURL)] {
+        // 构造 tar.bz2
+        let tarbz2URL = tempDir.appendingPathComponent("test.tar.bz2")
+        let r5 = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/tar"),
+                                      arguments: ["-cjf", tarbz2URL.path, "."],
+                                      currentDirectoryURL: workDir)
+        precondition(r5.status == 0, "tar.bz2 构造失败: \(r5.stderr)")
+
+        for (formatName, url) in [("TAR", tarURL), ("TAR.GZ", targzURL), ("TAR.XZ", tarxzURL), ("TAR.BZ2", tarbz2URL), ("7z", sevenZipURL)] {
             let listing = try PreviewArchive.read(url)
             precondition(!listing.truncated, "\(formatName) 不应截断")
 
@@ -109,6 +117,69 @@ struct TestPreviewArchives {
 
             print("  ✓ \(formatName) 解析成功（中文层级、大小、时间、符号链接与杂项过滤）")
         }
+    }
+
+    // MARK: - 1b. 软件包与光盘镜像（deb / rpm / iso / pkg）
+    private static func testPackageFormats(in tempDir: URL) throws {
+        print("\n--- 1b. 测试 deb / rpm / iso / pkg 顶层成员 ---")
+        let workDir = tempDir.appendingPathComponent("package-work", isDirectory: true)
+        try FileManager.default.createDirectory(at: workDir.appendingPathComponent("目录"), withIntermediateDirectories: true)
+        try Data("你好".utf8).write(to: workDir.appendingPathComponent("目录/中文.txt"))
+        func run(_ tool: String, _ arguments: [String]) throws {
+            let result = try ProcessRunner.run(executableURL: URL(fileURLWithPath: tool), arguments: arguments,
+                                               currentDirectoryURL: workDir)
+            precondition(result.status == 0, "\(tool) 构造失败: \(result.stderr)")
+        }
+        func paths(_ url: URL) throws -> Set<String> { Set(try PreviewArchive.read(url).entries.map(\.path)) }
+
+        // deb 是 GNU ar：按格式手写，避免依赖 dpkg；系统 ar 会额外写入符号表。
+        let tarGz = tempDir.appendingPathComponent("data.tar.gz")
+        try run("/usr/bin/tar", ["-czf", tarGz.path, "."])
+        func member(_ name: String, _ data: Data) -> Data {
+            func field(_ value: String, _ width: Int) -> String { value.padding(toLength: width, withPad: " ", startingAt: 0) }
+            var result = Data((field(name + "/", 16) + field("0", 12) + field("0", 6) + field("0", 6) + field("100644", 8)
+                               + field(String(data.count), 10) + "`\n").utf8)
+            precondition(result.count == 60)
+            result.append(data)
+            if data.count % 2 == 1 { result.append(0x0A) }
+            return result
+        }
+        var deb = Data("!<arch>\n".utf8)
+        deb.append(member("debian-binary", Data("2.0\n".utf8)))
+        deb.append(member("control.tar.gz", try Data(contentsOf: tarGz)))
+        deb.append(member("data.tar.gz", try Data(contentsOf: tarGz)))
+        let debURL = tempDir.appendingPathComponent("sample.deb")
+        try deb.write(to: debURL)
+        let debPaths = try paths(debURL)
+        precondition(debPaths == ["debian-binary", "control.tar.gz", "data.tar.gz"], "deb 顶层成员不符")
+        print("  ✓ deb 列出 ar 顶层成员")
+
+        // rpm：96 字节 lead + 空签名头 + 空主头 + gzip 压缩的 cpio 负载。
+        let cpio = tempDir.appendingPathComponent("payload.cpio")
+        try run("/usr/bin/tar", ["--format", "newc", "-cf", cpio.path, "目录"])
+        let gzip = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/gzip"), arguments: ["-kf", cpio.path])
+        precondition(gzip.status == 0, gzip.stderr)
+        var lead = Data(count: 96)
+        lead.replaceSubrange(0..<6, with: [0xED, 0xAB, 0xEE, 0xDB, 3, 0])
+        let header = Data([0x8E, 0xAD, 0xE8, 0x01] + [UInt8](repeating: 0, count: 12))
+        let rpmURL = tempDir.appendingPathComponent("sample.rpm")
+        try (lead + header + header + Data(contentsOf: URL(fileURLWithPath: cpio.path + ".gz"))).write(to: rpmURL)
+        let rpmPaths = try paths(rpmURL)
+        precondition(rpmPaths.contains("目录/中文.txt"), "rpm 应列出 cpio 负载中的文件")
+        print("  ✓ rpm 列出 cpio 负载")
+
+        let isoURL = tempDir.appendingPathComponent("sample.iso")
+        try run("/usr/bin/hdiutil", ["makehybrid", "-quiet", "-iso", "-joliet", "-o", isoURL.path, workDir.path])
+        let isoPaths = try paths(isoURL)
+        precondition(isoPaths.contains("目录/中文.txt"), "iso 应列出 Joliet 中文文件名")
+        print("  ✓ iso 列出光盘目录")
+
+        let pkgURL = tempDir.appendingPathComponent("sample.pkg")
+        try run("/usr/bin/pkgbuild", ["--quiet", "--root", workDir.path, "--identifier", "com.example.preview",
+                                      "--version", "1", "--install-location", "/tmp/finderright-preview", pkgURL.path])
+        let pkgPaths = try paths(pkgURL)
+        precondition(pkgPaths.isSuperset(of: ["Bom", "Payload", "PackageInfo"]), "pkg 应列出 xar 顶层成员")
+        print("  ✓ pkg 列出 xar 顶层成员")
     }
 
     // MARK: - 2. RAR5 自包含 fixture

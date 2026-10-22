@@ -16,6 +16,7 @@ PLISTS=(
   "FinderRight/Info.plist"
   "FinderRightSync/Info.plist"
   "FinderRightPreview/Info.plist"
+  "FinderRightMarkdown/Info.plist"
 )
 
 fail() {

@@ -30,6 +30,8 @@ enum DiagnosticsReport {
             preview = L("未知")
         }
         lines.append(String(format: L("快速查看扩展：%@"), preview))
+        let markdown = (try? PreviewExtensionManager.isEnabled(PreviewExtensionManager.markdownIdentifier)).map { $0 ? L("已启用") : L("未启用") } ?? L("未知")
+        lines.append(String(format: L("Markdown 预览扩展：%@"), markdown))
 
         lines.append(String(format: L("剪切队列：%d 项"), CutQueueStore().read().count))
 

@@ -35,10 +35,16 @@ int archive_read_support_format_tar(struct archive *);
 int archive_read_support_format_7zip(struct archive *);
 int archive_read_support_format_rar(struct archive *);
 int archive_read_support_format_rar5(struct archive *);
+int archive_read_support_format_ar(struct archive *);
+int archive_read_support_format_cpio(struct archive *);
+int archive_read_support_format_iso9660(struct archive *);
+int archive_read_support_format_xar(struct archive *);
 
 int archive_read_support_filter_none(struct archive *);
 int archive_read_support_filter_gzip(struct archive *);
 int archive_read_support_filter_xz(struct archive *);
+int archive_read_support_filter_bzip2(struct archive *);
+int archive_read_support_filter_rpm(struct archive *);
 
 int archive_read_set_seek_callback(struct archive *, archive_seek_callback seeker);
 

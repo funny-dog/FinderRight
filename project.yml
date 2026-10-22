@@ -34,6 +34,9 @@ targets:
       - target: FinderRightPreview
         embed: true
         codeSign: true
+      - target: FinderRightMarkdown
+        embed: true
+        codeSign: true
       - package: FinderRightKit
     settings:
       base:
@@ -88,6 +91,30 @@ targets:
         PRODUCT_MODULE_NAME: FinderRightPreview
         INFOPLIST_FILE: FinderRightPreview/Info.plist
         CODE_SIGN_ENTITLEMENTS: FinderRightPreview/FinderRightPreview.entitlements
+        GENERATE_INFOPLIST_FILE: false
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+
+  FinderRightMarkdown:
+    type: app-extension
+    platform: macOS
+    sources:
+      - FinderRightMarkdown
+      - path: FinderRightPreview/DocumentPreviewView.swift
+    dependencies:
+      - sdk: QuickLookUI.framework
+        embed: false
+      - sdk: AppKit.framework
+        embed: false
+      - package: FinderRightKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.finderright.app.markdown
+        PRODUCT_MODULE_NAME: FinderRightMarkdown
+        INFOPLIST_FILE: FinderRightMarkdown/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FinderRightMarkdown/FinderRightMarkdown.entitlements
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

@@ -4,6 +4,9 @@ import FinderRightKit
 /// 系统的扩展选举状态就是唯一配置，避免另存一份开关后与系统设置不一致。
 enum PreviewExtensionManager {
     static let identifier = "com.finderright.app.preview"
+    static let markdownIdentifier = "com.finderright.app.markdown"
+    /// Markdown 扩展声明的类型；其他应用的预览扩展也声明时，系统选用哪个不确定。
+    static let markdownTypes: Set<String> = ["net.daringfireball.markdown", "public.markdown", "io.typora.markdown"]
 
     enum Failure: LocalizedError {
         case unavailable, unknownState, commandFailed, changeFailed
@@ -20,12 +23,12 @@ enum PreviewExtensionManager {
         }
     }
 
-    static func isEnabled() throws -> Bool {
-        try enabledState(in: run(["-m", "-i", identifier]))
+    static func isEnabled(_ id: String = identifier) throws -> Bool {
+        try enabledState(in: run(["-m", "-i", id]), identifier: id)
     }
 
-    static func enabledState(in output: String) throws -> Bool {
-        guard let entry = FinderSyncElection.parse(output).first(where: { $0.bundleId == identifier }) else {
+    static func enabledState(in output: String, identifier id: String = identifier) throws -> Bool {
+        guard let entry = FinderSyncElection.parse(output).first(where: { $0.bundleId == id }) else {
             throw Failure.unavailable
         }
         switch entry.state {
@@ -36,9 +39,36 @@ enum PreviewExtensionManager {
         }
     }
 
-    static func setEnabled(_ enabled: Bool) throws {
-        _ = try run(["-e", enabled ? "use" : "ignore", "-i", identifier])
-        guard try isEnabled() == enabled else { throw Failure.changeFailed }
+    static func setEnabled(_ enabled: Bool, identifier id: String = identifier) throws {
+        _ = try run(["-e", enabled ? "use" : "ignore", "-i", id])
+        guard try isEnabled(id) == enabled else { throw Failure.changeFailed }
+    }
+
+    /// 其他已启用且声明了 Markdown 类型的预览扩展所属的应用名称（如 MarkEdit）。
+    static func markdownConflicts() -> [String] {
+        guard let output = try? run(["-m", "-v", "-p", "com.apple.quicklook.preview"]) else { return [] }
+        return markdownConflicts(verboseOutput: output) { path in
+            let info = NSDictionary(contentsOf: URL(fileURLWithPath: path).appendingPathComponent("Contents/Info.plist"))
+            let attributes = (info?["NSExtension"] as? [String: Any])?["NSExtensionAttributes"] as? [String: Any]
+            return attributes?["QLSupportedContentTypes"] as? [String] ?? []
+        }
+    }
+
+    /// verboseOutput 每行形如 `+    bundleId(版本)\tUUID\t时间\t路径`；空格状态表示未被用户覆盖的默认启用。
+    static func markdownConflicts(verboseOutput: String, supportedTypes: (String) -> [String]) -> [String] {
+        var names: [String] = []
+        for line in verboseOutput.split(whereSeparator: \.isNewline) {
+            let fields = line.split(separator: "\t")
+            guard let entry = FinderSyncElection.parse(String(fields.first ?? "")).first,
+                  entry.state == "+" || entry.state == " ",
+                  !entry.bundleId.hasPrefix("com.finderright."),
+                  let path = fields.last.map({ $0.trimmingCharacters(in: .whitespaces) }), path.hasSuffix(".appex"),
+                  !markdownTypes.isDisjoint(with: supportedTypes(path)) else { continue }
+            let app = URL(fileURLWithPath: path).pathComponents.last { $0.hasSuffix(".app") }
+            let name = app.map { String($0.dropLast(4)) } ?? entry.bundleId
+            if !names.contains(name) { names.append(name) }
+        }
+        return names
     }
 
     private static func run(_ arguments: [String]) throws -> String {

@@ -2,6 +2,7 @@ import AppKit
 import FinderRightKit
 
 /// 原生只读文本与表格，不创建 WebKit 子进程，也不解释文档中的 HTML 或外部链接。
+/// 同时编译进文件预览扩展与 Markdown 预览扩展，文案从各自扩展的 bundle 查表。
 final class DocumentPreviewView: NSScrollView {
     let textView = NSTextView()
 
@@ -20,7 +21,9 @@ final class DocumentPreviewView: NSScrollView {
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        textView.setAccessibilityLabel(NSLocalizedString("File contents", bundle: Bundle(for: PreviewController.self), comment: ""))
+        // 只排可见部分：长文档全量排版要数秒到数十秒（实测 300 KB Markdown 8.9 s → 0.4 s）。
+        textView.layoutManager?.allowsNonContiguousLayout = true
+        textView.setAccessibilityLabel(NSLocalizedString("File contents", bundle: Bundle(for: DocumentPreviewView.self), comment: ""))
         documentView = textView
     }
 
@@ -29,7 +32,12 @@ final class DocumentPreviewView: NSScrollView {
     func clear() { textView.textStorage?.setAttributedString(NSAttributedString(string: "")) }
 
     func show(_ document: PreviewDocument, text: (String) -> String) {
-        textView.textStorage?.setAttributedString(Self.content(for: document, text: text))
+        show(Self.content(for: document, text: text))
+    }
+
+    /// 内容可在后台线程生成，主线程只负责替换与滚动到开头。
+    func show(_ content: NSAttributedString) {
+        textView.textStorage?.setAttributedString(content)
         textView.scrollToBeginningOfDocument(nil)
     }
 
@@ -42,6 +50,15 @@ final class DocumentPreviewView: NSScrollView {
         switch document {
         case .text(let source):
             append(source, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+        case .markdown(let source, let frontMatter):
+            if let frontMatter {
+                result.append(NSAttributedString(string: frontMatter + "\n", attributes: [
+                    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                    .paragraphStyle: codeStyle(NSTextBlock())
+                ]))
+            }
+            result.append(markdown(source))
         case .notebook(let cells, let truncated):
             for cell in cells {
                 if cell.kind == "markdown" { result.append(markdown(cell.source)) }
@@ -87,6 +104,17 @@ final class DocumentPreviewView: NSScrollView {
         return style
     }
 
+    /// 代码块与元信息：整段铺底色，和正文明显区分。
+    private static func codeStyle(_ block: NSTextBlock) -> NSMutableParagraphStyle {
+        block.backgroundColor = .quaternaryLabelColor
+        block.setWidth(10, type: .absoluteValueType, for: .padding)
+        block.setWidth(6, type: .absoluteValueType, for: .margin, edge: .minY)
+        block.setWidth(6, type: .absoluteValueType, for: .margin, edge: .maxY)
+        let style = NSMutableParagraphStyle()
+        style.textBlocks = [block]
+        return style
+    }
+
     private static func markdown(_ source: String) -> NSAttributedString {
         guard let value = try? AttributedString(markdown: source) else {
             return NSAttributedString(string: source, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.textColor])
@@ -95,27 +123,54 @@ final class DocumentPreviewView: NSScrollView {
         var previousBlock: Int?
         var previousAttributes: [NSAttributedString.Key: Any] = [:]
         var tables: [Int: NSTextTable] = [:]
+        // 同一代码块或引用的多个片段共用一个文本块，才能画成连续的一整块。
+        var blocks: [Int: NSTextBlock] = [:]
+        // 自己记录末尾是否为换行：每次读 result.string 都会整段桥接，长文档会退化成平方复杂度。
+        var endsWithNewline = true
         for run in value.runs {
             let components = run.presentationIntent?.components ?? []
             let block = components.first?.identity
-            if block != previousBlock, result.length > 0, !result.string.hasSuffix("\n") {
+            let startsBlock = block != previousBlock
+            if startsBlock, result.length > 0, !endsWithNewline {
                 result.append(NSAttributedString(string: "\n", attributes: previousAttributes))
+                endsWithNewline = true
             }
             var font = NSFont.systemFont(ofSize: 14)
-            let style = NSMutableParagraphStyle()
+            var style = NSMutableParagraphStyle()
             style.paragraphSpacing = 8
             var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: NSColor.textColor]
             var row = 0
             var column = 0
             var table: NSTextTable?
             var prefix = ""
-            for component in components {
+            var listDepth = 0
+            var innermostItem: Int?
+            // components 由内向外排列：第一个 listItem 是当前项，紧随其后的列表决定编号样式。
+            for (index, component) in components.enumerated() {
                 switch component.kind {
                 case .header(let level): font = .boldSystemFont(ofSize: CGFloat(max(16, 28 - level * 3)))
-                case .codeBlock: font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-                case .listItem(let ordinal):
-                    prefix = components.contains { if case .orderedList = $0.kind { return true }; return false } ? "\(ordinal). " : "• "
-                case .blockQuote: style.headIndent = 16; style.firstLineHeadIndent = 16
+                case .codeBlock:
+                    font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+                    let codeBlock = blocks[component.identity] ?? NSTextBlock()
+                    blocks[component.identity] = codeBlock
+                    style = codeStyle(codeBlock)
+                case .listItem(let ordinal) where innermostItem == nil:
+                    innermostItem = ordinal
+                    let ordered = components.dropFirst(index + 1).first.map {
+                        if case .orderedList = $0.kind { return true }; return false
+                    } ?? false
+                    prefix = ordered ? "\(ordinal). " : "• "
+                case .orderedList, .unorderedList: listDepth += 1
+                case .blockQuote:
+                    let quote = blocks[component.identity] ?? NSTextBlock()
+                    if blocks[component.identity] == nil {
+                        quote.setWidth(3, type: .absoluteValueType, for: .border, edge: .minX)
+                        quote.setBorderColor(.separatorColor, for: .minX)
+                        quote.setWidth(10, type: .absoluteValueType, for: .padding, edge: .minX)
+                        blocks[component.identity] = quote
+                    }
+                    style.textBlocks = [quote]
+                    attributes[.foregroundColor] = NSColor.secondaryLabelColor
                 case .tableHeaderRow: font = .boldSystemFont(ofSize: 14)
                 case .tableRow(let index): row = index
                 case .tableCell(let index): column = index
@@ -124,23 +179,51 @@ final class DocumentPreviewView: NSScrollView {
                     grid.numberOfColumns = columns.count
                     tables[component.identity] = grid
                     table = grid
+                case .thematicBreak: attributes[.foregroundColor] = NSColor.separatorColor
                 default: break
                 }
             }
+            if listDepth > 0 {
+                style.firstLineHeadIndent = CGFloat(listDepth - 1) * 20
+                style.headIndent = style.firstLineHeadIndent + 16
+            }
+            var text = String(value[run.range].characters)
+            // GFM 任务列表：解析器把 [ ] / [x] 留在正文开头，换成勾选框符号。
+            if startsBlock, innermostItem != nil {
+                for (marker, box) in [("[ ] ", "☐ "), ("[x] ", "☑ "), ("[X] ", "☑ ")] where text.hasPrefix(marker) {
+                    prefix = box
+                    text.removeFirst(marker.count)
+                }
+            }
             if let intent = run.inlinePresentationIntent {
-                if intent.contains(.code) { font = .monospacedSystemFont(ofSize: 13, weight: .regular) }
+                if intent.contains(.code) {
+                    font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+                    attributes[.backgroundColor] = NSColor.quaternaryLabelColor
+                }
                 if intent.contains(.stronglyEmphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
                 if intent.contains(.emphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
                 if intent.contains(.strikethrough) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             }
+            // 只做视觉区分，不附带 .link：预览里不允许打开外部地址。
+            if run.link != nil { attributes[.foregroundColor] = NSColor.linkColor }
+            if run.imageURL != nil {
+                attributes[.foregroundColor] = NSColor.secondaryLabelColor
+                text = "🖼 " + text
+            }
             attributes[.font] = font
             attributes[.paragraphStyle] = table.map { tableStyle($0, row: row, column: column) } ?? style
-            if block != previousBlock { result.append(NSAttributedString(string: prefix, attributes: attributes)) }
-            result.append(NSAttributedString(string: String(value[run.range].characters), attributes: attributes))
+            if startsBlock {
+                var prefixAttributes = attributes
+                prefixAttributes.removeValue(forKey: .backgroundColor)
+                prefixAttributes.removeValue(forKey: .strikethroughStyle)
+                result.append(NSAttributedString(string: prefix, attributes: prefixAttributes))
+            }
+            result.append(NSAttributedString(string: text, attributes: attributes))
+            if let last = (prefix + text).last { endsWithNewline = last.isNewline }
             previousBlock = block
             previousAttributes = attributes
         }
-        if result.length > 0, !result.string.hasSuffix("\n") {
+        if result.length > 0, !endsWithNewline {
             result.append(NSAttributedString(string: "\n", attributes: previousAttributes))
         }
         return result

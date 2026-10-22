@@ -14,6 +14,7 @@ STAGE_DIR="$PROJECT_DIR/build/dmg-stage"
 APP_DIR="$STAGE_DIR/FinderRight.app"
 APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
 PREVIEW_DIR="$APP_DIR/Contents/PlugIns/FinderRightPreview.appex"
+MARKDOWN_DIR="$APP_DIR/Contents/PlugIns/FinderRightMarkdown.appex"
 # 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
 KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
 
@@ -59,6 +60,19 @@ swiftc -O -parse-as-library \
   FinderRightPreview/*.swift \
   -o "$PREVIEW_DIR/Contents/MacOS/FinderRightPreview"
 
+echo "=== 编译 Quick Look 扩展 FinderRightMarkdown (Release) ==="
+# 渲染视图与文件预览扩展共用同一份源码
+mkdir -p "$MARKDOWN_DIR/Contents/MacOS"
+swiftc -O -parse-as-library \
+  -module-name FinderRightMarkdown \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  -framework QuickLookUI -framework AppKit \
+  -Xlinker -e -Xlinker _NSExtensionMain \
+  FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift \
+  -o "$MARKDOWN_DIR/Contents/MacOS/FinderRightMarkdown"
+
 echo "=== 4. 组装与替换 Plist 变量 ==="
 # 主 App Info.plist
 sed \
@@ -76,6 +90,8 @@ cp FinderRight/en.lproj/Localizable.strings "$APP_DIR/Contents/Resources/en.lpro
 # 访达「服务」菜单标题的中文翻译（系统按 NSMenuItem.default 原文查表）
 mkdir -p "$APP_DIR/Contents/Resources/zh-Hans.lproj"
 cp FinderRight/zh-Hans.lproj/ServicesMenu.strings "$APP_DIR/Contents/Resources/zh-Hans.lproj/"
+# 导入文件类型在访达「种类」列的中文名称
+cp FinderRight/zh-Hans.lproj/InfoPlist.strings "$APP_DIR/Contents/Resources/zh-Hans.lproj/"
 
 # 硬校验：每个服务标题都必须有中文翻译，否则中文系统会显示英文
 services_count=$(/usr/libexec/PlistBuddy -c "Print :NSServices" FinderRight/Info.plist | grep -c "NSMessage = ")
@@ -154,6 +170,19 @@ for language in en zh-Hans; do
   mkdir -p "$PREVIEW_DIR/Contents/Resources/$language.lproj"
   cp "FinderRightPreview/$language.lproj/Localizable.strings" "$PREVIEW_DIR/Contents/Resources/$language.lproj/"
 done
+cp FinderRightPreview/zh-Hans.lproj/InfoPlist.strings "$PREVIEW_DIR/Contents/Resources/zh-Hans.lproj/"
+
+sed \
+  -e 's/\$(EXECUTABLE_NAME)/FinderRightMarkdown/g' \
+  -e 's/\$(PRODUCT_MODULE_NAME)/FinderRightMarkdown/g' \
+  FinderRightMarkdown/Info.plist > "$MARKDOWN_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$MARKDOWN_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$MARKDOWN_DIR/Contents/Info.plist"
+echo -n "XPC!????" > "$MARKDOWN_DIR/Contents/PkgInfo"
+for language in en zh-Hans; do
+  mkdir -p "$MARKDOWN_DIR/Contents/Resources/$language.lproj"
+  cp "FinderRightMarkdown/$language.lproj/Localizable.strings" "$MARKDOWN_DIR/Contents/Resources/$language.lproj/"
+done
 
 echo "=== 5. 代码签名 ==="
 # 优先使用 scripts/setup-signing.sh 生成的自签名证书：签名规则「标识 + 证书指纹」跨版本不变，
@@ -187,10 +216,11 @@ sign_bundle() {
 # Kit 为静态库、主程序只链接系统库，库验证不受影响；主 App 不发 AppleEvent，无需额外 entitlement。
 sign_bundle FinderRightSync/FinderRightSync.entitlements "$APPEX_DIR"
 sign_bundle FinderRightPreview/FinderRightPreview.entitlements "$PREVIEW_DIR"
+sign_bundle FinderRightMarkdown/FinderRightMarkdown.entitlements "$MARKDOWN_DIR"
 sign_bundle FinderRight/FinderRight.entitlements "$APP_DIR"
 
-# 硬校验：主 App 和两个扩展签名有效且都带 runtime 标志，否则立即构建失败
-for bundle in "$APP_DIR" "$APPEX_DIR" "$PREVIEW_DIR"; do
+# 硬校验：主 App 和各扩展签名有效且都带 runtime 标志，否则立即构建失败
+for bundle in "$APP_DIR" "$APPEX_DIR" "$PREVIEW_DIR" "$MARKDOWN_DIR"; do
   codesign --verify --strict "$bundle"
   # 先取完整输出再匹配：pipefail 下 `codesign | grep -q` 会因 grep 提前退出、codesign 收到 SIGPIPE 而误判失败
   sig_info="$(codesign -dv "$bundle" 2>&1)"

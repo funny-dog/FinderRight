@@ -1,0 +1,10 @@
+/* 导入文件类型在访达「种类」列中的中文名称（系统按 UTTypeDescription 原文查表） */
+"Configuration file" = "配置文件";
+"Source code" = "源代码";
+"Structured text" = "结构化文本";
+"Text document" = "文本文稿";
+"Debian package" = "Debian 软件包";
+"RPM package" = "RPM 软件包";
+"Python wheel" = "Python wheel 包";
+"INI configuration" = "INI 配置文件";
+"SQLite database" = "SQLite 数据库";

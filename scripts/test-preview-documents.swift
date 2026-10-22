@@ -16,6 +16,39 @@ struct PreviewDocumentChecks {
             guard case .text(let actual) = try PreviewDocument.read(file) else { preconditionFailure() }
             precondition(actual == source)
         }
+        for name in [".gitignore", ".env", "Dockerfile", "nginx.conf", "app.config", "setup.CFG", "my.cnf", "x.properties", "x.env",
+                     "main.go", "lib.rs", "App.tsx", "style.css", "theme.scss", "query.sql", "events.jsonl", "yarn.lock",
+                     "zh.srt", "en.vtt", "paper.tex", "notes.org"] {
+            let file = root.appendingPathComponent(name)
+            let source = "# 中文注释\nkey=value\n"
+            try Data(source.utf8).write(to: file)
+            precondition(PreviewDocument.supports(file) && PreviewDocument.sniffsText(file), name)
+            guard case .text(let actual) = try PreviewDocument.read(file) else { preconditionFailure(name) }
+            precondition(actual == source, name)
+        }
+        precondition(!PreviewDocument.sniffsText(root.appendingPathComponent("a.yaml")))
+        precondition(!PreviewDocument.sniffsText(root.appendingPathComponent("a.bin")))
+        let store = root.appendingPathComponent(".DS_Store")
+        try Data([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31]).write(to: store)
+        expectFailure { _ = try PreviewDocument.read(store) }
+        let invalidUTF8 = root.appendingPathComponent("binary.conf")
+        try Data([0xC3, 0x28, 0xFF]).write(to: invalidUTF8)
+        expectFailure { _ = try PreviewDocument.read(invalidUTF8) }
+        let markdown = root.appendingPathComponent("说明.md")
+        try Data("\u{FEFF}---\r\ntitle: 中文\r\ntags: [a]\r\n---\r\n# 标题\n正文\n".utf8).write(to: markdown)
+        guard case .markdown(let body, let frontMatter) = try PreviewDocument.readMarkdown(markdown) else { preconditionFailure() }
+        precondition(frontMatter == "title: 中文\ntags: [a]" && body == "# 标题\n正文\n", "应拆出开头元信息并去掉 BOM，实际：\(String(describing: frontMatter)) / \(body)")
+        try Data("---\n\n# 开头是分隔线\n".utf8).write(to: markdown)
+        guard case .markdown(let unclosed, let none) = try PreviewDocument.readMarkdown(markdown) else { preconditionFailure() }
+        precondition(none == nil && unclosed.hasPrefix("---"), "没有闭合行时 --- 是普通分隔线")
+        try Data("# 不在开头\n---\na: 1\n---\n".utf8).write(to: markdown)
+        guard case .markdown(_, let notFirst) = try PreviewDocument.readMarkdown(markdown) else { preconditionFailure() }
+        precondition(notFirst == nil)
+        precondition(!PreviewDocument.supports(markdown), "Markdown 由独立扩展处理，文件预览扩展不接")
+        try Data(repeating: 65, count: 1_048_577).write(to: markdown)
+        expectFailure { _ = try PreviewDocument.readMarkdown(markdown) }
+        try Data([0x23, 0x20, 0, 1]).write(to: markdown)
+        expectFailure { _ = try PreviewDocument.readMarkdown(markdown) }
         let text = root.appendingPathComponent("utf16.ini")
         try "中文 = 内容".data(using: .utf16)!.write(to: text)
         guard case .text(let decoded) = try PreviewDocument.read(text) else { preconditionFailure() }
@@ -80,7 +113,7 @@ struct PreviewDocumentChecks {
         let link = root.appendingPathComponent("link.sqlite")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: database)
         expectFailure { _ = try PreviewDocument.read(link) }
-        print("✓ 文档预览检查通过（配置编码与上限、Notebook 单元与输出、SQLite 普通表/只读/截断/损坏文件）")
+        print("✓ 文档预览检查通过（配置编码与上限、点文件/无扩展名/配置扩展名嗅探、Markdown 元信息与上限、Notebook 单元与输出、SQLite 普通表/只读/截断/损坏文件）")
     }
 
     private static func expectFailure(_ block: () throws -> Void) {

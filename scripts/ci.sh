@@ -80,6 +80,15 @@ swiftc -parse-as-library \
   FinderRightPreview/*.swift scripts/test-preview.swift \
   -o "$KIT_BUILD_DIR/test-preview"
 "$KIT_BUILD_DIR/test-preview"
+swiftc -parse-as-library \
+  -module-name FinderRightMarkdown \
+  -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  -framework QuickLookUI -framework AppKit \
+  FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift scripts/test-markdown-preview.swift \
+  -o "$KIT_BUILD_DIR/test-markdown-preview"
+"$KIT_BUILD_DIR/test-markdown-preview"
 
 echo "=== [CI] 6. 校验中英文案覆盖率 ==="
 # 面向用户的文案都写在 Swift 里、以中文原文作 key 查 en.lproj。漏翻译不会导致编译或运行失败，

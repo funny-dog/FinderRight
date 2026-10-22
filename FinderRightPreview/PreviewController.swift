@@ -3,6 +3,10 @@ import QuickLookUI
 import UniformTypeIdentifiers
 import FinderRightKit
 
+private struct SystemFallback: Error {
+    let underlying: Error
+}
+
 final class PreviewController: NSViewController, QLPreviewingController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     private let outline = NSOutlineView()
     private let documentView = DocumentPreviewView()
@@ -130,11 +134,12 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                 }
                 let directory = values.isDirectory == true
                 if !directory && PreviewDocument.supports(url) {
-                    return (nil, false, try PreviewDocument.read(url))
+                    do { return (nil, false, try PreviewDocument.read(url)) }
+                    catch where PreviewDocument.sniffsText(url) { throw SystemFallback(underlying: error) }
                 }
                 let listing: PreviewListing
                 if directory { listing = try PreviewContents.folder(url) }
-                else if url.pathExtension.lowercased() == "zip" { listing = try PreviewContents.zip(url) }
+                else if PreviewContents.zipExtensions.contains(url.pathExtension.lowercased()) { listing = try PreviewContents.zip(url) }
                 else { listing = try PreviewArchive.read(url) }
                 return (listing, directory, nil)
             }
@@ -144,6 +149,12 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                     return
                 }
                 self.progress.stopAnimation(nil)
+                if case .failure(let error as SystemFallback) = result {
+                    // 按内容嗅探的文件不是文本（如 .DS_Store、可执行文件），交回系统显示默认图标预览。
+                    self.status.stringValue = ""
+                    handler(error.underlying)
+                    return
+                }
                 do {
                     let (listing, directory, document) = try result.get()
                     if let document {

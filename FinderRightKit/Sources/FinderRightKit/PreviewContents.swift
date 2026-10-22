@@ -65,6 +65,9 @@ public enum PreviewContents {
         return PreviewListing(entries: entries, truncated: truncated)
     }
 
+    /// 本质是 ZIP 的安装包与归档，走自有中央目录解析（可列出加密条目）。
+    public static let zipExtensions: Set<String> = ["zip", "apk", "ipa", "whl", "jar", "war"]
+
     public static func zip(_ url: URL, limit: Int = 10000) throws -> PreviewListing {
         let raw = try ZipProbe.parseCentralDirectory(of: url)
         var entries: [PreviewEntry] = []

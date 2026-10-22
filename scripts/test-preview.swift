@@ -1,5 +1,6 @@
 import AppKit
 import FinderRightKit
+import UniformTypeIdentifiers
 
 /// 不开窗口：检查目录、压缩包与文档预览，以及异步切换和布局。
 @main
@@ -12,8 +13,40 @@ struct PreviewChecks {
         let attributes = ext["NSExtensionAttributes"] as! [String: Any]
         let types = attributes["QLSupportedContentTypes"] as! [String]
         precondition(!types.contains("public.text") && !types.contains("public.json") && !types.contains("net.daringfireball.markdown"))
+        // 点文件与无扩展名文件的具体类型就是 public.data / public.unix-executable，Quick Look 按具体类型分发。
+        precondition(types.contains("public.data") && types.contains("public.unix-executable"))
         let imported = plist["UTImportedTypeDeclarations"] as! [[String: Any]]
         for type in imported { precondition(types.contains(type["UTTypeIdentifier"] as! String)) }
+        let appPlistData = try Data(contentsOf: repository.appendingPathComponent("FinderRight/Info.plist"))
+        let appPlist = try PropertyListSerialization.propertyList(from: appPlistData, format: nil) as! [String: Any]
+        let appImported = (appPlist["UTImportedTypeDeclarations"] as! [[String: Any]]).map { $0["UTTypeIdentifier"] as! String }
+        precondition(Set(appImported) == Set(imported.map { $0["UTTypeIdentifier"] as! String }), "主 App 与预览扩展的导入类型必须一致")
+        // 动态 UTI 的扩展名必须有导入声明，否则 Quick Look 收不到；系统已有类型的直接列在支持类型里。
+        let declaredExtensions = Set(imported.flatMap { (($0["UTTypeTagSpecification"] as! [String: Any])["public.filename-extension"] as! [String]) })
+        let systemTyped: [String: String] = ["css": "public.css", "ndjson": "public.ndjson", "vtt": "org.w3.webvtt"]
+        for ext in PreviewDocument.sniffedTextExtensions.subtracting(declaredExtensions) {
+            precondition(systemTyped[ext].map(types.contains) == true, "扩展名 \(ext) 缺少类型声明")
+        }
+        for ext in ["deb", "rpm", "whl"] { precondition(declaredExtensions.contains(ext)) }
+        // 系统按扩展名查类型时只认继承 public.data 的声明；public.archive 本身不继承它，单写会退回动态 UTI。
+        for type in imported {
+            let parents = type["UTTypeConformsTo"] as! [String]
+            precondition(parents.contains { $0 == "public.data" || UTType($0)?.conforms(to: .data) == true },
+                         "\(type["UTTypeIdentifier"]!) 必须继承 public.data")
+        }
+        for type in ["public.bzip2-archive", "public.tar-bzip2-archive", "public.iso-image", "com.apple.installer-package-archive",
+                     "public.archive.apk", "com.apple.itunes.ipa", "com.sun.java-archive", "com.sun.web-application-archive"] {
+            precondition(types.contains(type), "缺少压缩包类型 \(type)")
+        }
+        // 自定义类型名称会显示在访达「种类」列，中文系统需要译名。
+        for bundle in ["FinderRight", "FinderRightPreview"] {
+            let strings = NSDictionary(contentsOf: repository.appendingPathComponent("\(bundle)/zh-Hans.lproj/InfoPlist.strings")) as! [String: String]
+            for type in imported {
+                let description = type["UTTypeDescription"] as! String
+                precondition(["YAML", "TOML", "Jupyter Notebook"].contains(description) || strings[description] != nil,
+                             "\(bundle) 缺少类型名称「\(description)」的中文")
+            }
+        }
         _ = NSApplication.shared
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("finderright-preview-\(UUID())", isDirectory: true)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("目录/子目录"), withIntermediateDirectories: true)
@@ -146,10 +179,30 @@ struct PreviewChecks {
         prepare(controller, tar)
         precondition(document.isHidden && outline.numberOfRows == 1)
         precondition((outline.item(atRow: 0) as? PreviewNode)?.name == "a.txt")
+        for ext in ["apk", "ipa", "whl", "jar", "war"] {
+            let package = root.appendingPathComponent("package.\(ext)")
+            try? FileManager.default.removeItem(at: package)
+            try FileManager.default.copyItem(at: zip, to: package)
+            prepare(controller, package)
+            precondition(document.isHidden && (outline.item(atRow: 0) as? PreviewNode)?.name == "目录", "\(ext) 应按 ZIP 列出内容")
+        }
         prepare(controller, config)
         try Data([0, 1]).write(to: config)
         prepare(controller, config)
         precondition(document.isHidden && !scroll.isHidden, "文档失败不能留下上一个文档的预览")
+        let dotfile = root.appendingPathComponent(".gitignore")
+        try Data("build/\n*.log\n".utf8).write(to: dotfile)
+        prepare(controller, dotfile)
+        precondition(!document.isHidden && document.textView.string.contains("*.log"))
+        let binary = root.appendingPathComponent(".DS_Store")
+        try Data([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31]).write(to: binary)
+        var fellBack = false
+        controller.preparePreviewOfFile(at: binary) { error in
+            precondition(error != nil, "非文本的嗅探文件必须交回系统默认预览")
+            fellBack = true
+        }
+        wait { fellBack }
+        precondition(document.isHidden, "交回系统预览时不能残留上一个文档")
         print("✓ Quick Look 集成检查通过（目录/压缩包加载、排序、展开、文档切换、静态内容隔离与布局）")
     }
 
