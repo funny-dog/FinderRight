@@ -442,7 +442,7 @@ struct GeneralTab: View {
 
 struct PermissionsTab: View {
     var body: some View {
-        FRPage(title: "权限与扩展", subtitle: "管理访达与快速查看扩展，以及系统授权") {
+        FRPage(title: "权限与扩展", subtitle: "管理访达扩展与系统授权") {
             // 从下载目录直接打开时先提醒：这种运行方式会让扩展状态与唤醒行为都不正常
             if AppRuntime.isTranslocated {
                 translocationNotice
@@ -451,21 +451,6 @@ struct PermissionsTab: View {
             FRSection("扩展") {
                 FRCard {
                     FinderExtensionView()
-                    FRDivider()
-                    PreviewExtensionToggle(
-                        identifier: PreviewExtensionManager.identifier,
-                        title: Text("文件与文件夹预览"),
-                        subtitle: Text("使用 FinderRight 的空格与右键「快速查看」预览；关闭后恢复系统默认预览。切换后请重新打开快速查看窗口。"),
-                        switchLabel: "文件与文件夹预览"
-                    )
-                    FRDivider()
-                    PreviewExtensionToggle(
-                        identifier: PreviewExtensionManager.markdownIdentifier,
-                        title: Text("Markdown 渲染预览"),
-                        subtitle: Text("按空格时把 .md 排版成文档：标题、列表、表格、代码块与任务列表；不加载图片和网页内容。关闭后由系统或其他应用预览。"),
-                        switchLabel: "Markdown 渲染预览",
-                        checksMarkdownConflicts: true
-                    )
                 }
             }
 
@@ -575,6 +560,29 @@ struct FeaturesTab: View {
             copyPathSection
             copyContentSection
             badgeSection
+            quickLookSection
+        }
+    }
+
+    // MARK: 快速查看
+
+    private var quickLookSection: some View {
+        FRSection("快速查看") {
+            FRCard {
+                PreviewExtensionToggle(
+                    identifier: PreviewExtensionManager.identifier,
+                    title: Text("预览增强"),
+                    subtitle: Text("文件夹、压缩包与更多文本格式"),
+                    switchLabel: "预览增强"
+                )
+                FRDivider()
+                PreviewExtensionToggle(
+                    identifier: PreviewExtensionManager.markdownIdentifier,
+                    title: Text("Markdown 渲染"),
+                    switchLabel: "Markdown 渲染",
+                    checksMarkdownConflicts: true
+                )
+            }
         }
     }
 
@@ -1467,19 +1475,19 @@ enum FinderRelauncher {
     }
 }
 
-/// 权限与扩展页中的 Quick Look 开关，直接读取与修改系统的扩展选举。
+/// 功能页中的 Quick Look 开关，直接读取与修改系统的扩展选举。
 /// 文件预览与 Markdown 预览是两个独立扩展，各自一行开关。
 private struct PreviewExtensionToggle: View {
     let identifier: String
     let title: Text
-    let subtitle: Text
+    var subtitle: Text? = nil
     let switchLabel: LocalizedStringKey
     var checksMarkdownConflicts = false
 
     @FRState private var enabled: Bool? = nil
     @FRState private var busy = false
     @FRState private var errorMessage: String? = nil
-    @FRState private var conflicts: [String] = []
+    @FRState private var hasConflict = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1512,10 +1520,9 @@ private struct PreviewExtensionToggle: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             }
-            if enabled == true, !conflicts.isEmpty {
+            if enabled == true, hasConflict {
                 FRDivider()
-                Text(verbatim: String(format: NSLocalizedString("%@ 也提供 Markdown 快速查看，同时开启时系统选用哪个不确定。建议只保留一个：关闭此开关，或在对方应用中关闭它的预览扩展。", comment: ""),
-                                      ListFormatter.localizedString(byJoining: conflicts)))
+                Text("检测到其他应用的 Markdown 预览，系统可能优先使用它")
                     .font(.system(size: 12))
                     .foregroundColor(FRTheme.mute)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1537,10 +1544,10 @@ private struct PreviewExtensionToggle: View {
                 if let desired { try PreviewExtensionManager.setEnabled(desired, identifier: identifier) }
                 return try PreviewExtensionManager.isEnabled(identifier)
             }
-            let found = checksMarkdownConflicts ? PreviewExtensionManager.markdownConflicts() : []
+            let conflict = checksMarkdownConflicts && !PreviewExtensionManager.markdownConflicts().isEmpty
             DispatchQueue.main.async {
                 busy = false
-                conflicts = found
+                hasConflict = conflict
                 switch result {
                 case .success(let value): enabled = value
                 case .failure(let error):

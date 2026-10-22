@@ -112,8 +112,8 @@ killall Finder
 | 操作后看不到结果 | 在「设置 → 操作历史」查看结果或失败原因。 |
 | 打开终端没有切到当前目录 | Ghostty / Alacritty / Kitty 已在运行时无法指定目录，属于终端自身限制。 |
 | 升级后权限开关是开的却不生效 | 从 1.2.0 及更早版本升级需重新授权一次（见「升级」）。 |
-| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 权限与扩展 → 扩展」打开「文件与文件夹预览」，再重新打开快速查看。 |
-| 按空格看 `.md` 不是 FinderRight 的排版 | 打开「Markdown 渲染预览」；若设置页提示其他应用也提供 Markdown 预览，关闭其中一个。 |
+| 选中文件夹或 ZIP 按空格仍是系统预览 | 在「设置 → 功能 → 快速查看」打开「预览增强」，再重新打开快速查看。 |
+| 按空格看 `.md` 不是 FinderRight 的排版 | 在同一处打开「Markdown 渲染」；若提示检测到其他应用的 Markdown 预览，关闭其中一个。 |
 
 <details>
 <summary>云盘与「服务」菜单</summary>
@@ -279,8 +279,8 @@ killall Finder
 | No visible result after an action | Check Settings → Operation History for the result or failure reason. |
 | Open in Terminal doesn't switch folders | Ghostty / Alacritty / Kitty can't take a working directory while already running. |
 | Permissions look on but don't work after upgrading | Upgrading from 1.2.0 or earlier requires re-granting once (see "Upgrading"). |
-| Space on a folder or ZIP still shows the system preview | Turn on "File and folder previews" in Settings → Permissions & Extensions → Extensions, then reopen Quick Look. |
-| Space on a `.md` file doesn't show FinderRight's formatting | Turn on "Rendered Markdown previews"; if Settings says another app also previews Markdown, turn one of them off. |
+| Space on a folder or ZIP still shows the system preview | Turn on "Enhanced previews" in Settings → Features → Quick Look, then reopen Quick Look. |
+| Space on a `.md` file doesn't show FinderRight's formatting | Turn on "Markdown rendering" in the same place; if it reports another app’s Markdown preview, turn one of them off. |
 
 <details>
 <summary>Cloud folders and the Services menu</summary>

@@ -29,9 +29,12 @@ enum DiagnosticsReport {
         } catch {
             preview = L("未知")
         }
-        lines.append(String(format: L("快速查看扩展：%@"), preview))
-        let markdown = (try? PreviewExtensionManager.isEnabled(PreviewExtensionManager.markdownIdentifier)).map { $0 ? L("已启用") : L("未启用") } ?? L("未知")
-        lines.append(String(format: L("Markdown 预览扩展：%@"), markdown))
+        lines.append(String(format: L("快速查看 · 预览增强：%@"), preview))
+        var markdown = (try? PreviewExtensionManager.isEnabled(PreviewExtensionManager.markdownIdentifier)).map { $0 ? L("已启用") : L("未启用") } ?? L("未知")
+        // 设置页只提示有冲突，具体应用名留给诊断排查
+        let conflicts = PreviewExtensionManager.markdownConflicts()
+        if !conflicts.isEmpty { markdown += String(format: L("（另有 %@ 的 Markdown 预览）"), conflicts.joined(separator: ", ")) }
+        lines.append(String(format: L("快速查看 · Markdown 渲染：%@"), markdown))
 
         lines.append(String(format: L("剪切队列：%d 项"), CutQueueStore().read().count))
 
