@@ -2386,6 +2386,67 @@ struct FinderRightKitTestsRunner {
             try assertEqual(FavoriteDirectories.displayNames(for: ["/"], home: "/Users/me"), ["/"], "根目录显示为 /")
         }
 
+        runTest("常用目录可用性：失效目录置灰，恢复后重新可用") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let missing = dir.appendingPathComponent("missing")
+            let file = dir.appendingPathComponent("file")
+            let link = dir.appendingPathComponent("link")
+            let dangling = dir.appendingPathComponent("dangling")
+            try Data().write(to: file)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: dir)
+            try FileManager.default.createSymbolicLink(at: dangling, withDestinationURL: missing)
+            let paths = [dir.path, missing.path, file.path, link.path, dangling.path]
+            let cache = FavoriteDirectoryAvailability()
+            func waitFor(_ expected: Set<String>, now: TimeInterval) throws {
+                let deadline = Date().addingTimeInterval(2)
+                while cache.unavailablePaths(in: paths, now: now) != expected {
+                    guard Date() < deadline else { throw TestFailure(message: "目录可用性未按预期更新") }
+                    Thread.sleep(forTimeInterval: 0.001)
+                }
+            }
+            try waitFor([missing.path, file.path, dangling.path], now: 0)
+            try FileManager.default.createDirectory(at: missing, withIntermediateDirectories: true)
+            try FileManager.default.removeItem(at: file)
+            try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+            try waitFor([], now: 5)
+            try FileManager.default.removeItem(at: missing)
+            try waitFor([missing.path, dangling.path], now: 10)
+        }
+
+        runTest("常用目录可用性：慢目录不阻塞快照或其他目录，权限不明不误禁用") {
+            let release = DispatchSemaphore(value: 0)
+            defer { release.signal() }
+            let lock = NSLock()
+            var calls: [String: Int] = [:]
+            let cache = FavoriteDirectoryAvailability { path in
+                lock.lock()
+                calls[path, default: 0] += 1
+                lock.unlock()
+                if path == "slow" {
+                    _ = release.wait(timeout: .now() + 3)
+                    return true
+                }
+                return path == "missing" ? false : nil
+            }
+            let paths = ["slow", "missing", "denied"]
+            let deadline = Date().addingTimeInterval(2)
+            while true {
+                let unavailable = cache.unavailablePaths(in: paths, now: 0)
+                lock.lock()
+                let started = calls.count == 3
+                let slowCalls = calls["slow"]
+                lock.unlock()
+                if started, unavailable == ["missing"] {
+                    try assertEqual(slowCalls, 1, "在途检查不重复派发")
+                    break
+                }
+                guard Date() < deadline else { throw TestFailure(message: "慢目录阻塞了其他目录或快照") }
+                Thread.sleep(forTimeInterval: 0.001)
+            }
+            try assertEqual(cache.unavailablePaths(in: [], now: 1), [], "移除配置后不保留失效标记")
+        }
+
         runTest("常用目录输入框：兼容复制路径的各种格式") {
             let home = "/Users/me"
             let a = URL(fileURLWithPath: "/Users/me/a b"), b = URL(fileURLWithPath: "/Users/me/it's")

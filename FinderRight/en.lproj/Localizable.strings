@@ -455,6 +455,7 @@
 
 /* Favorites: move / copy to */
 "常用目录" = "Favorite Folders";
+"目录不可用" = "Folder unavailable";
 "移动到" = "Move To";
 "复制到" = "Copy To";
 "把选中项移动到常用目录" = "Move the selection to a favorite folder";

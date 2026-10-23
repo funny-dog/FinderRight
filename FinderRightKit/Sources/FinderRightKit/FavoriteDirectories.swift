@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// 「移动到 / 复制到常用目录」的纯逻辑：菜单显示名与移动前检查。扩展与主 App 共用。
 public enum FavoriteDirectories {
@@ -83,6 +84,47 @@ public enum FavoriteDirectories {
         }
         if inWord { words.append(current) }
         return words
+    }
+}
+
+/// Finder 菜单只读取内存；每个目录独立在后台检查，避免断开的网络盘阻塞右键或其他目录。
+public final class FavoriteDirectoryAvailability {
+    private let lock = NSLock()
+    private var entries: [String: (unavailable: Bool, checkedAt: TimeInterval)] = [:]
+    private var checking: Set<String> = []
+    private let check: (String) -> Bool?
+
+    public init(check: ((String) -> Bool?)? = nil) {
+        self.check = check ?? { path in
+            var info = stat()
+            if stat(path, &info) == 0 { return info.st_mode & S_IFMT == S_IFDIR }
+            // 沙箱或权限拒绝不代表目录失效，保留入口交给主 App 在执行前校验。
+            return errno == ENOENT || errno == ENOTDIR ? false : nil
+        }
+    }
+
+    // shortcut: 按需每隔 5 秒后台复查，结果在下次展开菜单时生效；需要实时变化时接入目录事件通知。
+    public func unavailablePaths(in paths: [String], now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Set<String> {
+        let paths = Set(paths)
+        lock.lock()
+        entries = entries.filter { paths.contains($0.key) }
+        let unavailable = Set(entries.filter { $0.value.unavailable }.keys)
+        let refresh = paths.filter { path in
+            !checking.contains(path) && (entries[path].map { now - $0.checkedAt >= 5 } ?? true)
+        }
+        checking.formUnion(refresh)
+        lock.unlock()
+
+        for path in refresh {
+            DispatchQueue.global(qos: .utility).async {
+                let unavailable = self.check(path) == false
+                self.lock.lock()
+                self.entries[path] = (unavailable, now)
+                self.checking.remove(path)
+                self.lock.unlock()
+            }
+        }
+        return unavailable
     }
 }
 

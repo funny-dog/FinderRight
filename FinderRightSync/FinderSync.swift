@@ -324,6 +324,7 @@ class FinderSync: FIFinderSync {
     private var didDeferredSetup = false
     /// 当前构建的新建文件菜单项缓存，供 newFile(_ sender:) 按 tag 索引
     private var activeNewFileTemplates: [NewFileTemplateItem] = []
+    private static let favoriteAvailability = FavoriteDirectoryAvailability()
 
     override init() {
         Self.initStartUptime = ProcessInfo.processInfo.systemUptime
@@ -347,6 +348,9 @@ class FinderSync: FIFinderSync {
 
         // 后台预热编辑器与图标（派发即返回，不阻塞 init）
         Self.refreshInstalledEditorsAsync()
+        DispatchQueue.global(qos: .utility).async {
+            _ = Self.favoriteAvailability.unavailablePaths(in: SharedConfig.shared.favoriteDirectories)
+        }
 
         let initMs = (ProcessInfo.processInfo.systemUptime - Self.initStartUptime) * 1000
         // 版本号写进日志：排查角标/回调问题时必须能区分「装的是哪一版扩展」
@@ -1213,7 +1217,9 @@ class FinderSync: FIFinderSync {
     /// 「移动到 / 复制到」子菜单：每个常用目录一项（tag 为其在列表中的下标），末尾是「管理常用目录…」
     private func buildFavoritesMenu(mode: FileTransferCheck.Mode, selected: [URL], style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L(mode == .move ? "移动到" : "复制到"))
+        m.autoenablesItems = false
         let favorites = SharedConfig.shared.favoriteDirectories
+        let unavailable = Self.favoriteAvailability.unavailablePaths(in: favorites)
         let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
         let action = mode == .move ? #selector(moveToFavorite(_:)) : #selector(copyToFavorite(_:))
 
@@ -1224,8 +1230,10 @@ class FinderSync: FIFinderSync {
         }
         for (index, (path, name)) in zip(favorites, names).enumerated() {
             let item = makeItem(titleKey: name, tint: .cyan, systemImage: "folder", action: action, tag: index, style: style)
+            item.toolTip = path
+            if unavailable.contains(path) { item.title += " — " + L("目录不可用") }
             // 没有任何一项能放过去时置灰：移动时全部已在该目录，或目标位于选中的文件夹内部
-            item.isEnabled = selected.contains {
+            item.isEnabled = !unavailable.contains(path) && selected.contains {
                 FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: mode) == .ok
             }
             m.addItem(item)
