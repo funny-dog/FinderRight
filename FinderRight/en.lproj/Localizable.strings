@@ -542,6 +542,7 @@
 "添加编辑器" = "Add Editor";
 "这些应用声明可以编辑代码文件，但不在自动识别清单中" = "These apps can edit code files but aren't detected automatically";
 "正在查找…" = "Searching…";
+"重新扫描" = "Rescan";
 "没有发现其他编辑器" = "No other editors found";
 "从应用程序中选择…" = "Choose from Applications…";
 "完成" = "Done";

@@ -770,6 +770,13 @@ struct ToolsTab: View {
                 HStack {
                     FRCaption("右键菜单中显示")
                     Spacer()
+                    Button(action: detectInstalledApps) {
+                        Label("重新扫描", systemImage: "arrow.clockwise")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.frSecondary)
+                    .help("重新扫描")
+                    .disabled(isSearching)
                     Button(action: chooseTerminalApplications) {
                         Label("添加终端…", systemImage: "plus")
                     }

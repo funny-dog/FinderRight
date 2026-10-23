@@ -45,6 +45,13 @@ struct EditorsTab: View {
                 HStack {
                     FRCaption("右键菜单中显示")
                     Spacer()
+                    Button(action: reload) {
+                        Label("重新扫描", systemImage: "arrow.clockwise")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.frSecondary)
+                    .help("重新扫描")
+                    .disabled(isSearching)
                     Button(action: chooseApplications) {
                         Label("添加编辑器…", systemImage: "plus")
                     }
