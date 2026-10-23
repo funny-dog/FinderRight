@@ -190,6 +190,7 @@ struct EditorsTab: View {
         var custom = config.customEditors
         var updatedHidden = config.hiddenEditors
         var messages: [String] = []
+        var didAcceptApplication = false
         for url in panel.urls {
             guard let editor = EditorCatalog.editor(at: url), editor.id != Bundle.main.bundleIdentifier else {
                 messages.append(String(format: NSLocalizedString("未识别到文本编辑功能：%@", comment: ""), url.lastPathComponent))
@@ -203,10 +204,11 @@ struct EditorsTab: View {
                 custom.append(editor)
             }
             updatedHidden.remove(editor.id)
+            didAcceptApplication = true
         }
         if custom != config.customEditors { config.customEditors = custom }
         if updatedHidden != config.hiddenEditors { config.hiddenEditors = updatedHidden }
-        reload()
+        if didAcceptApplication { reload() }
         if !messages.isEmpty {
             let dialog = FRDialog(title: NSLocalizedString("无法添加编辑器", comment: ""),
                                   message: messages.joined(separator: "\n"),
