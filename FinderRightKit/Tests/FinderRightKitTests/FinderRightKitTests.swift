@@ -2552,70 +2552,124 @@ struct FinderRightKitTestsRunner {
             try assertEqual(following.terminalOrder, config.terminalOrder)
         }
 
-        runTest("EditorCatalog 清单无重复且以文本编辑兜底") {
-            let ids = EditorCatalog.all.map(\.id)
-            try assertEqual(Set(ids).count, ids.count, "bundle id 不应重复")
-            try assertEqual(ids.last, EditorCatalog.textEditBundleId)
-        }
-
-        runTest("EditorCatalog 合并：清单在前、手动项在后、去重、隐藏") {
-            let installedIds: Set<String> = ["com.microsoft.VSCode", "dev.zed.Zed", "com.example.Foo", "com.apple.TextEdit"]
-            let custom = [KnownEditor(id: "com.example.Foo", name: "Foo"),
-                          KnownEditor(id: "dev.zed.Zed", name: "重复的 Zed"),
-                          KnownEditor(id: "com.example.Gone", name: "已卸载")]
-            let all = EditorCatalog.installed(custom: custom, isInstalled: installedIds.contains)
-            try assertEqual(all.map(\.id), ["dev.zed.Zed", "com.microsoft.VSCode", "com.apple.TextEdit", "com.example.Foo"])
-            try assertEqual(all.first?.name, "Zed", "与清单重复的手动项以清单为准")
-
-            let menu = EditorCatalog.menuEditors(custom: custom, hidden: ["dev.zed.Zed", "com.apple.TextEdit"],
-                                                 isInstalled: installedIds.contains)
-            try assertEqual(menu.map(\.id), ["com.microsoft.VSCode", "com.example.Foo"])
-        }
-
-        runTest("EditorCatalog 排序同步设置、菜单和默认回退，兼容手动项") {
-            let custom = [KnownEditor(id: "com.example.Foo", name: "Foo")]
-            let installed: Set<String> = ["dev.zed.Zed", "com.microsoft.VSCode", "com.example.Foo"]
-            let order = ["com.example.Foo", "removed", "com.example.Foo", "com.microsoft.VSCode"]
-            let available = EditorCatalog.installed(custom: custom, order: order, isInstalled: installed.contains)
-            try assertEqual(available.map(\.id), ["com.example.Foo", "com.microsoft.VSCode", "dev.zed.Zed"])
-            let menu = EditorCatalog.menuEditors(custom: custom, hidden: ["com.microsoft.VSCode"],
-                                                 order: order, isInstalled: installed.contains)
-            try assertEqual(menu.map(\.id), ["com.example.Foo", "dev.zed.Zed"])
-            try assertEqual(EditorCatalog.resolvedDefault(preferred: nil, custom: custom, hidden: [],
-                                                          order: order, isInstalled: installed.contains), "com.example.Foo")
-            try assertEqual(EditorCatalog.resolvedDefault(preferred: "dev.zed.Zed", custom: custom, hidden: [],
-                                                          order: order, isInstalled: installed.contains), "dev.zed.Zed")
-        }
-
-        runTest("EditorCatalog 默认编辑器解析顺序") {
-            let installedIds: Set<String> = ["com.microsoft.VSCode", "dev.zed.Zed"]
-            func resolve(_ preferred: String?, hidden: Set<String> = [], installed: Set<String> = installedIds) -> String {
-                EditorCatalog.resolvedDefault(preferred: preferred, custom: [], hidden: hidden, isInstalled: installed.contains)
-            }
-            try assertEqual(resolve("com.microsoft.VSCode"), "com.microsoft.VSCode", "选定且已安装")
-            try assertEqual(resolve("com.microsoft.VSCode", hidden: ["com.microsoft.VSCode"]), "com.microsoft.VSCode", "选定的默认项即使在菜单中隐藏也生效")
-            try assertEqual(resolve(nil), "dev.zed.Zed", "未选定时取菜单第一个")
-            try assertEqual(resolve("com.example.Gone"), "dev.zed.Zed", "选定项已卸载时回退")
-            try assertEqual(resolve(nil, hidden: ["dev.zed.Zed"]), "com.microsoft.VSCode", "跳过隐藏项")
-            try assertEqual(resolve(nil, hidden: installedIds), "dev.zed.Zed", "全部隐藏时仍取任一已安装项")
-            try assertEqual(resolve(nil, installed: []), EditorCatalog.textEditBundleId, "全都没装时兜底文本编辑")
-        }
-
-        runTest("EditorDiscovery 只认显式声明代码文件的 Editor") {
-            let codeUTIs: Set<String> = ["public.swift-source"]
-            func doc(_ role: String?, exts: [String] = [], types: [String] = []) -> [String: Any] {
-                var d: [String: Any] = ["CFBundleTypeExtensions": exts, "LSItemContentTypes": types]
+        runTest("编辑器识别：要求同一文档中的 Editor 与文本类型，兼容通配符和旧文本类型") {
+            func doc(_ role: String?, exts: [String] = [], types: [String] = [], osTypes: [String] = []) -> [String: Any] {
+                var d: [String: Any] = ["CFBundleTypeExtensions": exts, "LSItemContentTypes": types, "CFBundleTypeOSTypes": osTypes]
                 if let role { d["CFBundleTypeRole"] = role }
                 return d
             }
             func check(_ docs: [[String: Any]]) -> Bool {
-                EditorDiscovery.declaresCodeEditing(infoDictionary: ["CFBundleDocumentTypes": docs], codeTypeIdentifiers: codeUTIs)
+                EditorCatalog.declaresEditing(infoDictionary: ["CFBundleDocumentTypes": docs])
             }
-            try assertTrue(check([doc("Editor", exts: ["PY"])]), "扩展名大小写不敏感")
-            try assertTrue(check([doc(nil, types: ["public.swift-source"])]), "缺省角色视为 Editor")
-            try assertTrue(!check([doc("Viewer", exts: ["js"])]), "浏览器类 Viewer 不算")
-            try assertTrue(!check([doc("Editor", types: ["public.plain-text", "public.folder"])]), "只声明通用文本类型的不算")
-            try assertTrue(!EditorDiscovery.declaresCodeEditing(infoDictionary: [:], codeTypeIdentifiers: codeUTIs), "不声明文档类型")
+            try assertTrue(check([doc("Editor", exts: ["PY"])]), "代码扩展名大小写不敏感")
+            try assertTrue(check([doc("Editor", types: ["public.swift-source"])]))
+            try assertTrue(check([doc("Editor", types: ["public.plain-text"])]), "文本编辑器")
+            try assertTrue(check([doc("Editor", types: ["public.source-code"])]))
+            try assertTrue(check([doc("Editor", exts: ["*"])]), "JetBrains 通配符")
+            try assertTrue(check([doc("Editor", osTypes: ["TEXT"])]), "旧式文本类型")
+            for role in ["Viewer", "Shell", "None", nil] as [String?] {
+                try assertTrue(!check([doc(role, exts: ["txt", "*"])]), "角色必须明确为 Editor")
+            }
+            for type in ["public.image", "com.adobe.pdf", "public.folder", "public.data"] {
+                try assertTrue(!check([doc("Editor", types: [type])]), "只编辑图片等非文本内容的应用不算")
+            }
+            try assertTrue(!check([doc("Viewer", types: ["public.text"]), doc("Editor", types: ["public.image"])]),
+                           "角色和文本类型不能跨条目拼接")
+            try assertTrue(!check([doc("Editor", exts: ["*"], types: ["public.image"])]),
+                           "现代 UTI 声明优先于旧扩展名")
+            try assertTrue(!check([doc("Editor", types: ["public.text"]), doc("Shell", types: ["public.unix-executable"])]),
+                           "终端不混入编辑器")
+            try assertTrue(!EditorCatalog.declaresEditing(infoDictionary: [:]))
+            try assertTrue(!EditorCatalog.declaresEditing(infoDictionary: ["CFBundleURLTypes": [doc("Editor", exts: ["txt"])]]),
+                           "URL 协议的 Editor 角色不代表文件编辑能力")
+        }
+
+        runTest("编辑器自动推荐：要求明确的通用编辑声明，专用格式保留手动添加") {
+            func document(_ types: [String] = [], extensions: [String] = [], role: String = "Editor") -> [String: Any] {
+                ["CFBundleTypeRole": role, "LSItemContentTypes": types, "CFBundleTypeExtensions": extensions]
+            }
+            func check(_ documents: [[String: Any]]) -> Bool {
+                EditorCatalog.declaresGeneralEditing(infoDictionary: ["CFBundleDocumentTypes": documents])
+            }
+            for type in ["public.text", "public.plain-text", "public.source-code", "public.utf8-plain-text"] {
+                try assertTrue(check([document([type])]))
+            }
+            for ext in ["TXT", "text", "*"] { try assertTrue(check([document(extensions: [ext])])) }
+            try assertTrue(check([["CFBundleTypeRole": "Editor", "CFBundleTypeOSTypes": ["TEXT"]]]))
+            for type in ["public.comma-separated-values-text", "net.daringfireball.markdown", "public.python-script", "public.json", "public.image"] {
+                try assertTrue(!check([document([type])]), "文本子类型不等于通用文本声明")
+            }
+            for ext in ["md", "sql", "csv", "py", "json"] {
+                let info: [String: Any] = ["CFBundleDocumentTypes": [document(extensions: [ext])]]
+                try assertTrue(EditorCatalog.declaresEditing(infoDictionary: info), "仍可手动添加")
+                try assertTrue(!EditorCatalog.declaresGeneralEditing(infoDictionary: info), "不自动推荐")
+            }
+            try assertTrue(!check([document(["public.text"], role: "Viewer"), document(["public.image"])]))
+            try assertTrue(!check([document(["public.image"], extensions: ["txt", "*"])]), "UTI 声明优先")
+        }
+
+        runTest("编辑器发现：通用编辑器自动显示，手动项与系统默认仍须通过基础校验") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            func app(_ name: String, id: String, role: String?, types: [String] = ["public.plain-text"], executable: Bool = true) throws -> URL {
+                let url = dir.appendingPathComponent("\(name).app")
+                let contents = url.appendingPathComponent("Contents")
+                try FileManager.default.createDirectory(at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true)
+                var info: [String: Any] = ["CFBundleIdentifier": id, "CFBundleName": name, "CFBundlePackageType": "APPL",
+                                           "CFBundleExecutable": "editor", "CFBundleInfoDictionaryVersion": "6.0"]
+                if let role {
+                    info["CFBundleDocumentTypes"] = [["CFBundleTypeRole": role, "LSItemContentTypes": types]]
+                }
+                try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+                    .write(to: contents.appendingPathComponent("Info.plist"))
+                if executable {
+                    let binary = contents.appendingPathComponent("MacOS/editor")
+                    try Data("#!/bin/sh\nexit 0\n".utf8).write(to: binary)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+                }
+                return url
+            }
+            let ide = try app("Antigravity IDE", id: "com.google.antigravity-ide", role: "Editor")
+            let agent = try app("Antigravity", id: "com.google.antigravity", role: nil)
+            let unknown = try app("New Editor", id: "org.example.new-editor", role: "Editor")
+            let viewer = try app("Viewer", id: "org.example.viewer", role: "Viewer")
+            let broken = try app("Broken", id: "org.example.broken", role: "Editor", executable: false)
+            let oldBrand = try app("Zed without declarations", id: "dev.zed.Zed", role: nil)
+            let specific = try app("Python IDE", id: "org.example.python", role: "Editor", types: ["public.python-script"])
+            let urls = [ide, agent, unknown, viewer, broken, oldBrand, specific, ide, dir]
+            let available = EditorCatalog.installed(applicationURLs: urls)
+            try assertEqual(available.map(\.id), ["com.google.antigravity-ide", "org.example.new-editor"])
+            try assertEqual(available.first?.name, "Antigravity IDE")
+            try assertNil(EditorCatalog.editor(at: agent))
+            try assertNil(EditorCatalog.editor(at: broken))
+            try assertNil(EditorCatalog.editor(at: oldBrand))
+            try assertTrue(EditorCatalog.editor(at: specific) != nil, "专用编辑器可手动添加")
+            let explicit = EditorCatalog.installed(applicationURLs: urls, including: ["org.example.python", "com.google.antigravity", "dev.zed.Zed"])
+            try assertEqual(Set(explicit.map(\.id)), ["com.google.antigravity-ide", "org.example.new-editor", "org.example.python"],
+                           "手动项或系统默认可放宽通用要求，但不能绕过基础编辑能力校验")
+        }
+
+        runTest("编辑器菜单：保持保存的排序和显示开关，去掉重复与失效顺序项") {
+            let available = [KnownEditor(id: "org.example.alpha", name: "Alpha"), KnownEditor(id: "org.example.beta", name: "Beta")]
+            let order = ["org.example.beta", "removed", "org.example.beta", "org.example.alpha"]
+            try assertEqual(EditorCatalog.ordered(available, by: order).map(\.id), ["org.example.beta", "org.example.alpha"])
+            let menu = EditorCatalog.menuEditors(available: available, hidden: ["org.example.alpha"], order: order)
+            try assertEqual(menu.map(\.id), ["org.example.beta"])
+            try assertTrue(EditorCatalog.menuEditors(available: available, hidden: Set(available.map(\.id))).isEmpty)
+        }
+
+        runTest("编辑器默认：跟随系统且只使用通过校验的应用，不受菜单可见性影响") {
+            let valid: Set<String> = ["org.example.Editor", "org.example.SystemEditor", "org.example.NewSystemEditor"]
+            func resolve(_ preferred: String?, systemDefault: String = "org.example.SystemEditor") -> String {
+                EditorCatalog.resolvedDefault(preferred: preferred, systemDefault: systemDefault, isInstalled: valid.contains)
+            }
+            try assertEqual(resolve("org.example.Editor"), "org.example.Editor")
+            try assertEqual(resolve(nil), "org.example.SystemEditor")
+            try assertEqual(resolve(""), "org.example.SystemEditor")
+            try assertEqual(resolve("com.google.antigravity"), "org.example.SystemEditor", "旧无效偏好回退")
+            try assertEqual(resolve(nil, systemDefault: "org.example.NewSystemEditor"), "org.example.NewSystemEditor")
+            try assertEqual(resolve(nil, systemDefault: "org.example.Viewer"), EditorCatalog.textEditBundleId,
+                            "系统关联若没有编辑能力则回退到文本编辑")
         }
 
         runTest("EditorDiscovery 只推荐常规安装位置") {
@@ -2628,7 +2682,7 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!EditorDiscovery.isStandardInstallLocation("/Users/me/.cache/x/Chromium.app", home: home))
         }
 
-        runTest("SharedConfig 编辑器偏好：默认未选定、手动项与隐藏项可持久化") {
+        runTest("SharedConfig 编辑器偏好：默认跟随系统、手动项与隐藏项可持久化") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
             let url = dir.appendingPathComponent("settings.plist")
@@ -2649,7 +2703,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(reloaded.editorOrder, config.editorOrder)
 
             reloaded.preferredEditor = ""
-            try assertNil(SharedConfig(fileURL: url).preferredEditor, "空串视为未选定")
+            try assertNil(SharedConfig(fileURL: url).preferredEditor, "空串恢复跟随系统")
         }
 
         runTest("SharedConfig 主题色偏好：默认午夜薄荷且可持久化") {

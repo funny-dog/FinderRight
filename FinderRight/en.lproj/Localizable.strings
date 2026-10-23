@@ -120,11 +120,17 @@
 "默认终端" = "Default Terminal";
 "添加终端…" = "Add Terminal…";
 "未识别到终端功能：%@" = "No terminal capability declared: %@";
+"无法添加终端" = "Unable to Add Terminal";
+"无法添加编辑器" = "Unable to Add Editor";
+"未识别到文本编辑功能：%@" = "No text-editing capability declared: %@";
+"所选应用未声明文本编辑功能，无法打开。" = "The selected app does not declare text-editing capabilities and cannot be opened.";
+"自动列出声明支持通用文本、通用源码或所有文件的编辑器；仅编辑特定文本格式的应用可通过「添加编辑器…」加入，无法识别时会弹窗说明。关闭开关可隐藏菜单项，拖动左侧的 ≡ 可调整顺序。" = "Editors that declare support for general text, general source code, or all files are listed automatically. Apps that edit only specific text formats can be added with Add Editor…; a dialog explains any recognition failure. Turn off an app to hide it from the menu, or drag the grip to reorder.";
 "所选应用未声明终端功能，无法打开。" = "The selected app does not declare terminal capabilities and cannot be opened.";
 "自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。" = "Apps that declare terminal capabilities are detected automatically. Use Add Terminal… to select an app manually; the same validation applies. The default terminal follows your system setting unless changed above.";
 "选择右键菜单中「在终端中打开」使用的终端应用" = "Choose the terminal used by \"Open in Terminal\"";
 "终端" = "Terminal";
 "默认编辑器" = "Default Editor";
+"默认编辑器跟随系统的纯文本默认打开应用，也可在上方指定；不受菜单顺序和显示开关影响。" = "The default editor follows the system app for plain text unless selected above; menu order and visibility do not affect it.";
 "选择右键菜单中「在编辑器中打开」使用的编辑器应用" = "Choose the editor used by \"Open in Editor\"";
 "编辑器" = "Editor";
 "文本编辑" = "TextEdit";

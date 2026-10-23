@@ -390,11 +390,7 @@ final class ServicesProvider: NSObject {
         let config = SharedConfig.shared
         config.reload()
         return EditorCatalog.resolvedDefault(
-            preferred: config.preferredEditor,
-            custom: config.customEditors,
-            hidden: config.hiddenEditors,
-            order: config.editorOrder,
-            isInstalled: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
+            preferred: config.preferredEditor)
     }
 
     @objc func openEditor(_ pboard: NSPasteboard,

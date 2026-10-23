@@ -605,6 +605,10 @@ final class FinderRightService {
               let bundleId = req.payload["bundleId"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "openWithApp 参数缺失")
         }
+        guard EditorCatalog.editor(bundleIdentifier: bundleId) != nil else {
+            return IPCResponse(id: req.id, success: false,
+                               message: NSLocalizedString("所选应用未声明文本编辑功能，无法打开。", comment: ""))
+        }
         let urls = paths.map { URL(fileURLWithPath: $0) }
         let ok = NSWorkspace.shared.open(
             urls,

@@ -959,8 +959,8 @@ class FinderSync: FIFinderSync {
     // 耗时的 LaunchServices 查询与 icns 读取一律在 cacheQueue 串行队列的锁外完成，
     // 主线程 menu(for:) 只取快照，绝不被后台刷新阻塞。
     private struct EditorCacheSnapshot {
-        /// 已安装的编辑器 bundle id（预置清单 + 检测时的手动添加项）
-        var installedIds: Set<String> = []
+        /// 经过文档编辑能力校验的应用快照
+        var editors: [KnownEditor] = []
         /// 上次检测覆盖到的手动添加项；设置里新增的项不在其中时需要补检
         var checkedCustomIds: Set<String> = []
         var icons: [String: NSImage] = [:]
@@ -983,11 +983,6 @@ class FinderSync: FIFinderSync {
         return editorCache
     }
 
-    /// 需要检测的全部 bundle id：预置清单 + 用户手动添加项
-    private static func editorIdsToCheck(custom: [KnownEditor]) -> [String] {
-        EditorCatalog.all.map(\.id) + custom.map(\.id)
-    }
-
     /// 启动时或后台静默刷新编辑器与图标（绝不阻塞主线程）
     static func refreshInstalledEditorsAsync() {
         cacheQueue.async {
@@ -995,28 +990,27 @@ class FinderSync: FIFinderSync {
             isRefreshingEditors = true
             defer { isRefreshingEditors = false }
 
-            let custom = SharedConfig.shared.customEditors
+            let config = SharedConfig.shared
+            let custom = config.customEditors
             let existingIcons = editorSnapshot().icons
-            var fresh = Set<String>()
+            let fresh = EditorCatalog.installed(custom: custom, preferred: config.preferredEditor)
             var freshIcons: [String: NSImage] = [:]
 
-            for id in editorIdsToCheck(custom: custom) {
-                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
-                    fresh.insert(id)
-                    if existingIcons[id] == nil {
-                        let icon = NSWorkspace.shared.icon(forFile: appURL.path)
-                        icon.size = NSSize(width: 16, height: 16)
-                        freshIcons[id] = icon
-                    }
+            for editor in fresh {
+                let id = editor.id
+                if let existing = existingIcons[id] {
+                    freshIcons[id] = existing
+                } else if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                    let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+                    icon.size = NSSize(width: 16, height: 16)
+                    freshIcons[id] = icon
                 }
             }
 
             editorCacheLock.lock()
-            editorCache.installedIds = fresh
+            editorCache.editors = fresh
             editorCache.checkedCustomIds = Set(custom.map(\.id))
-            for (k, v) in freshIcons {
-                editorCache.icons[k] = v
-            }
+            editorCache.icons = freshIcons
             editorCache.lastCheckTime = ProcessInfo.processInfo.systemUptime
             editorCache.hasChecked = true
             editorCacheLock.unlock()
@@ -1033,14 +1027,12 @@ class FinderSync: FIFinderSync {
         var snap = Self.editorSnapshot()
         let now = ProcessInfo.processInfo.systemUptime
         if !snap.hasChecked {
-            // 极早触发（后台预热尚未完成）：做一次仅查 bundle 的同步检测（实测冷启动约 12ms，之后 <1ms），
-            // 并触发异步刷新补全图标；hasChecked 置位后不再走此路径
-            let fallback = Set(Self.editorIdsToCheck(custom: custom).filter {
-                NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil
-            })
+            // 预热未完成时只校验默认项和手动项，不在右键线程枚举应用。
+            let ids = Set(custom.map(\.id)).union([EditorCatalog.defaultEditorBundleIdentifier()] + [config.preferredEditor].compactMap { $0 })
+            let fallback = ids.sorted().compactMap { EditorCatalog.editor(bundleIdentifier: $0) }
             Self.editorCacheLock.lock()
             if !Self.editorCache.hasChecked {
-                Self.editorCache.installedIds = fallback
+                Self.editorCache.editors = fallback
                 Self.editorCache.checkedCustomIds = Set(custom.map(\.id))
                 Self.editorCache.lastCheckTime = now
                 Self.editorCache.hasChecked = true
@@ -1049,24 +1041,22 @@ class FinderSync: FIFinderSync {
             Self.editorCacheLock.unlock()
             Self.refreshInstalledEditorsAsync()
         } else {
-            // 新增的手动项来自用户在设置里选的真实 .app，补检完成前先按已安装展示，同时触发刷新补上图标
+            // 手动项也先校验能力；旧配置中混入的普通应用不能绕过筛选。
             let unchecked = Set(custom.map(\.id)).subtracting(snap.checkedCustomIds)
+            let existing = Set(snap.editors.map(\.id))
+            snap.editors += unchecked.subtracting(existing).sorted().compactMap { EditorCatalog.editor(bundleIdentifier: $0) }
             if !unchecked.isEmpty || now - snap.lastCheckTime > 300.0 {
                 Self.refreshInstalledEditorsAsync()
             }
-            snap.installedIds.formUnion(unchecked)
         }
-        let installedIds = snap.installedIds
-        return EditorCatalog.menuEditors(custom: custom, hidden: hidden, order: config.editorOrder,
-                                         isInstalled: installedIds.contains)
+        return EditorCatalog.menuEditors(available: snap.editors, hidden: hidden, order: config.editorOrder)
     }
 
     /// 构建「打开编辑器」子菜单。
     ///
     /// 注意：FIFinderSync 的菜单会跨进程传给 Finder 渲染，NSMenuItem 的
     /// `representedObject`（Any）在跨进程序列化时会丢失，因此必须用 `tag`（Int）
-    /// 携带数据 —— 这里 tag = 编辑器在 editorMenuIds 中的下标。手动添加项不在预置清单里，
-    /// 无法再用清单下标定位，所以记下本次菜单的 bundle id 列表，点击时据 tag 反查。
+    /// 携带数据 —— 这里 tag = 编辑器在本次 editorMenuIds 快照中的下标。
     private func buildEditorMenu(_ editors: [KnownEditor], style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L("打开编辑器"))
         let icons = style != .none ? Self.editorSnapshot().icons : [:]

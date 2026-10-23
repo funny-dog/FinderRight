@@ -1,19 +1,21 @@
 import SwiftUI
 import AppKit
+import CoreServices
 import UniformTypeIdentifiers
 import FinderRightKit
 
 // MARK: - 编辑器 Tab
 
-/// 管理「打开编辑器」：默认编辑器（服务菜单 / 快捷键）、右键子菜单中显示哪些编辑器、手动添加清单外的应用。
+/// 管理「打开编辑器」：默认编辑器（服务菜单 / 快捷键）、右键菜单可见性与手动添加；自动推荐通用编辑器，手动添加校验文本编辑能力。
 struct EditorsTab: View {
     /// 已安装的编辑器，按用户保存的顺序显示
     @FRState private var editors: [KnownEditor] = []
     @FRState private var icons: [String: NSImage] = [:]
     @FRState private var hidden: Set<String> = []
     @FRState private var customIds: Set<String> = []
-    @FRState private var defaultId = EditorCatalog.textEditBundleId
-    @FRState private var showingAddSheet = false
+    @FRState private var defaultId = ""
+    @FRState private var systemDefaultId = EditorCatalog.textEditBundleId
+    @FRState private var isSearching = true
     @FRState private var dropTargetEditorId: String?
 
     var body: some View {
@@ -28,37 +30,43 @@ struct EditorsTab: View {
                                 SharedConfig.shared.preferredEditor = newValue
                             }
                         )) {
+                            Text("跟随系统").tag("")
                             ForEach(editors) { editor in
                                 Text(verbatim: editor.name).tag(editor.id)
                             }
                         }
+                        .disabled(isSearching)
                     }
                 }
+                FRFootnote(Text("默认编辑器跟随系统的纯文本默认打开应用，也可在上方指定；不受菜单顺序和显示开关影响。"))
             }
 
             FRSection {
                 HStack {
                     FRCaption("右键菜单中显示")
                     Spacer()
-                    Button {
-                        showingAddSheet = true
-                    } label: {
+                    Button(action: chooseApplications) {
                         Label("添加编辑器…", systemImage: "plus")
                     }
                     .buttonStyle(.frPrimary)
+                    .disabled(isSearching)
                 }
             } content: {
                 FRCard {
+                    if isSearching {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("正在查找…")
+                        }
+                        .padding(16)
+                    }
                     ForEach(Array(editors.enumerated()), id: \.element.id) { index, editor in
                         if index > 0 { FRDivider() }
                         row(editor)
                     }
                 }
-                FRFootnote(Text("常见编辑器会自动识别；其他编辑器（或任何应用）可通过「添加编辑器…」加入。关闭开关的编辑器不会出现在右键子菜单中。拖动左侧的 ≡ 可调整编辑器顺序。"))
+                FRFootnote(Text("自动列出声明支持通用文本、通用源码或所有文件的编辑器；仅编辑特定文本格式的应用可通过「添加编辑器…」加入，无法识别时会弹窗说明。关闭开关可隐藏菜单项，拖动左侧的 ≡ 可调整顺序。"))
             }
-        }
-        .sheet(isPresented: $showingAddSheet) {
-            AddEditorSheet(isPresented: $showingAddSheet, onAdd: add)
         }
         .onAppear(perform: reload)
     }
@@ -77,11 +85,11 @@ struct EditorsTab: View {
             Text(verbatim: editor.name)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(FRTheme.text)
-            if editor.id == defaultId {
-                FRChip(text: Text("默认"), kind: .ok)
+            if editor.id == systemDefaultId {
+                FRChip(text: Text("系统默认"))
             }
             if isCustom {
-                FRChip(text: Text("手动添加"))
+                FRChip(text: Text("手动添加"), kind: .accent)
             }
 
             Spacer(minLength: 8)
@@ -103,7 +111,6 @@ struct EditorsTab: View {
                 set: { visible in
                     if visible { hidden.remove(editor.id) } else { hidden.insert(editor.id) }
                     SharedConfig.shared.hiddenEditors = hidden
-                    refreshDefault()
                 }
             ))
         }
@@ -132,45 +139,85 @@ struct EditorsTab: View {
         order.insert(moved, at: to)
         editors = order
         SharedConfig.shared.editorOrder = order.map(\.id)
-        refreshDefault()
         return true
     }
 
     private func reload() {
+        isSearching = true
         let config = SharedConfig.shared
         let custom = config.customEditors
-        var appURLs: [String: URL] = [:]
-        editors = EditorCatalog.installed(custom: custom, order: config.editorOrder) { id in
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return false }
-            appURLs[id] = url
-            return true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let installed = EditorCatalog.installed(custom: custom, preferred: config.preferredEditor, order: config.editorOrder)
+            var freshIcons: [String: NSImage] = [:]
+            var manualIds = Set(custom.map(\.id))
+            let home = IPCBridge.realUserHomeDirectory.path
+            for editor in installed {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: editor.id) {
+                    freshIcons[editor.id] = NSWorkspace.shared.icon(forFile: url.path)
+                    // 旧手动记录不改变当前能自动识别的应用的显示来源。
+                    if EditorDiscovery.isStandardInstallLocation(url.path, home: home),
+                       EditorCatalog.declaresGeneralEditing(infoDictionary: Bundle(url: url)?.infoDictionary ?? [:]) {
+                        manualIds.remove(editor.id)
+                    }
+                }
+            }
+            let system = EditorCatalog.defaultEditorBundleIdentifier()
+            DispatchQueue.main.async {
+                editors = installed
+                icons = freshIcons
+                customIds = manualIds
+                hidden = config.hiddenEditors
+                systemDefaultId = system
+                defaultId = config.preferredEditor.flatMap { preferred in
+                    installed.contains(where: { $0.id == preferred }) ? preferred : nil
+                } ?? ""
+                isSearching = false
+            }
         }
-        icons = appURLs.mapValues { NSWorkspace.shared.icon(forFile: $0.path) }
-        customIds = Set(custom.map(\.id))
-        hidden = config.hiddenEditors
-        refreshDefault()
     }
 
-    private func refreshDefault() {
-        let config = SharedConfig.shared
-        defaultId = EditorCatalog.resolvedDefault(
-            preferred: config.preferredEditor, custom: config.customEditors, hidden: hidden,
-            order: config.editorOrder,
-            isInstalled: { id in editors.contains(where: { $0.id == id }) })
-    }
+    private func chooseApplications() {
+        let parentWindow = NSApp.keyWindow
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = NSLocalizedString("添加", comment: "")
+        guard panel.runModal() == .OK else { return }
 
-    /// 加入编辑器：清单内的（已自动识别）只需取消隐藏，其余记为手动添加项
-    private func add(_ editor: KnownEditor) {
         let config = SharedConfig.shared
-        if !EditorCatalog.all.contains(where: { $0.id == editor.id }),
-           !config.customEditors.contains(where: { $0.id == editor.id }) {
-            config.customEditors += [editor]
-        }
+        var custom = config.customEditors
         var updatedHidden = config.hiddenEditors
-        if updatedHidden.remove(editor.id) != nil {
-            config.hiddenEditors = updatedHidden
+        var messages: [String] = []
+        for url in panel.urls {
+            guard let editor = EditorCatalog.editor(at: url), editor.id != Bundle.main.bundleIdentifier else {
+                messages.append(String(format: NSLocalizedString("未识别到文本编辑功能：%@", comment: ""), url.lastPathComponent))
+                continue
+            }
+            guard LSRegisterURL(url as CFURL, true) == noErr else {
+                messages.append(String(format: NSLocalizedString("无法添加以下应用：%@", comment: ""), editor.name))
+                continue
+            }
+            if !editors.contains(where: { $0.id == editor.id }), !custom.contains(where: { $0.id == editor.id }) {
+                custom.append(editor)
+            }
+            updatedHidden.remove(editor.id)
         }
+        if custom != config.customEditors { config.customEditors = custom }
+        if updatedHidden != config.hiddenEditors { config.hiddenEditors = updatedHidden }
         reload()
+        if !messages.isEmpty {
+            let dialog = FRDialog(title: NSLocalizedString("无法添加编辑器", comment: ""),
+                                  message: messages.joined(separator: "\n"),
+                                  symbol: "exclamationmark.triangle", tone: .warning,
+                                  buttons: [NSLocalizedString("好", comment: "")])
+            if let parentWindow {
+                dialog.beginSheet(for: parentWindow) { _ in }
+            } else {
+                dialog.runModal()
+            }
+        }
     }
 
     private func remove(_ editor: KnownEditor) {
@@ -184,187 +231,5 @@ struct EditorsTab: View {
             config.preferredEditor = nil
         }
         reload()
-    }
-}
-
-// MARK: - 添加编辑器
-
-/// 一个可添加的应用（扫描出的候选或用户手选）
-private struct EditorCandidate: Identifiable {
-    var id: String { editor.id }
-    let editor: KnownEditor
-    let url: URL
-    let icon: NSImage
-}
-
-/// 添加编辑器：列出 LaunchServices 中声明能编辑代码文件、但不在自动识别清单里的应用，
-/// 并允许从「应用程序」文件夹手动选择任意应用（覆盖 Antigravity 这类不声明任何文档类型的编辑器）。
-struct AddEditorSheet: View {
-    @Binding var isPresented: Bool
-    let onAdd: (KnownEditor) -> Void
-
-    @FRState private var candidates: [EditorCandidate] = []
-    @FRState private var isSearching = true
-    @FRState private var message: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("添加编辑器")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(FRTheme.text)
-                Text("这些应用声明可以编辑代码文件，但不在自动识别清单中")
-                    .font(.system(size: 12))
-                    .foregroundColor(FRTheme.mute)
-            }
-
-            FRCard {
-                if isSearching {
-                    placeholder(Text("正在查找…"), showsProgress: true)
-                } else if candidates.isEmpty {
-                    placeholder(Text("没有发现其他编辑器"), showsProgress: false)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
-                                if index > 0 { FRDivider() }
-                                candidateRow(candidate)
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(maxHeight: .infinity)
-
-            if let message {
-                Text(verbatim: message)
-                    .font(.system(size: 12))
-                    .foregroundColor(FRTheme.warnText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 8) {
-                Button("从应用程序中选择…", action: chooseApplications)
-                    .buttonStyle(.frSecondary)
-                Spacer()
-                Button("完成") {
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.frPrimary)
-            }
-        }
-        .padding(22)
-        .frame(width: 460, height: 420)
-        .background(FRTheme.window)
-        .onAppear(perform: search)
-    }
-
-    private func placeholder(_ text: Text, showsProgress: Bool) -> some View {
-        HStack(spacing: 8) {
-            if showsProgress {
-                ProgressView().controlSize(.small)
-            }
-            text
-                .font(.system(size: 13))
-                .foregroundColor(FRTheme.mute)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 32)
-    }
-
-    private func candidateRow(_ candidate: EditorCandidate) -> some View {
-        HStack(spacing: 10) {
-            Image(nsImage: candidate.icon)
-                .resizable()
-                .frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: candidate.editor.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(FRTheme.text)
-                Text(verbatim: candidate.url.path)
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundColor(FRTheme.mute)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 8)
-            Button("添加") {
-                onAdd(candidate.editor)
-                candidates.removeAll { $0.id == candidate.id }
-            }
-            .buttonStyle(.frSecondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    /// 后台扫描候选（实测约 0.5 秒，不能放主线程）
-    private func search() {
-        let config = SharedConfig.shared
-        var excluded = Set(EditorCatalog.all.map(\.id))
-        excluded.formUnion(config.customEditors.map(\.id))
-        if let own = Bundle.main.bundleIdentifier { excluded.insert(own) }
-        let home = IPCBridge.realUserHomeDirectory.path
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let found = Self.discoverCandidates(excluding: excluded, home: home)
-            DispatchQueue.main.async {
-                candidates = found
-                isSearching = false
-            }
-        }
-    }
-
-    private static func discoverCandidates(excluding excluded: Set<String>, home: String) -> [EditorCandidate] {
-        let codeTypes = EditorDiscovery.codeExtensions.compactMap { UTType(filenameExtension: $0) }
-        let codeTypeIds = Set(codeTypes.map(\.identifier))
-        var seen = excluded
-        var result: [EditorCandidate] = []
-        for type in codeTypes {
-            for url in NSWorkspace.shared.urlsForApplications(toOpen: type) {
-                guard EditorDiscovery.isStandardInstallLocation(url.path, home: home),
-                      let bundle = Bundle(url: url), let id = bundle.bundleIdentifier,
-                      !seen.contains(id) else { continue }
-                seen.insert(id)
-                guard !TerminalCatalog.declaresShell(infoDictionary: bundle.infoDictionary ?? [:]),
-                      EditorDiscovery.declaresCodeEditing(infoDictionary: bundle.infoDictionary ?? [:],
-                                                          codeTypeIdentifiers: codeTypeIds) else { continue }
-                result.append(EditorCandidate(editor: KnownEditor(id: id, name: appName(url)), url: url,
-                                              icon: NSWorkspace.shared.icon(forFile: url.path)))
-            }
-        }
-        return result.sorted { $0.editor.name.localizedStandardCompare($1.editor.name) == .orderedAscending }
-    }
-
-    /// 应用显示名：取访达中显示的本地化名称，去掉 .app 后缀
-    private static func appName(_ url: URL) -> String {
-        let name = FileManager.default.displayName(atPath: url.path)
-        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
-    }
-
-    private func chooseApplications() {
-        message = nil
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.application]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.prompt = NSLocalizedString("添加", comment: "")
-        guard panel.runModal() == .OK else { return }
-
-        var rejected: [String] = []
-        for url in panel.urls {
-            guard let id = Bundle(url: url)?.bundleIdentifier, id != Bundle.main.bundleIdentifier else {
-                rejected.append(url.lastPathComponent)
-                continue
-            }
-            onAdd(KnownEditor(id: id, name: Self.appName(url)))
-            candidates.removeAll { $0.id == id }
-        }
-        if !rejected.isEmpty {
-            message = String(format: NSLocalizedString("无法添加以下应用：%@", comment: ""),
-                             rejected.joined(separator: "、"))
-        }
     }
 }

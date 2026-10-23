@@ -275,7 +275,7 @@ public final class SharedConfig {
     }
 
     /// 用户选定的默认编辑器 bundle identifier（服务菜单 / 快捷键使用）。
-    /// nil 表示未选择，由 EditorCatalog.resolvedDefault 自动取右键菜单中的第一个
+    /// nil 表示跟随系统的纯文本默认打开应用，不保存当时解析出的 bundle identifier。
     public var preferredEditor: String? {
         get {
             lock.lock()

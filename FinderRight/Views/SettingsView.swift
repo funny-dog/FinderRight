@@ -736,7 +736,6 @@ struct ToolsTab: View {
     @FRState private var selectedTerminalIds: Set<String> = []
     @FRState private var dropTargetTerminalId: String?
     @FRState private var isSearching = true
-    @FRState private var terminalMessage: String?
 
     var body: some View {
         FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
@@ -788,9 +787,6 @@ struct ToolsTab: View {
                         if index > 0 { FRDivider() }
                         terminalRow(terminal)
                     }
-                }
-                if let terminalMessage {
-                    FRFootnote(Text(verbatim: terminalMessage))
                 }
                 FRFootnote(Text("自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。"))
                 FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。"))
@@ -876,7 +872,7 @@ struct ToolsTab: View {
     }
 
     private func chooseTerminalApplications() {
-        terminalMessage = nil
+        let parentWindow = NSApp.keyWindow
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = true
@@ -904,7 +900,17 @@ struct ToolsTab: View {
             selectedTerminalIds.insert(terminal.bundleIdentifier)
             SharedConfig.shared.selectedTerminals = selectedTerminalIds
         }
-        terminalMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
+        if !messages.isEmpty {
+            let dialog = FRDialog(title: NSLocalizedString("无法添加终端", comment: ""),
+                                  message: messages.joined(separator: "\n"),
+                                  symbol: "exclamationmark.triangle", tone: .warning,
+                                  buttons: [NSLocalizedString("好", comment: "")])
+            if let parentWindow {
+                dialog.beginSheet(for: parentWindow) { _ in }
+            } else {
+                dialog.runModal()
+            }
+        }
     }
 }
 

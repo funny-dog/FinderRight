@@ -430,6 +430,7 @@ extension ButtonStyle where Self == FRLinkButtonStyle {
 /// 状态小标签
 struct FRChip: View {
     enum Kind {
+        case accent
         case ok
         case warn
         case neutral
@@ -450,6 +451,7 @@ struct FRChip: View {
 
     private var foreground: Color {
         switch kind {
+        case .accent: return FRTheme.accentText
         case .ok: return FRTheme.okText
         case .warn: return FRTheme.warnText
         case .neutral: return FRTheme.mute
@@ -458,6 +460,7 @@ struct FRChip: View {
 
     private var background: Color {
         switch kind {
+        case .accent: return FRTheme.selection
         case .ok: return FRTheme.okBackground
         case .warn: return FRTheme.warnBackground
         case .neutral: return FRTheme.hover
