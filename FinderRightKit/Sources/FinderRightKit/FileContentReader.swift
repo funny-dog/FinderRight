@@ -70,8 +70,8 @@ public enum FileContentReader {
             return .success(text)
         }
 
-        // 2. 无 UTF-16 BOM 时，若前 8KB 包含空字符 (0x00)，视为二进制文件
-        if data.prefix(8192).contains(0) {
+        // 2. 无 UTF-16 BOM 时，全文任意位置包含空字符 (0x00) 都视为二进制文件
+        if data.contains(0) {
             return .binaryFile
         }
 

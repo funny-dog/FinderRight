@@ -117,6 +117,7 @@ struct AutomaticUpdateChecks {
             checker.configureAutomaticUpdates()
             pump()
             precondition(checker.currentStatus == .idle && ReleaseProtocol.requests.isEmpty)
+            ReleaseProtocol.withChecksum = true
             holdBoth()
             checker.check(force: true) { _ in }
             wait { ReleaseProtocol.pending.count == 2 }
@@ -140,6 +141,88 @@ struct AutomaticUpdateChecks {
                 checker.check { _ in }
                 precondition(ReleaseProtocol.requests.count == 2)
             }
+        }
+        for first in [websiteAPI, UpdateChecker.releaseAPI] {
+            scenario("旧版本或不完整信息不能抢先结束检查：\(first.host!)") { checker, _ in
+                holdBoth()
+                var completions = 0
+                checker.check(force: true) { if $0 != .checking { completions += 1 } }
+                wait { ReleaseProtocol.pending.count == 2 }
+                ReleaseProtocol.pending.first { $0.request.url == first }!.respond(
+                    data: ReleaseProtocol.release(tag: "v0.0.0"))
+                pump()
+                precondition(checker.currentStatus == .checking && completions == 0)
+                ReleaseProtocol.withChecksum = true
+                ReleaseProtocol.pending.first { $0.request.url != first }!.respond()
+                wait { availableURL(checker) != nil }
+                precondition(completions == 1)
+            }
+            scenario("缺少校验和继续等待可安装结果：\(first.host!)") { checker, _ in
+                holdBoth()
+                checker.check(force: true) { _ in }
+                wait { ReleaseProtocol.pending.count == 2 }
+                ReleaseProtocol.pending.first { $0.request.url == first }!.respond()
+                pump()
+                precondition(checker.currentStatus == .checking)
+                ReleaseProtocol.withChecksum = true
+                ReleaseProtocol.pending.first { $0.request.url != first }!.respond()
+                let expected = first == websiteAPI ? ReleaseProtocol.githubZIP : ReleaseProtocol.websiteZIP
+                wait { availableURL(checker) == expected }
+            }
+        }
+        for tag in ["v0.0.0", "v9999.0.0"] {
+            scenario("另一渠道失败时保留有效结果：\(tag)") { checker, _ in
+                holdBoth()
+                checker.check(force: true) { _ in }
+                wait { ReleaseProtocol.pending.count == 2 }
+                ReleaseProtocol.pending[0].respond(data: ReleaseProtocol.release(tag: tag))
+                pump()
+                precondition(checker.currentStatus == .checking)
+                ReleaseProtocol.pending[1].respond(code: 503)
+                wait { checker.currentStatus != .checking }
+                precondition(tag == "v0.0.0" ? checker.currentStatus == .upToDate : isAvailable(checker))
+                let requests = ReleaseProtocol.requests.count
+                checker.check { _ in }
+                pump()
+                precondition(ReleaseProtocol.requests.count == requests)
+            }
+        }
+        for secondTag in ["v0.0.0", "v9998.0.0", "v9999.0.1"] {
+            scenario("回退保留较新的版本提示：\(secondTag)") { checker, _ in
+                holdBoth()
+                checker.check(force: true) { _ in }
+                wait { ReleaseProtocol.pending.count == 2 }
+                ReleaseProtocol.pending[0].respond()
+                pump()
+                ReleaseProtocol.pending[1].respond(data: ReleaseProtocol.release(tag: secondTag))
+                wait { isAvailable(checker) }
+                guard case .updateAvailable(let version, _, nil, nil) = checker.currentStatus else { preconditionFailure() }
+                precondition(version == (secondTag == "v9999.0.1" ? secondTag : "v9999.0.0"))
+            }
+        }
+        scenario("两路均无新版本时才确认最新") { checker, _ in
+            holdBoth()
+            checker.check(force: true) { _ in }
+            wait { ReleaseProtocol.pending.count == 2 }
+            ReleaseProtocol.pending[0].respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
+            pump()
+            precondition(checker.currentStatus == .checking)
+            ReleaseProtocol.pending[1].respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
+            wait { checker.currentStatus == .upToDate }
+        }
+        scenario("成功后强制检查失败，普通检查仍可立即重试") { checker, _ in
+            ReleaseProtocol.withChecksum = true
+            checker.check { _ in }
+            wait { isAvailable(checker) }
+            ReleaseProtocol.replies[websiteAPI.absoluteString] = .failure
+            ReleaseProtocol.replies[UpdateChecker.releaseAPI.absoluteString] = .failure
+            checker.check(force: true) { _ in }
+            wait { isFailed(checker) }
+            let requests = ReleaseProtocol.requests.count
+            ReleaseProtocol.replies = [:]
+            checker.check { _ in }
+            wait { isAvailable(checker) }
+            precondition(ReleaseProtocol.requests.count == requests + 2)
         }
         for invalid in [Data("<html>error</html>".utf8), ReleaseProtocol.release(tag: "not-a-version")] {
             scenario("无效响应不能抢赢有效响应") { checker, _ in

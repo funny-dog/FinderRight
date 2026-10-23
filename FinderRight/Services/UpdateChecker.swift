@@ -136,18 +136,23 @@ public final class UpdateChecker: NSObject {
             completion(currentStatus)
             return
         }
-        if !force, let last = lastCheckedDate, Date().timeIntervalSince(last) < 600, currentStatus != .idle {
-            completion(currentStatus)
-            return
+        if !force, let last = lastCheckedDate, Date().timeIntervalSince(last) < 600 {
+            switch currentStatus {
+            case .upToDate, .updateAvailable:
+                completion(currentStatus)
+                return
+            default: break
+            }
         }
 
         currentStatus = .checking
         completion(.checking)
 
         let sources = [Self.releaseAPI, URL(string: Self.websiteOrigin + "/update/latest.json")!]
-        // 结果统一在主线程决胜：首个有效响应生效，失败响应不会抢先结束另一条请求。
+        // 可安装的新版本立即生效；旧缓存或缺少校验信息的响应等待另一渠道，再作为回退。
         var remaining = sources.count
         var finished = false
+        var fallback: UpdateCheckStatus?
         checkTasks = sources.map { source in
             var request = URLRequest(url: source, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
             request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
@@ -171,11 +176,23 @@ public final class UpdateChecker: NSObject {
                     let status: UpdateCheckStatus
                     switch result {
                     case .success(let value):
-                        status = value
+                        if case .updateAvailable(_, _, .some, .some) = value {
+                            status = value
+                        } else {
+                            switch (fallback, value) {
+                            case (.updateAvailable(let saved, _, _, _), .updateAvailable(let incoming, _, _, _)):
+                                if Self.compareVersions(incoming, saved) == .orderedDescending { fallback = value }
+                            case (.updateAvailable, .upToDate): break
+                            default: fallback = value
+                            }
+                            guard remaining == 0 else { return }
+                            status = fallback ?? value
+                        }
                         self.lastCheckedDate = Date()
                     case .failure(let error):
                         guard remaining == 0 else { return }
-                        status = .failed(error.localizedDescription)
+                        status = fallback ?? .failed(error.localizedDescription)
+                        if fallback != nil { self.lastCheckedDate = Date() }
                     }
                     finished = true
                     self.checkTasks.forEach { $0.cancel() }

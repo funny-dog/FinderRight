@@ -2805,6 +2805,14 @@ struct FinderRightKitTestsRunner {
             let readBin = FileContentReader.readText(from: binaryFile, maxBytes: limit)
             try assertEqual(readBin, .binaryFile, "含 0x00 的文件应被识别为二进制")
 
+            let longText = Data(repeating: 0x61, count: 8193)
+            try longText.write(to: binaryFile)
+            try assertEqual(FileContentReader.readText(from: binaryFile, maxBytes: limit),
+                            .success(String(decoding: longText, as: UTF8.self)), "超过 8KB 的正常文本仍可读取")
+            try (longText + Data([0])).write(to: binaryFile)
+            try assertEqual(FileContentReader.readText(from: binaryFile, maxBytes: limit),
+                            .binaryFile, "8KB 之后的空字符也必须拦截")
+
             // 目录
             let readDir = FileContentReader.readText(from: subDir, maxBytes: limit)
             try assertEqual(readDir, .notRegularFile, "目录应返回 .notRegularFile")

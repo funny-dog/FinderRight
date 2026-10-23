@@ -29,8 +29,8 @@
 
 - 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板
 - ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动
-- 💻 **打开终端 / 编辑器** —— 按应用的 Shell 角色声明识别终端（如 iTerm2、cmux），也可手动选择 `.app`，使用同一规则校验；默认终端跟随系统，可自行更改。编辑器不使用品牌清单：自动列出以 Editor 角色明确声明通用文本、通用源码或通配符编辑能力的应用；仅支持特定文本格式的应用可手动添加，仍须通过编辑能力校验，失败时弹窗说明。能自动识别的应用不标记为「手动添加」。默认编辑器可选择「跟随系统」（纯文本默认编辑应用）或自行指定，不随菜单排序和显示开关变化
-- 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文本文件可直接复制全文
+- 💻 **打开终端 / 编辑器** —— 按应用的 Shell 角色声明识别终端（如 iTerm2、cmux），也可手动选择 `.app`，使用同一规则校验；默认终端跟随系统，可自行更改；终端设置列表显示应用实际图标。编辑器不使用品牌清单：自动列出以 Editor 角色明确声明通用文本、通用源码或通配符编辑能力的应用；仅支持特定文本格式的应用可手动添加，仍须通过编辑能力校验，失败时弹窗说明。能自动识别的应用不标记为「手动添加」。默认编辑器可选择「跟随系统」（纯文本默认编辑应用）或自行指定，不随菜单排序和显示开关变化
+- 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文本文件可直接复制全文，全文检查空字符以拦截非文本内容
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录
 - 📦 **压缩 / 解压** —— 压缩为 ZIP，解压 ZIP / 7z / RAR（默认关闭，可在设置中开启）
@@ -94,7 +94,7 @@ killall Finder
   tccutil reset Accessibility com.finderright.app
   ```
   然后重新打开 FinderRight 按引导授权。1.3.0 起使用固定证书，后续升级会保留授权。
-- **自动更新**：默认关闭；开启后每 6 小时检查一次，在文件操作空闲时安装并自动重启。更新同时请求官网与 GitHub，下载卡住会切换备用源，全程校验 SHA-256 与签名证书，校验失败不安装。
+- **自动更新**：默认关闭；开启后每 6 小时检查一次，在文件操作空闲时安装并自动重启。更新同时请求官网与 GitHub，优先采用可安装的新版本；“已是最新”或缺少校验信息的响应会等待另一渠道，检查失败可立即重试。下载卡住会切换备用源，全程校验 SHA-256 与签名证书，校验失败不安装。
 - **混用 Homebrew 与应用内更新**：应用内更新不会同步 Homebrew 的版本记录，可能导致重复安装；Cask 声明了 `auto_updates true`，普通 `brew upgrade` 会跳过它。
 
 </details>
@@ -194,8 +194,8 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 - 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates
 - ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste
-- 💻 **Open in Terminal / Editor** — detect terminals by their declared Shell role (such as iTerm2 and cmux), or select an `.app` manually with the same validation. The default follows the system unless changed. Editors use no preset brand list: automatic detection requires an Editor role explicitly declaring general text, general source code, or wildcard support. Apps limited to specific text formats can be added manually after editing-capability validation; invalid additions show a dialog. Automatically detected apps are not labeled as manually added. The default editor follows the system text editor unless explicitly selected, independently of menu order and visibility.
-- 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; copy a text file's full content directly
+- 💻 **Open in Terminal / Editor** — detect terminals by their declared Shell role (such as iTerm2 and cmux), or select an `.app` manually with the same validation. The default follows the system unless changed; terminal settings show each app’s actual icon. Editors use no preset brand list: automatic detection requires an Editor role explicitly declaring general text, general source code, or wildcard support. Apps limited to specific text formats can be added manually after editing-capability validation; invalid additions show a dialog. Automatically detected apps are not labeled as manually added. The default editor follows the system text editor unless explicitly selected, independently of menu order and visibility.
+- 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; copy a text file's full content directly, checking the entire content for null characters to reject non-text data
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click
 - 📦 **Compress / Extract** — compress to ZIP, extract ZIP / 7z / RAR (off by default, enable in Settings)
@@ -261,7 +261,7 @@ killall Finder
   tccutil reset Accessibility com.finderright.app
   ```
   Then reopen FinderRight and follow the onboarding. Since 1.3.0 a fixed certificate is used, so later upgrades keep permissions.
-- **Auto-update**: off by default; when on, it checks every 6 hours and installs while file operations are idle, then restarts. It queries the website and GitHub, switches to the alternate source if a download stalls, and always verifies SHA-256 and the signing certificate before installing.
+- **Auto-update**: off by default; when on, it checks every 6 hours and installs while file operations are idle, then restarts. It queries the website and GitHub and accepts an installable new version immediately. An up-to-date result or one missing verification information waits for the other source; failed checks can be retried immediately. Downloads switch to the alternate source if they stall, and SHA-256 and the signing certificate are always verified before installation.
 - **Mixing Homebrew and in-app updates**: in-app updates don't update Homebrew's version record, which may cause reinstalls; the cask declares `auto_updates true`, so a plain `brew upgrade` skips it.
 
 </details>

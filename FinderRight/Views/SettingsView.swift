@@ -731,6 +731,7 @@ struct FeaturesTab: View {
 
 struct ToolsTab: View {
     @FRState private var availableTerminals: [KnownTerminal] = []
+    @FRState private var terminalIcons: [String: NSImage] = [:]
     @FRState private var selectedTerminalBundleId = ""
     @FRState private var defaultSystemTerminalId: String = "com.apple.Terminal"
     @FRState private var selectedTerminalIds: Set<String> = []
@@ -802,7 +803,13 @@ struct ToolsTab: View {
             FRGrip()
                 .draggable(terminal.bundleIdentifier)
                 .help("拖动调整在右键菜单中的顺序")
-            FRIconChip(systemName: terminal.icon)
+            if let icon = terminalIcons[terminal.bundleIdentifier] {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 28, height: 28)
+            } else {
+                FRIconChip(systemName: terminal.icon)
+            }
             Text(NSLocalizedString(terminal.name, comment: ""))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(FRTheme.text)
@@ -857,8 +864,15 @@ struct ToolsTab: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let installed = TerminalCatalog.installed(additionalBundleIdentifiers: additionalIds)
             let defaultId = TerminalCatalog.defaultTerminalBundleIdentifier()
+            var icons: [String: NSImage] = [:]
+            for terminal in installed {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: terminal.bundleIdentifier) {
+                    icons[terminal.bundleIdentifier] = NSWorkspace.shared.icon(forFile: url.path)
+                }
+            }
             DispatchQueue.main.async {
                 availableTerminals = TerminalCatalog.ordered(installed, by: config.terminalOrder)
+                terminalIcons = icons
                 defaultSystemTerminalId = defaultId
                 selectedTerminalBundleId = !config.followsSystemTerminal
                     && installed.contains(where: { $0.bundleIdentifier == config.preferredTerminal })
@@ -898,6 +912,7 @@ struct ToolsTab: View {
             if !availableTerminals.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier }) {
                 availableTerminals.append(terminal)
             }
+            terminalIcons[terminal.bundleIdentifier] = NSWorkspace.shared.icon(forFile: url.path)
             selectedTerminalIds.insert(terminal.bundleIdentifier)
             SharedConfig.shared.selectedTerminals = selectedTerminalIds
         }
