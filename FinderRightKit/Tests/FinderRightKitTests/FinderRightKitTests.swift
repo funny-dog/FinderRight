@@ -2601,8 +2601,11 @@ struct FinderRightKitTestsRunner {
             }
             for ext in ["md", "sql", "csv", "py", "json"] {
                 let info: [String: Any] = ["CFBundleDocumentTypes": [document(extensions: [ext])]]
-                try assertTrue(EditorCatalog.declaresEditing(infoDictionary: info), "仍可手动添加")
-                try assertTrue(!EditorCatalog.declaresGeneralEditing(infoDictionary: info), "不自动推荐")
+                // md、sql 的类型可能由已安装应用注册，不能假定干净系统已将它们识别为文本。
+                if ["csv", "py", "json"].contains(ext) {
+                    try assertTrue(EditorCatalog.declaresEditing(infoDictionary: info), "系统内建文本类型仍可手动添加：\(ext)")
+                }
+                try assertTrue(!EditorCatalog.declaresGeneralEditing(infoDictionary: info), "专用格式不自动推荐：\(ext)")
             }
             try assertTrue(!check([document(["public.text"], role: "Viewer"), document(["public.image"])]))
             try assertTrue(!check([document(["public.image"], extensions: ["txt", "*"])]), "UTI 声明优先")
