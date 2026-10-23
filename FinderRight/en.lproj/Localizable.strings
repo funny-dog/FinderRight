@@ -130,7 +130,7 @@
 "选择右键菜单中「在终端中打开」使用的终端应用" = "Choose the terminal used by \"Open in Terminal\"";
 "终端" = "Terminal";
 "默认编辑器" = "Default Editor";
-"默认编辑器跟随系统的纯文本默认打开应用，也可在上方指定；不受菜单顺序和显示开关影响。" = "The default editor follows the system app for plain text unless selected above; menu order and visibility do not affect it.";
+"用于服务菜单和快捷键。" = "Used by Services and keyboard shortcuts.";
 "选择右键菜单中「在编辑器中打开」使用的编辑器应用" = "Choose the editor used by \"Open in Editor\"";
 "编辑器" = "Editor";
 "文本编辑" = "TextEdit";

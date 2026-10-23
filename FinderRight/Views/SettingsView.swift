@@ -763,6 +763,7 @@ struct ToolsTab: View {
                         .disabled(isSearching)
                     }
                 }
+                FRFootnote(Text("用于服务菜单和快捷键。"))
             }
             FRSection {
                 HStack {

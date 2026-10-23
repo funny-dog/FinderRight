@@ -38,7 +38,7 @@ struct EditorsTab: View {
                         .disabled(isSearching)
                     }
                 }
-                FRFootnote(Text("默认编辑器跟随系统的纯文本默认打开应用，也可在上方指定；不受菜单顺序和显示开关影响。"))
+                FRFootnote(Text("用于服务菜单和快捷键。"))
             }
 
             FRSection {
