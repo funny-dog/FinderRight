@@ -1004,7 +1004,7 @@ class FinderSync: FIFinderSync {
                 let id = editor.id
                 if let existing = existingIcons[id] {
                     freshIcons[id] = existing
-                } else if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                } else if let appURL = EditorDiscovery.preferredIconSourceURL(bundleIdentifier: id) {
                     let icon = NSWorkspace.shared.icon(forFile: appURL.path)
                     icon.size = NSSize(width: 16, height: 16)
                     freshIcons[id] = icon

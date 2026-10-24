@@ -2746,6 +2746,18 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!EditorDiscovery.isStandardInstallLocation("/Users/me/.cache/x/Chromium.app", home: home))
         }
 
+        runTest("EditorDiscovery 图标来源优先常规安装位置副本") {
+            let home = "/Users/me"
+            let buildProduct = URL(fileURLWithPath: "/Users/me/codes/work/_build/Debug/Inkpot.app")
+            let installed = URL(fileURLWithPath: "/Applications/Inkpot.app")
+            let toolbox = URL(fileURLWithPath: "/Users/me/Applications/JetBrains Toolbox/PyCharm.app")
+            try assertEqual(EditorDiscovery.preferredCopy(among: [buildProduct, installed], fallback: buildProduct, home: home), installed)
+            try assertEqual(EditorDiscovery.preferredCopy(among: [buildProduct, toolbox], fallback: buildProduct, home: home), toolbox)
+            try assertEqual(EditorDiscovery.preferredCopy(among: [buildProduct], fallback: buildProduct, home: home), buildProduct,
+                            "没有常规副本时退回 LaunchServices 解析结果")
+            try assertNil(EditorDiscovery.preferredCopy(among: [], fallback: nil, home: home))
+        }
+
         runTest("SharedConfig 编辑器偏好：默认跟随系统、手动项与隐藏项可持久化") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }

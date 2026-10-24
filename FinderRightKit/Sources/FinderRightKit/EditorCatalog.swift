@@ -147,4 +147,19 @@ public enum EditorDiscovery {
         // 排除 App 包内嵌的子应用（如 Doubao.app/Contents/Helpers/Doubao Browser.app）
         return !appPath.dropLast(4).contains(".app/")
     }
+
+    /// 读取 bundle 资源（如图标）时的来源：LaunchServices 可能把 bundle id 解析到构建产物
+    /// 等非常规路径，沙箱扩展读不到那里的 icns，只能拿到系统默认的空白应用图标。
+    public static func preferredIconSourceURL(bundleIdentifier: String) -> URL? {
+        preferredCopy(
+            among: NSWorkspace.shared.urlsForApplications(withBundleIdentifier: bundleIdentifier),
+            fallback: NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
+            home: IPCBridge.realUserHomeDirectory.path
+        )
+    }
+
+    /// 从已注册副本中选常规安装位置的一个；没有常规副本时退回 LaunchServices 的解析结果。
+    public static func preferredCopy(among candidates: [URL], fallback: URL?, home: String) -> URL? {
+        candidates.first(where: { isStandardInstallLocation($0.path, home: home) }) ?? fallback
+    }
 }
