@@ -62,4 +62,39 @@ public enum PathFormatter {
         if !s.isEmpty, s.unicodeScalars.allSatisfy({ safe.contains($0) }) { return s }
         return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
+
+    /// 按 CopyFileNameFormat 生成剪贴板文本。
+    /// - withoutExtension 只去掉普通文件最后一段扩展名；目录（含名称带点或 .app 包）与类型未知项保留全名。
+    /// - full 不做文件系统访问。
+    /// - 多选时每行一项。
+    public static func fileNames(for urls: [URL], format: CopyFileNameFormat) -> String {
+        urls.map { fileName(for: $0, format: format) }.joined(separator: "\n")
+    }
+
+    /// 单个 URL 的文件名格式化
+    public static func fileName(for url: URL, format: CopyFileNameFormat) -> String {
+        let fullName = url.lastPathComponent
+        guard format == .withoutExtension,
+              let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+              values.isRegularFile == true else { return fullName }
+        return (fullName as NSString).deletingPathExtension
+    }
+}
+
+/// 「复制文件名」写入剪贴板的格式（设置里选择，默认包含扩展名）。
+public enum CopyFileNameFormat: String, CaseIterable, Identifiable {
+    /// 含扩展名：如 report.tar.gz、.gitignore、Folder.bundle
+    case full
+    /// 仅去除普通文件最后一段扩展名（report.tar.gz → report.tar），目录与无扩展名文件保持原名。
+    case withoutExtension
+
+    public var id: String { rawValue }
+
+    /// 设置界面显示名的本地化 key
+    public var titleKey: String {
+        switch self {
+        case .full: return "含扩展名"
+        case .withoutExtension: return "不含扩展名"
+        }
+    }
 }

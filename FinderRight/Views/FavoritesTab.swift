@@ -6,6 +6,7 @@ import FinderRightKit
 
 /// 管理右键「移动到 / 复制到」使用的常用目录：添加、移除、拖动排序。
 struct FavoritesTab: View {
+    @StateObject private var directoryStatus = FavoriteDirectoryStatus()
     @FRState private var paths: [String] = SharedConfig.shared.favoriteDirectories
     @FRState private var message: String?
     @FRState private var dropTargetPath: String?
@@ -55,6 +56,13 @@ struct FavoritesTab: View {
         .onAppear {
             paths = SharedConfig.shared.favoriteDirectories
         }
+        .task(id: paths) {
+            while !Task.isCancelled {
+                directoryStatus.refresh(paths)
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) }
+                catch { return }
+            }
+        }
     }
 
     /// 手动输入 / 粘贴路径：回车或点「添加」提交，Option-回车换行
@@ -83,13 +91,13 @@ struct FavoritesTab: View {
     }
 
     private func row(path: String, name: String) -> some View {
-        let exists = FileManager.default.fileExists(atPath: path)
+        let entry = directoryStatus.entries[path]
         return HStack(spacing: 10) {
             FRGrip()
                 .draggable(path)
                 .help("拖动调整顺序")
 
-            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+            Image(nsImage: entry?.icon ?? NSImage(systemSymbolName: "folder", accessibilityDescription: nil)!)
                 .resizable()
                 .frame(width: 28, height: 28)
 
@@ -102,10 +110,18 @@ struct FavoritesTab: View {
                     .foregroundColor(FRTheme.mute)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if !exists {
-                    Text("目录不存在，移动或复制到这里会失败")
+                if entry == nil {
+                    Text("正在检查目录…")
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.mute)
+                } else if entry?.available == false {
+                    Text("目录不可用，移动或复制到这里会失败")
                         .font(.system(size: 12))
                         .foregroundColor(FRTheme.warnText)
+                } else if entry?.available == nil {
+                    Text("无法确认目录状态")
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.mute)
                 }
             }
 

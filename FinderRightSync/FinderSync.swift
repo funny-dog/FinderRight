@@ -907,13 +907,14 @@ class FinderSync: FIFinderSync {
     @objc func copyFileName(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard !urls.isEmpty else { logToFile("copyFileName: no items"); return }
-        let names = PathFormatter.string(for: urls, format: .name, home: IPCBridge.realUserHomeDirectory.path)
+        let format = SharedConfig.shared.copyFileNameFormat
+        let names = PathFormatter.fileNames(for: urls, format: format)
         NSPasteboard.general.clearContents()
         guard NSPasteboard.general.setString(names, forType: .string) else {
             logToFile("copyFileName: pasteboard write failed"); return
         }
         ClipboardToast.showCopied()
-        logToFile("copyFileName ok: count=\(urls.count)")
+        logToFile("copyFileName ok: count=\(urls.count) format=\(format.rawValue)")
     }
 
     @objc func copyFileContent(_ sender: NSMenuItem) {

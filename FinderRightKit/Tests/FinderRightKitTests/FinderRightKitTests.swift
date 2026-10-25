@@ -3515,6 +3515,126 @@ struct FinderRightKitTestsRunner {
             try assertTrue(config.isNewFileTemplateEnabled("csv"), "恢复后为启用状态")
         }
 
+        runTest("复制文件名：SharedConfig 默认值、持久化与未知值回退") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let configURL = tempDir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: configURL)
+
+            // 1. 默认值
+            try assertEqual(config.copyFileNameFormat, .full, "默认含扩展名")
+
+            // 2. 持久化
+            config.copyFileNameFormat = .withoutExtension
+            try assertEqual(config.copyFileNameFormat, .withoutExtension)
+            let reloaded = SharedConfig(fileURL: configURL)
+            try assertEqual(reloaded.copyFileNameFormat, .withoutExtension, "磁盘重新加载保持 withoutExtension")
+
+            // 3. 未知值回退到 full
+            guard let data = try? Data(contentsOf: configURL),
+                  var dict = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else {
+                throw TestFailure(message: "无法读取 plist")
+            }
+            dict["copyFileNameFormat"] = "unknown_invalid_format"
+            let mutatedData = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
+            try mutatedData.write(to: configURL)
+
+            let fallbackConfig = SharedConfig(fileURL: configURL)
+            try assertEqual(fallbackConfig.copyFileNameFormat, .full, "未知值应安全回退到 .full")
+        }
+
+        runTest("复制文件名：中文、多点文件名、普通文件与无扩展名") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let fm = FileManager.default
+
+            // 1. 中文多点普通文件
+            let file1 = tempDir.appendingPathComponent("项目 汇报.2026.docx")
+            fm.createFile(atPath: file1.path, contents: Data("test".utf8))
+            try assertEqual(PathFormatter.fileName(for: file1, format: .full), "项目 汇报.2026.docx")
+            try assertEqual(PathFormatter.fileName(for: file1, format: .withoutExtension), "项目 汇报.2026")
+
+            // 2. 多点文件名 (report.tar.gz)
+            let file2 = tempDir.appendingPathComponent("report.tar.gz")
+            fm.createFile(atPath: file2.path, contents: Data())
+            try assertEqual(PathFormatter.fileName(for: file2, format: .full), "report.tar.gz")
+            try assertEqual(PathFormatter.fileName(for: file2, format: .withoutExtension), "report.tar")
+
+            // 3. 普通单扩展名文件
+            let file3 = tempDir.appendingPathComponent("notes.txt")
+            fm.createFile(atPath: file3.path, contents: Data())
+            try assertEqual(PathFormatter.fileName(for: file3, format: .full), "notes.txt")
+            try assertEqual(PathFormatter.fileName(for: file3, format: .withoutExtension), "notes")
+
+            // 4. 无扩展名文件
+            let file4 = tempDir.appendingPathComponent("LICENSE")
+            fm.createFile(atPath: file4.path, contents: Data())
+            try assertEqual(PathFormatter.fileName(for: file4, format: .full), "LICENSE")
+            try assertEqual(PathFormatter.fileName(for: file4, format: .withoutExtension), "LICENSE")
+
+            let trailingDot = tempDir.appendingPathComponent("report.")
+            try Data().write(to: trailingDot)
+            try assertEqual(PathFormatter.fileName(for: trailingDot, format: .withoutExtension), "report.", "末尾单独的点不是扩展名")
+        }
+
+        runTest("复制文件名：点文件、带点目录、app 包与类型未知") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let fm = FileManager.default
+
+            // 1. 点文件 .gitignore (保留原名)
+            let dot1 = tempDir.appendingPathComponent(".gitignore")
+            fm.createFile(atPath: dot1.path, contents: Data())
+            try assertEqual(PathFormatter.fileName(for: dot1, format: .full), ".gitignore")
+            try assertEqual(PathFormatter.fileName(for: dot1, format: .withoutExtension), ".gitignore")
+
+            // 2. 多点点文件 .env.local (去掉最后一段扩展名)
+            let dot2 = tempDir.appendingPathComponent(".env.local")
+            fm.createFile(atPath: dot2.path, contents: Data())
+            try assertEqual(PathFormatter.fileName(for: dot2, format: .full), ".env.local")
+            try assertEqual(PathFormatter.fileName(for: dot2, format: .withoutExtension), ".env")
+
+            // 3. 带点目录 (保留全名)
+            let dirWithDot = tempDir.appendingPathComponent("project.v2.dir")
+            try fm.createDirectory(at: dirWithDot, withIntermediateDirectories: true)
+            try assertEqual(PathFormatter.fileName(for: dirWithDot, format: .full), "project.v2.dir")
+            try assertEqual(PathFormatter.fileName(for: dirWithDot, format: .withoutExtension), "project.v2.dir")
+
+            // 4. app 包目录 (保留全名)
+            let appBundle = tempDir.appendingPathComponent("DemoTool.app")
+            try fm.createDirectory(at: appBundle, withIntermediateDirectories: true)
+            try assertEqual(PathFormatter.fileName(for: appBundle, format: .full), "DemoTool.app")
+            try assertEqual(PathFormatter.fileName(for: appBundle, format: .withoutExtension), "DemoTool.app")
+
+            // 5. 类型未知 (不存在的路径，保留全名避免误截目录)
+            let ghostFile = tempDir.appendingPathComponent("non_existent.dir.or.file.txt")
+            try assertEqual(PathFormatter.fileName(for: ghostFile, format: .full), "non_existent.dir.or.file.txt")
+            try assertEqual(PathFormatter.fileName(for: ghostFile, format: .withoutExtension), "non_existent.dir.or.file.txt")
+        }
+
+        runTest("复制文件名：多选格式化每行一项") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let fm = FileManager.default
+            let f1 = tempDir.appendingPathComponent("文档.pdf")
+            let f2 = tempDir.appendingPathComponent("data.tar.gz")
+            let d3 = tempDir.appendingPathComponent("folder.bundle")
+            fm.createFile(atPath: f1.path, contents: Data())
+            fm.createFile(atPath: f2.path, contents: Data())
+            try fm.createDirectory(at: d3, withIntermediateDirectories: true)
+
+            let urls = [f1, f2, d3]
+
+            let full = PathFormatter.fileNames(for: urls, format: .full)
+            try assertEqual(full, "文档.pdf\ndata.tar.gz\nfolder.bundle")
+
+            let withoutExt = PathFormatter.fileNames(for: urls, format: .withoutExtension)
+            try assertEqual(withoutExt, "文档\ndata.tar\nfolder.bundle")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

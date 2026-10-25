@@ -33,3 +33,4 @@
 "Archive format or compression is not supported" = "不支持此压缩包格式或压缩方法";
 "The archive is encrypted and cannot be previewed" = "压缩包已加密，无法预览";
 "Archive preview timed out" = "压缩包预览读取超时";
+"Copy link address" = "复制链接地址";

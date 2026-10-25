@@ -146,7 +146,9 @@ struct PreviewChecks {
             ["cell_type": "code", "source": "print(1)", "outputs": [["text": "1\n"]]]
         ]]
         try JSONSerialization.data(withJSONObject: content).write(to: notebook)
-        let rendered = DocumentPreviewView.content(for: try PreviewDocument.read(notebook), text: { $0 })
+        prepare(controller, notebook)
+        precondition(!document.isHidden && outline.numberOfRows == 0)
+        let rendered = document.textView.attributedString()
         precondition(rendered.string.contains("标题") && rendered.string.contains("加粗"))
         let boldRange = (rendered.string as NSString).range(of: "加粗")
         let boldFont = rendered.attribute(.font, at: boldRange.location, effectiveRange: nil) as! NSFont
@@ -158,8 +160,6 @@ struct PreviewChecks {
             precondition(attributes[.link] == nil && attributes[.attachment] == nil)
         }
         precondition(rendered.string.contains("print(1)"))
-        prepare(controller, notebook)
-        precondition(!document.isHidden && outline.numberOfRows == 0)
         let database = root.appendingPathComponent("sample.sqlite")
         let databaseResult = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/sqlite3"),
             arguments: [database.path, "CREATE TABLE products (name TEXT); INSERT INTO products VALUES ('苹果');"])
@@ -170,6 +170,20 @@ struct PreviewChecks {
         document.textView.layoutManager?.ensureLayout(for: document.textView.textContainer!)
         let tableBounds = document.textView.layoutManager!.usedRect(for: document.textView.textContainer!)
         precondition(tableBounds.width > 0 && tableBounds.height > 0, "SQLite 表格必须完成原生排版")
+        cancelled = false
+        newestFinished = false
+        controller.preparePreviewOfFile(at: notebook) { error in
+            precondition(Thread.isMainThread)
+            precondition((error as? CocoaError)?.code == .userCancelled)
+            cancelled = true
+        }
+        controller.preparePreviewOfFile(at: database) { error in
+            precondition(Thread.isMainThread && error == nil)
+            newestFinished = true
+        }
+        wait { cancelled && newestFinished }
+        precondition(document.textView.string.contains("苹果") && !document.textView.string.contains("print(1)"),
+                     "快速切换文档后，旧的后台富文本结果不能覆盖新预览")
         prepare(controller, zip)
         precondition(document.isHidden && !scroll.isHidden && outline.numberOfRows == 1)
         let tar = root.appendingPathComponent("sample.tar")
@@ -214,6 +228,7 @@ struct PreviewChecks {
     private static func prepare(_ controller: PreviewController, _ url: URL) {
         var finished = false
         controller.preparePreviewOfFile(at: url) { error in
+            precondition(Thread.isMainThread, "预览完成回调必须在主线程执行")
             precondition(error == nil, String(describing: error))
             finished = true
         }

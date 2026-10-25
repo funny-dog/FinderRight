@@ -3,7 +3,7 @@ import FinderRightKit
 
 /// 原生只读文本与表格，不创建 WebKit 子进程，也不解释文档中的 HTML 或外部链接。
 /// 同时编译进文件预览扩展与 Markdown 预览扩展，文案从各自扩展的 bundle 查表。
-final class DocumentPreviewView: NSScrollView {
+final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
     let textView = NSTextView()
 
     init() {
@@ -13,6 +13,7 @@ final class DocumentPreviewView: NSScrollView {
         autohidesScrollers = true
         textView.isEditable = false
         textView.isSelectable = true
+        textView.delegate = self
         textView.importsGraphics = false
         textView.usesFindPanel = true
         textView.backgroundColor = .textBackgroundColor
@@ -29,11 +30,24 @@ final class DocumentPreviewView: NSScrollView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func clear() { textView.textStorage?.setAttributedString(NSAttributedString(string: "")) }
-
-    func show(_ document: PreviewDocument, text: (String) -> String) {
-        show(Self.content(for: document, text: text))
+    func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
+        guard let storage = view.textStorage, charIndex >= 0, charIndex < storage.length,
+              let target = storage.attribute(.toolTip, at: charIndex, effectiveRange: nil) as? String else { return menu }
+        let item = NSMenuItem(title: NSLocalizedString("Copy link address", bundle: Bundle(for: Self.self), comment: ""),
+                              action: #selector(copyLinkAddress(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = target
+        menu.insertItem(item, at: 0)
+        return menu
     }
+
+    @objc private func copyLinkAddress(_ sender: NSMenuItem) {
+        guard let target = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(target, forType: .string)
+    }
+
+    func clear() { textView.textStorage?.setAttributedString(NSAttributedString(string: "")) }
 
     /// 内容可在后台线程生成，主线程只负责替换与滚动到开头。
     func show(_ content: NSAttributedString) {
@@ -94,13 +108,15 @@ final class DocumentPreviewView: NSScrollView {
         return result
     }
 
-    private static func tableStyle(_ table: NSTextTable, row: Int, column: Int) -> NSMutableParagraphStyle {
+    private static func tableStyle(_ table: NSTextTable, row: Int, column: Int,
+                                   alignment: NSTextAlignment = .natural) -> NSMutableParagraphStyle {
         let block = NSTextTableBlock(table: table, startingRow: row, rowSpan: 1, startingColumn: column, columnSpan: 1)
         block.setWidth(1, type: .absoluteValueType, for: .border)
         block.setBorderColor(.separatorColor)
         block.setWidth(6, type: .absoluteValueType, for: .padding)
         let style = NSMutableParagraphStyle()
         style.textBlocks = [block]
+        style.alignment = alignment
         return style
     }
 
@@ -115,13 +131,27 @@ final class DocumentPreviewView: NSScrollView {
         return style
     }
 
+    private static let footnoteDefinition = try! NSRegularExpression(
+        pattern: #"(?m)^([ \t>]*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)*\[\^[^\]\r\n]+\])(:)"#)
+
     private static func markdown(_ source: String) -> NSAttributedString {
-        guard let value = try? AttributedString(markdown: source) else {
+        var input = source
+        var footnoteMarker: String?
+        if source.contains("[^"), footnoteDefinition.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)) != nil {
+            // 临时隔开脚注标签与冒号，避免系统吞掉定义；显示前去除，代码块原文也会还原。
+            var marker = "\u{E000}"
+            while source.contains(marker) { marker = "\u{E000}" + UUID().uuidString + "\u{E001}" }
+            input = footnoteDefinition.stringByReplacingMatches(in: source, range: NSRange(source.startIndex..., in: source),
+                                                                 withTemplate: "$1" + marker + "$2")
+            footnoteMarker = marker
+        }
+        guard let value = try? AttributedString(markdown: input) else {
             return NSAttributedString(string: source, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.textColor])
         }
         let result = NSMutableAttributedString(string: "")
         var previousBlock: Int?
         var previousAttributes: [NSAttributedString.Key: Any] = [:]
+        let bodyFont = NSFont.systemFont(ofSize: 14)
         var tables: [Int: NSTextTable] = [:]
         // 同一代码块或引用的多个片段共用一个文本块，才能画成连续的一整块。
         var blocks: [Int: NSTextBlock] = [:]
@@ -135,13 +165,14 @@ final class DocumentPreviewView: NSScrollView {
                 result.append(NSAttributedString(string: "\n", attributes: previousAttributes))
                 endsWithNewline = true
             }
-            var font = NSFont.systemFont(ofSize: 14)
+            var font = bodyFont
             var style = NSMutableParagraphStyle()
             style.paragraphSpacing = 8
             var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: NSColor.textColor]
             var row = 0
             var column = 0
             var table: NSTextTable?
+            var alignment: NSTextAlignment = .natural
             var prefix = ""
             var listDepth = 0
             var innermostItem: Int?
@@ -179,6 +210,12 @@ final class DocumentPreviewView: NSScrollView {
                     grid.numberOfColumns = columns.count
                     tables[component.identity] = grid
                     table = grid
+                    switch columns[column].alignment {
+                    case .left: alignment = .left
+                    case .center: alignment = .center
+                    case .right: alignment = .right
+                    @unknown default: break
+                    }
                 case .thematicBreak: attributes[.foregroundColor] = NSColor.separatorColor
                 default: break
                 }
@@ -188,6 +225,7 @@ final class DocumentPreviewView: NSScrollView {
                 style.headIndent = style.firstLineHeadIndent + 16
             }
             var text = String(value[run.range].characters)
+            if let marker = footnoteMarker, text.contains(marker) { text = text.replacingOccurrences(of: marker, with: "") }
             // GFM 任务列表：解析器把 [ ] / [x] 留在正文开头，换成勾选框符号。
             if startsBlock, innermostItem != nil {
                 for (marker, box) in [("[ ] ", "☐ "), ("[x] ", "☑ "), ("[X] ", "☑ ")] where text.hasPrefix(marker) {
@@ -204,22 +242,26 @@ final class DocumentPreviewView: NSScrollView {
                 if intent.contains(.emphasized) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
                 if intent.contains(.strikethrough) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             }
-            // 只做视觉区分，不附带 .link：预览里不允许打开外部地址。
-            if run.link != nil { attributes[.foregroundColor] = NSColor.linkColor }
+            // 不附带 .link，只提供提示与复制，避免系统自动打开地址。
+            if let link = run.link {
+                attributes[.foregroundColor] = NSColor.linkColor
+                attributes[.toolTip] = link.absoluteString
+            }
             if run.imageURL != nil {
                 attributes[.foregroundColor] = NSColor.secondaryLabelColor
                 text = "🖼 " + text
             }
             attributes[.font] = font
-            attributes[.paragraphStyle] = table.map { tableStyle($0, row: row, column: column) } ?? style
-            if startsBlock {
+            attributes[.paragraphStyle] = table.map { tableStyle($0, row: row, column: column, alignment: alignment) } ?? style
+            if startsBlock, !prefix.isEmpty {
                 var prefixAttributes = attributes
                 prefixAttributes.removeValue(forKey: .backgroundColor)
                 prefixAttributes.removeValue(forKey: .strikethroughStyle)
+                prefixAttributes.removeValue(forKey: .toolTip)
                 result.append(NSAttributedString(string: prefix, attributes: prefixAttributes))
             }
             result.append(NSAttributedString(string: text, attributes: attributes))
-            if let last = (prefix + text).last { endsWithNewline = last.isNewline }
+            if let last = text.last ?? prefix.last { endsWithNewline = last.isNewline }
             previousBlock = block
             previousAttributes = attributes
         }

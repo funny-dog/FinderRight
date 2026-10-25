@@ -30,9 +30,9 @@
 - 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板
 - ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动
 - 💻 **打开终端 / 编辑器** —— 按应用的 Shell 角色声明识别终端（如 iTerm2、cmux），也可手动选择 `.app`，使用同一规则校验；默认终端跟随系统，可自行更改；终端设置列表显示应用实际图标。终端和编辑器列表均可点击旋转箭头重新扫描。编辑器不使用品牌清单：自动列出以 Editor 角色明确声明通用文本、通用源码或通配符编辑能力的应用；仅支持特定文本格式的应用可手动添加，仍须通过编辑能力校验，失败时弹窗说明。能自动识别的应用不标记为「手动添加」。默认编辑器可选择「跟随系统」（纯文本默认编辑应用）或自行指定，不随菜单排序和显示开关变化
-- 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文本文件可直接复制全文，全文检查空字符以拦截非文本内容
+- 📋 **复制路径 / 文件名 / 文件内容** —— 路径支持 `~`、终端转义、文件 URL 等格式；文件名可选择包含或去掉最后一段扩展名，目录保持原名，多选每行一项；文本文件可直接复制全文，全文检查空字符以拦截非文本内容。「服务」菜单在后台读取文件，剪贴板写入失败会提示错误
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
-- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录；确认不存在或已不再是目录的目标会置灰并标记“目录不可用”，保留配置，恢复后后台检查会重新启用。状态在重新展开菜单时更新
+- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录；确认不存在或已不再是目录的目标会置灰并标记“目录不可用”，保留配置，恢复后后台检查会重新启用。菜单状态在重新展开时更新；设置页在后台检查目录和读取图标，约每 5 秒刷新，区分检查中、目录不可用与状态不明
 - 📦 **压缩 / 解压** —— 压缩为 ZIP，解压 ZIP / 7z / RAR（默认关闭，可在设置中开启）
 - 👀 **扩展空格预览** —— 文件夹、压缩包（ZIP / TAR / TAR.GZ / TAR.BZ2 / TAR.XZ / 7z / RAR）和安装包与镜像（deb / rpm / pkg / iso / apk / ipa / jar / whl）的目录列表，以及 YAML / TOML / INI、`.gitignore` 等点文件、无扩展名文本、`.conf` 等配置文件、系统不认识的源码（Go / Rust / TSX / Vue / SQL 等）、字幕、SQLite 和 Jupyter Notebook 内容；Markdown 渲染为排版后的文档（可单独关闭）
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
@@ -135,7 +135,8 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - apk / ipa / jar / war / whl 按 ZIP 列出内容；rpm 列出负载中的文件（zstd 压缩的负载不支持）；iso 列出光盘目录；deb 与 pkg 只列出顶层成员（如 `data.tar.xz`、`Payload`），不再展开内层包。
 - YAML / YML / TOML / INI 显示文本，最多 1 MiB，支持 UTF-8 与带 BOM 的 UTF-16。
 - `.gitignore`、`.env` 等点文件，`Dockerfile` 等无扩展名文件，`.conf` / `.config` / `.cfg` 等配置文件，系统不认识的源码（`.go` / `.rs` / `.tsx` / `.vue` / `.scss` / `.sql` / `.proto` / `.tf` 等）、`.jsonl` / `.lock` 等结构化文本，以及 `.srt` / `.vtt` / `.tex` / `.org` 等字幕与标记文档，都按内容识别：是文本则以纯文本显示（无语法高亮），不是文本（如 `.DS_Store`、可执行程序）则保留系统默认预览。TypeScript 的 `.ts` 被系统固定识别为视频，无法接管。
-- Markdown（`.md`）渲染标题、列表、任务列表、表格、引用与代码块，最多 1 MiB；开头的 YAML 元信息以原文显示；图片只显示替代文字，HTML 按原文显示，链接不可点击，不加载任何外部资源。它是独立的预览扩展，可在设置里单独关闭；若 MarkEdit 等应用也提供 Markdown 预览，设置页会提示只保留一个。
+- Markdown（`.md`）渲染标题、列表、任务列表、表格、引用与代码块，最多 1 MiB；表格保留列对齐，保留脚注引用标记与定义正文（不提供脚注跳转）；开头的 YAML 元信息以原文显示；图片只显示替代文字，HTML 按原文显示，链接悬停可查看目标、右键可复制地址，但不可点击跳转，不加载任何外部资源。它是独立的预览扩展，可在设置里单独关闭；若 MarkEdit 等应用也提供 Markdown 预览，设置页会提示只保留一个。
+- 文档预览在后台生成显示内容，减少 Notebook 与 SQLite 等复杂内容准备时的主线程阻塞。
 - Jupyter Notebook（v4）最多读取 5 MiB、展示 200 个单元；渲染 Markdown、显示代码与已保存的文字输出，不执行代码、不加载外部资源，不显示图片与 HTML 输出。
 - SQLite（`.sqlite` / `.sqlite3`）只读展示最多 20 张普通表的列名、类型和每表前 50 条记录，单元格最多展示 512 字节；跳过视图、虚拟表和生成列。使用主文件快照，不包含尚未合并到主文件的 WAL 数据。
 - 包含隐藏项；不展开符号链接或 `.app` 等文件包，不递归统计目录大小。
@@ -195,9 +196,9 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates
 - ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste
 - 💻 **Open in Terminal / Editor** — detect terminals by their declared Shell role (such as iTerm2 and cmux), or select an `.app` manually with the same validation. The default follows the system unless changed; terminal settings show each app’s actual icon. Use the circular arrow in either app list to rescan. Editors use no preset brand list: automatic detection requires an Editor role explicitly declaring general text, general source code, or wildcard support. Apps limited to specific text formats can be added manually after editing-capability validation; invalid additions show a dialog. Automatically detected apps are not labeled as manually added. The default editor follows the system text editor unless explicitly selected, independently of menu order and visibility.
-- 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; copy a text file's full content directly, checking the entire content for null characters to reject non-text data
+- 📋 **Copy Path / File Name / File Content** — paths as `~`, shell-escaped or file URLs; choose full file names or remove only the final extension, keeping folder names unchanged and one item per line for multiple selections; copy a text file's full content directly, checking the entire content for null characters to reject non-text data. The Services menu reads files in the background, and clipboard write failures show an error
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
-- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click. Targets confirmed missing or no longer folders are disabled and marked “Folder unavailable”; saved folders are kept and re-enabled after a background check confirms recovery. Reopen the menu to see refreshed status
+- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click. Targets confirmed missing or no longer folders are disabled and marked “Folder unavailable”; saved folders are kept and re-enabled after a background check confirms recovery. Reopen the menu to see refreshed status. Settings checks folders and loads their icons in the background about every 5 seconds, distinguishing checks in progress, unavailable folders and unknown status
 - 📦 **Compress / Extract** — compress to ZIP, extract ZIP / 7z / RAR (off by default, enable in Settings)
 - 👀 **Extended Quick Look previews** — listings for folders, archives (ZIP / TAR / TAR.GZ / TAR.BZ2 / TAR.XZ / 7z / RAR) and packages or disk images (deb / rpm / pkg / iso / apk / ipa / jar / whl), plus YAML / TOML / INI, dotfiles such as `.gitignore`, extensionless text, config files such as `.conf`, source code macOS doesn't recognize (Go / Rust / TSX / Vue / SQL and more), subtitles, SQLite and Jupyter Notebook contents; Markdown rendered as formatted documents (can be turned off separately)
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
@@ -302,7 +303,8 @@ In these places FinderRight's actions are available under **right-click → Serv
 - apk / ipa / jar / war / whl are listed as ZIP; rpm lists its payload files (zstd-compressed payloads aren't supported); iso lists the disc directory; deb and pkg list only top-level members (such as `data.tar.xz` or `Payload`) without opening nested archives.
 - YAML / YML / TOML / INI display text up to 1 MiB, using UTF-8 or BOM-marked UTF-16.
 - Dotfiles such as `.gitignore` and `.env`, extensionless files such as `Dockerfile`, config files such as `.conf` / `.config` / `.cfg`, source code macOS doesn't recognize (`.go` / `.rs` / `.tsx` / `.vue` / `.scss` / `.sql` / `.proto` / `.tf` and more), structured text such as `.jsonl` / `.lock`, and subtitles or markup such as `.srt` / `.vtt` / `.tex` / `.org` are detected by content: text is shown as plain text (no syntax highlighting), while non-text files (such as `.DS_Store` or executables) keep the system's default preview. TypeScript `.ts` files can't be taken over because macOS always treats them as video.
-- Markdown (`.md`) renders headings, lists, task lists, tables, quotes and code blocks, up to 1 MiB; leading YAML front matter is shown as-is; images show only their alt text, HTML is shown as plain text, links aren't clickable, and no external resources are loaded. It's a separate preview extension you can turn off in Settings; if another app such as MarkEdit also previews Markdown, Settings suggests keeping only one.
+- Markdown (`.md`) renders headings, lists, task lists, tables, quotes and code blocks, up to 1 MiB; table column alignment is preserved, and footnote markers and definition text are preserved without jump navigation; leading YAML front matter is shown as-is; images show only their alt text, HTML is shown as plain text, hover over links to see their targets or right-click to copy their addresses; links don't open, and no external resources are loaded. It's a separate preview extension you can turn off in Settings; if another app such as MarkEdit also previews Markdown, Settings suggests keeping only one.
+- Document preview content is generated in the background to reduce main-thread blocking while preparing complex Notebook and SQLite previews.
 - Jupyter Notebook v4 reads up to 5 MiB and displays up to 200 cells, with rendered Markdown, code and saved text outputs. Code is never executed, external resources are never loaded, and image/HTML outputs are omitted.
 - SQLite (`.sqlite` / `.sqlite3`) displays names and types of columns and up to 50 rows from each of 20 ordinary tables, with a 512-byte cell display limit. Views, virtual tables and generated columns are skipped. Read-only previews use the main database file snapshot and omit uncheckpointed WAL changes.
 - Includes hidden items; doesn't follow symbolic links, browse app packages, or compute folder sizes.

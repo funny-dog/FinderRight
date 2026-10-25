@@ -529,6 +529,7 @@ struct PermissionsTab: View {
 struct FeaturesTab: View {
     @FRState private var badgeOwnershipReclaim: Bool = SharedConfig.shared.badgeOwnershipReclaim
     @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
+    @FRState private var copyFileNameFormat: CopyFileNameFormat = SharedConfig.shared.copyFileNameFormat
     @FRState private var copyFileContentMaxSizeKB: Int = SharedConfig.shared.copyFileContentMaxSizeKB
     @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder)
     @FRState private var dropTargetId: String?
@@ -554,10 +555,21 @@ struct FeaturesTab: View {
         return PathFormatter.string(for: [sample], format: copyPathFormat, home: home.path)
     }
 
+    /// 演示当前复制文件名格式
+    private var copyFileNameExample: String {
+        switch copyFileNameFormat {
+        case .full:
+            return "报告 2026.tar.gz"
+        case .withoutExtension:
+            return "报告 2026.tar"
+        }
+    }
+
     var body: some View {
         FRPage(title: "功能", subtitle: "选择出现在右键菜单中的功能，拖动调整顺序") {
             menuSection
             copyPathSection
+            copyFileNameSection
             copyContentSection
             badgeSection
             quickLookSection
@@ -676,6 +688,47 @@ struct FeaturesTab: View {
             FRFootnote(Text(copyPathFormat == .shellEscaped
                             ? "含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。"
                             : "多选时每行一项。「服务」菜单里的复制路径也使用此格式。"))
+        }
+    }
+
+    // MARK: 复制文件名
+
+    private var copyFileNameSection: some View {
+        FRSection("复制文件名") {
+            FRCard {
+                FRRow(title: Text("复制格式")) {
+                    FRPicker(label: "复制格式", selection: Binding(
+                        get: { copyFileNameFormat },
+                        set: { newValue in
+                            copyFileNameFormat = newValue
+                            SharedConfig.shared.copyFileNameFormat = newValue
+                        }
+                    )) {
+                        ForEach(CopyFileNameFormat.allCases) { format in
+                            Text(LocalizedStringKey(format.titleKey)).tag(format)
+                        }
+                    }
+                }
+
+                FRDivider()
+
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("示例")
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.mute)
+                    Text(verbatim: copyFileNameExample)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(FRTheme.text)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+            }
+
+            FRFootnote(Text("不含扩展名时仅去除普通文件最后一段扩展名（如 report.tar.gz → report.tar）；目录（含 .app 包）与无扩展名文件保持原名。多选时每行一项。"))
         }
     }
 

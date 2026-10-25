@@ -95,12 +95,14 @@ public final class FavoriteDirectoryAvailability {
     private let check: (String) -> Bool?
 
     public init(check: ((String) -> Bool?)? = nil) {
-        self.check = check ?? { path in
-            var info = stat()
-            if stat(path, &info) == 0 { return info.st_mode & S_IFMT == S_IFDIR }
-            // 沙箱或权限拒绝不代表目录失效，保留入口交给主 App 在执行前校验。
-            return errno == ENOENT || errno == ENOTDIR ? false : nil
-        }
+        self.check = check ?? Self.isAvailable
+    }
+
+    /// nil 表示权限或设备状态不明，不能据此认定目录失效；调用方须在后台检查。
+    public static func isAvailable(_ path: String) -> Bool? {
+        var info = stat()
+        if stat(path, &info) == 0 { return info.st_mode & S_IFMT == S_IFDIR }
+        return errno == ENOENT || errno == ENOTDIR ? false : nil
     }
 
     // shortcut: 按需每隔 5 秒后台复查，结果在下次展开菜单时生效；需要实时变化时接入目录事件通知。

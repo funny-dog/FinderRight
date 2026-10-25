@@ -61,6 +61,7 @@ public final class SharedConfig {
         static let shortcuts = "shortcuts"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
         static let copyPathFormat = "copyPathFormat"
+        static let copyFileNameFormat = "copyFileNameFormat"
         static let menuOrder = "menuOrder"
         static let favoriteDirectories = "favoriteDirectories"
         static let appTheme = "appTheme"
@@ -540,6 +541,26 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.copyPathFormat] = newValue.rawValue
+            save()
+        }
+    }
+
+    // MARK: - Copy File Name Format
+
+    /// 「复制文件名」的格式（默认含扩展名）
+    public var copyFileNameFormat: CopyFileNameFormat {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            if let raw = store[Keys.copyFileNameFormat] as? String, let format = CopyFileNameFormat(rawValue: raw) {
+                return format
+            }
+            return .full
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.copyFileNameFormat] = newValue.rawValue
             save()
         }
     }

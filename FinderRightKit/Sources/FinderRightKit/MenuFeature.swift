@@ -140,7 +140,7 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: undo,         nameKey: "撤销",           descriptionKey: "撤销 FinderRight 的上一次文件操作，只在可撤销时出现", systemImage: "arrow.uturn.backward", tint: .gray),
         MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus", tint: .blue),
         MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link", tint: .indigo),
-        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制完整文件名（含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo),
+        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制文件名（可选含/不含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo),
         MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext", tint: .teal),
         MenuFeature(id: goToDirectory, nameKey: "打开路径…",     descriptionKey: "输入文件或文件夹路径，在访达中显示或直接打开", systemImage: "arrow.right.circle", tint: .cyan),
         MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal", tint: .graphite),

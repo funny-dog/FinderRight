@@ -181,7 +181,7 @@ final class ServicesProvider: NSObject {
         }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        let names = PathFormatter.string(for: items, format: .name, home: IPCBridge.realUserHomeDirectory.path)
+        let names = PathFormatter.fileNames(for: items, format: SharedConfig.shared.copyFileNameFormat)
         NSPasteboard.general.clearContents()
         guard NSPasteboard.general.setString(names, forType: .string) else {
             showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
@@ -211,25 +211,31 @@ final class ServicesProvider: NSObject {
             return
         }
         let maxBytes = SharedConfig.shared.copyFileContentMaxBytes
-        let result = FileContentReader.readText(from: url, maxBytes: maxBytes)
-        switch result {
-        case .success(let text):
-            NSPasteboard.general.clearContents()
-            guard NSPasteboard.general.setString(text, forType: .string) else {
-                showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
-                return
+        // 服务传入的 pasteboard 已同步读完；文件 I/O 和文本识别交给后台。
+        workQueue.async { [self] in
+            let result = FileContentReader.readText(from: url, maxBytes: maxBytes)
+            DispatchQueue.main.async { [self] in
+                switch result {
+                case .success(let text):
+                    NSPasteboard.general.clearContents()
+                    guard NSPasteboard.general.setString(text, forType: .string) else {
+                        showAlert(NSLocalizedString("无法写入剪贴板", comment: "service"))
+                        return
+                    }
+                    ClipboardToast.showCopied(message: NSLocalizedString("已复制文件内容到剪贴板", comment: ""))
+                    returnFocusToFinderIfNeeded()
+                case .notRegularFile:
+                    showAlert(NSLocalizedString("仅支持普通文件", comment: "service"))
+                case .fileTooLarge:
+                    ClipboardToast.showCopied(message: NSLocalizedString("文件大小超过限制", comment: ""), isWarning: true)
+                case .readFailed:
+                    showAlert(NSLocalizedString("无法读取文件内容", comment: "service"))
+                case .binaryFile:
+                    ClipboardToast.showCopied(message: NSLocalizedString("无法复制：非文本文件", comment: ""), isWarning: true)
+                }
             }
-            ClipboardToast.showCopied(message: NSLocalizedString("已复制文件内容到剪贴板", comment: ""))
-            returnFocusToFinderIfNeeded()
-        case .notRegularFile:
-            showAlert(NSLocalizedString("仅支持普通文件", comment: "service"))
-        case .fileTooLarge:
-            ClipboardToast.showCopied(message: NSLocalizedString("文件大小超过限制", comment: ""), isWarning: true)
-        case .readFailed:
-            showAlert(NSLocalizedString("无法读取文件内容", comment: "service"))
-        case .binaryFile:
-            ClipboardToast.showCopied(message: NSLocalizedString("无法复制：非文本文件", comment: ""), isWarning: true)
         }
+        returnFocusToFinderIfNeeded()
     }
 
     @objc func goToDirectory(_ pboard: NSPasteboard,

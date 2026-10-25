@@ -16,6 +16,13 @@ swift run --package-path FinderRightKit FinderRightKitTests
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Views/FavoriteDirectoryStatus.swift scripts/test-favorite-directory-status.swift \
+  -o "$KIT_BUILD_DIR/test-favorite-directory-status"
+"$KIT_BUILD_DIR/test-favorite-directory-status"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
   FinderRight/Services/LaunchPresentation.swift scripts/test-launch-presentation.swift \
   -o "$KIT_BUILD_DIR/test-launch-presentation"
 "$KIT_BUILD_DIR/test-launch-presentation"

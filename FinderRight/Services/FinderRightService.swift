@@ -1131,12 +1131,16 @@ final class FinderRightService {
 
         switch result {
         case .success(let text):
-            DispatchQueue.main.async {
+            let write = {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
+                guard NSPasteboard.general.setString(text, forType: .string) else {
+                    ClipboardToast.showCopied(message: L("无法写入剪贴板"), isWarning: true)
+                    return IPCResponse(id: req.id, success: false, message: L("无法写入剪贴板"))
+                }
                 ClipboardToast.showCopied(message: L("已复制文件内容到剪贴板"))
+                return IPCResponse(id: req.id, success: true, message: "ok")
             }
-            return IPCResponse(id: req.id, success: true, message: "ok")
+            return Thread.isMainThread ? write() : DispatchQueue.main.sync(execute: write)
         case .notRegularFile:
             return IPCResponse(id: req.id, success: false, message: L("无法读取：不是普通文件"))
         case .fileTooLarge:

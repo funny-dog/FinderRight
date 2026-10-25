@@ -730,3 +730,12 @@
 "会清空所有操作历史，包括未显示的记录。不会删除文件，也不会影响当前可撤销的操作。清空后无法恢复这些记录。" = "All operation history will be cleared, including entries hidden by filters. Your files and the current undo action are unaffected. Cleared entries cannot be restored.";
 
 "更新请求超限，请稍后再试" = "Too many update requests. Please try again later.";
+
+"正在检查目录…" = "Checking folder…";
+"目录不可用，移动或复制到这里会失败" = "Folder unavailable; moving or copying here would fail";
+"无法确认目录状态" = "Unable to determine folder status";
+
+"含扩展名" = "Include extension";
+"不含扩展名" = "Exclude extension";
+"复制文件名（可选含/不含扩展名），多选时每行一项" = "Copy file names with or without the final extension; one item per line for multiple selections";
+"不含扩展名时仅去除普通文件最后一段扩展名（如 report.tar.gz → report.tar）；目录（含 .app 包）与无扩展名文件保持原名。多选时每行一项。" = "Excluding extensions removes only the final extension of regular files (for example, report.tar.gz → report.tar). Folders (including .app bundles) and names without extensions stay unchanged. Multiple selections use one item per line.";

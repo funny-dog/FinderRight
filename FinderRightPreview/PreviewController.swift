@@ -28,7 +28,9 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         return formatter
     }()
 
-    private func text(_ key: String) -> String {
+    private func text(_ key: String) -> String { Self.text(key) }
+
+    private static func text(_ key: String) -> String {
         NSLocalizedString(key, bundle: Bundle(for: PreviewController.self), comment: "")
     }
 
@@ -127,14 +129,15 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         queue.async { [weak self] in
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
-            let result = Result { () -> (PreviewListing?, Bool, PreviewDocument?) in
+            let result = Result { () -> (PreviewListing?, Bool, NSAttributedString?) in
                 let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
                 guard values.isSymbolicLink != true, values.isPackage != true else {
                     throw CocoaError(.fileReadUnsupportedScheme)
                 }
                 let directory = values.isDirectory == true
                 if !directory && PreviewDocument.supports(url) {
-                    do { return (nil, false, try PreviewDocument.read(url)) }
+                    // 与 Markdown 扩展一致，富文本生成也在后台完成，避免复杂文档阻塞主线程。
+                    do { return (nil, false, DocumentPreviewView.content(for: try PreviewDocument.read(url), text: Self.text)) }
                     catch where PreviewDocument.sniffsText(url) { throw SystemFallback(underlying: error) }
                 }
                 let listing: PreviewListing
@@ -156,12 +159,12 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                     return
                 }
                 do {
-                    let (listing, directory, document) = try result.get()
-                    if let document {
+                    let (listing, directory, content) = try result.get()
+                    if let content {
                         self.showingDocument = true
                         self.outline.enclosingScrollView?.isHidden = true
                         self.documentView.isHidden = false
-                        self.documentView.show(document, text: self.text)
+                        self.documentView.show(content)
                         self.updateStatus()
                         handler(nil)
                         return
