@@ -390,21 +390,24 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    /// 首次菜单构建之后执行的一次性延后初始化（冷启动瘦身的一部分）
+    /// 首次菜单回调返回后执行一次，避免预热和卷枚举阻塞菜单交付。
     private func deferredSetupIfNeeded() {
         guard !didDeferredSetup else { return }
         didDeferredSetup = true
 
-        // SF Symbols 预热（getSymbolImage 本身带懒缓存兜底，这里只是提前摊销）
-        Self.preloadSymbols()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // SF Symbols 预热（getSymbolImage 本身带懒缓存兜底，这里只是提前摊销）
+            Self.preloadSymbols()
 
-        // 卷挂载监听延后注册，并补并一次 init 之后、监听注册之前挂载的卷（集合未变化时不会重设）。
-        // 只监听挂载、不监听卸载（见 volumeDidMount）。
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(volumeDidMount(_:)),
-            name: NSWorkspace.didMountNotification, object: nil)
-        mergeMountedVolumes()
-        logToFile("deferredSetup done")
+            // 卷挂载监听延后注册，并补并一次 init 之后、监听注册之前挂载的卷（集合未变化时不会重设）。
+            // 只监听挂载、不监听卸载（见 volumeDidMount）。
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self, selector: #selector(volumeDidMount(_:)),
+                name: NSWorkspace.didMountNotification, object: nil)
+            self.mergeMountedVolumes()
+            logToFile("deferredSetup done")
+        }
     }
 
     /// 新卷挂载：把新卷并入监控集合。
