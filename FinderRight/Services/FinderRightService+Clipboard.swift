@@ -25,7 +25,13 @@ extension FinderRightService {
             return IPCResponse(id: req.id, success: false, message: "copyFileHash 参数缺失")
         }
         let urls = items.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-        let files = urls.filter(FileHasher.isRegularFile)
+        // handle() 对只读 action 只校验存在性；与「复制文件内容」一样在这里补源路径白名单，
+        // 不让摘要读到完全磁盘访问专属的数据。越界项按未计算跳过
+        let allowed = urls.filter { isPathAllowed($0.path, role: .source) }
+        if allowed.count < urls.count {
+            serviceLog("copyFileHash 路径越界被跳过: \(urls.count - allowed.count) 项")
+        }
+        let files = allowed.filter(FileHasher.isRegularFile)
         guard !files.isEmpty else {
             ClipboardToast.showCopied(message: L("所选项目中没有可计算哈希的文件"), isWarning: true)
             return IPCResponse(id: req.id, success: false, message: L("所选项目中没有可计算哈希的文件"))
