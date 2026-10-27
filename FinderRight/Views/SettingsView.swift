@@ -996,7 +996,7 @@ struct AboutTab: View {
     private let appVersion = UpdateChecker.shared.currentAppVersion
 
     @FRState private var updateStatus: UpdateCheckStatus = UpdateChecker.shared.currentStatus
-    @FRState private var didCopyDiagnostics = false
+    @FRState private var showingFeedback = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1049,24 +1049,14 @@ struct AboutTab: View {
             }
             .padding(.top, 24)
 
-            // 反馈入口：一次带齐版本、系统、权限与扩展状态，省掉 issue 里反复问环境
+            // 反馈入口：弹窗里选问题反馈或功能建议，提交时才跳转 GitHub；复制诊断信息也在弹窗里
             Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(DiagnosticsReport.make(), forType: .string)
-                didCopyDiagnostics = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    didCopyDiagnostics = false
-                }
+                showingFeedback = true
             } label: {
-                if didCopyDiagnostics {
-                    Label("已复制诊断信息", systemImage: "checkmark")
-                } else {
-                    Label("复制诊断信息", systemImage: "doc.on.doc")
-                }
+                Label("反馈与建议", systemImage: "exclamationmark.bubble")
             }
-            .buttonStyle(.frLink)
-            .help("复制版本、系统、权限与扩展状态，反馈问题时附上")
+            .buttonStyle(.frSecondary)
+            .help("反馈问题或提出功能建议")
             .padding(.top, 12)
 
             Spacer(minLength: 0)
@@ -1080,6 +1070,9 @@ struct AboutTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             performCheck(force: false)
+        }
+        .sheet(isPresented: $showingFeedback) {
+            FeedbackSheet(isPresented: $showingFeedback)
         }
         // 菜单栏「检查更新…」发起的检查与下载也同步到这里
         .onReceive(NotificationCenter.default.publisher(for: UpdateChecker.statusDidChangeNotification)) { _ in

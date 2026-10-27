@@ -598,7 +598,17 @@
 /* 诊断信息 */
 "复制诊断信息" = "Copy Diagnostics";
 "已复制诊断信息" = "Diagnostics Copied";
-"复制版本、系统、权限与扩展状态，反馈问题时附上" = "Copies the version, system, permission and extension state to attach to a bug report";
+"反馈与建议" = "Feedback";
+"反馈问题或提出功能建议" = "Report a problem or suggest a feature";
+"功能建议" = "Feature Request";
+"提交会在浏览器中打开 GitHub，需要登录 GitHub 账号" = "Submitting opens GitHub in your browser; a GitHub account is required";
+"问题反馈" = "Bug Report";
+"功能出错、崩溃或与预期不符" = "Something fails, crashes or behaves unexpectedly";
+"希望新增或改进的功能" = "Something you'd like added or improved";
+"复制版本、系统、权限与扩展状态，用于邮件、群聊或补充到已有 issue" = "Copies the version, system, permission and extension state for email, chat or an existing issue";
+"前往 GitHub 提交" = "Continue on GitHub";
+"将自动填入以下诊断信息" = "The following diagnostics will be filled in";
+"用户名已从路径中隐去；提交前可在网页中修改或删除" = "Your user name is removed from paths; you can edit or delete anything before submitting";
 "系统：%@" = "System: %@";
 "芯片：%@（%@）" = "Chip: %@ (%@)";
 "辅助功能：%@" = "Accessibility: %@";

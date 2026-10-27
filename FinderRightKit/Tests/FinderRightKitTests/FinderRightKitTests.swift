@@ -3635,6 +3635,37 @@ struct FinderRightKitTestsRunner {
             try assertEqual(withoutExt, "文档\ndata.tar\nfolder.bundle")
         }
 
+        runTest("反馈链接：模板与字段预填、特殊字符编码") {
+            let url = IssueLink.url(template: .bug, fields: [
+                (id: "version", value: "1.11.0 (build 42)"),
+                (id: "permissions", value: "辅助功能：已授权\na&b=c+d"),
+                (id: "logs", value: "  \n"),
+            ])
+            try assertEqual(url.host, "github.com")
+            try assertEqual(url.path, "/funny-dog/FinderRight/issues/new")
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let dict = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
+            try assertEqual(dict["template"], "bug_report.yml")
+            try assertEqual(dict["version"], "1.11.0 (build 42)")
+            // & = + 换行都必须被编码，否则会截断或拆出多余参数
+            try assertEqual(dict["permissions"], "辅助功能：已授权\na&b=c+d")
+            try assertTrue(!url.absoluteString.contains("+"), "加号未编码会被 GitHub 解析成空格")
+            try assertEqual(dict["logs"], nil, "空字段应省略")
+            try assertEqual(items.count, 3)
+        }
+
+        runTest("反馈链接：功能建议模板与超长字段截断") {
+            let feature = IssueLink.url(template: .feature)
+            try assertEqual(feature.query, "template=01-feature_request.yml")
+
+            let long = String(repeating: "长", count: IssueLink.fieldLimit + 100)
+            let url = IssueLink.url(template: .bug, fields: [(id: "logs", value: long)])
+            let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "logs" }?.value ?? ""
+            try assertEqual(value.count, IssueLink.fieldLimit + 1)
+            try assertTrue(value.hasSuffix("…"))
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

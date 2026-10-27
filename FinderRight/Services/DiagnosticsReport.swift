@@ -1,24 +1,56 @@
 import AppKit
 import Darwin
+import FinderRightKit
 
-/// 「关于」页的「复制诊断信息」：把反馈问题时需要的环境与开关状态拼成一段纯文本。
+/// 「反馈与建议」弹窗里的诊断信息：把反馈问题时需要的环境与开关状态拼成纯文本，或按 issue 模板字段预填。
 ///
 /// 只写状态，不写文件路径：失败原因里的 `/Users/<名字>` 会被压成 `~`，
 /// 剪切队列也只给出数量。用户贴到 issue 前仍然可以自己再删。
 enum DiagnosticsReport {
 
-    static func make() -> String {
-        var lines: [String] = []
+    /// 按 issue 模板字段分好组的诊断信息，复制文本与反馈链接共用同一份内容
+    struct Sections {
+        /// 对应模板字段 `version`
+        var version: String
+        /// 对应模板字段 `macos`
+        var system: [String]
+        /// 对应模板字段 `permissions`
+        var state: [String]
+        /// 对应模板字段 `logs`：可能带文件名，单独放一栏方便用户提交前删改
+        var failures: [String]
+    }
 
+    /// 复制与弹窗预览用的纯文本
+    static func text(_ s: Sections) -> String {
+        ([s.version] + s.system + s.state + s.failures).joined(separator: "\n")
+    }
+
+    /// 「问题反馈」：打开 Bug 模板并预填诊断信息
+    static func bugReportURL(_ s: Sections) -> URL {
+        IssueLink.url(template: .bug, fields: [
+            (id: "version", value: s.version),
+            (id: "macos", value: s.system.joined(separator: "\n")),
+            (id: "permissions", value: s.state.joined(separator: "\n")),
+            (id: "logs", value: s.failures.joined(separator: "\n")),
+        ])
+    }
+
+    /// 「功能建议」：只需要打开模板，不带环境信息
+    static func featureRequestURL() -> URL {
+        IssueLink.url(template: .feature)
+    }
+
+    static func sections() -> Sections {
         let version = UpdateChecker.shared.currentAppVersion
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        lines.append("FinderRight \(version) (build \(build))")
-        lines.append(String(format: L("系统：%@"), ProcessInfo.processInfo.operatingSystemVersionString))
 
+        var system: [String] = []
+        system.append(String(format: L("系统：%@"), ProcessInfo.processInfo.operatingSystemVersionString))
         let chip = sysctlString("machdep.cpu.brand_string") ?? "?"
         let model = sysctlString("hw.model") ?? "?"
-        lines.append(String(format: L("芯片：%@（%@）"), chip, model))
+        system.append(String(format: L("芯片：%@（%@）"), chip, model))
 
+        var lines: [String] = []
         lines.append(String(format: L("辅助功能：%@"), granted(AccessibilityChecker.check())))
         lines.append(String(format: L("完全磁盘访问：%@"), granted(FullDiskAccessChecker.check())))
         lines.append(String(format: L("Finder 扩展：%@"), enabled(FinderExtensionChecker.check())))
@@ -38,18 +70,19 @@ enum DiagnosticsReport {
 
         lines.append(String(format: L("剪切队列：%d 项"), CutQueueStore().read().count))
 
+        var failures: [String] = []
         let recent = RecentOperations.shared
         if recent.capacity > 0 {
             lines.append(String(format: L("操作历史：保留最近 %d 条"), recent.capacity))
             for record in recent.records.filter({ $0.failure != nil }).prefix(3) {
                 guard let failure = record.failure else { continue }
-                lines.append(String(format: L("最近失败：%@"), "\(record.kind.rawValue) · \(shorten(failure))"))
+                failures.append(String(format: L("最近失败：%@"), "\(record.kind.rawValue) · \(shorten(failure))"))
             }
         } else {
             lines.append(String(format: L("操作历史：%@"), L("已关闭")))
         }
 
-        return lines.joined(separator: "\n")
+        return Sections(version: "FinderRight \(version) (build \(build))", system: system, state: lines, failures: failures)
     }
 
     private static func L(_ key: String) -> String {
