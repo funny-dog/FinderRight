@@ -48,6 +48,7 @@ enum OperationHistoryPresentation {
         case .move: return L("移动文件")
         case .copy: return L("复制文件")
         case .undo: return L("撤销操作")
+        case .symlink: return L("创建符号链接")
         }
     }
 
@@ -61,6 +62,7 @@ enum OperationHistoryPresentation {
         case .move: return "folder"
         case .copy: return "doc.on.doc"
         case .undo: return "arrow.uturn.backward"
+        case .symlink: return "link.badge.plus"
         }
     }
 
@@ -163,7 +165,7 @@ struct OperationHistoryFilter {
         }
     }
 
-    static let kinds: [OperationRecord.Kind] = [.createFile, .cut, .paste, .move, .copy, .compress, .decompress, .undo]
+    static let kinds: [OperationRecord.Kind] = [.createFile, .cut, .paste, .move, .copy, .symlink, .compress, .decompress, .undo]
     var searchText = ""
     var kind: OperationRecord.Kind?
     var status = Status.all

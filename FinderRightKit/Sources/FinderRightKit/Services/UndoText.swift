@@ -15,6 +15,7 @@ public enum UndoText {
         case .createFile: return String(format: localize("新建“%@”"), name)
         case .compress:   return String(format: localize("压缩“%@”"), name)
         case .decompress: return String(format: localize("解压“%@”"), name)
+        case .symlink:    return String(format: localize("创建符号链接（%d 项）"), count)
         }
     }
 

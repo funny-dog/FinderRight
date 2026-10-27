@@ -124,6 +124,7 @@ public enum MenuFeatureCatalog {
     public static let copyPath     = "feature.copyPath"
     public static let copyFileName = "feature.copyFileName"
     public static let copyFileContent = "feature.copyFileContent"
+    public static let copyFileHash = "feature.copyFileHash"
     public static let goToDirectory = "feature.goToDirectory"
     public static let openTerminal = "feature.openTerminal"
     public static let openEditor   = "feature.openEditor"
@@ -131,6 +132,7 @@ public enum MenuFeatureCatalog {
     public static let paste        = "feature.paste"
     public static let moveTo       = "feature.moveTo"
     public static let copyTo       = "feature.copyTo"
+    public static let createSymlink = "feature.createSymlink"
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
@@ -142,6 +144,7 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link", tint: .indigo),
         MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制文件名（可选含/不含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo),
         MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext", tint: .teal),
+        MenuFeature(id: copyFileHash, nameKey: "复制哈希",       descriptionKey: "计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致", systemImage: "number", tint: .teal),
         MenuFeature(id: goToDirectory, nameKey: "打开路径…",     descriptionKey: "输入文件或文件夹路径，在访达中显示或直接打开", systemImage: "arrow.right.circle", tint: .cyan),
         MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal", tint: .graphite),
         MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces", tint: .purple),
@@ -149,14 +152,16 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard", tint: .orange),
         MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "arrowshape.turn.up.right", tint: .green),
         MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square", tint: .green),
+        MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green),
         MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "doc.zipper", tint: .brown),
         MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "shippingbox.and.arrow.backward", tint: .brown),
         MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye", tint: .pink),
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
-    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置
-    public static let disabledByDefault: Set<String> = [compress, decompress]
+    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置；
+    /// 复制哈希、创建符号链接面向开发者，默认不占菜单位置
+    public static let disabledByDefault: Set<String> = [compress, decompress, copyFileHash, createSymlink]
 
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }

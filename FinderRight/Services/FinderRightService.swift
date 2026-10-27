@@ -69,7 +69,7 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent"]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
         // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
@@ -153,6 +153,10 @@ final class FinderRightService {
             return transferItems(req)
         case "copyFileContent":
             return copyFileContent(req)
+        case "copyFileHash":
+            return copyFileHash(req)
+        case "createSymlink":
+            return createSymlink(req)
         case "undoLast":
             return undoLast(req)
         case BadgeReclaimIPC.action:
@@ -953,6 +957,8 @@ final class FinderRightService {
             return IPCResponse(id: req.id, success: false, message: L("常用目录不存在"))
         }
 
+        // 受理即算一次使用：右键菜单、服务菜单与设置页按最近使用排序时据此排在前面
+        SharedConfig.shared.markFavoriteUsed(destination)
         Self.backgroundJobs.run(on: Self.transferQueue) { [weak self] in
             self?.performTransfer(sourcePaths: items, destDir: URL(fileURLWithPath: destination), mode: mode)
         }
@@ -1014,6 +1020,120 @@ final class FinderRightService {
             serviceLog("transferItems(\(mode.rawValue)) succeeded: \(done.count) item(s) to \(destDir.path)")
             RecentOperations.shared.record(OperationRecord(kind: kind, subject: subject, results: done, location: destDir))
         }
+    }
+
+    // MARK: - 复制哈希
+
+    /// 哈希专用串行队列：大文件计算可能要几秒，不占用移动 / 压缩队列
+    private static let hashQueue = DispatchQueue(label: "com.finderright.app.hash", qos: .userInitiated)
+
+    /// 选中文件合计超过这个大小时先提示「正在计算」，小文件直接出结果，不闪两次提示
+    private static let hashProgressHintBytes: UInt64 = 64 << 20
+
+    /// 计算选中文件的摘要并写入剪贴板。只读操作，与「复制文件内容」一样只校验路径存在；
+    /// 文件夹与包跳过，全部跳过时提示没有可计算的文件
+    private func copyFileHash(_ req: IPCRequest) -> IPCResponse {
+        guard let items = req.payload["items"]?.stringArrayValue, !items.isEmpty,
+              let raw = req.payload["algorithm"]?.stringValue,
+              let algorithm = FileHasher.Algorithm(rawValue: raw) else {
+            return IPCResponse(id: req.id, success: false, message: "copyFileHash 参数缺失")
+        }
+        let urls = items.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        let files = urls.filter(FileHasher.isRegularFile)
+        guard !files.isEmpty else {
+            ClipboardToast.showCopied(message: L("所选项目中没有可计算哈希的文件"), isWarning: true)
+            return IPCResponse(id: req.id, success: false, message: L("所选项目中没有可计算哈希的文件"))
+        }
+        let totalBytes = files.reduce(UInt64(0)) { sum, url in
+            sum + UInt64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        if totalBytes > Self.hashProgressHintBytes {
+            ClipboardToast.showCopied(message: String(format: L("正在计算 %@…"), algorithm.title))
+        }
+        let skipped = urls.count - files.count
+
+        Self.backgroundJobs.run(on: Self.hashQueue) { [weak self] in
+            var results: [(name: String, digest: String)] = []
+            var failed = 0
+            for url in files {
+                if let digest = FileHasher.hexDigest(of: url, algorithm: algorithm) {
+                    results.append((url.lastPathComponent, digest))
+                } else {
+                    failed += 1
+                }
+            }
+            self?.serviceLog("copyFileHash(\(algorithm.rawValue)): ok=\(results.count) failed=\(failed) skipped=\(skipped)")
+            guard !results.isEmpty else {
+                ClipboardToast.showCopied(message: L("无法读取文件内容"), isWarning: true)
+                return
+            }
+            let text = FileHasher.clipboardText(results)
+            DispatchQueue.main.async {
+                NSPasteboard.general.clearContents()
+                guard NSPasteboard.general.setString(text, forType: .string) else {
+                    ClipboardToast.showCopied(message: L("无法写入剪贴板"), isWarning: true)
+                    return
+                }
+                if failed + skipped > 0 {
+                    ClipboardToast.showCopied(message: String(format: L("已复制 %d 个文件的 %@，%d 项未计算"),
+                                                              results.count, algorithm.title, failed + skipped),
+                                              isWarning: true)
+                } else {
+                    ClipboardToast.showCopied(message: String(format: L("已复制 %@"), algorithm.title))
+                }
+            }
+        }
+        return IPCResponse(id: req.id, success: true, message: "已受理，正在后台计算")
+    }
+
+    // MARK: - 创建符号链接
+
+    /// 在每个选中项旁边创建指向它的符号链接（内容为绝对路径），命名见 SymlinkNaming。
+    /// items 已由 handle() 按源路径校验；链接写在源所在目录，这里再按写入目标校验该目录
+    private func createSymlink(_ req: IPCRequest) -> IPCResponse {
+        guard let items = req.payload["items"]?.stringArrayValue, !items.isEmpty else {
+            return IPCResponse(id: req.id, success: false, message: "createSymlink 参数缺失")
+        }
+        let fileManager = FileManager.default
+        var created: [URL] = []
+        var firstError: String?
+        var failed = 0
+        for item in items {
+            let source = URL(fileURLWithPath: (item as NSString).expandingTildeInPath).standardizedFileURL
+            let directory = source.deletingLastPathComponent()
+            guard isPathAllowed(directory.path, role: .destination) else {
+                serviceLog("createSymlink 目录越界被拦截: \(directory.path)")
+                failed += 1
+                if firstError == nil { firstError = String(format: L("路径越界：安全策略拒绝访问 %@"), directory.path) }
+                continue
+            }
+            let link = SymlinkNaming.linkURL(for: source, suffix: L("链接"))
+            do {
+                try fileManager.createSymbolicLink(atPath: link.path, withDestinationPath: source.path)
+                created.append(link)
+            } catch {
+                failed += 1
+                if firstError == nil { firstError = error.localizedDescription }
+            }
+        }
+
+        if !created.isEmpty {
+            registerUndo(.symlink, name: created.count == 1 ? created[0].lastPathComponent : "",
+                         items: created.map { ($0, nil) })
+            NSWorkspace.shared.activateFileViewerSelecting(created)
+        }
+        let subject = Self.subject(forPaths: items)
+        let location = URL(fileURLWithPath: items[0]).deletingLastPathComponent()
+        if let firstError {
+            serviceLog("createSymlink completed with \(failed) failure(s): \(firstError)")
+            RecentOperations.shared.record(OperationRecord(
+                kind: .symlink, subject: subject,
+                failure: String(format: L("%d 项未能创建符号链接：%@"), failed, firstError),
+                results: created, location: location))
+            return IPCResponse(id: req.id, success: false, message: firstError)
+        }
+        RecentOperations.shared.record(OperationRecord(kind: .symlink, subject: subject, results: created, location: location))
+        return IPCResponse(id: req.id, success: true, message: "ok")
     }
 
     // MARK: - 撤销上一次操作

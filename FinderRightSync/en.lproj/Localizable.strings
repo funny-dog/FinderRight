@@ -57,3 +57,6 @@
 "压缩“%@”" = "Compress “%@”";
 "解压“%@”" = "Extract “%@”";
 "撤销%@" = "Undo %@";
+"复制哈希" = "Copy Hash";
+"创建符号链接" = "Make Symbolic Link";
+"创建符号链接（%d 项）" = "Make symbolic link (%d items)";

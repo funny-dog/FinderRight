@@ -312,7 +312,7 @@ class FinderSync: FIFinderSync {
             "doc.badge.plus", "link", "character.cursor.ibeam", "arrow.right.circle",
             "terminal", "curlybraces", "scissors", "doc.on.clipboard", "xmark.circle",
             "arrowshape.turn.up.right", "plus.square.on.square", "doc.zipper",
-            "shippingbox.and.arrow.backward", "eye"
+            "shippingbox.and.arrow.backward", "eye", "number", "link.badge.plus"
         ]
         for s in symbols {
             _ = getSymbolImage(named: s)
@@ -666,6 +666,11 @@ class FinderSync: FIFinderSync {
                 guard FileContentReader.isEligible(url: url, maxBytes: SharedConfig.shared.copyFileContentMaxBytes) else { return }
                 menu.addItem(self.makeItem(titleKey: "复制文件内容", tint: .teal, systemImage: "doc.plaintext", action: #selector(self.copyFileContent(_:)), shortcutId: "shortcut.copyFileContent", style: style))
             },
+            MenuFeatureCatalog.copyFileHash: {
+                // 至少有一个普通文件才显示；只看前 50 项，避免全选大目录时拖慢菜单
+                guard hasSelection, selected.prefix(50).contains(where: FileHasher.isRegularFile) else { return }
+                menu.addItem(self.makeSubmenuItem(titleKey: "复制哈希", tint: .teal, systemImage: "number", shortcutId: nil, style: style, build: { self.buildHashMenu() }))
+            },
             MenuFeatureCatalog.goToDirectory: {
                 menu.addItem(self.makeItem(titleKey: "打开路径…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
             },
@@ -711,6 +716,10 @@ class FinderSync: FIFinderSync {
             MenuFeatureCatalog.copyTo: {
                 guard hasExplicitSelection else { return }
                 menu.addItem(self.makeSubmenuItem(titleKey: "复制到", tint: .green, systemImage: "plus.square.on.square", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
+            },
+            MenuFeatureCatalog.createSymlink: {
+                guard hasExplicitSelection else { return }
+                menu.addItem(self.makeItem(titleKey: "创建符号链接", tint: .green, systemImage: "link.badge.plus", action: #selector(self.createSymlink(_:)), shortcutId: nil, style: style))
             },
             MenuFeatureCatalog.compress: {
                 guard hasExplicitSelection else { return }
@@ -929,6 +938,40 @@ class FinderSync: FIFinderSync {
         logToFile("copyFileContent: sending ipc for \(url.path)")
         IPCClient.shared.callAsync(action: "copyFileContent", payload: ["path": .string(url.path)]) { r in
             logToFile("copyFileContent ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    /// 「复制哈希」子菜单：每种算法一项，tag 为其在 FileHasher.Algorithm.allCases 中的下标
+    private func buildHashMenu() -> NSMenu {
+        let m = NSMenu(title: L("复制哈希"))
+        for (index, algorithm) in FileHasher.Algorithm.allCases.enumerated() {
+            m.addItem(makeItem(titleKey: algorithm.title, tint: .teal, systemImage: nil, action: #selector(copyFileHash(_:)), tag: index, style: .none))
+        }
+        return m
+    }
+
+    @objc func copyFileHash(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        let algorithms = FileHasher.Algorithm.allCases
+        guard !urls.isEmpty, algorithms.indices.contains(sender.tag) else {
+            logToFile("copyFileHash: no items or algorithm index out of range (\(sender.tag))"); return
+        }
+        let algorithm = algorithms[sender.tag]
+        logToFile("copyFileHash ipc (async) → \(algorithm.rawValue) count=\(urls.count)")
+        IPCClient.shared.callAsync(action: "copyFileHash", payload: [
+            "items": .stringArray(urls.map(\.path)),
+            "algorithm": .string(algorithm.rawValue)
+        ]) { r in
+            logToFile("copyFileHash ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    @objc func createSymlink(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { logToFile("createSymlink: no items"); return }
+        logToFile("createSymlink ipc (async) → count=\(urls.count)")
+        IPCClient.shared.callAsync(action: "createSymlink", payload: ["items": .stringArray(urls.map(\.path))]) { r in
+            logToFile("createSymlink ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
 
@@ -1218,11 +1261,12 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 移动到 / 复制到常用目录
 
-    /// 「移动到 / 复制到」子菜单：每个常用目录一项（tag 为其在列表中的下标），末尾是「管理常用目录…」
+    /// 「移动到 / 复制到」子菜单：每个常用目录一项，末尾是「管理常用目录…」。
+    /// tag 为其在 orderedFavoriteDirectories 中的下标：访达转发菜单只保留 tag 与标题，带不了路径
     private func buildFavoritesMenu(mode: FileTransferCheck.Mode, selected: [URL], style: MenuIconStyle) -> NSMenu {
         let m = NSMenu(title: L(mode == .move ? "移动到" : "复制到"))
         m.autoenablesItems = false
-        let favorites = SharedConfig.shared.favoriteDirectories
+        let favorites = SharedConfig.shared.orderedFavoriteDirectories
         let unavailable = Self.favoriteAvailability.unavailablePaths(in: favorites)
         let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
         let action = mode == .move ? #selector(moveToFavorite(_:)) : #selector(copyToFavorite(_:))
@@ -1258,7 +1302,8 @@ class FinderSync: FIFinderSync {
 
     private func transferToFavorite(_ sender: NSMenuItem, mode: FileTransferCheck.Mode) {
         let urls = currentContext().selectedItems
-        let favorites = SharedConfig.shared.favoriteDirectories
+        // 与构建菜单时同一顺序；菜单展开到点击之间不会有新的使用记录，顺序不变
+        let favorites = SharedConfig.shared.orderedFavoriteDirectories
         guard !urls.isEmpty, favorites.indices.contains(sender.tag) else {
             logToFile("transferItems: no items or favorite index out of range (\(sender.tag))"); return
         }

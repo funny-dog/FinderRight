@@ -20,6 +20,21 @@ public enum FavoriteDirectories {
         }
     }
 
+    /// 右键菜单、服务菜单与设置页共用的显示顺序，保证三处一致：
+    /// 关闭「按最近使用排序」时就是手动顺序；开启时用过的目录按最近使用时间倒序排在前面，
+    /// 从未用过的保持手动顺序排在后面。手动顺序本身不被改写，关掉开关即可恢复
+    public static func ordered(_ paths: [String], lastUsed: [String: Double], byRecent: Bool) -> [String] {
+        guard byRecent else { return paths }
+        return paths.enumerated().sorted { a, b in
+            switch (lastUsed[a.element], lastUsed[b.element]) {
+            case let (x?, y?) where x != y: return x > y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.offset < b.offset
+            }
+        }.map(\.element)
+    }
+
     /// 把设置页输入框里的文本拆成候选路径，兼容「复制路径」的各种格式：
     /// 绝对路径、~ 路径、file:// URL 每行一项；终端转义路径以空格分隔，支持单引号、双引号与反斜杠转义。
     /// 只做文本层面的拆分与反转义，存在性、是否目录与白名单由调用方校验。

@@ -749,3 +749,20 @@
 "不含扩展名" = "Exclude extension";
 "复制文件名（可选含/不含扩展名），多选时每行一项" = "Copy file names with or without the final extension; one item per line for multiple selections";
 "不含扩展名时仅去除普通文件最后一段扩展名（如 report.tar.gz → report.tar）；目录（含 .app 包）与无扩展名文件保持原名。多选时每行一项。" = "Excluding extensions removes only the final extension of regular files (for example, report.tar.gz → report.tar). Folders (including .app bundles) and names without extensions stay unchanged. Multiple selections use one item per line.";
+
+/* 复制哈希 / 创建符号链接 / 常用目录按最近使用排序 */
+"复制哈希" = "Copy Hash";
+"计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致" = "Compute and copy the SHA-256 / SHA-1 / MD5 of selected files; multiple files use the shasum output format";
+"创建符号链接" = "Make Symbolic Link";
+"在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）" = "Create symbolic links next to the selected items, which Terminal and developer tools understand (Finder aliases don’t)";
+"创建符号链接（%d 项）" = "Make symbolic link (%d items)";
+"%d 项未能创建符号链接：%@" = "%d items could not be linked: %@";
+"链接" = "link";
+"所选项目中没有可计算哈希的文件" = "The selection contains no files to hash";
+"正在计算 %@…" = "Computing %@…";
+"已复制 %@" = "Copied %@";
+"已复制 %d 个文件的 %@，%d 项未计算" = "Copied %2$@ of %1$d files; %3$d items skipped";
+"按最近使用排序" = "Sort by Recent Use";
+"最近移动或复制过的目录排在前面，右键菜单与这里的顺序一致" = "Folders you moved or copied to recently come first; the context menu uses the same order";
+"按最近使用排序时不能拖动" = "Turn off Sort by Recent Use to reorder";
+"添加后，选中文件右键即可「移动到」或「复制到」这些目录。关闭「按最近使用排序」后可拖动调整顺序，并恢复之前排好的顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。" = "Once added, right-click selected files to Move To or Copy To these folders. Turn off Sort by Recent Use to drag them into order; your previous manual order comes back. Only folders in your home folder or on external disks can be added. You can paste the output of Copy Path into the field, one folder per line.";

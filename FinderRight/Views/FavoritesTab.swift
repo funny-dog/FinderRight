@@ -4,15 +4,23 @@ import FinderRightKit
 
 // MARK: - 常用目录 Tab
 
-/// 管理右键「移动到 / 复制到」使用的常用目录：添加、移除、拖动排序。
+/// 管理右键「移动到 / 复制到」使用的常用目录：添加、移除、拖动排序或按最近使用排序。
 struct FavoritesTab: View {
     @StateObject private var directoryStatus = FavoriteDirectoryStatus()
+    /// 手动顺序；按最近使用排序时只用于显示从未用过的目录，本身不被改写
     @FRState private var paths: [String] = SharedConfig.shared.favoriteDirectories
+    @FRState private var sortByRecent = SharedConfig.shared.favoriteSortByRecent
+    @FRState private var lastUsed = SharedConfig.shared.favoriteLastUsed
     @FRState private var message: String?
     @FRState private var dropTargetPath: String?
     @FRState private var pathInput = ""
 
     private var home: String { IPCBridge.realUserHomeDirectory.path }
+
+    /// 与右键菜单、服务菜单一致的显示顺序
+    private var displayedPaths: [String] {
+        FavoriteDirectories.ordered(paths, lastUsed: lastUsed, byRecent: sortByRecent)
+    }
 
     var body: some View {
         FRPage(title: "常用目录", subtitle: "右键「移动到 / 复制到」使用的目的地") {
@@ -31,11 +39,24 @@ struct FavoritesTab: View {
                 pathInputRow
 
                 FRCard {
+                    FRRow(title: Text("按最近使用排序"), subtitle: Text("最近移动或复制过的目录排在前面，右键菜单与这里的顺序一致")) {
+                        FRSwitch(label: "按最近使用排序", isOn: Binding(
+                            get: { sortByRecent },
+                            set: { newValue in
+                                sortByRecent = newValue
+                                SharedConfig.shared.favoriteSortByRecent = newValue
+                            }
+                        ))
+                    }
+                }
+
+                FRCard {
                     if paths.isEmpty {
                         emptyState
                     } else {
-                        let names = FavoriteDirectories.displayNames(for: paths, home: home)
-                        ForEach(Array(zip(paths, names).enumerated()), id: \.element.0) { index, pair in
+                        let ordered = displayedPaths
+                        let names = FavoriteDirectories.displayNames(for: ordered, home: home)
+                        ForEach(Array(zip(ordered, names).enumerated()), id: \.element.0) { index, pair in
                             if index > 0 { FRDivider() }
                             row(path: pair.0, name: pair.1)
                         }
@@ -50,15 +71,24 @@ struct FavoritesTab: View {
                         .padding(.horizontal, 4)
                 }
 
-                FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
+                if sortByRecent {
+                    FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。关闭「按最近使用排序」后可拖动调整顺序，并恢复之前排好的顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
+                } else {
+                    FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
+                }
             }
         }
         .onAppear {
             paths = SharedConfig.shared.favoriteDirectories
+            sortByRecent = SharedConfig.shared.favoriteSortByRecent
+            lastUsed = SharedConfig.shared.favoriteLastUsed
         }
         .task(id: paths) {
             while !Task.isCancelled {
                 directoryStatus.refresh(paths)
+                // 设置页开着时右键移动 / 复制也会更新使用记录，随目录状态一起刷新
+                let used = SharedConfig.shared.favoriteLastUsed
+                if used != lastUsed { lastUsed = used }
                 do { try await Task.sleep(nanoseconds: 5_000_000_000) }
                 catch { return }
             }
@@ -93,9 +123,16 @@ struct FavoritesTab: View {
     private func row(path: String, name: String) -> some View {
         let entry = directoryStatus.entries[path]
         return HStack(spacing: 10) {
-            FRGrip()
-                .draggable(path)
-                .help("拖动调整顺序")
+            if sortByRecent {
+                // 按最近使用排序时不能拖动：占位保持行内对齐
+                FRGrip()
+                    .opacity(0.3)
+                    .help("按最近使用排序时不能拖动")
+            } else {
+                FRGrip()
+                    .draggable(path)
+                    .help("拖动调整顺序")
+            }
 
             Image(nsImage: entry?.icon ?? NSImage(systemSymbolName: "folder", accessibilityDescription: nil)!)
                 .resizable()
@@ -165,7 +202,7 @@ struct FavoritesTab: View {
     /// 下移时落在目标之后，上移时落在目标之前
     private func move(_ path: String, to target: String) -> Bool {
         dropTargetPath = nil
-        guard path != target,
+        guard !sortByRecent, path != target,
               let from = paths.firstIndex(of: path),
               let to = paths.firstIndex(of: target) else { return false }
         var updated = paths

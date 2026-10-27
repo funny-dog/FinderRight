@@ -32,7 +32,8 @@
 - 💻 **打开终端 / 编辑器** —— 可自定义终端 / 编辑器
 - 📋 **复制路径 / 文件名 / 文件内容** —— 支持设置各种格式的路径 / 文件名可选择是否带后缀
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
-- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录
+- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
+- 🔗 **复制哈希 / 创建符号链接**（默认关闭）—— 复制 SHA-256 / SHA-1 / MD5（多选与 shasum 格式一致）；在原位置创建终端可识别的符号链接
 - 📦 **压缩 / 解压**
 - 👀 **扩展空格预览** —— 系统自带的快速查看（空格快捷键）增强，支持大多数格式，包括文件夹和压缩包等等，markdown支持渲染
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
@@ -106,7 +107,7 @@ killall Finder
 | 右键完全没有 FinderRight 菜单 | 在「设置 → 权限与扩展 → 右键菜单排查」中一键启用访达扩展并重启访达。 |
 | 升级后菜单或角标还是旧的 | 重启访达：`killall Finder`。 |
 | 云盘、`/Applications` 等目录没有菜单 | 系统限制，改用 **右键 → 服务** 子菜单（见下方说明）。 |
-| 菜单里没有压缩 / 解压 | 默认关闭，在「设置 → 功能」中开启。 |
+| 菜单里没有压缩 / 解压、复制哈希、创建符号链接 | 默认关闭，在「设置 → 功能」中开启。 |
 | 快捷键按了没反应 | 授予「辅助功能」权限；多数快捷键需要先选中文件。 |
 | 剪切后没有剪刀角标 | 可能被其他扩展（如 Keka）占用，不影响粘贴；可在「设置 → 功能」开启「自动解决角标冲突」。 |
 | 操作后看不到结果 | 在「设置 → 操作历史」查看结果或失败原因。 |
@@ -198,7 +199,8 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 💻 **Open in Terminal / Editor** — customize your terminal and editor
 - 📋 **Copy Path / File Name / File Content** — choose from various path formats and whether file names include extensions
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
-- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click
+- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
+- 🔗 **Copy Hash / Make Symbolic Link** (off by default) — copy SHA-256 / SHA-1 / MD5 (multiple files use the shasum format); create symbolic links that Terminal understands, next to the originals
 - 📦 **Compress / Extract**
 - 👀 **Extended Quick Look previews** — enhance the built-in Quick Look (Space bar) with support for most formats, including folders and archives, plus rendered Markdown
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
@@ -274,7 +276,7 @@ killall Finder
 | No FinderRight items in the right-click menu | Use Settings → Permissions & Extensions → Troubleshooting to enable the Finder extension and relaunch Finder. |
 | Menu or badges look old after upgrading | Relaunch Finder: `killall Finder`. |
 | No menu in cloud folders, `/Applications`, etc. | A system limitation; use **right-click → Services** instead (see below). |
-| No Compress / Extract in the menu | Off by default; turn it on in Settings → Features. |
+| No Compress / Extract, Copy Hash or Make Symbolic Link in the menu | Off by default; turn them on in Settings → Features. |
 | Shortcuts do nothing | Grant Accessibility; most shortcuts need a selected item. |
 | No scissors badge after cutting | Another extension (such as Keka) may hold the badge; paste still works. Turn on "Resolve Badge Conflicts Automatically" in Settings → Features. |
 | No visible result after an action | Check Settings → Operation History for the result or failure reason. |

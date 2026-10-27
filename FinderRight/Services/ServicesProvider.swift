@@ -309,7 +309,8 @@ final class ServicesProvider: NSObject {
             showAlert(NSLocalizedString("请先选中要移动或复制的项目", comment: "service"))
             return
         }
-        let favorites = SharedConfig.shared.favoriteDirectories
+        // 与右键菜单、设置页同一顺序（开启「按最近使用排序」时最近用过的在前）
+        let favorites = SharedConfig.shared.orderedFavoriteDirectories
         guard !favorites.isEmpty else {
             showAlert(NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service"))
             return

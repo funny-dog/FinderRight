@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import FinderRightKit
 import Compression
+import CryptoKit
 
 // MARK: - 测试辅助断言
 
@@ -2379,6 +2380,31 @@ struct FinderRightKitTestsRunner {
             try assertEqual(Array(ids[paste...paste + 2]), ["feature.paste", "feature.moveTo", "feature.copyTo"])
         }
 
+        runTest("常用目录按最近使用排序：用过的倒序在前，没用过的保持手动顺序") {
+            let paths = ["/a", "/b", "/c", "/d"]
+            let used = ["/c": 100.0, "/a": 200.0, "/gone": 999.0]
+            try assertEqual(FavoriteDirectories.ordered(paths, lastUsed: used, byRecent: true), ["/a", "/c", "/b", "/d"])
+            try assertEqual(FavoriteDirectories.ordered(paths, lastUsed: used, byRecent: false), paths, "关闭时就是手动顺序")
+            try assertEqual(FavoriteDirectories.ordered(paths, lastUsed: [:], byRecent: true), paths, "都没用过时不变")
+            try assertEqual(FavoriteDirectories.ordered(paths, lastUsed: ["/b": 1, "/d": 1], byRecent: true),
+                            ["/b", "/d", "/a", "/c"], "同一时间按手动顺序")
+        }
+
+        runTest("常用目录使用记录：默认按最近使用排序，记录时丢掉已移除的目录") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let config = SharedConfig(fileURL: dir.appendingPathComponent("settings.plist"))
+            try assertTrue(config.favoriteSortByRecent, "默认开启")
+            config.favoriteDirectories = ["/a", "/b"]
+            config.favoriteLastUsed = ["/removed": 1]
+            config.markFavoriteUsed("/b", at: Date(timeIntervalSince1970: 50))
+            try assertEqual(config.favoriteLastUsed, ["/b": 50])
+            try assertEqual(config.orderedFavoriteDirectories, ["/b", "/a"])
+            config.favoriteSortByRecent = false
+            try assertEqual(config.orderedFavoriteDirectories, ["/a", "/b"])
+            try assertEqual(SharedConfig(fileURL: dir.appendingPathComponent("settings.plist")).favoriteLastUsed, ["/b": 50], "写入磁盘")
+        }
+
         runTest("FavoriteDirectories 显示名：重名时附上级路径") {
             let names = FavoriteDirectories.displayNames(
                 for: ["/Users/me/Downloads", "/Volumes/E/Downloads", "/Users/me/项目"], home: "/Users/me")
@@ -3664,6 +3690,72 @@ struct FinderRightKitTestsRunner {
                 .queryItems?.first { $0.name == "logs" }?.value ?? ""
             try assertEqual(value.count, IssueLink.fieldLimit + 1)
             try assertTrue(value.hasSuffix("…"))
+        }
+
+        // MARK: - 复制哈希 / 创建符号链接
+
+        runTest("复制哈希：三种算法与已知摘要一致，跨块读取结果不变") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let file = dir.appendingPathComponent("abc.txt")
+            try Data("abc".utf8).write(to: file)
+            try assertEqual(FileHasher.hexDigest(of: file, algorithm: .sha256),
+                            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+            try assertEqual(FileHasher.hexDigest(of: file, algorithm: .sha1), "a9993e364706816aba3e25717850c26c9cd0d89d")
+            try assertEqual(FileHasher.hexDigest(of: file, algorithm: .md5), "900150983cd24fb0d6963f7d28e17f72")
+
+            let empty = dir.appendingPathComponent("empty")
+            try Data().write(to: empty)
+            try assertEqual(FileHasher.hexDigest(of: empty, algorithm: .md5), "d41d8cd98f00b204e9800998ecf8427e", "空文件")
+
+            // 超过一块（1 MiB）的文件：与一次性计算的结果一致
+            let big = dir.appendingPathComponent("big.bin")
+            let bytes = Data((0..<(3 << 20) + 7).map { UInt8($0 % 251) })
+            try bytes.write(to: big)
+            let expected = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+            try assertEqual(FileHasher.hexDigest(of: big, algorithm: .sha256), expected)
+        }
+
+        runTest("复制哈希：文件夹与不存在的文件不计算，取消即中止，符号链接按目标") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            try assertNil(FileHasher.hexDigest(of: dir, algorithm: .sha256), "文件夹")
+            try assertNil(FileHasher.hexDigest(of: dir.appendingPathComponent("missing"), algorithm: .sha256))
+            let file = dir.appendingPathComponent("a")
+            try Data("abc".utf8).write(to: file)
+            try assertNil(FileHasher.hexDigest(of: file, algorithm: .sha256, isCancelled: { true }))
+            let link = dir.appendingPathComponent("link")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+            try assertTrue(FileHasher.isRegularFile(link))
+            try assertEqual(FileHasher.hexDigest(of: link, algorithm: .md5), "900150983cd24fb0d6963f7d28e17f72")
+            try assertTrue(!FileHasher.isRegularFile(dir))
+        }
+
+        runTest("复制哈希：单个文件只给摘要，多个文件与 shasum 输出一致") {
+            try assertEqual(FileHasher.clipboardText([("a.txt", "aa")]), "aa")
+            try assertEqual(FileHasher.clipboardText([("a.txt", "aa"), ("b c.txt", "bb")]), "aa  a.txt\nbb  b c.txt")
+        }
+
+        runTest("复制哈希与创建符号链接默认关闭，排在复制文件内容 / 复制到之后") {
+            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
+            let ids = MenuFeatureCatalog.all.map(\.id)
+            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyFileContent)! + 1], MenuFeatureCatalog.copyFileHash)
+            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyTo)! + 1], MenuFeatureCatalog.createSymlink)
+        }
+
+        runTest("符号链接命名：保留完整文件名，重名自动编号") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let source = dir.appendingPathComponent("报告.pdf")
+            try Data().write(to: source)
+            let first = SymlinkNaming.linkURL(for: source, suffix: "链接")
+            try assertEqual(first.lastPathComponent, "报告.pdf 链接")
+            try FileManager.default.createSymbolicLink(at: first, withDestinationURL: dir.appendingPathComponent("missing"))
+            try assertEqual(SymlinkNaming.linkURL(for: source, suffix: "链接").lastPathComponent, "报告.pdf 链接 1",
+                            "悬空的同名链接也算占用")
+            let folder = dir.appendingPathComponent("src/")
+            try assertEqual(SymlinkNaming.linkURL(for: folder, suffix: "link").lastPathComponent, "src link")
         }
 
         print("\n-----------------------------------------")
