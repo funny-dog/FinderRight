@@ -137,7 +137,7 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                 let directory = values.isDirectory == true
                 if !directory && PreviewDocument.supports(url) {
                     // 与 Markdown 扩展一致，富文本生成也在后台完成，避免复杂文档阻塞主线程。
-                    do { return (nil, false, DocumentPreviewView.content(for: try PreviewDocument.read(url), text: Self.text)) }
+                    do { return (nil, false, DocumentPreviewView.content(for: try PreviewDocument.read(url), language: url.pathExtension, text: Self.text)) }
                     catch where PreviewDocument.sniffsText(url) { throw SystemFallback(underlying: error) }
                 }
                 let listing: PreviewListing

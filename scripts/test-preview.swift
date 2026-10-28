@@ -140,6 +140,20 @@ struct PreviewChecks {
         let literal = DocumentPreviewView.content(for: .text("<script>bad()</script>"), text: { $0 })
         precondition(literal.string == "<script>bad()</script>")
         precondition(literal.attribute(.attachment, at: 0, effectiveRange: nil) == nil)
+
+        // 纯文本轻量语法高亮断言（指定语言、未知语言纯文本）
+        let swiftDoc = DocumentPreviewView.content(for: .text("func greet() -> String { return \"hi\" }"), language: "swift", text: { $0 })
+        let swiftString = swiftDoc.string as NSString
+        let funcColor = swiftDoc.attribute(.foregroundColor, at: swiftString.range(of: "func").location, effectiveRange: nil) as? NSColor
+        let strColor = swiftDoc.attribute(.foregroundColor, at: swiftString.range(of: "\"hi\"").location, effectiveRange: nil) as? NSColor
+        precondition(funcColor == SyntaxTheme.keywordColor, "纯文本预览指定语言后关键字应着色")
+        precondition(strColor == SyntaxTheme.stringColor, "纯文本预览指定语言后字符串应着色")
+
+        let plainDoc = DocumentPreviewView.content(for: .text("func greet() { 123 }"), language: "unknown_ext", text: { $0 })
+        let plainString = plainDoc.string as NSString
+        let plainFuncColor = plainDoc.attribute(.foregroundColor, at: plainString.range(of: "func").location, effectiveRange: nil) as? NSColor
+        precondition(plainFuncColor == .textColor, "未知语言纯文本预览应保持默认前景色")
+
         let notebook = root.appendingPathComponent("sample.ipynb")
         let content: [String: Any] = ["nbformat": 4, "cells": [
             ["cell_type": "markdown", "source": "# 标题\n\n**加粗**\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n![remote](https://example.com/image.png)\n\n<script>bad()</script>"],

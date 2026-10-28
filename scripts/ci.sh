@@ -76,6 +76,12 @@ swiftc -typecheck -parse-as-library \
   -framework FinderSync -framework AppKit \
   FinderRightSync/*.swift
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-syntax-highlight.swift -o "$KIT_BUILD_DIR/test-syntax-highlight"
+"$KIT_BUILD_DIR/test-syntax-highlight"
+
 echo "=== [CI] 5. 编译 Quick Look 扩展代码并运行预览集成检查 ==="
 for check in documents archives; do
   swiftc -parse-as-library -target arm64-apple-macos13.0 \

@@ -83,6 +83,21 @@ struct MarkdownPreviewChecks {
         }
         precondition(style(of: "内层").firstLineHeadIndent > style(of: "外层").firstLineHeadIndent, "嵌套列表应逐级缩进")
         precondition(style(of: "let a = 1").textBlocks.first?.backgroundColor != nil, "代码块应整段铺底色")
+        let codeRange = string.range(of: "let a = 1")
+        let codeFont = rendered.attribute(.font, at: codeRange.location, effectiveRange: nil) as? NSFont
+        precondition(codeFont?.isFixedPitch == true, "代码块必须保持等宽字体")
+        let letRange = string.range(of: "let")
+        let numRange = string.range(of: "1")
+        let letColor = rendered.attribute(.foregroundColor, at: letRange.location, effectiveRange: nil) as? NSColor
+        let numColor = rendered.attribute(.foregroundColor, at: numRange.location, effectiveRange: nil) as? NSColor
+        precondition(letColor == SyntaxTheme.keywordColor, "Markdown 内围栏代码块中的关键字应正确着色")
+        precondition(numColor == SyntaxTheme.numberColor, "Markdown 内围栏代码块中的数字应正确着色")
+
+        let unstyledCode = DocumentPreviewView.content(for: .markdown("```\nlet a = 1\n```", frontMatter: nil), text: { $0 })
+        let unstyledString = unstyledCode.string as NSString
+        let unstyledLetColor = unstyledCode.attribute(.foregroundColor, at: unstyledString.range(of: "let").location, effectiveRange: nil) as? NSColor
+        precondition(unstyledLetColor == .textColor, "未标语言的代码块应保持普通文本前景色")
+
         precondition(style(of: "title: 示例").textBlocks.first?.backgroundColor != nil, "元信息应整段铺底色")
         precondition(style(of: "引用").textBlocks.first?.width(for: .border, edge: .minX) ?? 0 > 0, "引用应有左侧竖线")
         precondition(style(of: "列A").textBlocks.first is NSTextTableBlock, "表格应原生排版")

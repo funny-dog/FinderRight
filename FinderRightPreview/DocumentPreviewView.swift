@@ -55,7 +55,7 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         textView.scrollToBeginningOfDocument(nil)
     }
 
-    static func content(for document: PreviewDocument, text: (String) -> String) -> NSAttributedString {
+    static func content(for document: PreviewDocument, language: String? = nil, text: (String) -> String) -> NSAttributedString {
         let result = NSMutableAttributedString(string: "")
         func append(_ source: String, font: NSFont = .systemFont(ofSize: 14)) {
             result.append(NSAttributedString(string: source, attributes: [.font: font, .foregroundColor: NSColor.textColor]))
@@ -63,7 +63,18 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         func note(_ key: String) { append(text(key) + "\n\n") }
         switch document {
         case .text(let source):
-            append(source, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+            let lang = SyntaxLanguage.normalize(language)
+            if let lang, source.utf8.count <= SyntaxHighlighter.maxHighlightedBytes {
+                let highlighted = SyntaxHighlighter.highlight(
+                    source: source,
+                    language: lang,
+                    baseFont: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                    baseColor: .textColor
+                )
+                result.append(highlighted)
+            } else {
+                append(source, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+            }
         case .markdown(let source, let frontMatter):
             if let frontMatter {
                 result.append(NSAttributedString(string: frontMatter + "\n", attributes: [
@@ -176,11 +187,15 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
             var prefix = ""
             var listDepth = 0
             var innermostItem: Int?
+            var isCodeBlock = false
+            var codeLanguageHint: String?
             // components 由内向外排列：第一个 listItem 是当前项，紧随其后的列表决定编号样式。
             for (index, component) in components.enumerated() {
                 switch component.kind {
                 case .header(let level): font = .boldSystemFont(ofSize: CGFloat(max(16, 28 - level * 3)))
-                case .codeBlock:
+                case .codeBlock(let languageHint):
+                    isCodeBlock = true
+                    codeLanguageHint = languageHint
                     font = .monospacedSystemFont(ofSize: 13, weight: .regular)
                     let codeBlock = blocks[component.identity] ?? NSTextBlock()
                     blocks[component.identity] = codeBlock
@@ -260,7 +275,20 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
                 prefixAttributes.removeValue(forKey: .toolTip)
                 result.append(NSAttributedString(string: prefix, attributes: prefixAttributes))
             }
-            result.append(NSAttributedString(string: text, attributes: attributes))
+            if isCodeBlock, let hint = codeLanguageHint,
+               let lang = SyntaxLanguage.normalize(hint),
+               text.utf8.count <= SyntaxHighlighter.maxHighlightedBytes {
+                let codeHighlighted = SyntaxHighlighter.highlight(
+                    source: text,
+                    language: lang,
+                    baseFont: font,
+                    baseColor: (attributes[.foregroundColor] as? NSColor) ?? .textColor,
+                    paragraphStyle: (attributes[.paragraphStyle] as? NSParagraphStyle)
+                )
+                result.append(codeHighlighted)
+            } else {
+                result.append(NSAttributedString(string: text, attributes: attributes))
+            }
             if let last = text.last ?? prefix.last { endsWithNewline = last.isNewline }
             previousBlock = block
             previousAttributes = attributes
