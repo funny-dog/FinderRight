@@ -62,7 +62,8 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         }
         func note(_ key: String) { append(text(key) + "\n\n") }
         switch document {
-        case .text(let source):
+        case .text(let source, let truncated):
+            if truncated { note("Large file; showing only the first 1 MB") }
             let lang = SyntaxLanguage.normalize(language)
             if let lang, source.utf8.count <= SyntaxHighlighter.maxHighlightedBytes {
                 let highlighted = SyntaxHighlighter.highlight(

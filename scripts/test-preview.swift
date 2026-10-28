@@ -137,6 +137,10 @@ struct PreviewChecks {
         precondition(document.textView.layoutManager!.numberOfGlyphs > 0)
         precondition(document.textView.frame.height > 20 && document.textView.visibleRect.height > 20,
                      "文本内容不能位于零高度的文档视图中")
+        let partialText = DocumentPreviewView.content(for: .text("let number = 42\n", truncated: true), language: "swift", text: { $0 })
+        precondition(partialText.string == "Large file; showing only the first 1 MB\n\nlet number = 42\n")
+        precondition(partialText.attribute(.foregroundColor, at: partialText.length - 3, effectiveRange: nil) as? NSColor != NSColor.textColor,
+                     "截断提示后仍需保留语法着色")
         let literal = DocumentPreviewView.content(for: .text("<script>bad()</script>"), text: { $0 })
         precondition(literal.string == "<script>bad()</script>")
         precondition(literal.attribute(.attachment, at: 0, effectiveRange: nil) == nil)

@@ -34,3 +34,5 @@
 "The archive is encrypted and cannot be previewed" = "压缩包已加密，无法预览";
 "Archive preview timed out" = "压缩包预览读取超时";
 "Copy link address" = "复制链接地址";
+
+"Large file; showing only the first 1 MB" = "文件较大，仅显示前 1 MB";

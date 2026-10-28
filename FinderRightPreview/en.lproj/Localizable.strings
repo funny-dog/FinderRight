@@ -34,3 +34,5 @@
 "The archive is encrypted and cannot be previewed" = "The archive is encrypted and cannot be previewed";
 "Archive preview timed out" = "Archive preview timed out";
 "Copy link address" = "Copy link address";
+
+"Large file; showing only the first 1 MB" = "Large file; showing only the first 1 MB";

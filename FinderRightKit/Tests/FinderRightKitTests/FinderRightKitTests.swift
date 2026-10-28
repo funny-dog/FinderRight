@@ -4419,6 +4419,115 @@ struct FinderRightKitTestsRunner {
 
         }
 
+        runTest("文本预览 刚好 1 MiB 完整显示") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("exact.yaml")
+            let data = Data(repeating: 65, count: 1_048_576)
+            try data.write(to: file)
+            guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+            try assertEqual(text.utf8.count, data.count)
+            try assertTrue(!truncated)
+        }
+
+        runTest("文本预览 超出上限在最后完整换行处截断") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for name in [".gitignore", "main.go", "settings.ini"] {
+                let file = root.appendingPathComponent(name)
+                let head = "# 中文注释\r\nkey = true\n"
+                try (Data(head.utf8) + Data(repeating: 65, count: 1_048_576)).write(to: file)
+                guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+                try assertEqual(text, head)
+                try assertTrue(truncated)
+            }
+        }
+
+        runTest("文本预览 截断不切开 CRLF 换行") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("windows.conf")
+            let head = "first\n"
+            let padding = Data(repeating: 65, count: 1_048_576 - head.utf8.count - 1)
+            try (Data(head.utf8) + padding + Data("\r\nnext".utf8)).write(to: file)
+            guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+            try assertEqual(text, head)
+            try assertTrue(truncated)
+            let padded = head + String(repeating: "a", count: (1_048_576 - 2) / 2 - head.utf16.count - 1) + "\r\nnext"
+            for (encoding, bom) in [(String.Encoding.utf16LittleEndian, [UInt8(0xFF), 0xFE]), (.utf16BigEndian, [0xFE, 0xFF])] {
+                try (Data(bom) + padded.data(using: encoding)!).write(to: file)
+                guard case .text(let utf16Text, let limited) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+                try assertEqual(utf16Text, head)
+                try assertTrue(limited)
+            }
+
+        }
+
+        runTest("文本预览 截断不切开 UTF-8 多字节字符") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("multi.conf")
+            for character in ["中", "😀"] {
+                for count in 1..<character.utf8.count {
+                    let prefix = Data(repeating: 65, count: 1_048_576 - count)
+                    try (prefix + Data(character.utf8) + Data([66])).write(to: file)
+                    guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+                    try assertEqual(Data(text.utf8), prefix)
+                    try assertTrue(truncated)
+                }
+            }
+        }
+
+        runTest("文本预览 无换行保留限长前缀且拒绝非法内容") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("long.config")
+            try Data(repeating: 65, count: 1_048_577).write(to: file)
+            guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+            try assertEqual(text.utf8.count, 1_048_576)
+            try assertTrue(truncated)
+            for invalid in [Data([0xFF]), Data([0])] {
+                try (invalid + Data(repeating: 65, count: 1_048_576)).write(to: file)
+                do {
+                    _ = try PreviewDocument.read(file)
+                    throw TestFailure(message: "必须拒绝二进制内容")
+                } catch PreviewDocumentError.invalid {}
+            }
+            let link = root.appendingPathComponent("link.conf")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+            for url in [link, root] {
+                do {
+                    _ = try PreviewDocument.read(url)
+                    throw TestFailure(message: "必须拒绝符号链接与目录")
+                } catch PreviewDocumentError.invalid {}
+            }
+        }
+
+        runTest("文本预览 保留 UTF-16 支持与原有文档上限") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("utf16.ini")
+            let head = "中文 = 内容\r\n"
+            try (head + String(repeating: "中", count: 524_288)).data(using: .utf16)!.write(to: file)
+            guard case .text(let text, let truncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+            try assertEqual(text, head)
+            try assertTrue(truncated)
+            let prefix = String(repeating: "a", count: (1_048_576 - 4) / 2)
+            try (prefix + "😀").data(using: .utf16)!.write(to: file)
+            guard case .text(let unicodePrefix, let unicodeTruncated) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少文本") }
+            try assertEqual(unicodePrefix, prefix)
+            try assertTrue(unicodeTruncated)
+            for (ext, limit) in [("md", 1_048_576), ("ipynb", 5 * 1_048_576)] {
+                let large = root.appendingPathComponent("large." + ext)
+                try Data(repeating: 65, count: limit + 1).write(to: large)
+                do {
+                    if ext == "md" { _ = try PreviewDocument.readMarkdown(large) }
+                    else { _ = try PreviewDocument.read(large) }
+                    throw TestFailure(message: "原有文档必须保持上限")
+                } catch PreviewDocumentError.tooLarge {}
+            }
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

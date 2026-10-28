@@ -15,7 +15,7 @@ public struct PreviewNotebookCell {
 }
 
 public enum PreviewDocument {
-    case text(String)
+    case text(String, truncated: Bool = false)
     case notebook([PreviewNotebookCell], truncated: Bool)
     case database([PreviewDatabaseTable], truncated: Bool)
     /// frontMatter 为文件开头 `---` 包围的 YAML 元信息，单独以等宽原文显示，不参与 Markdown 解析。
@@ -56,7 +56,7 @@ public enum PreviewDocument {
             return try PreviewDatabase.read(url)
         }
         if textExtensions.contains(ext) || sniffsText(url) {
-            return .text(try decodeText(boundedData(url, limit: 1_048_576)))
+            return try readText(url)
         }
         guard ext == "ipynb" else { throw PreviewDocumentError.invalid }
         let data = try boundedData(url, limit: 5 * 1_048_576)
@@ -105,6 +105,49 @@ public enum PreviewDocument {
             return .markdown(lines[(end + 1)...].joined(separator: "\n"), frontMatter: frontMatter)
         }
         return .markdown(text, frontMatter: nil)
+    }
+
+    private static func readText(_ url: URL) throws -> PreviewDocument {
+        let limit = 1_048_576
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw PreviewDocumentError.invalid }
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        var data = try file.read(upToCount: limit + 2) ?? Data()
+        let truncated = data.count > limit
+        if truncated {
+            let utf16LE = data.starts(with: [0xFF, 0xFE])
+            let utf16BE = data.starts(with: [0xFE, 0xFF])
+            let unitSize = utf16LE || utf16BE ? 2 : 1
+            let crlf: [UInt8] = utf16LE ? [13, 0, 10, 0] : utf16BE ? [0, 13, 0, 10] : [13, 10]
+            let splitCRLF = data[(limit - unitSize)...].starts(with: crlf)
+            data = Data(data.prefix(limit - (splitCRLF ? unitSize : 0)))
+            // 限长可能落在字符中间：只移除尾部未完成的编码单元，再严格解码以拒绝二进制内容。
+            if utf16LE || utf16BE {
+                let littleEndian = utf16LE
+                let last = data.count - 2
+                let unit = littleEndian ? UInt16(data[last]) | UInt16(data[last + 1]) << 8
+                                        : UInt16(data[last]) << 8 | UInt16(data[last + 1])
+                if (0xD800...0xDBFF).contains(unit) { data.removeLast(2) }
+            } else if let last = data.indices.last {
+                var start = last
+                while start > 0, data[start] & 0xC0 == 0x80 { start -= 1 }
+                let lead = data[start]
+                let length: Int
+                switch lead {
+                case 0xC2...0xDF: length = 2
+                case 0xE0...0xEF: length = 3
+                case 0xF0...0xF4: length = 4
+                default: length = 1
+                }
+                if data.count - start < length { data.removeSubrange(start...) }
+            }
+        }
+        var text = try decodeText(data)
+        if truncated, let newline = text.lastIndex(where: \.isNewline) {
+            text = String(text[...newline])
+        }
+        return .text(text, truncated: truncated)
     }
 
     private static func decodeText(_ data: Data) throws -> String {

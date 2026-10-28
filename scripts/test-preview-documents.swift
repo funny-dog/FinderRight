@@ -13,7 +13,7 @@ struct PreviewDocumentChecks {
             let source = "name = 中文\nenabled = true\n"
             try Data(source.utf8).write(to: file)
             precondition(PreviewDocument.supports(file))
-            guard case .text(let actual) = try PreviewDocument.read(file) else { preconditionFailure() }
+            guard case .text(let actual, _) = try PreviewDocument.read(file) else { preconditionFailure() }
             precondition(actual == source)
         }
         for name in [".gitignore", ".env", "Dockerfile", "nginx.conf", "app.config", "setup.CFG", "my.cnf", "x.properties", "x.env",
@@ -23,7 +23,7 @@ struct PreviewDocumentChecks {
             let source = "# 中文注释\nkey=value\n"
             try Data(source.utf8).write(to: file)
             precondition(PreviewDocument.supports(file) && PreviewDocument.sniffsText(file), name)
-            guard case .text(let actual) = try PreviewDocument.read(file) else { preconditionFailure(name) }
+            guard case .text(let actual, _) = try PreviewDocument.read(file) else { preconditionFailure(name) }
             precondition(actual == source, name)
         }
         precondition(!PreviewDocument.sniffsText(root.appendingPathComponent("a.yaml")))
@@ -51,12 +51,13 @@ struct PreviewDocumentChecks {
         expectFailure { _ = try PreviewDocument.readMarkdown(markdown) }
         let text = root.appendingPathComponent("utf16.ini")
         try "中文 = 内容".data(using: .utf16)!.write(to: text)
-        guard case .text(let decoded) = try PreviewDocument.read(text) else { preconditionFailure() }
+        guard case .text(let decoded, _) = try PreviewDocument.read(text) else { preconditionFailure() }
         precondition(decoded == "中文 = 内容")
         try Data([0, 1, 2]).write(to: text)
         expectFailure { _ = try PreviewDocument.read(text) }
         try Data(repeating: 65, count: 1_048_577).write(to: text)
-        expectFailure { _ = try PreviewDocument.read(text) }
+        guard case .text(let prefix, let truncated) = try PreviewDocument.read(text) else { preconditionFailure() }
+        precondition(prefix.utf8.count == 1_048_576 && truncated)
         let notebook = root.appendingPathComponent("sample.ipynb")
         let sample: [String: Any] = ["nbformat": 4, "cells": [
             ["cell_type": "markdown", "source": ["# 标题\n", "\n**加粗**"]],

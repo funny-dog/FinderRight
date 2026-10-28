@@ -6,3 +6,5 @@
 "Invalid or unsupported preview document" = "Invalid or unsupported preview document";
 "The file is too large to preview" = "The file is too large to preview";
 "Copy link address" = "Copy link address";
+
+"Large file; showing only the first 1 MB" = "Large file; showing only the first 1 MB";
