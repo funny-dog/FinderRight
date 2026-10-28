@@ -112,6 +112,10 @@ public enum OperationHistoryPresentation {
     }
 
     public static func failureSummary(_ record: OperationRecord) -> String {
+        if record.kind == .convertImage || record.kind == .scaleImage,
+           let reason = OperationRecord.summary(of: record.failure ?? "", maxLines: 1) {
+            return reason
+        }
         let details = (record.failure ?? "").lowercased()
         if details.contains("permission") || details.contains("denied") || details.contains("not permitted") || details.contains("权限") || details.contains("不允许") {
             return L("无法访问文件或写入目标文件夹。请检查文件夹权限，必要时在设置中授予完全磁盘访问权限。")

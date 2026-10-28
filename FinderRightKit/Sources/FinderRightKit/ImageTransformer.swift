@@ -45,7 +45,7 @@ public enum ImageTransformError: LocalizedError, Equatable {
         case .multiFrameNotSupported(let count):
             return String(format: NSLocalizedString("多帧图片暂不支持处理（共 %d 帧）", comment: "image error"), count)
         case .alreadySmallerThanTarget(let edge, let target):
-            return String(format: NSLocalizedString("图片长边（%d 像素）未超过 %d 像素，已跳过", comment: "image error"), edge, target)
+            return String(format: NSLocalizedString("原图长边为 %d 像素，不超过目标 %d 像素；缩放只缩小、不放大，本次未执行。", comment: "image error"), edge, target)
         case .cannotReadImageSource:
             return NSLocalizedString("无法读取图片或文件已损坏", comment: "image error")
         case .cannotCreateThumbnail:

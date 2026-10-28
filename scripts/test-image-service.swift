@@ -132,15 +132,18 @@ struct ImageServiceChecks {
         precondition(afterUndo == original)
         precondition(FileManager.default.fileExists(atPath: last.path))
         let previousUndo = service.undo
+        let previousToast = ClipboardToast.last
         precondition(service.scaleImage(IPCRequest(id: UUID().uuidString, action: "scaleImage", payload: [
             "items": .stringArray([first.path, last.path]), "maxPixel": .int(800)
         ])).success)
         precondition(FinderRightService.backgroundJobs.waitUntilIdle(timeout: 10))
         let allSkipped = RecentOperations.shared.records.last!
-        precondition(allSkipped.failure == nil && allSkipped.results.isEmpty)
-        precondition(allSkipped.note!.contains("first.png") && allSkipped.note!.contains("last.png"))
+        precondition(allSkipped.failure != nil && allSkipped.results.isEmpty)
+        precondition(allSkipped.failure!.contains("first.png") && allSkipped.failure!.contains("last.png"))
+        precondition(allSkipped.note == nil)
         precondition(service.undo == previousUndo)
-        precondition(ClipboardToast.last!.style == .success && ClipboardToast.last!.message.contains("无需缩放"))
+        precondition(ClipboardToast.last?.message == previousToast?.message
+                     && ClipboardToast.last?.style == previousToast?.style)
 
         let large = root.appendingPathComponent("large.png")
         try fixture(large, width: 1200, height: 600)
@@ -160,7 +163,7 @@ struct ImageServiceChecks {
         let realFailure = RecentOperations.shared.records.last!
         precondition(realFailure.failure!.contains("corrupt.png") && !realFailure.failure!.contains("first.png"))
         precondition(realFailure.note!.contains("first.png"))
-        print("Image scaling: all-small and mixed batches skip normally; real errors stay failures; undo only tracks outputs")
+        print("Image scaling: all-small batches remain unfinished with an exact reason; mixed batches report their actual outputs")
         print("Image service batch: continues after failures, checks both path roles, records every failure, one undo preserves sources")
     }
 }

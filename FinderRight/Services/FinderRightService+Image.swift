@@ -135,21 +135,18 @@ extension FinderRightService {
 
         let failureDetails = failures.map { "\($0.name)：\($0.reason)" }.joined(separator: "\n")
         let skipDetails = skipped.map { "\($0.name)：\($0.reason)" }.joined(separator: "\n")
+        let nothingResized = created.isEmpty && !skipped.isEmpty && failures.isEmpty
         RecentOperations.shared.record(OperationRecord(
             kind: recordKind, subject: subject,
-            failure: failures.isEmpty ? nil : failureDetails,
+            failure: nothingResized ? skipDetails : failures.isEmpty ? nil : failureDetails,
             results: created, location: location,
-            note: skipped.isEmpty ? nil : skipDetails
+            note: skipped.isEmpty || nothingResized ? nil : skipDetails
         ))
 
-        // 真正的失败由 AppDelegate 统一反馈；不放大属于正常跳过，不能进入失败提示。
-        guard failures.isEmpty else { return }
+        // 未生成任何缩放结果时也按未完成反馈，具体原因由历史记录提供。
+        guard failures.isEmpty, !nothingResized else { return }
         let message: String
-        if created.isEmpty, skipped.count == 1 {
-            message = String(format: L("无需缩放：%@"), skipped[0].reason)
-        } else if created.isEmpty {
-            message = String(format: L("已跳过 %d 项，无需缩放"), skipped.count)
-        } else if !skipped.isEmpty {
+        if !skipped.isEmpty {
             message = String(format: L("已处理 %d 项，%d 项无需缩放"), created.count, skipped.count)
         } else {
             message = String(format: L("已完成图片处理（%d 项）"), created.count)

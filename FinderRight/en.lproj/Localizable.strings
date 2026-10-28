@@ -805,6 +805,6 @@
 "缩放长边必须在 1 至 2560 像素之间" = "Image long edge must be between 1 and 2560 pixels";
 
 "处理说明" = "Processing Notes";
-"无需缩放：%@" = "No resizing needed: %@";
-"已跳过 %d 项，无需缩放" = "Skipped %d items; no resizing needed";
 "已处理 %d 项，%d 项无需缩放" = "Processed %d items; %d did not need resizing";
+
+"原图长边为 %d 像素，不超过目标 %d 像素；缩放只缩小、不放大，本次未执行。" = "The original long edge is %d px, at or below the %d px target. Resizing only reduces images; nothing was changed.";

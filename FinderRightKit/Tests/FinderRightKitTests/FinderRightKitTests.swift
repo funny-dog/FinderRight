@@ -4469,6 +4469,15 @@ struct FinderRightKitTestsRunner {
             try assertNil(tracker.handleDataWritten(bytesWritten: 10, totalBytesWritten: 10, totalBytesExpected: 10))
         }
 
+        runTest("操作历史：未执行缩放保留失败状态并直接说明原因") {
+            let reason = ImageTransformError.alreadySmallerThanTarget(longEdge: 436, target: 800).localizedDescription
+            let record = OperationRecord(kind: .scaleImage, subject: "photo.heic", failure: reason)
+            try assertTrue(!record.succeeded)
+            try assertEqual(OperationHistoryPresentation.Outcome(record), .failed)
+            try assertEqual(OperationHistoryPresentation.failureSummary(record), reason)
+            try assertTrue(reason.contains("436") && reason.contains("800") && reason.contains("不放大"))
+        }
+
         runTest("操作历史：无需缩放说明不属于失败且兼容旧记录") {
             let note = "photo.heic：图片长边（436 像素）未超过 800 像素，已跳过"
             let record = OperationRecord(kind: .scaleImage, subject: "photo.heic", note: note)
