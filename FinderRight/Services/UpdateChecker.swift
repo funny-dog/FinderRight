@@ -3,39 +3,13 @@ import AppKit
 import CryptoKit
 import FinderRightKit
 
-/// 更新包的校验和来源
-public enum UpdateChecksum: Equatable {
-    /// Releases API 直接给出的 SHA-256：随检查更新的响应一起拿到，安装时无需再发请求
-    case digest(String)
-    /// 回退：发布里同名的 .sha256 文件（旧发布没有 digest 字段时使用）
-    case file(URL)
-}
-
-public enum UpdateCheckStatus: Equatable {
-    case idle
-    case checking
-    case upToDate
-    case updateAvailable(version: String, releaseURL: URL, downloadURL: URL?, checksum: UpdateChecksum? = nil)
-    case downloading(progress: Double)
-    case installing
-    case failed(String)
-
-    /// 检查、下载或安装正在进行
-    public var isInProgress: Bool {
-        switch self {
-        case .checking, .downloading, .installing: return true
-        default: return false
-        }
-    }
-}
-
 public final class UpdateChecker: NSObject {
     public static let shared = UpdateChecker()
 
-    private let repoOwner = "funny-dog"
-    private let repoName = "FinderRight"
-    static let websiteOrigin = "https://finderright.erhuerhu.dpdns.org"
-    static let releaseAPI = URL(string: "https://api.github.com/repos/funny-dog/FinderRight/releases/latest")!
+    private let repoOwner = UpdatePolicy.repoOwner
+    private let repoName = UpdatePolicy.repoName
+    static let websiteOrigin = UpdatePolicy.websiteOrigin
+    static let releaseAPI = UpdatePolicy.defaultReleaseAPI
     /// 状态变化后在主线程发出：菜单栏和关于页可能各自发起检查或更新，靠它保持显示一致
     public static let statusDidChangeNotification = Notification.Name("com.finderright.updateStatusDidChange")
 
@@ -136,13 +110,9 @@ public final class UpdateChecker: NSObject {
             completion(currentStatus)
             return
         }
-        if !force, let last = lastCheckedDate, Date().timeIntervalSince(last) < 600 {
-            switch currentStatus {
-            case .upToDate, .updateAvailable:
-                completion(currentStatus)
-                return
-            default: break
-            }
+        if UpdatePolicy.shouldReuseCachedStatus(currentStatus: currentStatus, lastCheckedDate: lastCheckedDate, force: force) {
+            completion(currentStatus)
+            return
         }
 
         currentStatus = .checking
@@ -154,9 +124,7 @@ public final class UpdateChecker: NSObject {
         var finished = false
         var fallback: UpdateCheckStatus?
         checkTasks = sources.map { source in
-            var request = URLRequest(url: source, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
-            request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
-            request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+            let request = UpdatePolicy.makeCheckRequest(for: source)
             return checkSession.dataTask(with: request) { [weak self] data, response, error in
                 DispatchQueue.main.async {
                     guard let self, !finished else { return }
@@ -168,94 +136,34 @@ public final class UpdateChecker: NSObject {
                             throw UpdateError(code == 403 ? NSLocalizedString("更新请求超限，请稍后再试", comment: "update error") : "检查失败 (\(code))")
                         }
                         guard let data else { throw UpdateError("未接收到数据") }
-                        result = .success(try self.releaseStatus(from: data, viaWebsite: source != Self.releaseAPI))
+                        result = .success(try UpdatePolicy.releaseStatus(from: data, viaWebsite: source != Self.releaseAPI, currentVersion: self.currentAppVersion))
                     } catch {
                         result = .failure(error)
                     }
                     remaining -= 1
-                    let status: UpdateCheckStatus
-                    switch result {
-                    case .success(let value):
-                        if case .updateAvailable(_, _, .some, .some) = value {
-                            status = value
-                        } else {
-                            switch (fallback, value) {
-                            case (.updateAvailable(let saved, _, _, _), .updateAvailable(let incoming, _, _, _)):
-                                if Self.compareVersions(incoming, saved) == .orderedDescending { fallback = value }
-                            case (.updateAvailable, .upToDate): break
-                            default: fallback = value
-                            }
-                            guard remaining == 0 else { return }
-                            status = fallback ?? value
+                    let decision = UpdatePolicy.arbitrateCheck(result: result, currentFallback: fallback, remaining: remaining)
+                    switch decision {
+                    case .finish(let status, let recordSuccessDate):
+                        finished = true
+                        if recordSuccessDate {
+                            self.lastCheckedDate = Date()
                         }
-                        self.lastCheckedDate = Date()
-                    case .failure(let error):
-                        guard remaining == 0 else { return }
-                        status = fallback ?? .failed(error.localizedDescription)
-                        if fallback != nil { self.lastCheckedDate = Date() }
+                        self.checkTasks.forEach { $0.cancel() }
+                        self.checkTasks.removeAll()
+                        self.currentStatus = status
+                        completion(status)
+                    case .waitForRemaining(let newFallback):
+                        fallback = newFallback
                     }
-                    finished = true
-                    self.checkTasks.forEach { $0.cancel() }
-                    self.checkTasks.removeAll()
-                    self.currentStatus = status
-                    completion(status)
                 }
             }
         }
         checkTasks.forEach { $0.resume() }
     }
 
-    private func releaseStatus(from data: Data, viaWebsite: Bool) throws -> UpdateCheckStatus {
-        guard let release = try? JSONDecoder().decode(GitHubReleaseResponse.self, from: data),
-              release.tagName.range(of: "^v[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil else {
-            throw UpdateError("解析版本信息失败")
-        }
-        let tag = release.tagName
-        let releaseURL = URL(string: "https://github.com/\(repoOwner)/\(repoName)/releases/tag/\(tag)")!
-        let name = "FinderRight-\(tag).zip"
-        let githubZIP = URL(string: "https://github.com/\(repoOwner)/\(repoName)/releases/download/\(tag)/\(name)")!
-        var downloadURL: URL?
-        var checksum: UpdateChecksum?
-        // 只接受本仓库、固定版本、精确同名的资产，备用源不重新查询 latest。
-        if let assets = release.assets,
-           let zip = assets.first(where: { $0.name == name && $0.browserDownloadUrl == githubZIP.absoluteString }) {
-            if let hash = UpdateIntegrity.parseAssetDigest(zip.digest) {
-                checksum = .digest(hash)
-            } else if let sha = assets.first(where: {
-                $0.name == name + ".sha256" && $0.browserDownloadUrl == githubZIP.absoluteString + ".sha256"
-            }), let shaURL = URL(string: sha.browserDownloadUrl) {
-                checksum = .file(viaWebsite ? Self.alternateAssetURL(for: shaURL)! : shaURL)
-            }
-            if checksum != nil {
-                downloadURL = viaWebsite ? Self.alternateAssetURL(for: githubZIP)! : githubZIP
-            }
-        }
-        return Self.compareVersions(tag, currentAppVersion) == .orderedDescending
-            ? .updateAvailable(version: tag, releaseURL: releaseURL, downloadURL: downloadURL, checksum: checksum)
-            : .upToDate
-    }
-
     /// 双向映射仅限固定版本 ZIP 及其校验和；不允许任意 URL、查询串或 latest。
     static func alternateAssetURL(for url: URL) -> URL? {
-        guard url.scheme == "https", url.user == nil, url.password == nil, url.port == nil,
-              url.query == nil, url.fragment == nil else { return nil }
-        let parts = url.path.split(separator: "/").map(String.init)
-        let tag: String
-        let name: String
-        let destination: String
-        if url.host == "github.com", parts.count == 6,
-           Array(parts.prefix(4)) == ["funny-dog", "FinderRight", "releases", "download"] {
-            tag = parts[4]
-            name = parts[5]
-            destination = Self.websiteOrigin + "/download"
-        } else if url.host == URL(string: Self.websiteOrigin)!.host, parts.count == 3, parts[0] == "download" {
-            tag = parts[1]
-            name = parts[2]
-            destination = "https://github.com/funny-dog/FinderRight/releases/download"
-        } else { return nil }
-        guard tag.range(of: "^v[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil,
-              name == "FinderRight-\(tag).zip" || name == "FinderRight-\(tag).zip.sha256" else { return nil }
-        return URL(string: "\(destination)/\(tag)/\(name)")
+        UpdatePolicy.alternateAssetURL(for: url)
     }
 
     /// 开始下载并自动安装更新
@@ -308,7 +216,7 @@ public final class UpdateChecker: NSObject {
 
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if case .failure = result, allowFallback, let alternate = Self.alternateAssetURL(for: url) {
+                if case .failure = result, let alternate = UpdatePolicy.fallbackAssetURL(for: url, allowFallback: allowFallback) {
                     self.fetchChecksum(from: alternate, allowFallback: false, completion: completion)
                     return
                 }
@@ -335,7 +243,7 @@ public final class UpdateChecker: NSObject {
                     self.verifyAndInstall(zipLocation: zipLocation, expectedHash: expectedHash, statusHandler: statusHandler)
 
                 case .failure(let error):
-                    if allowFallback, let alternate = Self.alternateAssetURL(for: downloadURL) {
+                    if let alternate = UpdatePolicy.fallbackAssetURL(for: downloadURL, allowFallback: allowFallback) {
                         self.downloadPackage(downloadURL: alternate, expectedHash: expectedHash,
                                              allowFallback: false, statusHandler: statusHandler)
                         return
@@ -576,14 +484,14 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let onProgress: (Double) -> Void
     private let onFinish: (Result<URL, Error>) -> Void
     private let schedule: (TimeInterval, DispatchWorkItem) -> Void
-    private var completed = false
+    private var tracker: DownloadTimeoutTracker
     private var timeout: DispatchWorkItem?
-    private var stallTimeout: TimeInterval = 10
 
     init(onProgress: @escaping (Double) -> Void, onFinish: @escaping (Result<URL, Error>) -> Void,
          schedule: @escaping (TimeInterval, DispatchWorkItem) -> Void = { interval, work in
              DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: work)
          }) {
+        self.tracker = DownloadTimeoutTracker(firstByteTimeout: 3, stallTimeout: 10)
         self.onProgress = onProgress
         self.onFinish = onFinish
         self.schedule = schedule
@@ -591,14 +499,14 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func watch(_ task: URLSessionDownloadTask, firstByteTimeout: TimeInterval, stallTimeout: TimeInterval) {
-        self.stallTimeout = stallTimeout
-        scheduleTimeout(for: task, after: firstByteTimeout)
+        self.tracker = DownloadTimeoutTracker(firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout)
+        scheduleTimeout(for: task, after: tracker.initialTimeout())
     }
 
     private func scheduleTimeout(for task: URLSessionDownloadTask, after interval: TimeInterval) {
         timeout?.cancel()
         let work = DispatchWorkItem { [weak self, weak task] in
-            guard let self, !self.completed else { return }
+            guard let self, !self.tracker.isCompleted else { return }
             task?.cancel()
             self.finish(.failure(URLError(.timedOut)))
         }
@@ -607,23 +515,24 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     private func finish(_ result: Result<URL, Error>) {
-        guard !completed else { return }
-        completed = true
+        guard tracker.handleFinished() else { return }
         timeout?.cancel()
         timeout = nil
         onFinish(result)
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard !completed else { return }
-        scheduleTimeout(for: downloadTask, after: stallTimeout)
-        if totalBytesExpectedToWrite > 0 {
-            onProgress(min(max(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite), 0), 1))
+        guard let decision = tracker.handleDataWritten(bytesWritten: bytesWritten, totalBytesWritten: totalBytesWritten, totalBytesExpected: totalBytesExpectedToWrite) else { return }
+        if let resetInterval = decision.resetTimeoutInterval {
+            scheduleTimeout(for: downloadTask, after: resetInterval)
+        }
+        if let progress = decision.progress {
+            onProgress(progress)
         }
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard !completed else { return }
+        guard !tracker.isCompleted else { return }
         guard let response = downloadTask.response as? HTTPURLResponse, response.statusCode == 200 else {
             finish(.failure(URLError(.badServerResponse)))
             return
@@ -643,38 +552,4 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error { finish(.failure(error)) }
     }
-}
-
-// MARK: - 数据模型
-
-private struct GitHubReleaseResponse: Decodable {
-    let tagName: String
-    let htmlUrl: String
-    let assets: [GitHubReleaseAsset]?
-
-    enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case htmlUrl = "html_url"
-        case assets
-    }
-}
-
-private struct GitHubReleaseAsset: Decodable {
-    let name: String
-    let browserDownloadUrl: String
-    /// GitHub 上传时计算的摘要，形如 `sha256:<hash>`；较早的发布没有该字段
-    let digest: String?
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case browserDownloadUrl = "browser_download_url"
-        case digest
-    }
-}
-
-/// 带可读描述的更新错误，供 Result 传递
-private struct UpdateError: LocalizedError {
-    let message: String
-    init(_ message: String) { self.message = message }
-    var errorDescription: String? { message }
 }

@@ -815,10 +815,13 @@ struct FinderRightKitTestsRunner {
         }
 
         // 21. 更新包校验和文件解析：只接受 64 位十六进制 SHA-256
-        runTest("UpdateIntegrity 解析 shasum 输出") {
+        runTest("UpdateIntegrity 解析 shasum 输出各种格式写法") {
             let hash = String(repeating: "ab", count: 32)
             try assertEqual(UpdateIntegrity.parseChecksum("\(hash)  FinderRight-v1.1.10.zip\n"), hash)
             try assertEqual(UpdateIntegrity.parseChecksum(hash.uppercased()), hash, "大写应归一为小写")
+            try assertEqual(UpdateIntegrity.parseChecksum("  \(hash) \n"), hash, "纯哈希且带首尾空白")
+            try assertEqual(UpdateIntegrity.parseChecksum("\t\n \(hash)   FinderRight-v1.1.10.zip \r\n"), hash, "多余空白与换行")
+            try assertEqual(UpdateIntegrity.parseChecksum("\(hash) *FinderRight-v1.1.10.zip\n"), hash, "二进制模式星号前缀")
         }
 
         runTest("UpdateIntegrity 拒绝非 SHA-256 内容") {
@@ -4050,6 +4053,290 @@ struct FinderRightKitTestsRunner {
             try assertTrue(ServiceInvocationPolicy.validateFavoritesTransfer(items: [file], favorites: ["/tmp"]))
             try assertTrue(!ServiceInvocationPolicy.validateFavoritesTransfer(items: [], favorites: ["/tmp"]))
             try assertTrue(!ServiceInvocationPolicy.validateFavoritesTransfer(items: [file], favorites: []))
+        }
+
+        runTest("UpdatePolicy 备用源地址双向映射及拒绝非法 URL") {
+            let tag = "v1.2.3"
+            let name = "FinderRight-\(tag).zip"
+            let githubZIP = URL(string: "https://github.com/funny-dog/FinderRight/releases/download/\(tag)/\(name)")!
+            let websiteZIP = URL(string: "\(UpdatePolicy.websiteOrigin)/download/\(tag)/\(name)")!
+
+            // 双向映射正常推导
+            try assertEqual(UpdatePolicy.alternateAssetURL(for: githubZIP), websiteZIP)
+            try assertEqual(UpdatePolicy.alternateAssetURL(for: websiteZIP), githubZIP)
+
+            // .sha256 校验和文件映射
+            let githubSHA = URL(string: githubZIP.absoluteString + ".sha256")!
+            let websiteSHA = URL(string: websiteZIP.absoluteString + ".sha256")!
+            try assertEqual(UpdatePolicy.alternateAssetURL(for: githubSHA), websiteSHA)
+            try assertEqual(UpdatePolicy.alternateAssetURL(for: websiteSHA), githubSHA)
+
+            // fallbackAssetURL 判定
+            try assertEqual(UpdatePolicy.fallbackAssetURL(for: githubZIP, allowFallback: true), websiteZIP)
+            try assertNil(UpdatePolicy.fallbackAssetURL(for: githubZIP, allowFallback: false))
+
+            // 拒绝非法 URL
+            let invalids = [
+                "http://github.com/funny-dog/FinderRight/releases/download/\(tag)/\(name)", // 非 HTTPS
+                "https://github.com/other-org/FinderRight/releases/download/\(tag)/\(name)", // 跨仓库
+                "https://github.com/funny-dog/FinderRight/releases/download/latest/\(name)", // latest
+                "https://github.com/funny-dog/FinderRight/releases/download/v1.2.3/FinderRight-v1.2.4.zip", // 版本不匹配
+                "\(UpdatePolicy.websiteOrigin)/download/\(tag)/\(name)?query=1", // 带 query
+                "\(UpdatePolicy.websiteOrigin)/download/\(tag)/\(name)#hash" // 带 fragment
+            ]
+            for invalid in invalids {
+                try assertNil(UpdatePolicy.alternateAssetURL(for: URL(string: invalid)!), "应拒绝: \(invalid)")
+            }
+        }
+
+        runTest("UpdatePolicy Release 数据解析：带 digest 完整新版本") {
+            let hash = String(repeating: "f", count: 64)
+            let tag = "v2.0.0"
+            let json = """
+            {
+                "tag_name": "\(tag)",
+                "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)",
+                "assets": [
+                    {
+                        "name": "FinderRight-\(tag).zip",
+                        "browser_download_url": "https://github.com/funny-dog/FinderRight/releases/download/\(tag)/FinderRight-\(tag).zip",
+                        "digest": "sha256:\(hash)"
+                    }
+                ]
+            }
+            """
+            let status = try UpdatePolicy.releaseStatus(from: Data(json.utf8), viaWebsite: false, currentVersion: "1.0.0")
+            let expectedURL = URL(string: "https://github.com/funny-dog/FinderRight/releases/download/\(tag)/FinderRight-\(tag).zip")!
+            try assertEqual(status, .updateAvailable(
+                version: tag,
+                releaseURL: URL(string: "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)")!,
+                downloadURL: expectedURL,
+                checksum: .digest(hash)
+            ))
+        }
+
+        runTest("UpdatePolicy Release 数据解析：带 sha256 文件且走官网镜像") {
+            let tag = "v2.0.0"
+            let json = """
+            {
+                "tag_name": "\(tag)",
+                "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)",
+                "assets": [
+                    {
+                        "name": "FinderRight-\(tag).zip",
+                        "browser_download_url": "https://github.com/funny-dog/FinderRight/releases/download/\(tag)/FinderRight-\(tag).zip"
+                    },
+                    {
+                        "name": "FinderRight-\(tag).zip.sha256",
+                        "browser_download_url": "https://github.com/funny-dog/FinderRight/releases/download/\(tag)/FinderRight-\(tag).zip.sha256"
+                    }
+                ]
+            }
+            """
+            let status = try UpdatePolicy.releaseStatus(from: Data(json.utf8), viaWebsite: true, currentVersion: "1.0.0")
+            let expectedDownloadURL = URL(string: "\(UpdatePolicy.websiteOrigin)/download/\(tag)/FinderRight-\(tag).zip")!
+            let expectedChecksumURL = URL(string: "\(UpdatePolicy.websiteOrigin)/download/\(tag)/FinderRight-\(tag).zip.sha256")!
+            try assertEqual(status, .updateAvailable(
+                version: tag,
+                releaseURL: URL(string: "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)")!,
+                downloadURL: expectedDownloadURL,
+                checksum: .file(expectedChecksumURL)
+            ))
+        }
+
+        runTest("UpdatePolicy Release 数据解析：无匹配资产或跨仓库资产") {
+            let tag = "v2.0.0"
+            let json = """
+            {
+                "tag_name": "\(tag)",
+                "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)",
+                "assets": [
+                    {
+                        "name": "OtherApp.zip",
+                        "browser_download_url": "https://example.com/OtherApp.zip"
+                    }
+                ]
+            }
+            """
+            let status = try UpdatePolicy.releaseStatus(from: Data(json.utf8), viaWebsite: false, currentVersion: "1.0.0")
+            try assertEqual(status, .updateAvailable(
+                version: tag,
+                releaseURL: URL(string: "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)")!,
+                downloadURL: nil,
+                checksum: nil
+            ))
+        }
+
+        runTest("UpdatePolicy Release 数据解析：版本相同或更旧") {
+            let tagSame = "v1.0.0"
+            let jsonSame = """
+            {"tag_name": "\(tagSame)", "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tagSame)"}
+            """
+            let statusSame = try UpdatePolicy.releaseStatus(from: Data(jsonSame.utf8), viaWebsite: false, currentVersion: "1.0.0")
+            try assertEqual(statusSame, .upToDate)
+
+            let tagOlder = "v0.9.5"
+            let jsonOlder = """
+            {"tag_name": "\(tagOlder)", "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tagOlder)"}
+            """
+            let statusOlder = try UpdatePolicy.releaseStatus(from: Data(jsonOlder.utf8), viaWebsite: false, currentVersion: "1.0.0")
+            try assertEqual(statusOlder, .upToDate)
+        }
+
+        runTest("UpdatePolicy Release 数据解析：draft 与 prerelease 保留现有行为") {
+            let tag = "v2.1.0"
+            let json = """
+            {
+                "tag_name": "\(tag)",
+                "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)",
+                "draft": true,
+                "prerelease": true
+            }
+            """
+            let status = try UpdatePolicy.releaseStatus(from: Data(json.utf8), viaWebsite: false, currentVersion: "1.0.0")
+            try assertEqual(status, .updateAvailable(
+                version: tag,
+                releaseURL: URL(string: "https://github.com/funny-dog/FinderRight/releases/tag/\(tag)")!,
+                downloadURL: nil,
+                checksum: nil
+            ))
+            let ignoredFields = json.replacingOccurrences(of: "\"draft\": true", with: "\"draft\": \"ignored\"")
+                .replacingOccurrences(of: "\"prerelease\": true", with: "\"prerelease\": 1")
+            try assertEqual(try UpdatePolicy.releaseStatus(from: Data(ignoredFields.utf8), viaWebsite: false, currentVersion: "1.0.0"), status)
+
+        }
+
+        runTest("UpdatePolicy Release 数据解析：非法标签格式抛出错误") {
+            for invalidTag in ["1.0.0", "v1.0", "v1.0.0-beta", "not-a-version"] {
+                let json = """
+                {"tag_name": "\(invalidTag)", "html_url": "https://github.com/funny-dog/FinderRight/releases/tag/\(invalidTag)"}
+                """
+                var didThrow = false
+                do {
+                    _ = try UpdatePolicy.releaseStatus(from: Data(json.utf8), viaWebsite: false, currentVersion: "1.0.0")
+                } catch {
+                    didThrow = true
+                }
+                try assertTrue(didThrow, "非法 tag [\(invalidTag)] 应抛出错误")
+            }
+        }
+
+        runTest("UpdatePolicy 两路检查仲裁：首个完整可安装新版直接完成") {
+            let fullStatus: UpdateCheckStatus = .updateAvailable(
+                version: "v2.0.0",
+                releaseURL: URL(string: "https://example.com/rel")!,
+                downloadURL: URL(string: "https://example.com/dl")!,
+                checksum: .digest("abcd")
+            )
+            let decision = UpdatePolicy.arbitrateCheck(
+                result: .success(fullStatus),
+                currentFallback: nil,
+                remaining: 1
+            )
+            try assertEqual(decision, .finish(status: fullStatus, recordSuccessDate: true))
+        }
+
+        runTest("UpdatePolicy 两路检查仲裁：部分响应暂存 fallback 与最终裁决") {
+            let partialStatus: UpdateCheckStatus = .updateAvailable(
+                version: "v2.0.0",
+                releaseURL: URL(string: "https://example.com/rel")!,
+                downloadURL: nil,
+                checksum: nil
+            )
+
+            // 第一路返回缺少校验和的新版，仍有 1 路待返回 -> 继续等待并暂存
+            let step1 = UpdatePolicy.arbitrateCheck(
+                result: .success(partialStatus),
+                currentFallback: nil,
+                remaining: 1
+            )
+            try assertEqual(step1, .waitForRemaining(fallback: partialStatus))
+
+            // 第二路返回更高版本（同样缺少校验和），剩余 0 路 -> 决出最新版本
+            let partialStatusHigher: UpdateCheckStatus = .updateAvailable(
+                version: "v2.1.0",
+                releaseURL: URL(string: "https://example.com/rel2")!,
+                downloadURL: nil,
+                checksum: nil
+            )
+            let step2 = UpdatePolicy.arbitrateCheck(
+                result: .success(partialStatusHigher),
+                currentFallback: partialStatus,
+                remaining: 0
+            )
+            try assertEqual(step2, .finish(status: partialStatusHigher, recordSuccessDate: true))
+        }
+
+        runTest("UpdatePolicy 两路检查仲裁：一路失败一路成功与双路全败") {
+            let err = UpdateError("网络错误")
+
+            // 第一路失败，剩余 1 路 -> 继续等待
+            let step1 = UpdatePolicy.arbitrateCheck(
+                result: .failure(err),
+                currentFallback: nil,
+                remaining: 1
+            )
+            try assertEqual(step1, .waitForRemaining(fallback: nil))
+
+            // 第二路也失败，剩余 0 路 -> 决出失败，且不记录成功时间
+            let step2Fail = UpdatePolicy.arbitrateCheck(
+                result: .failure(err),
+                currentFallback: nil,
+                remaining: 0
+            )
+            try assertEqual(step2Fail, .finish(status: .failed(err.localizedDescription), recordSuccessDate: false))
+
+            // 若已有 fallback，第二路失败时采用已有 fallback
+            let fallback: UpdateCheckStatus = .upToDate
+            let step2Fallback = UpdatePolicy.arbitrateCheck(
+                result: .failure(err),
+                currentFallback: fallback,
+                remaining: 0
+            )
+            try assertEqual(step2Fallback, .finish(status: fallback, recordSuccessDate: true))
+        }
+
+        runTest("UpdatePolicy 缓存复用决策与请求构造") {
+            let now = Date()
+            let status: UpdateCheckStatus = .upToDate
+
+            // 10 分钟内正常复用
+            try assertTrue(UpdatePolicy.shouldReuseCachedStatus(currentStatus: status, lastCheckedDate: now.addingTimeInterval(-300), now: now, force: false))
+            // 超过 10 分钟不复用
+            try assertTrue(!UpdatePolicy.shouldReuseCachedStatus(currentStatus: status, lastCheckedDate: now.addingTimeInterval(-700), now: now, force: false))
+            // force 强制检查不复用
+            try assertTrue(!UpdatePolicy.shouldReuseCachedStatus(currentStatus: status, lastCheckedDate: now.addingTimeInterval(-100), now: now, force: true))
+            // failed 状态不复用
+            try assertTrue(!UpdatePolicy.shouldReuseCachedStatus(currentStatus: .failed("err"), lastCheckedDate: now.addingTimeInterval(-100), now: now, force: false))
+
+            // 请求构造
+            let req = UpdatePolicy.makeCheckRequest(for: URL(string: "https://example.com")!)
+            try assertEqual(req.value(forHTTPHeaderField: "User-Agent"), "FinderRight-App")
+            try assertEqual(req.value(forHTTPHeaderField: "Accept"), "application/vnd.github.v3+json")
+        }
+
+        runTest("UpdatePolicy 下载超时状态机决策") {
+            var tracker = DownloadTimeoutTracker(firstByteTimeout: 3, stallTimeout: 10)
+            try assertEqual(tracker.initialTimeout(), 3)
+            try assertTrue(!tracker.isCompleted)
+
+            // 收到数据，未确定预期总量
+            let step1 = tracker.handleDataWritten(bytesWritten: 100, totalBytesWritten: 100, totalBytesExpected: -1)
+            try assertEqual(step1?.resetTimeoutInterval, 10)
+            try assertNil(step1?.progress)
+
+            // 收到数据，进度计算与边界裁切
+            let step2 = tracker.handleDataWritten(bytesWritten: 50, totalBytesWritten: 50, totalBytesExpected: 100)
+            try assertEqual(step2?.progress, 0.5)
+
+            let stepOverflow = tracker.handleDataWritten(bytesWritten: 200, totalBytesWritten: 200, totalBytesExpected: 100)
+            try assertEqual(stepOverflow?.progress, 1.0)
+
+            // 首次完成返回 true，二次完成返回 false
+            try assertTrue(tracker.handleFinished())
+            try assertTrue(tracker.isCompleted)
+            try assertTrue(!tracker.handleFinished())
+            try assertNil(tracker.handleDataWritten(bytesWritten: 10, totalBytesWritten: 10, totalBytesExpected: 10))
         }
 
         print("\n-----------------------------------------")
