@@ -4658,6 +4658,19 @@ struct FinderRightKitTestsRunner {
             }
         }
 
+        runTest("图片菜单：候选筛选无需内容读取且判定结果可经 IPC 往返") {
+            let root = URL(fileURLWithPath: "/not-readable")
+            let images = ["a.PNG", "b.jpeg", "c.heic", "d.webp", "e.tiff"].map { root.appendingPathComponent($0) }
+            try assertTrue(ImageMenuState.canInspectSelection(images))
+            try assertTrue(!ImageMenuState.canInspectSelection([]))
+            try assertTrue(!ImageMenuState.canInspectSelection(images + [root.appendingPathComponent("note.txt")]))
+            for state in [ImageMenuState(isAllImages: true, formats: [.png, .jpeg, .heic]),
+                          ImageMenuState(isAllImages: false)] {
+                let decoded = try JSONDecoder().decode(ImageMenuState.self, from: JSONEncoder().encode(state))
+                try assertEqual(decoded, state)
+            }
+        }
+
         runTest("图片菜单：纯决策与真实文件检测（目录/文本伪装/损坏图/真实同格式隐藏）") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
             let tempDir = makeTempDirectory()

@@ -93,7 +93,7 @@ final class FinderRightService {
                 }
             }
         }
-        let isImageAction = (req.action == "convertImage" || req.action == "scaleImage")
+        let isImageAction = (req.action == "convertImage" || req.action == "scaleImage" || req.action == "inspectImages")
         if !isImageAction {
             let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
             for (key, role) in arrayKeys {
@@ -160,6 +160,8 @@ final class FinderRightService {
             return copyFileHash(req)
         case "createSymlink":
             return createSymlink(req)
+        case "inspectImages":
+            return inspectImages(req)
         case "convertImage":
             return convertImage(req)
         case "scaleImage":

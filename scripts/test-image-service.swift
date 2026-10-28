@@ -49,6 +49,13 @@ enum ImageTransformer {
 @main
 struct ImageServiceChecks {
     static func main() throws {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--sandbox-image-candidate" {
+            let url = URL(fileURLWithPath: CommandLine.arguments[2])
+            precondition(ImageMenuState.canInspectSelection([url]))
+            precondition(!ImageMenuState.evaluate(urls: [url]).isAllImages, "Sandbox still readable: \(url.path) resolved=\(url.resolvingSymlinksInPath().path)")
+            print("Image candidate remains detectable without sandbox file-read-data")
+            return
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("finderright-image-service-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -71,6 +78,30 @@ struct ImageServiceChecks {
         try Data("not an image".utf8).write(to: corrupt)
         let original = try Data(contentsOf: first)
         let service = FinderRightService()
+        // 沙箱按真实路径匹配，Foundation 的 URL 仍可能保留 /var 别名。
+        let canonical = realpath(first.path, nil)!
+        defer { free(canonical) }
+        let profile = "(version 1)(allow default)(deny file-read-data (literal \"\(String(cString: canonical))\"))"
+        let sandbox = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"), arguments: [
+            "-p", profile, CommandLine.arguments[0], "--sandbox-image-candidate", first.path
+        ])
+        precondition(sandbox.status == 0, sandbox.stderr)
+        func inspect(_ files: [URL]) throws -> ImageMenuState {
+            let response = service.inspectImages(IPCRequest(id: UUID().uuidString, action: "inspectImages", payload: [
+                "items": .stringArray(files.map(\.path))
+            ]))
+            precondition(response.success)
+            return try JSONDecoder().decode(ImageMenuState.self, from: Data(response.message!.utf8))
+        }
+        let valid = try inspect([first, last])
+        precondition(valid.isAllImages && valid.allArePNG)
+        let invalid = try inspect([first, corrupt])
+        precondition(!invalid.isAllImages)
+        precondition(!service.inspectImages(IPCRequest(id: UUID().uuidString, action: "inspectImages", payload: [
+            "items": .stringArray([denied.path])
+        ])).success)
+        precondition(RecentOperations.shared.records.isEmpty && service.undo == nil)
+        print("Image menu inspection: sandbox candidate, host validation, corrupt-file rejection and path policy passed")
         let request = IPCRequest(id: UUID().uuidString, action: "convertImage", payload: [
             "items": .stringArray([first, missing, corrupt, denied, blocked, last].map(\.path)), "format": .string("jpeg")
         ])

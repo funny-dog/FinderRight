@@ -410,7 +410,18 @@ class FinderSync: FIFinderSync {
         }
 
         let undoTitle: String? = UndoMenuState.read().map { UndoText.menuTitle(for: $0, localize: self.L) }
-        let imageState = ImageMenuState.evaluate(urls: selected)
+        var imageState: ImageMenuState?
+        if location != .container, SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.imageTools),
+           ImageMenuState.canInspectSelection(selected) {
+            // Finder 返回的 URL 不保证授予沙箱内容读取权限，交给主 App 限时检验。
+            let response = IPCClient.shared.call(action: "inspectImages", payload: [
+                "items": .stringArray(selected.map(\.path))
+            ], timeout: 1)
+            if response.success, let data = response.message?.data(using: .utf8) {
+                imageState = try? JSONDecoder().decode(ImageMenuState.self, from: data)
+            }
+            logToFile("imageMenu: inspected=\(response.success) allImages=\(imageState?.isAllImages ?? false) count=\(selected.count)")
+        }
 
         let input = MenuBuildInput(
             location: location,

@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// 菜单右键触发的位置
 public enum MenuTargetLocation: Equatable {
@@ -108,7 +109,7 @@ public struct InspectedImageItem: Equatable {
 }
 
 /// 图片源格式分类
-public enum ImageSourceFormat: String, Equatable, Hashable {
+public enum ImageSourceFormat: String, Codable, Equatable, Hashable {
     case png
     case jpeg
     case heic
@@ -130,7 +131,7 @@ public enum ImageSourceFormat: String, Equatable, Hashable {
 }
 
 /// 纯数据图片选中状态与菜单可用性判定
-public struct ImageMenuState: Equatable {
+public struct ImageMenuState: Codable, Equatable {
     public let isAllImages: Bool
     public let formats: [ImageSourceFormat]
 
@@ -141,6 +142,13 @@ public struct ImageMenuState: Equatable {
     public init(isAllImages: Bool, formats: [ImageSourceFormat] = []) {
         self.isAllImages = isAllImages
         self.formats = formats
+    }
+
+    /// 扩展只筛选候选类型，实际可读性与格式由主 App 检验，不依赖扩展的文件读取权限。
+    public static func canInspectSelection(_ urls: [URL]) -> Bool {
+        !urls.isEmpty && urls.allSatisfy {
+            UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true
+        }
     }
 
     /// 纯决策：由图片检测结果列表决定是否全为有效图片及各格式分布（MenuModel 纯逻辑）

@@ -8,6 +8,21 @@ private func L(_ key: String) -> String { NSLocalizedString(key, comment: "notif
 
 extension FinderRightService {
 
+    func inspectImages(_ req: IPCRequest) -> IPCResponse {
+        guard let items = req.payload["items"]?.stringArrayValue, !items.isEmpty else {
+            return IPCResponse(id: req.id, success: false, message: "inspectImages 参数缺失")
+        }
+        let urls = items.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        guard urls.allSatisfy({ isPathAllowed($0.path, role: .source) }) else {
+            return IPCResponse(id: req.id, success: false, message: "inspectImages 路径不允许")
+        }
+        let state = ImageMenuState.evaluate(urls: urls)
+        guard let data = try? JSONEncoder().encode(state), let message = String(data: data, encoding: .utf8) else {
+            return IPCResponse(id: req.id, success: false, message: "inspectImages 编码失败")
+        }
+        return IPCResponse(id: req.id, success: true, message: message)
+    }
+
     func convertImage(_ req: IPCRequest) -> IPCResponse {
         guard let items = req.payload["items"]?.stringArrayValue, !items.isEmpty,
               let formatStr = req.payload["format"]?.stringValue,
