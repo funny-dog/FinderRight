@@ -571,4 +571,52 @@ final class ServicesProvider: NSObject {
             }
         }
     }
+
+    @objc func convertImageToPNG(_ pboard: NSPasteboard,
+                                 userData: String?,
+                                 error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("convertImageToPNG") else { return }
+        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        let paths = items.map(\.path)
+        performFileAction(IPCRequest(
+            id: UUID().uuidString,
+            action: "convertImage",
+            payload: ["items": .stringArray(paths), "format": .string("png")]
+        ), feature: MenuFeatureCatalog.imageTools)
+        returnFocusToFinderIfNeeded()
+    }
+
+    @objc func convertImageToJPEG(_ pboard: NSPasteboard,
+                                  userData: String?,
+                                  error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("convertImageToJPEG") else { return }
+        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        let paths = items.map(\.path)
+        performFileAction(IPCRequest(
+            id: UUID().uuidString,
+            action: "convertImage",
+            payload: ["items": .stringArray(paths), "format": .string("jpeg")]
+        ), feature: MenuFeatureCatalog.imageTools)
+        returnFocusToFinderIfNeeded()
+    }
+
+    @objc func convertImageToHEIC(_ pboard: NSPasteboard,
+                                  userData: String?,
+                                  error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("convertImageToHEIC") else { return }
+        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        let paths = items.map(\.path)
+        performFileAction(IPCRequest(
+            id: UUID().uuidString,
+            action: "convertImage",
+            payload: ["items": .stringArray(paths), "format": .string("heic")]
+        ), feature: MenuFeatureCatalog.imageTools)
+        returnFocusToFinderIfNeeded()
+    }
 }

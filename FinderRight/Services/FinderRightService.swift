@@ -13,7 +13,7 @@ private func L(_ key: String) -> String { NSLocalizedString(key, comment: "notif
 /// 所有方法都在主 App 进程（非沙箱）里执行，借用主 App 的 TCC 权限（包括 Full Disk Access）。
 final class FinderRightService {
 
-    /// 归档（压缩/解压）专用串行队列：隔离耗时 I/O 子进程任务，避免并发争抢系统 I/O。
+    /// 归档与图片处理共用串行队列：隔离耗时任务，并串行维护同一份暂存登记表。
     ///
     /// 必须为类型级（static）：本类同时被 IPCWatcher 与 ServicesProvider 各实例化一次，
     /// 若用实例属性则两个实例各持一条队列，排队互斥形同虚设。
@@ -32,7 +32,7 @@ final class FinderRightService {
         qos: .userInitiated
     )
 
-    /// 在途的压缩 / 解压 / 粘贴任务。AppDelegate 在退出前等待它们完成（见 applicationShouldTerminate）
+    /// 在途的压缩 / 解压 / 粘贴 / 图片处理任务。AppDelegate 在退出前等待它们完成（见 applicationShouldTerminate）
     static let backgroundJobs = BackgroundJobs()
 
     /// 取消剪切代次：每次 cancelCut 自增，**只能在 cutPasteQueue 上访问**。
@@ -93,20 +93,23 @@ final class FinderRightService {
                 }
             }
         }
-        let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
-        for (key, role) in arrayKeys {
-            if let paths = req.payload[key]?.stringArrayValue {
-                for path in paths {
-                    if needsWhitelist {
-                        guard isPathAllowed(path, role: role) else {
-                            serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
-                            return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), path))
-                        }
-                    } else {
-                        let expanded = (path as NSString).expandingTildeInPath
-                        guard FileManager.default.fileExists(atPath: expanded) else {
-                            serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
-                            return IPCResponse(id: req.id, success: false, message: String(format: L("路径不存在：%@"), path))
+        let isImageAction = (req.action == "convertImage" || req.action == "scaleImage")
+        if !isImageAction {
+            let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
+            for (key, role) in arrayKeys {
+                if let paths = req.payload[key]?.stringArrayValue {
+                    for path in paths {
+                        if needsWhitelist {
+                            guard isPathAllowed(path, role: role) else {
+                                serviceLog("路径越界被拦截 [key=\(key)]: \(path)")
+                                return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), path))
+                            }
+                        } else {
+                            let expanded = (path as NSString).expandingTildeInPath
+                            guard FileManager.default.fileExists(atPath: expanded) else {
+                                serviceLog("只读路径不存在被拒绝 [key=\(key)]: \(path)")
+                                return IPCResponse(id: req.id, success: false, message: String(format: L("路径不存在：%@"), path))
+                            }
                         }
                     }
                 }
@@ -157,6 +160,10 @@ final class FinderRightService {
             return copyFileHash(req)
         case "createSymlink":
             return createSymlink(req)
+        case "convertImage":
+            return convertImage(req)
+        case "scaleImage":
+            return scaleImage(req)
         case "undoLast":
             return undoLast(req)
         case BadgeReclaimIPC.action:

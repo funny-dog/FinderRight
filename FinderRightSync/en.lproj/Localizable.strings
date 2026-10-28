@@ -60,3 +60,16 @@
 "复制哈希" = "Copy Hash";
 "创建符号链接" = "Make Symbolic Link";
 "创建符号链接（%d 项）" = "Make symbolic link (%d items)";
+
+"图片" = "Images";
+"转换为 PNG" = "Convert to PNG";
+"转换为 JPEG" = "Convert to JPEG";
+"转换为 HEIC" = "Convert to HEIC";
+"缩放到 2560 像素" = "Scale to 2560 px";
+"缩放到 1920 像素" = "Scale to 1920 px";
+"缩放到 1280 像素" = "Scale to 1280 px";
+"缩放到 800 像素" = "Scale to 800 px";
+"转换“%@”" = "Convert “%@”";
+"转换图片（%d 项）" = "Convert Images (%d items)";
+"图片处理“%@”" = "Process Image “%@”";
+"图片处理（%d 项）" = "Process Images (%d items)";

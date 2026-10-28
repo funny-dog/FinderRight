@@ -92,8 +92,13 @@ public struct MenuFeature: Identifiable, Equatable {
     public let systemImage: String
     /// 彩色模式下的主题色分组
     public let tint: MenuTint
-    /// 若该功能进「服务」菜单，则提供对应的服务声明；否则为 nil
-    public let serviceDeclaration: ServiceMenuDeclaration?
+    /// 若该功能进「服务」菜单，则提供对应的服务声明列表
+    public let serviceDeclarations: [ServiceMenuDeclaration]
+
+    /// 兼容旧的单一服务声明属性
+    public var serviceDeclaration: ServiceMenuDeclaration? {
+        serviceDeclarations.first
+    }
 
     public init(
         id: String,
@@ -101,14 +106,21 @@ public struct MenuFeature: Identifiable, Equatable {
         descriptionKey: String,
         systemImage: String,
         tint: MenuTint = .blue,
-        serviceDeclaration: ServiceMenuDeclaration? = nil
+        serviceDeclaration: ServiceMenuDeclaration? = nil,
+        serviceDeclarations: [ServiceMenuDeclaration] = []
     ) {
         self.id = id
         self.nameKey = nameKey
         self.descriptionKey = descriptionKey
         self.systemImage = systemImage
         self.tint = tint
-        self.serviceDeclaration = serviceDeclaration
+        if !serviceDeclarations.isEmpty {
+            self.serviceDeclarations = serviceDeclarations
+        } else if let serviceDeclaration {
+            self.serviceDeclarations = [serviceDeclaration]
+        } else {
+            self.serviceDeclarations = []
+        }
     }
 }
 
@@ -156,6 +168,7 @@ public enum MenuFeatureCatalog {
     public static let moveTo       = "feature.moveTo"
     public static let copyTo       = "feature.copyTo"
     public static let createSymlink = "feature.createSymlink"
+    public static let imageTools   = "feature.imageTools"
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
@@ -189,6 +202,12 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyToFavorite", menuItemTitle: "FinderRight: Copy to Favorite Folder…")),
         MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green,
                     serviceDeclaration: ServiceMenuDeclaration(message: "createSymlink", menuItemTitle: "FinderRight: Create Symbolic Link")),
+        MenuFeature(id: imageTools,   nameKey: "图片",           descriptionKey: "快速转换格式（PNG/JPEG/HEIC）或按长边等比缩放，仅在选中图片时显示", systemImage: "photo.on.rectangle.angled", tint: .teal,
+                    serviceDeclarations: [
+                        ServiceMenuDeclaration(message: "convertImageToPNG", menuItemTitle: "FinderRight: Convert to PNG"),
+                        ServiceMenuDeclaration(message: "convertImageToJPEG", menuItemTitle: "FinderRight: Convert to JPEG"),
+                        ServiceMenuDeclaration(message: "convertImageToHEIC", menuItemTitle: "FinderRight: Convert to HEIC")
+                    ]),
         MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "ZIP 使用 UTF-8 文件名，便于 Windows 正确显示中文；通常不含 Mac 元数据（应用包等情况保留），需保留时请用访达自带「压缩」",     systemImage: "doc.zipper", tint: .brown,
                     serviceDeclaration: ServiceMenuDeclaration(message: "compressZip", menuItemTitle: "FinderRight: Compress to ZIP")),
         MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压到当前目录，支持输入密码解压加密 ZIP",         systemImage: "shippingbox.and.arrow.backward", tint: .brown,
@@ -301,9 +320,8 @@ public enum ServiceMenuDriftChecker {
         var issues: [VerificationIssue] = []
 
         // 1. 检查已声明的服务是否在三个地方都存在
-        let declared = features.compactMap { f -> (feature: MenuFeature, decl: ServiceMenuDeclaration)? in
-            guard let d = f.serviceDeclaration else { return nil }
-            return (f, d)
+        let declared = features.flatMap { f in
+            f.serviceDeclarations.map { (feature: f, decl: $0) }
         }
 
         let plistMap = Dictionary(plistServices.map { ($0.message, $0.title) }, uniquingKeysWith: { a, _ in a })

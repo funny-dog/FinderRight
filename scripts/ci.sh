@@ -49,6 +49,13 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Services/FinderRightService+Image.swift scripts/test-image-service.swift \
+  -o "$KIT_BUILD_DIR/test-image-service"
+"$KIT_BUILD_DIR/test-image-service"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
   FinderRight/Views/Components/FRDialog.swift FinderRight/Views/OperationHistoryView.swift FinderRight/Views/OperationHistoryRow.swift \
   scripts/test-operation-history.swift -o "$KIT_BUILD_DIR/test-operation-history"

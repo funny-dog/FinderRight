@@ -22,7 +22,8 @@ enum ExclusiveRename {
                 continue
             case ENOTSUP, EINVAL:
                 // 部分文件系统（exFAT、SMB 等）不支持 RENAME_EXCL：退回「查重 + 不覆盖的移动」
-                guard !FileManager.default.fileExists(atPath: candidate.path) else { continue }
+                // attributesOfItem 不跟随符号链接，悬空链接也能正确检测为已存在，避免冲突覆盖
+                guard (try? FileManager.default.attributesOfItem(atPath: candidate.path)) == nil else { continue }
                 do {
                     try FileManager.default.moveItem(at: source, to: candidate)
                     return candidate

@@ -410,6 +410,7 @@ class FinderSync: FIFinderSync {
         }
 
         let undoTitle: String? = UndoMenuState.read().map { UndoText.menuTitle(for: $0, localize: self.L) }
+        let imageState = ImageMenuState.evaluate(urls: selected)
 
         let input = MenuBuildInput(
             location: location,
@@ -421,7 +422,8 @@ class FinderSync: FIFinderSync {
             newFileTemplates: templateData,
             terminals: terminalData,
             editors: editorData,
-            favoriteDirectories: favoriteData
+            favoriteDirectories: favoriteData,
+            imageMenuState: imageState
         )
 
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
@@ -474,6 +476,8 @@ class FinderSync: FIFinderSync {
         case "manageFavorites": return #selector(self.manageFavorites(_:))
         case "createSymlink": return #selector(self.createSymlink(_:))
         case "archiveOperation": return #selector(self.archiveOperation(_:))
+        case "convertImage": return #selector(self.convertImage(_:))
+        case "scaleImage": return #selector(self.scaleImage(_:))
         case "toggleHiddenFiles": return #selector(self.toggleHiddenFiles(_:))
         case "undoLast": return #selector(self.undoLast(_:))
         default: return nil

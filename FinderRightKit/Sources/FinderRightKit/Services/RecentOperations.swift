@@ -4,7 +4,7 @@ import Foundation
 public struct OperationRecord: Codable, Identifiable, Equatable {
 
     public enum Kind: String, Codable {
-        case compress, decompress, paste, move, copy, undo, createFile, cut, symlink
+        case compress, decompress, paste, move, copy, undo, createFile, cut, symlink, convertImage, scaleImage
     }
 
     public let id: UUID

@@ -775,3 +775,31 @@
 
 "ZIP 使用 UTF-8 文件名，便于 Windows 正确显示中文；通常不含 Mac 元数据（应用包等情况保留），需保留时请用访达自带「压缩」" = "ZIP uses UTF-8 names for Chinese filenames on Windows, usually without Mac metadata (preserved for app bundles and other fallbacks); use Finder’s Compress to retain it";
 "解压到当前目录，支持输入密码解压加密 ZIP" = "Extract here, including encrypted ZIPs with a password prompt";
+
+"图片" = "Images";
+"转换为 PNG" = "Convert to PNG";
+"转换为 JPEG" = "Convert to JPEG";
+"转换为 HEIC" = "Convert to HEIC";
+"缩放到 2560 像素" = "Scale to 2560 px";
+"缩放到 1920 像素" = "Scale to 1920 px";
+"缩放到 1280 像素" = "Scale to 1280 px";
+"缩放到 800 像素" = "Scale to 800 px";
+"快速转换格式（PNG/JPEG/HEIC）或按长边等比缩放，仅在选中图片时显示" = "Quickly convert formats (PNG/JPEG/HEIC) or scale proportionally by long edge, shown only when images are selected";
+"转换图片" = "Convert Images";
+"已完成图片处理（%d 项）" = "Finished processing %d image(s)";
+"转换“%@”" = "Convert \"%@\"";
+"转换图片（%d 项）" = "Convert Images (%d items)";
+"图片处理" = "Image Processing";
+"图片处理“%@”" = "Process Image \"%@\"";
+"图片处理（%d 项）" = "Process Images (%d items)";
+"文件不存在：%@" = "File does not exist: %@";
+"多帧图片暂不支持处理（共 %d 帧）" = "Multi-frame images are not supported (%d frames)";
+"图片长边（%d 像素）未超过 %d 像素，已跳过" = "Image long edge (%d px) does not exceed %d px, skipped";
+"无法读取图片或文件已损坏" = "Cannot read image or file is corrupted";
+"图像解码缩放失败" = "Image decoding/scaling failed";
+"无法创建输出图片" = "Cannot create destination image";
+"图片像素（%@）超过格式转换上限（%@），请先使用缩放缩小尺寸后再转换" = "Image pixels (%@) exceed conversion limit (%@), please scale down before converting";
+"不支持写出 %@ 格式，无法直接缩放。请先转换为 PNG/JPEG/HEIC" = "Scaling directly to %@ is not supported. Please convert to PNG/JPEG/HEIC first";
+"创建图像绘制上下文失败" = "Failed to create image drawing context";
+
+"缩放长边必须在 1 至 2560 像素之间" = "Image long edge must be between 1 and 2560 pixels";

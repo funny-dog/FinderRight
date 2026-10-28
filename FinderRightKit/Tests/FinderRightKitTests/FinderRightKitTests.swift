@@ -73,6 +73,136 @@ private func zipEntries(_ zip: URL) throws -> [String] {
         .sorted()
 }
 
+private func transformTestImage(sourceURL: URL, operation: ImageTransformOperation) throws -> URL {
+    try ImageTransformer.process(sourceURL: sourceURL, operation: operation,
+                                 registry: ScratchDirectoryRegistry(registryDirectory: sourceURL.deletingLastPathComponent()))
+}
+
+/// 生成指定宽高与颜色的测试图片
+private func makeTestPNG(width: Int, height: Int, fillColor: CGColor, hasAlpha: Bool = false) -> (URL, URL) {
+    let tempDir = makeTempDirectory()
+    let file = tempDir.appendingPathComponent("test_\(UUID().uuidString).png")
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = hasAlpha ? CGImageAlphaInfo.premultipliedLast.rawValue : CGImageAlphaInfo.noneSkipLast.rawValue
+    let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo)!
+    if !hasAlpha {
+        ctx.setFillColor(fillColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    } else {
+        ctx.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        ctx.setFillColor(fillColor)
+        ctx.fill(CGRect(x: width / 4, y: height / 4, width: width / 2, height: height / 2))
+    }
+    let img = ctx.makeImage()!
+    let dest = CGImageDestinationCreateWithURL(file as CFURL, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(dest, img, nil)
+    CGImageDestinationFinalize(dest)
+    return (file, tempDir)
+}
+
+/// 生成非对称双色带 EXIF 方向的 JPEG（左半红，右半蓝，EXIF 方向为 orientation）
+private func makeTestAsymmetricDualColorJPEG(width: Int, height: Int, orientation: Int) -> (URL, URL) {
+    let tempDir = makeTempDirectory()
+    let file = tempDir.appendingPathComponent("asym_\(UUID().uuidString).jpg")
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+    let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    // 左半部分：纯红 (1, 0, 0)
+    ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+    // 右半部分：纯蓝 (0, 0, 1)
+    ctx.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+    ctx.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+    let img = ctx.makeImage()!
+    let dest = CGImageDestinationCreateWithURL(file as CFURL, "public.jpeg" as CFString, 1, nil)!
+    let props: [CFString: Any] = [
+        kCGImagePropertyOrientation: orientation,
+        kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFOrientation: orientation]
+    ]
+    CGImageDestinationAddImage(dest, img, props as CFDictionary)
+    CGImageDestinationFinalize(dest)
+    return (file, tempDir)
+}
+
+/// 生成包含旧元数据（TIFF/Exif 尺寸与方向）的测试图
+private func makeTestJPEGWithOldMetadata(width: Int, height: Int) -> (URL, URL) {
+    let tempDir = makeTempDirectory()
+    let file = tempDir.appendingPathComponent("meta_\(UUID().uuidString).jpg")
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+    let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.setFillColor(CGColor(red: 0.5, green: 0.8, blue: 0.2, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let img = ctx.makeImage()!
+    let dest = CGImageDestinationCreateWithURL(file as CFURL, "public.jpeg" as CFString, 1, nil)!
+    let props: [CFString: Any] = [
+        kCGImagePropertyOrientation: 6,
+        kCGImagePropertyTIFFDictionary: [
+            kCGImagePropertyTIFFOrientation: 6,
+            "ImageWidth" as CFString: width,
+            "ImageLength" as CFString: height
+        ],
+        kCGImagePropertyExifDictionary: [
+            kCGImagePropertyExifPixelXDimension: width,
+            kCGImagePropertyExifPixelYDimension: height
+        ]
+    ]
+    CGImageDestinationAddImage(dest, img, props as CFDictionary)
+    CGImageDestinationFinalize(dest)
+    return (file, tempDir)
+}
+
+/// 生成 100x100 像素的有效 WebP 测试图片（只读格式）
+private func makeTestWebP() -> (URL, URL) {
+    let tempDir = makeTempDirectory()
+    let file = tempDir.appendingPathComponent("test_\(UUID().uuidString).webp")
+    let webpBytes: [UInt8] = [
+        82, 73, 70, 70, 102, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32, 90, 0, 0, 0,
+        16, 6, 0, 157, 1, 42, 100, 0, 100, 0, 62, 109, 54, 153, 73, 164, 35, 34,
+        161, 32, 168, 0, 128, 13, 137, 105, 110, 225, 115, 233, 112, 31, 128, 0,
+        1, 141, 174, 166, 247, 17, 121, 96, 26, 234, 111, 113, 23, 150, 1, 174, 166,
+        247, 17, 121, 96, 26, 120, 0, 254, 254, 81, 125, 255, 255, 144, 92, 176,
+        186, 228, 107, 255, 255, 32, 63, 228, 7, 252, 128, 255, 248, 248, 166, 70,
+        149, 42, 116, 32, 0, 0, 0
+    ]
+    try! Data(webpBytes).write(to: file)
+    return (file, tempDir)
+}
+
+/// 生成多帧 GIF
+private func makeMultiFrameGIF() -> (URL, URL) {
+    let tempDir = makeTempDirectory()
+    let file = tempDir.appendingPathComponent("test_\(UUID().uuidString).gif")
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+    let ctx = CGContext(data: nil, width: 50, height: 50, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
+    let img1 = ctx.makeImage()!
+    ctx.setFillColor(CGColor(red: 0, green: 1, blue: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
+    let img2 = ctx.makeImage()!
+    let dest = CGImageDestinationCreateWithURL(file as CFURL, "com.compuserve.gif" as CFString, 2, nil)!
+    CGImageDestinationAddImage(dest, img1, nil)
+    CGImageDestinationAddImage(dest, img2, nil)
+    CGImageDestinationFinalize(dest)
+    return (file, tempDir)
+}
+
+/// 获取图片指定坐标的像素 RGB
+private func getPixelRGB(at point: CGPoint, from imageURL: URL) -> (r: UInt8, g: UInt8, b: UInt8)? {
+    guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+          let img = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+    let width = img.width
+    let height = img.height
+    let x = Int(point.x)
+    let y = Int(point.y)
+    guard x >= 0, x < width, y >= 0, y < height else { return nil }
+    var pixelData = [UInt8](repeating: 0, count: 4)
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+    guard let ctx = CGContext(data: &pixelData, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: colorSpace, bitmapInfo: bitmapInfo.rawValue) else { return nil }
+    ctx.draw(img, in: CGRect(x: -x, y: -y, width: width, height: height))
+    return (pixelData[0], pixelData[1], pixelData[2])
+}
+
 /// 目录下的全部条目名（含隐藏项，已排序）
 private func directoryListing(_ dir: URL) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
@@ -4526,6 +4656,286 @@ struct FinderRightKitTestsRunner {
                     throw TestFailure(message: "原有文档必须保持上限")
                 } catch PreviewDocumentError.tooLarge {}
             }
+        }
+
+        runTest("图片菜单：纯决策与真实文件检测（目录/文本伪装/损坏图/真实同格式隐藏）") {
+            let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            // 1. 纯决策输入测试
+            let inspectedPNG = [InspectedImageItem(format: .png, width: 200, height: 100)]
+            let statePNG = ImageMenuState.evaluate(inspected: inspectedPNG)
+            try assertTrue(statePNG.isAllImages)
+            try assertTrue(statePNG.allArePNG)
+
+            let inspectedZero = [InspectedImageItem(format: .png, width: 0, height: 100)]
+            try assertTrue(!ImageMenuState.evaluate(inspected: inspectedZero).isAllImages, "尺寸为0纯决策判定为非图片")
+            try assertTrue(!ImageMenuState.evaluate(inspected: []).isAllImages, "空数组纯决策判定为非图片")
+
+            // 2. 真实正常图片
+            let (realPNG, imageDirectory) = makeTestPNG(width: 100, height: 80, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            defer { try? FileManager.default.removeItem(at: imageDirectory) }
+            let stateReal = ImageMenuState.evaluate(urls: [realPNG])
+            try assertTrue(stateReal.isAllImages)
+            try assertTrue(stateReal.allArePNG)
+
+            // 3. 目录名伪装为 foo.png：必须不显示图片菜单
+            let fakeDir = tempDir.appendingPathComponent("foo.png")
+            try FileManager.default.createDirectory(at: fakeDir, withIntermediateDirectories: false)
+            try assertTrue(!ImageMenuState.evaluate(urls: [fakeDir]).isAllImages, "名为 foo.png 的目录不应显示图片菜单")
+
+            // 4. 普通文本伪装为 text.png：必须不显示
+            let fakeText = tempDir.appendingPathComponent("text.png")
+            try Data("hello world this is not an image".utf8).write(to: fakeText)
+            try assertTrue(!ImageMenuState.evaluate(urls: [fakeText]).isAllImages, "文本伪装 png 不应显示图片菜单")
+
+            // 5. 损坏图像文件：必须不显示
+            let corruptFile = tempDir.appendingPathComponent("corrupt.jpg")
+            try Data([0xFF, 0xD8, 0x00, 0x01, 0x02, 0x03]).write(to: corruptFile)
+            try assertTrue(!ImageMenuState.evaluate(urls: [corruptFile]).isAllImages, "损坏图片不应显示图片菜单")
+
+            // 6. 真实同格式按检测类型隐藏：PNG 命名为 fake.jpg，实际按 PNG 隐藏「转换为 PNG」
+            let pngWithJpgExt = tempDir.appendingPathComponent("disguised.jpg")
+            try FileManager.default.copyItem(at: realPNG, to: pngWithJpgExt)
+            let detectedState = ImageMenuState.evaluate(urls: [pngWithJpgExt])
+            try assertTrue(detectedState.isAllImages)
+            try assertTrue(detectedState.allArePNG, "即使扩展名为 .jpg，通过 ImageIO 检测出其实际类型为 PNG")
+
+            let input = MenuBuildInput(
+                location: .items,
+                selection: .singleFile(isTextEligible: false, isArchive: false),
+                enabledFeatureIds: allFeatures,
+                imageMenuState: detectedState
+            )
+            let nodes = MenuTreeBuilder.buildMenuTree(input: input)
+            guard let imgNode = nodes.first(where: { $0.id == MenuFeatureCatalog.imageTools }),
+                  case .submenu(let children) = imgNode.kind else {
+                throw TestFailure(message: "应该显示图片子菜单")
+            }
+            let childIds = children.map(\.id)
+            try assertTrue(!childIds.contains("image.convertToPNG"), "真实类型为 PNG 应隐藏转换为 PNG")
+            try assertTrue(childIds.contains("image.convertToJPEG"), "显示转换为 JPEG")
+            try assertTrue(childIds.contains("image.convertToHEIC"), "显示转换为 HEIC")
+            try assertTrue(!ImageMenuState.evaluate(urls: [realPNG, fakeText]).isAllImages)
+            var hiddenInput = input
+            hiddenInput.location = .container
+            try assertTrue(!MenuTreeBuilder.buildMenuTree(input: hiddenInput).contains { $0.id == MenuFeatureCatalog.imageTools })
+            hiddenInput = input
+            hiddenInput.enabledFeatureIds.remove(MenuFeatureCatalog.imageTools)
+            try assertTrue(!MenuTreeBuilder.buildMenuTree(input: hiddenInput).contains { $0.id == MenuFeatureCatalog.imageTools })
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.imageTools))
+            try assertEqual(ImageSourceFormat.from(uti: "public.jpeg-2000" as CFString), .other)
+            for (format, hiddenID) in [(ImageSourceFormat.jpeg, "image.convertToJPEG"), (.heic, "image.convertToHEIC")] {
+                var formatInput = input
+                formatInput.imageMenuState = ImageMenuState.evaluate(inspected: [InspectedImageItem(format: format, width: 100, height: 50)])
+                guard let menu = MenuTreeBuilder.buildMenuTree(input: formatInput).first(where: { $0.id == MenuFeatureCatalog.imageTools }),
+                      case .submenu(let formatChildren) = menu.kind else { throw TestFailure(message: "缺少图片子菜单") }
+                try assertTrue(!formatChildren.contains { $0.id == hiddenID })
+            }
+
+        }
+
+        runTest("图片处理：实际输出命名重名和悬空链接不覆盖") {
+            let (file, directory) = makeTestPNG(width: 100, height: 50, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let base = file.deletingPathExtension().lastPathComponent
+            let original = try Data(contentsOf: file)
+            let first = try transformTestImage(sourceURL: file, operation: .convert(format: .jpeg))
+            try assertEqual(first.lastPathComponent, base + ".jpg")
+            let link = directory.appendingPathComponent(base + " 1.jpg")
+            try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "missing-target")
+            let second = try transformTestImage(sourceURL: file, operation: .convert(format: .jpeg))
+            try assertEqual(second.lastPathComponent, base + " 2.jpg")
+            try assertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), "missing-target")
+            try assertEqual(try Data(contentsOf: file), original)
+        }
+
+        runTest("图片处理：实际缩放尺寸命名与不放大") {
+            let (file, directory) = makeTestPNG(width: 100, height: 50, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            defer { try? FileManager.default.removeItem(at: directory) }
+            for target in [100, 1920] {
+                do {
+                    _ = try transformTestImage(sourceURL: file, operation: .scale(maxPixelSize: target))
+                    throw TestFailure(message: "不得放大或重复输出相同大小图片")
+                } catch ImageTransformError.alreadySmallerThanTarget(let edge, let requested) {
+                    try assertEqual(edge, 100)
+                    try assertEqual(requested, target)
+                }
+            }
+            let output = try transformTestImage(sourceURL: file, operation: .scale(maxPixelSize: 40))
+            try assertEqual(output.lastPathComponent, file.deletingPathExtension().lastPathComponent + " 40px.png")
+            let source = CGImageSourceCreateWithURL(output as CFURL, nil)!
+            try assertEqual(CGImageSourceGetType(source) as String?, "public.png")
+            let (width, height, _, _) = try ImageTransformer.inspectImageSource(source)
+            try assertEqual(width, 40)
+            try assertEqual(height, 20)
+        }
+
+        runTest("图片处理：异常缩放尺寸与非普通文件拒绝") {
+            let (file, directory) = makeTestPNG(width: 20, height: 10, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            defer { try? FileManager.default.removeItem(at: directory) }
+            for target in [0, -1, 2561, Int.max] {
+                do {
+                    _ = try transformTestImage(sourceURL: file, operation: .scale(maxPixelSize: target))
+                    throw TestFailure(message: "必须拒绝异常尺寸")
+                } catch ImageTransformError.invalidScaleSize {}
+            }
+            do {
+                _ = try transformTestImage(sourceURL: directory, operation: .convert(format: .png))
+                throw TestFailure(message: "必须拒绝目录")
+            } catch ImageTransformError.cannotReadImageSource {}
+        }
+
+        runTest("图片处理：非对称双色图旋转后断言两个像素方位与方向重置") {
+            // 构造宽 200 高 100 的非对称双色图（左半红、右半蓝），设置 EXIF 方向 6（顺时针旋转 90 度）
+            let (jpegFile, tempDir) = makeTestAsymmetricDualColorJPEG(width: 200, height: 100, orientation: 6)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            // 缩放到 150 像素（原长边 200 > 150，应用旋转后高为 150，宽为 75）
+            let scaledURL = try transformTestImage(sourceURL: jpegFile, operation: .scale(maxPixelSize: 150))
+            defer { try? FileManager.default.removeItem(at: scaledURL) }
+
+            guard let src = CGImageSourceCreateWithURL(scaledURL as CFURL, nil) else {
+                throw TestFailure(message: "无法读取缩放后的 JPEG")
+            }
+            let (w, h, _, props) = try ImageTransformer.inspectImageSource(src)
+
+            // 1. 断言输出方向重置为 1
+            let outOrientation = (props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 0
+            try assertEqual(outOrientation, 1, "输出方向必须重置为 1 (TopLeft)")
+
+            // 2. 变换后尺寸
+            try assertEqual(h, 150, "顺时针旋转 90 度后高为长边 150")
+            try assertEqual(w, 75, "顺时针旋转 90 度后宽为短边 75")
+
+            // 3. 断言旋转后至少两个像素方位：
+            guard let topPixel = getPixelRGB(at: CGPoint(x: 37, y: 35), from: scaledURL),
+                  let bottomPixel = getPixelRGB(at: CGPoint(x: 37, y: 115), from: scaledURL) else {
+                throw TestFailure(message: "无法获取变换后两个方位的像素")
+            }
+            // 顺时针旋转 90 度校正后，上方方位为蓝色 (B 高，R 低)，下方方位为红色 (R 高，B 低)
+            try assertTrue(topPixel.b > 200 && topPixel.r < 50, "上方像素方位应为蓝色，实际: (\(topPixel.r), \(topPixel.g), \(topPixel.b))")
+            try assertTrue(bottomPixel.r > 200 && bottomPixel.b < 50, "下方像素方位应为红色，实际: (\(bottomPixel.r), \(bottomPixel.g), \(bottomPixel.b))")
+        }
+
+        runTest("图片处理：HEIC 格式转换可读回与元数据清洗") {
+            let (jpegFile, tempDir) = makeTestJPEGWithOldMetadata(width: 200, height: 100)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            // 转换为 HEIC
+            let heicURL = try transformTestImage(sourceURL: jpegFile, operation: .convert(format: .heic))
+            defer { try? FileManager.default.removeItem(at: heicURL) }
+
+            // 断言可正常读回
+            guard let src = CGImageSourceCreateWithURL(heicURL as CFURL, nil) else {
+                throw TestFailure(message: "HEIC 转换结果无法通过 ImageIO 读回")
+            }
+            let (w, h, count, props) = try ImageTransformer.inspectImageSource(src)
+            try assertEqual(count, 1, "单帧 HEIC")
+            try assertEqual(w, 100, "应用方向校正后宽为 100")
+            try assertEqual(h, 200, "应用方向校正后高为 200")
+
+            // 元数据清洗断言：顶层方向重置为 1
+            let outOrientation = (props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 0
+            try assertEqual(outOrientation, 1, "HEIC 输出顶层方向必须重置为 1")
+
+            // TIFF 字典若存在，方向重置为 1，且不应残留旧的尺寸键
+            if let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+                let tiffOrient = (tiff[kCGImagePropertyTIFFOrientation] as? NSNumber)?.intValue ?? 1
+                try assertEqual(tiffOrient, 1)
+                try assertNil(tiff["ImageWidth" as CFString], "TIFF 字典不应残留旧尺寸")
+                try assertNil(tiff["ImageLength" as CFString], "TIFF 字典不应残留旧尺寸")
+            }
+
+            // Exif 字典若存在，不应残留旧尺寸
+            if let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+                try assertNil(exif[kCGImagePropertyExifPixelXDimension], "Exif 字典不应残留旧尺寸")
+                try assertNil(exif[kCGImagePropertyExifPixelYDimension], "Exif 字典不应残留旧尺寸")
+            }
+        }
+
+        runTest("图片处理：WebP 格式支持转换输入，但直接缩放明确跳过并提示原因") {
+            let (webpFile, tempDir) = makeTestWebP()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            // 1. 允许作为转换输入：WebP -> PNG
+            let pngURL = try transformTestImage(sourceURL: webpFile, operation: .convert(format: .png))
+            defer { try? FileManager.default.removeItem(at: pngURL) }
+            guard let src = CGImageSourceCreateWithURL(pngURL as CFURL, nil) else {
+                throw TestFailure(message: "无法读取转换自 WebP 的 PNG")
+            }
+            let (w, h, _, _) = try ImageTransformer.inspectImageSource(src)
+            try assertEqual(w, 100)
+            try assertEqual(h, 100)
+
+            // 2. 缩放 WebP：系统不支持写入 WebP，应明确跳过并抛出原因，禁止静默改变格式
+            var rejected = false
+            do {
+                _ = try transformTestImage(sourceURL: webpFile, operation: .scale(maxPixelSize: 50))
+            } catch let err as ImageTransformError {
+                if case .unwritableSourceFormat(let ext) = err {
+                    try assertEqual(ext.lowercased(), "webp")
+                    rejected = true
+                }
+            }
+            try assertTrue(rejected, "WebP 缩放应明确拒绝并告知不可写原因")
+        }
+
+        runTest("图片处理：预解码尺寸上限与乘法溢出检查") {
+            try ImageTransformer.validateConversionSize(width: 8000, height: 5000)
+            for (width, height) in [(10_000, 10_000), (Int.max, 2)] {
+                do {
+                    try ImageTransformer.validateConversionSize(width: width, height: height)
+                    throw TestFailure(message: "必须在解码前拦截超大位图")
+                } catch ImageTransformError.pixelCountExceedsLimit(_, let limit) {
+                    try assertEqual(limit, 40_000_000)
+                }
+            }
+        }
+
+        runTest("图片处理：缩放撤销文案使用图片处理避免错称转换") {
+            let id: (String) -> String = { $0 }
+            let scaleSingle = UndoText.actionDescription(kind: .scaleImage, count: 1, name: "photo 1920px.png", localize: id)
+            try assertEqual(scaleSingle, "图片处理“photo 1920px.png”")
+
+            let scaleMultiple = UndoText.actionDescription(kind: .scaleImage, count: 3, name: "", localize: id)
+            try assertEqual(scaleMultiple, "图片处理（3 项）")
+
+            let convertSingle = UndoText.actionDescription(kind: .convertImage, count: 1, name: "photo.jpg", localize: id)
+            try assertEqual(convertSingle, "转换“photo.jpg”")
+        }
+
+        runTest("图片处理：透明 PNG 转 JPEG 后角落像素为白色") {
+            // 创建四周透明、中心红色的 PNG
+            let (pngFile, tempDir) = makeTestPNG(width: 100, height: 100, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1), hasAlpha: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            // 转换为 JPEG
+            let jpegURL = try transformTestImage(sourceURL: pngFile, operation: .convert(format: .jpeg))
+            defer { try? FileManager.default.removeItem(at: jpegURL) }
+
+            // 检查角落 (0, 0) 像素：在透明转 JPEG 后必须铺白底，RGB 应为白色 (>= 240)
+            guard let rgb = getPixelRGB(at: CGPoint(x: 0, y: 0), from: jpegURL) else {
+                throw TestFailure(message: "无法获取角落像素 RGB")
+            }
+            try assertTrue(rgb.r >= 240 && rgb.g >= 240 && rgb.b >= 240, "透明角落转 JPEG 必须为白色，实际为: (\(rgb.r), \(rgb.g), \(rgb.b))")
+        }
+
+        runTest("图片处理：多帧图片被拒绝") {
+            let (gifFile, tempDir) = makeMultiFrameGIF()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            var rejected = false
+            do {
+                _ = try transformTestImage(sourceURL: gifFile, operation: .convert(format: .png))
+            } catch let err as ImageTransformError {
+                if case .multiFrameNotSupported(let count) = err {
+                    try assertEqual(count, 2)
+                    rejected = true
+                }
+            }
+            try assertTrue(rejected, "多帧动图应被明确拒绝并跳过")
         }
 
         print("\n-----------------------------------------")

@@ -62,7 +62,7 @@ public struct FinderUndoSnapshot: Equatable {
 public struct UndoRecord: Equatable {
 
     public enum Kind: String, Codable {
-        case move, copy, cut, paste, createFile, compress, decompress, symlink
+        case move, copy, cut, paste, createFile, compress, decompress, symlink, convertImage, scaleImage
     }
 
     public struct Item: Equatable {

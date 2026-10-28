@@ -94,6 +94,101 @@ public struct CutState: Equatable {
     }
 }
 
+/// 单个图片的探测结果（纯数据模型，用于 MenuModel 纯决策输入）
+public struct InspectedImageItem: Equatable {
+    public let format: ImageSourceFormat
+    public let width: Int
+    public let height: Int
+
+    public init(format: ImageSourceFormat, width: Int, height: Int) {
+        self.format = format
+        self.width = width
+        self.height = height
+    }
+}
+
+/// 图片源格式分类
+public enum ImageSourceFormat: String, Equatable, Hashable {
+    case png
+    case jpeg
+    case heic
+    case other
+
+    public static func from(uti: CFString) -> ImageSourceFormat {
+        let utiStr = uti as String
+        switch utiStr {
+        case "public.png":
+            return .png
+        case "public.jpeg":
+            return .jpeg
+        case "public.heic", "public.heif":
+            return .heic
+        default:
+            return .other
+        }
+    }
+}
+
+/// 纯数据图片选中状态与菜单可用性判定
+public struct ImageMenuState: Equatable {
+    public let isAllImages: Bool
+    public let formats: [ImageSourceFormat]
+
+    public var allArePNG: Bool { !formats.isEmpty && formats.allSatisfy { $0 == .png } }
+    public var allAreJPEG: Bool { !formats.isEmpty && formats.allSatisfy { $0 == .jpeg } }
+    public var allAreHEIC: Bool { !formats.isEmpty && formats.allSatisfy { $0 == .heic } }
+
+    public init(isAllImages: Bool, formats: [ImageSourceFormat] = []) {
+        self.isAllImages = isAllImages
+        self.formats = formats
+    }
+
+    /// 纯决策：由图片检测结果列表决定是否全为有效图片及各格式分布（MenuModel 纯逻辑）
+    public static func evaluate(inspected items: [InspectedImageItem]) -> ImageMenuState {
+        guard !items.isEmpty else {
+            return ImageMenuState(isAllImages: false, formats: [])
+        }
+        for item in items {
+            guard item.width > 0, item.height > 0 else {
+                return ImageMenuState(isAllImages: false, formats: [])
+            }
+        }
+        return ImageMenuState(isAllImages: true, formats: items.map(\.format))
+    }
+
+    /// 检验普通可读文件及 ImageIO 实际图像类型/有效尺寸（不完整解码大图）
+    public static func evaluate(urls: [URL]) -> ImageMenuState {
+        guard !urls.isEmpty else {
+            return ImageMenuState(isAllImages: false, formats: [])
+        }
+        var inspected: [InspectedImageItem] = []
+        inspected.reserveCapacity(urls.count)
+
+        for url in urls {
+            let path = url.path
+            var isDir: ObjCBool = false
+            // 必须是已存在的文件、不可为目录、必须可读
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+                  !isDir.boolValue,
+                  FileManager.default.isReadableFile(atPath: path) else {
+                return ImageMenuState(isAllImages: false, formats: [])
+            }
+            // 排除目录伪装为 .png 等非常规文件
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                  values.isRegularFile == true else {
+                return ImageMenuState(isAllImages: false, formats: [])
+            }
+            // 通过 ImageIO 读取头部实际类型与有效尺寸（不完整解码大图）
+            guard let item = ImageTransformer.inspectImageHeader(at: url) else {
+                return ImageMenuState(isAllImages: false, formats: [])
+            }
+            inspected.append(item)
+        }
+
+        return evaluate(inspected: inspected)
+    }
+}
+
 /// 纯数据菜单树输入上下文
 public struct MenuBuildInput: Equatable {
     public var location: MenuTargetLocation
@@ -107,6 +202,7 @@ public struct MenuBuildInput: Equatable {
     public var editors: [MenuEditorData]
     public var favoriteDirectories: [MenuFavoriteData]
     public var hashAlgorithms: [String]
+    public var imageMenuState: ImageMenuState?
 
     public init(
         location: MenuTargetLocation,
@@ -119,7 +215,8 @@ public struct MenuBuildInput: Equatable {
         terminals: [MenuTerminalData] = [],
         editors: [MenuEditorData] = [],
         favoriteDirectories: [MenuFavoriteData] = [],
-        hashAlgorithms: [String] = FileHasher.Algorithm.allCases.map(\.title)
+        hashAlgorithms: [String] = FileHasher.Algorithm.allCases.map(\.title),
+        imageMenuState: ImageMenuState? = nil
     ) {
         self.location = location
         self.selection = selection
@@ -132,6 +229,7 @@ public struct MenuBuildInput: Equatable {
         self.editors = editors
         self.favoriteDirectories = favoriteDirectories
         self.hashAlgorithms = hashAlgorithms
+        self.imageMenuState = imageMenuState
     }
 }
 
@@ -567,6 +665,75 @@ public enum MenuTreeBuilder {
                         systemImage: "link.badge.plus",
                         tint: .green,
                         actionId: "createSymlink"
+                    ))
+                }
+            case MenuFeatureCatalog.imageTools:
+                if hasExplicitSelection, let state = input.imageMenuState, state.isAllImages {
+                    var children: [MenuDataNode] = []
+                    if !state.allArePNG {
+                        children.append(.action(
+                            id: "image.convertToPNG",
+                            titleKey: "转换为 PNG",
+                            tint: .teal,
+                            actionId: "convertImage",
+                            tag: 0
+                        ))
+                    }
+                    if !state.allAreJPEG {
+                        children.append(.action(
+                            id: "image.convertToJPEG",
+                            titleKey: "转换为 JPEG",
+                            tint: .teal,
+                            actionId: "convertImage",
+                            tag: 1
+                        ))
+                    }
+                    if !state.allAreHEIC {
+                        children.append(.action(
+                            id: "image.convertToHEIC",
+                            titleKey: "转换为 HEIC",
+                            tint: .teal,
+                            actionId: "convertImage",
+                            tag: 2
+                        ))
+                    }
+                    if !children.isEmpty {
+                        children.append(.separator(id: "image.separator"))
+                    }
+                    children.append(.action(
+                        id: "image.scale2560",
+                        titleKey: "缩放到 2560 像素",
+                        tint: .teal,
+                        actionId: "scaleImage",
+                        tag: 2560
+                    ))
+                    children.append(.action(
+                        id: "image.scale1920",
+                        titleKey: "缩放到 1920 像素",
+                        tint: .teal,
+                        actionId: "scaleImage",
+                        tag: 1920
+                    ))
+                    children.append(.action(
+                        id: "image.scale1280",
+                        titleKey: "缩放到 1280 像素",
+                        tint: .teal,
+                        actionId: "scaleImage",
+                        tag: 1280
+                    ))
+                    children.append(.action(
+                        id: "image.scale800",
+                        titleKey: "缩放到 800 像素",
+                        tint: .teal,
+                        actionId: "scaleImage",
+                        tag: 800
+                    ))
+                    items.append(.submenu(
+                        id: MenuFeatureCatalog.imageTools,
+                        titleKey: "图片",
+                        systemImage: "photo.on.rectangle.angled",
+                        tint: .teal,
+                        children: children
                     ))
                 }
             case MenuFeatureCatalog.compress:

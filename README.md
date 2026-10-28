@@ -34,6 +34,7 @@
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
 - 🔗 **复制哈希 / 创建符号链接**（默认关闭）—— 复制 SHA-256 / SHA-1 / MD5（多选与 shasum 格式一致）；在原位置创建终端可识别的符号链接
+- 🖼️ **图片快速转换 / 缩放** —— 转换为 PNG / JPEG / HEIC，或按长边等比缩放至 2560px / 1920px / 1280px / 800px；仅在选中项全为图片时显示，支持批量与撤销。WebP 仅支持作为源格式转换为其他格式，不支持直接缩放输出；超过 4,000 万像素的图片需先缩放再转换；原图不会被修改，多帧图片会跳过并说明原因。
 - 📦 **压缩 / 解压** —— 默认关闭：ZIP 使用 UTF-8 文件名，Windows 上中文名不乱码，通常不含 `__MACOSX`、`.DS_Store` 和 AppleDouble `._*` 元数据（应用包或特殊路径等情况退回系统方式），支持输入密码解压加密 ZIP。需要保留 Mac 元数据时请用访达自带「压缩」。
 - 👀 **扩展空格预览** —— 系统自带的快速查看（空格快捷键）增强，支持大多数格式，包括文件夹和压缩包等等，markdown支持渲染
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
@@ -121,7 +122,7 @@ killall Finder
 
 iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Provider 域，目录归云盘自己的扩展管理，第三方 Finder 扩展的右键菜单不会出现，完全磁盘访问也改变不了（见 [Keka #1327 中转述的 Apple DTS 答复](https://github.com/aonez/Keka/issues/1327)）。`/Applications`、`/Users/Shared` 等未注册目录同理。
 
-在这些位置，FinderRight 的操作改由 **右键 → 服务** 提供：复制路径 / 复制文件名 / 复制文件内容 / 复制 SHA-256 / 创建符号链接 / 打开路径 / 新建文件 / 移动到 / 复制到 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
+在这些位置，FinderRight 的操作改由 **右键 → 服务** 提供：复制路径 / 复制文件名 / 复制文件内容 / 复制 SHA-256 / 创建符号链接 / 转换为 PNG / 转换为 JPEG / 转换为 HEIC / 打开路径 / 新建文件 / 移动到 / 复制到 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
 
 - 粘贴：剪切后在目标目录空白处选「服务 → FinderRight：粘贴到此文件夹」；若空白处没有「服务」，可回到上一级右键目标文件夹。它移动的是 FinderRight 的剪切队列，而不是系统剪贴板。
 - 新建文件、移动到 / 复制到会先弹确认框；取消不会操作文件。
@@ -201,6 +202,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
 - 🔗 **Copy Hash / Make Symbolic Link** (off by default) — copy SHA-256 / SHA-1 / MD5 (multiple files use the shasum format); create symbolic links that Terminal understands, next to the originals
+- 🖼️ **Image Convert / Scale** — convert to PNG / JPEG / HEIC, or scale proportionally by long edge to 2560px / 1920px / 1280px / 800px; shown only when all selected items are images, with batch support and undo. WebP is supported as a read/conversion source only and cannot be directly scaled to WebP; images over 40 million pixels must be scaled down before converting. Originals remain unchanged; multi-frame images are skipped with a reason.
 - 📦 **Compress / Extract** — Off by default: ZIPs use UTF-8 filenames for Chinese names on Windows, usually omit `__MACOSX`, `.DS_Store` and AppleDouble `._*` metadata (app bundles and special paths fall back to the system method), and encrypted ZIPs prompt for a password. Use Finder’s Compress when you need to retain Mac metadata.
 - 👀 **Extended Quick Look previews** — enhance the built-in Quick Look (Space bar) with support for most formats, including folders and archives, plus rendered Markdown
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
@@ -290,7 +292,7 @@ killall Finder
 
 iCloud Drive, Google Drive, OneDrive, Dropbox and similar services are File Provider domains on macOS, owned by the provider's own extension, so third-party Finder extension menus don't appear there, and Full Disk Access doesn't change that (see [the Apple DTS reply quoted in Keka #1327](https://github.com/aonez/Keka/issues/1327)). Unregistered folders such as `/Applications` and `/Users/Shared` behave the same way.
 
-In these places FinderRight's actions are available under **right-click → Services**: Copy Path / Copy File Name / Copy File Content / Copy SHA-256 / Create Symbolic Link / Go to Folder / New File / Move To / Copy To / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
+In these places FinderRight's actions are available under **right-click → Services**: Copy Path / Copy File Name / Copy File Content / Copy SHA-256 / Create Symbolic Link / Convert to PNG / Convert to JPEG / Convert to HEIC / Go to Folder / New File / Move To / Copy To / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
 
 - Paste: after cutting, right-click empty space in the destination and choose "Services → FinderRight: Paste into This Folder"; if Services is missing there, right-click the destination folder from its parent. It moves FinderRight's cut queue, not the system clipboard.
 - New File and Move To / Copy To show a confirmation dialog first; cancelling does nothing.

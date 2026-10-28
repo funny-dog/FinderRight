@@ -317,4 +317,34 @@ extension FinderSync {
             logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
+
+    @objc func convertImage(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { return }
+        let formats = ["png", "jpeg", "heic"]
+        guard formats.indices.contains(sender.tag) else { return }
+        let targetFormat = formats[sender.tag]
+        let paths = urls.map(\.path)
+        logToFile("convertImage ipc (async) → target=\(targetFormat) count=\(paths.count)")
+        IPCClient.shared.callAsync(action: "convertImage", payload: [
+            "items": .stringArray(paths),
+            "format": .string(targetFormat)
+        ]) { r in
+            logToFile("convertImage ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    @objc func scaleImage(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { return }
+        let maxPixel = sender.tag
+        let paths = urls.map(\.path)
+        logToFile("scaleImage ipc (async) → maxPixel=\(maxPixel) count=\(paths.count)")
+        IPCClient.shared.callAsync(action: "scaleImage", payload: [
+            "items": .stringArray(paths),
+            "maxPixel": .int(maxPixel)
+        ]) { r in
+            logToFile("scaleImage ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
 }
