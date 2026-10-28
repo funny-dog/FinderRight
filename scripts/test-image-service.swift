@@ -5,17 +5,19 @@ import ImageIO
 // 使用内存记录隔离历史与提示；不启动 App、不打开窗口、不操作用户配置。
 enum ClipboardToast {
     enum Style { case success, failure, partial }
-    static func show(message: String, style: Style) {}
+    static var last: (message: String, style: Style)?
+    static func show(message: String, style: Style) { last = (message, style) }
 }
 struct OperationRecord {
     enum Kind { case convertImage, scaleImage }
     let kind: Kind
     let subject: String
     let failure: String?
+    let note: String?
     let results: [URL]
     let location: URL?
-    init(kind: Kind, subject: String, failure: String? = nil, results: [URL] = [], location: URL? = nil) {
-        self.kind = kind; self.subject = subject; self.failure = failure; self.results = results; self.location = location
+    init(kind: Kind, subject: String, failure: String? = nil, results: [URL] = [], location: URL? = nil, note: String? = nil) {
+        self.kind = kind; self.subject = subject; self.failure = failure; self.results = results; self.location = location; self.note = note
     }
 }
 final class RecentOperations {
@@ -59,11 +61,11 @@ struct ImageServiceChecks {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("finderright-image-service-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        func fixture(_ file: URL) throws {
-            let context = CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8, bytesPerRow: 0,
+        func fixture(_ file: URL, width: Int = 40, height: Int = 20) throws {
+            let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
             context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-            context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             let dest = CGImageDestinationCreateWithURL(file as CFURL, "public.png" as CFString, 1, nil)!
             CGImageDestinationAddImage(dest, context.makeImage()!, nil)
             precondition(CGImageDestinationFinalize(dest))
@@ -129,6 +131,36 @@ struct ImageServiceChecks {
         let afterUndo = try Data(contentsOf: first)
         precondition(afterUndo == original)
         precondition(FileManager.default.fileExists(atPath: last.path))
+        let previousUndo = service.undo
+        precondition(service.scaleImage(IPCRequest(id: UUID().uuidString, action: "scaleImage", payload: [
+            "items": .stringArray([first.path, last.path]), "maxPixel": .int(800)
+        ])).success)
+        precondition(FinderRightService.backgroundJobs.waitUntilIdle(timeout: 10))
+        let allSkipped = RecentOperations.shared.records.last!
+        precondition(allSkipped.failure == nil && allSkipped.results.isEmpty)
+        precondition(allSkipped.note!.contains("first.png") && allSkipped.note!.contains("last.png"))
+        precondition(service.undo == previousUndo)
+        precondition(ClipboardToast.last!.style == .success && ClipboardToast.last!.message.contains("无需缩放"))
+
+        let large = root.appendingPathComponent("large.png")
+        try fixture(large, width: 1200, height: 600)
+        precondition(service.scaleImage(IPCRequest(id: UUID().uuidString, action: "scaleImage", payload: [
+            "items": .stringArray([large.path, first.path]), "maxPixel": .int(800)
+        ])).success)
+        precondition(FinderRightService.backgroundJobs.waitUntilIdle(timeout: 10))
+        let mixed = RecentOperations.shared.records.last!
+        precondition(mixed.failure == nil && mixed.results.count == 1 && mixed.note!.contains("first.png"))
+        precondition(service.undo!.items.count == 1 && service.undo!.kind == .scaleImage)
+        precondition(ClipboardToast.last!.style == .success)
+
+        precondition(service.scaleImage(IPCRequest(id: UUID().uuidString, action: "scaleImage", payload: [
+            "items": .stringArray([corrupt.path, first.path]), "maxPixel": .int(800)
+        ])).success)
+        precondition(FinderRightService.backgroundJobs.waitUntilIdle(timeout: 10))
+        let realFailure = RecentOperations.shared.records.last!
+        precondition(realFailure.failure!.contains("corrupt.png") && !realFailure.failure!.contains("first.png"))
+        precondition(realFailure.note!.contains("first.png"))
+        print("Image scaling: all-small and mixed batches skip normally; real errors stay failures; undo only tracks outputs")
         print("Image service batch: continues after failures, checks both path roles, records every failure, one undo preserves sources")
     }
 }

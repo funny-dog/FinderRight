@@ -53,6 +53,7 @@ extension FinderRightService {
     private func executeImageTransform(items: [String], operation: ImageTransformOperation) {
         var created: [URL] = []
         var failures: [(name: String, reason: String)] = []
+        var skipped: [(name: String, reason: String)] = []
 
         let isScale: Bool
         switch operation {
@@ -98,6 +99,13 @@ extension FinderRightService {
                         outputDirectory: directory
                     )
                     created.append(outputURL)
+                } catch let error as ImageTransformError {
+                    if case .alreadySmallerThanTarget = error {
+                        skipped.append((itemName, error.localizedDescription))
+                    } else {
+                        serviceLog("图片处理失败 [\(itemName)]: \(error.localizedDescription)")
+                        failures.append((itemName, error.localizedDescription))
+                    }
                 } catch {
                     let reason = error.localizedDescription
                     serviceLog("图片处理失败 [\(itemName)]: \(reason)")
@@ -125,28 +133,27 @@ extension FinderRightService {
         let location = items.first.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath).deletingLastPathComponent() }
         let recordKind: OperationRecord.Kind = isScale ? .scaleImage : .convertImage
 
-        if !failures.isEmpty {
-            // 历史失败详情包含每个失败/跳过项的名称及原因
-            let failureDetails = failures.map { "\($0.name)：\($0.reason)" }.joined(separator: "\n")
+        let failureDetails = failures.map { "\($0.name)：\($0.reason)" }.joined(separator: "\n")
+        let skipDetails = skipped.map { "\($0.name)：\($0.reason)" }.joined(separator: "\n")
+        RecentOperations.shared.record(OperationRecord(
+            kind: recordKind, subject: subject,
+            failure: failures.isEmpty ? nil : failureDetails,
+            results: created, location: location,
+            note: skipped.isEmpty ? nil : skipDetails
+        ))
 
-            RecentOperations.shared.record(OperationRecord(
-                kind: recordKind,
-                subject: subject,
-                failure: failureDetails,
-                results: created,
-                location: location
-            ))
-
-            // 失败或部分完成由 AppDelegate 的 operationDidFinish 统一弹出 Toast，避免重复弹两次
-        } else if !created.isEmpty {
-            RecentOperations.shared.record(OperationRecord(
-                kind: recordKind,
-                subject: subject,
-                results: created,
-                location: location
-            ))
-            let successMsg = String(format: L("已完成图片处理（%d 项）"), created.count)
-            ClipboardToast.show(message: successMsg, style: .success)
+        // 真正的失败由 AppDelegate 统一反馈；不放大属于正常跳过，不能进入失败提示。
+        guard failures.isEmpty else { return }
+        let message: String
+        if created.isEmpty, skipped.count == 1 {
+            message = String(format: L("无需缩放：%@"), skipped[0].reason)
+        } else if created.isEmpty {
+            message = String(format: L("已跳过 %d 项，无需缩放"), skipped.count)
+        } else if !skipped.isEmpty {
+            message = String(format: L("已处理 %d 项，%d 项无需缩放"), created.count, skipped.count)
+        } else {
+            message = String(format: L("已完成图片处理（%d 项）"), created.count)
         }
+        ClipboardToast.show(message: message, style: .success)
     }
 }

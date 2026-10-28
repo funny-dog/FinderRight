@@ -4469,6 +4469,23 @@ struct FinderRightKitTestsRunner {
             try assertNil(tracker.handleDataWritten(bytesWritten: 10, totalBytesWritten: 10, totalBytesExpected: 10))
         }
 
+        runTest("操作历史：无需缩放说明不属于失败且兼容旧记录") {
+            let note = "photo.heic：图片长边（436 像素）未超过 800 像素，已跳过"
+            let record = OperationRecord(kind: .scaleImage, subject: "photo.heic", note: note)
+            try assertTrue(record.succeeded)
+            try assertEqual(OperationHistoryPresentation.Outcome(record), .completed)
+            try assertEqual(OperationHistoryFilter(searchText: "436").apply(to: [record]), [record])
+            let encoded = try JSONEncoder().encode(record)
+            try assertEqual(try JSONDecoder().decode(OperationRecord.self, from: encoded), record)
+            var legacy = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+            legacy.removeValue(forKey: "note")
+            let old = try JSONDecoder().decode(OperationRecord.self, from: JSONSerialization.data(withJSONObject: legacy))
+            try assertNil(old.note)
+            try assertTrue(old.succeeded)
+            let failed = OperationRecord(kind: .scaleImage, subject: "bad.heic", failure: "decode failed", note: note)
+            try assertEqual(OperationHistoryPresentation.Outcome(failed), .failed)
+        }
+
         runTest("操作历史 状态搜索筛选与日期分组") {
         let ok = OperationRecord(kind: .compress, subject: "资料")
         let cancelled = OperationRecord(kind: .decompress, subject: "资料.zip", cancelled: true)

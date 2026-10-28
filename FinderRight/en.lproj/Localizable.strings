@@ -803,3 +803,8 @@
 "创建图像绘制上下文失败" = "Failed to create image drawing context";
 
 "缩放长边必须在 1 至 2560 像素之间" = "Image long edge must be between 1 and 2560 pixels";
+
+"处理说明" = "Processing Notes";
+"无需缩放：%@" = "No resizing needed: %@";
+"已跳过 %d 项，无需缩放" = "Skipped %d items; no resizing needed";
+"已处理 %d 项，%d 项无需缩放" = "Processed %d items; %d did not need resizing";

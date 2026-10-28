@@ -13,6 +13,8 @@ public struct OperationRecord: Codable, Identifiable, Equatable {
     public let subject: String
     /// 失败原因；nil 表示成功
     public let failure: String?
+    /// 非失败说明，例如图片已小于目标尺寸而跳过。
+    public let note: String?
     /// 成功时产出的文件，供「在访达中显示」
     public let results: [URL]
     public let date: Date
@@ -24,11 +26,12 @@ public struct OperationRecord: Codable, Identifiable, Equatable {
     public var succeeded: Bool { failure == nil && !cancelled }
 
     public init(id: UUID = UUID(), kind: Kind, subject: String, failure: String? = nil, results: [URL] = [],
-                cancelled: Bool = false, date: Date = Date(), location: URL? = nil) {
+                cancelled: Bool = false, date: Date = Date(), location: URL? = nil, note: String? = nil) {
         self.id = id
         self.kind = kind
         self.subject = subject
         self.failure = failure
+        self.note = note
         self.results = results
         self.cancelled = cancelled
         self.date = date

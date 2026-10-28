@@ -174,6 +174,14 @@ struct OperationHistoryRow: View {
                         resultList
                     }
                 }
+                if let note = record.note {
+                    GridRow {
+                        detailLabel("处理说明")
+                        Text(verbatim: note)
+                            .foregroundColor(FRTheme.text)
+                            .textSelection(.enabled)
+                    }
+                }
             }
             actions
         }

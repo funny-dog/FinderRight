@@ -201,7 +201,7 @@ public struct OperationHistoryFilter {
             guard kind == nil || record.kind == kind else { return false }
             guard !terms.isEmpty else { return true }
             var fields = [record.subject, OperationHistoryPresentation.actionTitle(record.kind),
-                          record.kind.rawValue, OperationHistoryPresentation.status(record), record.failure ?? ""]
+                          record.kind.rawValue, OperationHistoryPresentation.status(record), record.failure ?? "", record.note ?? ""]
             if OperationHistoryPresentation.Outcome(record).needsAttention {
                 fields.append(OperationHistoryPresentation.failureSummary(record))
             }
