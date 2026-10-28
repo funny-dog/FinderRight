@@ -20,9 +20,14 @@ public enum PreviewDocument {
     case database([PreviewDatabaseTable], truncated: Bool)
     /// frontMatter 为文件开头 `---` 包围的 YAML 元信息，单独以等宽原文显示，不参与 Markdown 解析。
     case markdown(String, frontMatter: String?)
+    /// CSV / TSV：单张表格，首行为表头
+    case table(PreviewDatabaseTable)
+    /// plist：binary 为 true 表示原文件是二进制，已转换为 XML 显示
+    case propertyList(String, binary: Bool, truncated: Bool)
 
     public static let textExtensions: Set<String> = ["yaml", "yml", "toml", "ini"]
     public static let databaseExtensions: Set<String> = ["sqlite", "sqlite3"]
+    public static let propertyListExtensions: Set<String> = ["plist"]
     /// 系统不认识（动态 UTI）或认识但没有预览器的文本格式；扩展名不保证内容是文本，按内容判断。
     public static let sniffedTextExtensions: Set<String> = [
         // 配置
@@ -40,7 +45,9 @@ public enum PreviewDocument {
 
     public static func supports(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
-        return textExtensions.contains(ext) || databaseExtensions.contains(ext) || ext == "ipynb" || sniffsText(url)
+        return textExtensions.contains(ext) || databaseExtensions.contains(ext) || ext == "ipynb"
+            || PreviewDelimited.csvExtensions.contains(ext) || PreviewDelimited.tsvExtensions.contains(ext)
+            || propertyListExtensions.contains(ext) || sniffsText(url)
     }
 
     /// 点文件与无扩展名文件（系统标为 public.data / public.unix-executable）及常见配置扩展名，
@@ -54,6 +61,12 @@ public enum PreviewDocument {
         let ext = url.pathExtension.lowercased()
         if databaseExtensions.contains(ext) {
             return try PreviewDatabase.read(url)
+        }
+        if PreviewDelimited.csvExtensions.contains(ext) || PreviewDelimited.tsvExtensions.contains(ext) {
+            return try PreviewDelimited.read(url)
+        }
+        if propertyListExtensions.contains(ext) {
+            return try readPropertyList(url)
         }
         if textExtensions.contains(ext) || sniffsText(url) {
             return try readText(url)
@@ -108,6 +121,12 @@ public enum PreviewDocument {
     }
 
     private static func readText(_ url: URL) throws -> PreviewDocument {
+        let (text, truncated) = try readTextPrefix(url)
+        return .text(text, truncated: truncated)
+    }
+
+    /// 限长读取并解码文本，纯文本与 CSV 共用；截断边界按 UTF-8/UTF-16 处理后再交给解码。
+    static func readTextPrefix(_ url: URL, fallbackEncoding: String.Encoding? = nil) throws -> (text: String, truncated: Bool) {
         let limit = 1_048_576
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true else { throw PreviewDocumentError.invalid }
@@ -143,19 +162,61 @@ public enum PreviewDocument {
                 if data.count - start < length { data.removeSubrange(start...) }
             }
         }
-        var text = try decodeText(data)
+        var text = try decodeText(data, fallbackEncoding: fallbackEncoding)
         if truncated, let newline = text.lastIndex(where: \.isNewline) {
             text = String(text[...newline])
         }
-        return .text(text, truncated: truncated)
+        return (text, truncated)
     }
 
-    private static func decodeText(_ data: Data) throws -> String {
+    private static func decodeText(_ data: Data, fallbackEncoding: String.Encoding? = nil) throws -> String {
         let encoding: String.Encoding = data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) ? .utf16 : .utf8
-        guard let text = String(data: data, encoding: encoding), !text.contains("\0") else {
-            throw PreviewDocumentError.invalid
+        if let text = String(data: data, encoding: encoding) {
+            guard !text.contains("\0") else { throw PreviewDocumentError.invalid }
+            return text
         }
-        return text
+        // 备用编码（如 CSV 的 GB18030）：限长可能把双字节字符切成两半，依次去掉末尾不完整字节重试。
+        if let fallback = fallbackEncoding {
+            for drop in 0...3 {
+                if let text = String(data: data.dropLast(drop), encoding: fallback) {
+                    guard !text.contains("\0") else { throw PreviewDocumentError.invalid }
+                    return text
+                }
+            }
+        }
+        throw PreviewDocumentError.invalid
+    }
+
+    /// plist 显示为可读文本：二进制转成 XML，文本 plist 保留原文（注释与键顺序不动）。
+    private static func readPropertyList(_ url: URL) throws -> PreviewDocument {
+        let data = try boundedData(url, limit: 1_048_576)
+        guard data.starts(with: Array("bplist".utf8)) else {
+            return .propertyList(try decodeText(data), binary: false, truncated: false)
+        }
+        // plist 无法只解析一部分，超限已抛 tooLarge；二进制解析失败按无效文件处理。
+        let object: Any
+        do { object = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) }
+        catch { throw PreviewDocumentError.invalid }
+        let xml = try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
+        guard var text = String(data: xml, encoding: .utf8) else { throw PreviewDocumentError.invalid }
+        var truncated = false
+        if text.utf8.count > 1_048_576 {
+            truncated = true
+            // 按 Character 累计字节数，截到最后一个完整字符内的换行，不切断多字节字符
+            var bytes = 0
+            var lastNewline: String.Index?
+            var index = text.startIndex
+            while index < text.endIndex {
+                let char = text[index]
+                let width = char.utf8.count
+                if bytes + width > 1_048_576 { break }
+                bytes += width
+                if char.isNewline { lastNewline = index }
+                index = text.index(after: index)
+            }
+            text = String(text[..<(lastNewline.map { text.index(after: $0) } ?? index)])
+        }
+        return .propertyList(text, binary: true, truncated: truncated)
     }
 
     private static func notebookText(_ value: Any?) -> String? {

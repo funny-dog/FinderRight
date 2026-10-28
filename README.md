@@ -141,6 +141,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - 文档预览在后台生成显示内容，减少 Notebook 与 SQLite 等复杂内容准备时的主线程阻塞。
 - Jupyter Notebook（v4）最多读取 5 MiB、展示 200 个单元；渲染 Markdown、显示代码与已保存的文字输出，不执行代码、不加载外部资源，不显示图片与 HTML 输出。
 - SQLite（`.sqlite` / `.sqlite3`）只读展示最多 20 张普通表的列名、类型和每表前 50 条记录，单元格最多展示 512 字节；跳过视图、虚拟表和生成列。使用主文件快照，不包含尚未合并到主文件的 WAL 数据。
+- CSV / TSV 以表格显示（首行为表头，自动识别逗号 / 分号 / 制表符，支持 GBK 编码），最多显示 500 行 × 50 列；plist 显示为文本，二进制 plist 自动转换为 XML。
 - 包含隐藏项；不展开符号链接或 `.app` 等文件包，不递归统计目录大小。
 - 每层文件夹最多 2,000 项，压缩包最多 10,000 条记录，超出会提示内容不完整；其他压缩格式还受扫描资源上限约束。
 - 不支持 ZIP64、分卷 ZIP；加密 ZIP 可显示条目但不解密。
@@ -311,6 +312,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - Document preview content is generated in the background to reduce main-thread blocking while preparing complex Notebook and SQLite previews.
 - Jupyter Notebook v4 reads up to 5 MiB and displays up to 200 cells, with rendered Markdown, code and saved text outputs. Code is never executed, external resources are never loaded, and image/HTML outputs are omitted.
 - SQLite (`.sqlite` / `.sqlite3`) displays names and types of columns and up to 50 rows from each of 20 ordinary tables, with a 512-byte cell display limit. Views, virtual tables and generated columns are skipped. Read-only previews use the main database file snapshot and omit uncheckpointed WAL changes.
+- CSV / TSV files are shown as a table (first row as header; comma, semicolon or tab detected automatically; GBK encoding supported), up to 500 rows × 50 columns; plist files are shown as text, with binary plists converted to XML.
 - Includes hidden items; doesn't follow symbolic links, browse app packages, or compute folder sizes.
 - Up to 2,000 items per folder and 10,000 archive records, with a notice when truncated; other archive formats also have scan resource limits.
 - ZIP64 and split ZIPs aren't supported; encrypted ZIPs list entries but aren't decrypted.

@@ -114,7 +114,23 @@ struct PreviewDocumentChecks {
         let link = root.appendingPathComponent("link.sqlite")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: database)
         expectFailure { _ = try PreviewDocument.read(link) }
-        print("✓ 文档预览检查通过（配置编码与上限、点文件/无扩展名/配置扩展名嗅探、Markdown 元信息与上限、Notebook 单元与输出、SQLite 普通表/只读/截断/损坏文件）")
+
+        let csv = root.appendingPathComponent("表格.csv")
+        try "名称,城市\n张三,北京\n".write(to: csv, atomically: true, encoding: .utf8)
+        precondition(PreviewDocument.supports(csv))
+        guard case .table(let csvTable) = try PreviewDocument.read(csv) else { preconditionFailure() }
+        precondition(csvTable.columns == ["名称", "城市"] && csvTable.rows == [["张三", "北京"]])
+        let tsv = root.appendingPathComponent("表格.tsv")
+        try "a,b\tc\n1,2\t3\n".write(to: tsv, atomically: true, encoding: .utf8)
+        precondition(PreviewDocument.supports(tsv))
+        guard case .table(let tsvTable) = try PreviewDocument.read(tsv) else { preconditionFailure() }
+        precondition(tsvTable.columns == ["a,b", "c"], "TSV 不按逗号分列")
+        let propertyList = root.appendingPathComponent("信息.plist")
+        try PropertyListSerialization.data(fromPropertyList: ["键": "值"], format: .binary, options: 0).write(to: propertyList)
+        precondition(PreviewDocument.supports(propertyList))
+        guard case .propertyList(let plistText, let binaryPlist, _) = try PreviewDocument.read(propertyList) else { preconditionFailure() }
+        precondition(binaryPlist && plistText.contains("<key>键</key>") && plistText.contains("<string>值</string>"))
+        print("✓ 文档预览检查通过（配置编码与上限、点文件/无扩展名/配置扩展名嗅探、Markdown 元信息与上限、Notebook 单元与输出、SQLite 普通表/只读/截断/损坏文件、CSV/TSV 表格与 GBK、二进制 plist 转 XML）")
     }
 
     private static func expectFailure(_ block: () throws -> Void) {

@@ -4684,6 +4684,159 @@ struct FinderRightKitTestsRunner {
             }
         }
 
+        runTest("表格预览 简单 CSV 解析") {
+            let table = PreviewDelimited.parse("a,b\n1,2\n", delimiter: ",")
+            try assertEqual(table.name, "")
+            try assertEqual(table.columns, ["a", "b"])
+            try assertEqual(table.rows, [["1", "2"]])
+            try assertTrue(!table.truncated)
+        }
+
+        runTest("表格预览 引号内逗号与转义引号") {
+            let table = PreviewDelimited.parse("name,note\n\"x, y\",\"say \"\"hi\"\"\"\n", delimiter: ",")
+            try assertEqual(table.columns, ["name", "note"])
+            try assertEqual(table.rows, [["x, y", "say \"hi\""]])
+        }
+
+        runTest("表格预览 引号内换行清洗为空格") {
+            let table = PreviewDelimited.parse("a\n\"line1\nline2\"\n", delimiter: ",")
+            try assertEqual(table.rows, [["line1 line2"]])
+        }
+
+        runTest("表格预览 CRLF 与 LF 解析一致") {
+            let crlf = PreviewDelimited.parse("a,b\r\n1,2\r\n", delimiter: ",")
+            let lf = PreviewDelimited.parse("a,b\n1,2\n", delimiter: ",")
+            try assertEqual(crlf.columns, lf.columns)
+            try assertEqual(crlf.rows, lf.rows)
+            try assertEqual(crlf.rows, [["1", "2"]])
+        }
+
+        runTest("表格预览 UTF-8 BOM 被去掉") {
+            let table = PreviewDelimited.parse("\u{FEFF}a,b\n1,2", delimiter: ",")
+            try assertEqual(table.columns, ["a", "b"])
+            try assertEqual(table.rows, [["1", "2"]])
+        }
+
+        runTest("表格预览 行长度不齐末尾补空") {
+            let table = PreviewDelimited.parse("a,b,c\n1\n", delimiter: ",")
+            try assertEqual(table.columns, ["a", "b", "c"])
+            try assertEqual(table.rows, [["1", "", ""]])
+        }
+
+        runTest("表格预览 分隔符识别与 sep 提示行") {
+            try assertEqual(PreviewDelimited.detectDelimiter("a;b;c\n1;2;3").delimiter, ";")
+            let sep = PreviewDelimited.detectDelimiter("sep=;\na;b\n1;2")
+            try assertEqual(sep.delimiter, ";")
+            try assertTrue(sep.skipFirstLine)
+            let table = PreviewDelimited.parse("a;b\n1;2", delimiter: sep.delimiter)
+            try assertEqual(table.columns, ["a", "b"])
+            try assertEqual(table.rows, [["1", "2"]])
+            try assertEqual(PreviewDelimited.detectDelimiter("a\tb").delimiter, "\t")
+        }
+
+        runTest("表格预览 超过最大行数只保留前 500 行") {
+            var source = "h\n"
+            for index in 0...500 { source += "\(index)\n" }
+            let table = PreviewDelimited.parse(source, delimiter: ",")
+            try assertEqual(table.rows.count, PreviewDelimited.maxRows)
+            try assertEqual(table.rows.first, ["0"])
+            try assertEqual(table.rows.last, ["499"])
+            try assertTrue(table.truncated)
+        }
+
+        runTest("表格预览 超过最大列数只保留前 50 列") {
+            let source = (1...60).map { "c\($0)" }.joined(separator: ",") + "\n"
+                + (1...60).map { "v\($0)" }.joined(separator: ",") + "\n"
+            let table = PreviewDelimited.parse(source, delimiter: ",")
+            try assertEqual(table.columns.count, PreviewDelimited.maxColumns)
+            try assertEqual(table.rows.count, 1)
+            try assertEqual(table.rows[0].count, PreviewDelimited.maxColumns)
+            try assertTrue(table.truncated)
+        }
+
+        runTest("表格预览 超长单元格截断加省略号") {
+            let table = PreviewDelimited.parse("a\n\(String(repeating: "字", count: 301))\n", delimiter: ",")
+            try assertEqual(table.rows[0][0].count, PreviewDelimited.maxCellCharacters)
+            try assertTrue(table.rows[0][0].hasSuffix("…"))
+        }
+
+        runTest("表格预览 GBK 编码的 CSV 读取") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let encoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(
+                CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+            let file = root.appendingPathComponent("gbk.csv")
+            try "姓名,城市\n张三,北京\n".data(using: encoding)!.write(to: file)
+            try assertTrue(PreviewDocument.supports(file))
+            guard case .table(let table) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少表格") }
+            try assertEqual(table.columns, ["姓名", "城市"])
+            try assertEqual(table.rows, [["张三", "北京"]])
+            try assertTrue(!table.truncated)
+        }
+
+        runTest("表格预览 TSV 固定按制表符分列") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("data.tsv")
+            try "a,b\tc\n1,2\t3\n".write(to: file, atomically: true, encoding: .utf8)
+            guard case .table(let table) = try PreviewDocument.read(file) else { throw TestFailure(message: "缺少表格") }
+            try assertEqual(table.columns, ["a,b", "c"])
+            try assertEqual(table.rows, [["1,2", "3"]])
+        }
+
+        runTest("plist 预览 二进制转换 XML 文本") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("binary.plist")
+            try PropertyListSerialization.data(fromPropertyList: ["键": "值", "n": 1], format: .binary, options: 0).write(to: file)
+            try assertTrue(PreviewDocument.supports(file))
+            guard case .propertyList(let text, let binary, let truncated) = try PreviewDocument.read(file) else {
+                throw TestFailure(message: "缺少 plist 文本")
+            }
+            try assertTrue(binary)
+            try assertTrue(!truncated)
+            try assertTrue(text.contains("<key>键</key>"))
+            try assertTrue(text.contains("<string>值</string>"))
+        }
+
+        runTest("plist 预览 XML 原文完整保留") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("plain.plist")
+            let source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+                + "<plist version=\"1.0\">\n<!-- 注释 -->\n<dict>\n\t<key>名称</key>\n\t<string>值</string>\n</dict>\n</plist>\n"
+            try Data(source.utf8).write(to: file)
+            guard case .propertyList(let text, let binary, let truncated) = try PreviewDocument.read(file) else {
+                throw TestFailure(message: "缺少 plist 文本")
+            }
+            try assertEqual(text, source)
+            try assertTrue(!binary)
+            try assertTrue(!truncated)
+        }
+
+        runTest("plist 预览 损坏的二进制文件抛错") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("broken.plist")
+            try (Data("bplist00".utf8) + Data([0x11, 0x22, 0x33, 0x44, 0x55, 0x66])).write(to: file)
+            do {
+                _ = try PreviewDocument.read(file)
+                throw TestFailure(message: "必须拒绝损坏的二进制 plist")
+            } catch PreviewDocumentError.invalid {}
+        }
+
+        runTest("表格预览 无备用编码仍拒绝非法 UTF-8") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("invalid.conf")
+            try Data([0xC3, 0x28, 0xFF]).write(to: file)
+            do {
+                _ = try PreviewDocument.read(file)
+                throw TestFailure(message: "必须拒绝非法 UTF-8")
+            } catch PreviewDocumentError.invalid {}
+        }
+
         runTest("图片菜单：候选筛选无需内容读取且判定结果可经 IPC 往返") {
             let root = URL(fileURLWithPath: "/not-readable")
             let images = ["a.PNG", "b.jpeg", "c.heic", "d.webp", "e.tiff"].map { root.appendingPathComponent($0) }

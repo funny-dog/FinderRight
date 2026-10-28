@@ -133,6 +133,9 @@
 				<string>dyn.ah62d4rv4ge80k3pc</string>
 				<string>dyn.ah62d4rv4ge81e6dr</string>
 				<string>dyn.ah62d4rv4ge81s4dq</string>
+				<string>public.comma-separated-values-text</string>
+				<string>public.tab-separated-values-text</string>
+				<string>com.apple.property-list</string>
 			</array>
 			<key>QLSupportsSearchableItems</key>
 			<false/>

@@ -6,6 +6,13 @@ public struct PreviewDatabaseTable {
     public let columns: [String]
     public let rows: [[String]]
     public let truncated: Bool
+
+    public init(name: String, columns: [String], rows: [[String]], truncated: Bool) {
+        self.name = name
+        self.columns = columns
+        self.rows = rows
+        self.truncated = truncated
+    }
 }
 
 /// 仅查询普通实体表；不执行视图、虚拟表、触发器或数据库自带的 SQL。

@@ -61,6 +61,27 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
             result.append(NSAttributedString(string: source, attributes: [.font: font, .foregroundColor: NSColor.textColor]))
         }
         func note(_ key: String) { append(text(key) + "\n\n") }
+        func appendTable(_ table: PreviewDatabaseTable) {
+            let grid = NSTextTable()
+            grid.numberOfColumns = table.columns.count
+            for (row, values) in ([table.columns] + table.rows).enumerated() {
+                for (column, value) in values.enumerated() {
+                    // Kit 生成的默认列名固定是「列 N」，英文界面换成 Column N
+                    var cell = value
+                    if row == 0, cell.hasPrefix("列 "), let number = Int(cell.dropFirst(2)) {
+                        cell = String(format: text("Column %ld"), number)
+                    }
+                    result.append(NSAttributedString(string: cell + "\n", attributes: [
+                        .font: NSFont.monospacedSystemFont(ofSize: 13, weight: row == 0 ? .semibold : .regular),
+                        .foregroundColor: NSColor.textColor,
+                        .paragraphStyle: tableStyle(grid, row: row, column: column)
+                    ]))
+                }
+            }
+            if table.rows.isEmpty { note("No records") }
+            if table.truncated { note("Item limit reached; showing partial contents") }
+            append("\n")
+        }
         switch document {
         case .text(let source, let truncated):
             if truncated { note("Large file; showing only the first 1 MB") }
@@ -100,22 +121,15 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
             if tables.isEmpty { note("No ordinary tables") }
             for table in tables {
                 append(table.name + "\n", font: .boldSystemFont(ofSize: 20))
-                let grid = NSTextTable()
-                grid.numberOfColumns = table.columns.count
-                for (row, values) in ([table.columns] + table.rows).enumerated() {
-                    for (column, value) in values.enumerated() {
-                        result.append(NSAttributedString(string: value + "\n", attributes: [
-                            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: row == 0 ? .semibold : .regular),
-                            .foregroundColor: NSColor.textColor,
-                            .paragraphStyle: tableStyle(grid, row: row, column: column)
-                        ]))
-                    }
-                }
-                if table.rows.isEmpty { note("No records") }
-                if table.truncated { note("Item limit reached; showing partial contents") }
-                append("\n")
+                appendTable(table)
             }
             if truncated { note("Item limit reached; showing partial contents") }
+        case .table(let table):
+            appendTable(table)
+        case .propertyList(let source, let binary, let truncated):
+            if binary { note("Binary property list; shown as XML") }
+            if truncated { note("Large file; showing only the first 1 MB") }
+            append(source, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
         }
         return result
     }
