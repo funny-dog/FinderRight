@@ -772,3 +772,6 @@
 "正在粘贴，请完成后再移除剪切项" = "Paste is in progress. Wait until it finishes before removing cut items.";
 "移除剪切项失败：%@" = "Failed to remove cut item: %@";
 "剪切 / 粘贴" = "Cut / Paste";
+
+"ZIP 使用 UTF-8 文件名，便于 Windows 正确显示中文；通常不含 Mac 元数据（应用包等情况保留），需保留时请用访达自带「压缩」" = "ZIP uses UTF-8 names for Chinese filenames on Windows, usually without Mac metadata (preserved for app bundles and other fallbacks); use Finder’s Compress to retain it";
+"解压到当前目录，支持输入密码解压加密 ZIP" = "Extract here, including encrypted ZIPs with a password prompt";

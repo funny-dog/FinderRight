@@ -34,7 +34,7 @@
 - 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
 - 🔗 **复制哈希 / 创建符号链接**（默认关闭）—— 复制 SHA-256 / SHA-1 / MD5（多选与 shasum 格式一致）；在原位置创建终端可识别的符号链接
-- 📦 **压缩 / 解压**
+- 📦 **压缩 / 解压** —— 默认关闭：ZIP 使用 UTF-8 文件名，Windows 上中文名不乱码，通常不含 `__MACOSX`、`.DS_Store` 和 AppleDouble `._*` 元数据（应用包或特殊路径等情况退回系统方式），支持输入密码解压加密 ZIP。需要保留 Mac 元数据时请用访达自带「压缩」。
 - 👀 **扩展空格预览** —— 系统自带的快速查看（空格快捷键）增强，支持大多数格式，包括文件夹和压缩包等等，markdown支持渲染
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
 - ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
@@ -201,7 +201,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 📂 **Go to Folder** — paste a path to reveal or open it in Finder
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
 - 🔗 **Copy Hash / Make Symbolic Link** (off by default) — copy SHA-256 / SHA-1 / MD5 (multiple files use the shasum format); create symbolic links that Terminal understands, next to the originals
-- 📦 **Compress / Extract**
+- 📦 **Compress / Extract** — Off by default: ZIPs use UTF-8 filenames for Chinese names on Windows, usually omit `__MACOSX`, `.DS_Store` and AppleDouble `._*` metadata (app bundles and special paths fall back to the system method), and encrypted ZIPs prompt for a password. Use Finder’s Compress when you need to retain Mac metadata.
 - 👀 **Extended Quick Look previews** — enhance the built-in Quick Look (Space bar) with support for most formats, including folders and archives, plus rendered Markdown
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
 - ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
