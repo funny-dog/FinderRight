@@ -14,6 +14,12 @@ swift build -c release --package-path FinderRightKit
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --package-path FinderRightKit FinderRightKitTests
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-cut-queue-removal.swift -o "$KIT_BUILD_DIR/test-cut-queue-removal"
+"$KIT_BUILD_DIR/test-cut-queue-removal"
+
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

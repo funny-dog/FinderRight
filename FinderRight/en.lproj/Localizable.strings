@@ -766,3 +766,9 @@
 "最近移动或复制过的目录排在前面，右键菜单与这里的顺序一致" = "Folders you moved or copied to recently come first; the context menu uses the same order";
 "按最近使用排序时不能拖动" = "Turn off Sort by Recent Use to reorder";
 "添加后，选中文件右键即可「移动到」或「复制到」这些目录。关闭「按最近使用排序」后可拖动调整顺序，并恢复之前排好的顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。" = "Once added, right-click selected files to Move To or Copy To these folders. Turn off Sort by Recent Use to drag them into order; your previous manual order comes back. Only folders in your home folder or on external disks can be added. You can paste the output of Copy Path into the field, one folder per line.";
+
+"已剪切 %d 项" = "%d Item(s) Cut";
+"移除：%@" = "Remove: %@";
+"正在粘贴，请完成后再移除剪切项" = "Paste is in progress. Wait until it finishes before removing cut items.";
+"移除剪切项失败：%@" = "Failed to remove cut item: %@";
+"剪切 / 粘贴" = "Cut / Paste";

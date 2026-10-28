@@ -83,6 +83,21 @@ extension FinderRightService {
         return response
     }
 
+    static func pendingCutPaths() -> [String] {
+        cutPasteQueue.sync { CutQueueStore().read() }
+    }
+
+    /// 菜单栏入口与 IPC 剪切/粘贴共用短事务，避免快照过期后移除在途项目。
+    static func removePendingCutPath(_ path: String) throws {
+        try cutPasteQueue.sync {
+            let remaining = try CutQueueStore().remove(path)
+            UndoCenter.shared.revalidate { $0.pruningRemovedItems(cutQueue: remaining) }
+            CutQueueChangeNotifier.post()
+            FinderShortcutInterceptor.shared.refreshCutQueueMirror(remaining)
+        }
+        scheduleRemovalCheck()
+    }
+
     /// 在 cutPasteQueue 短事务中一次性取走当前剪切队列，并记录取走时的取消代次
     private func takeCutQueue() throws -> (id: UUID, paths: [String], generation: Int)? {
         try Self.cutPasteQueue.sync {

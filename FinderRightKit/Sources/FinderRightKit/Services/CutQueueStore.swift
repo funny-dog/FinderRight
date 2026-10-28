@@ -57,6 +57,19 @@ public struct CutQueueStore {
         return merged
     }
 
+    public enum RemovalError: Error {
+        case pasteInProgress
+    }
+
+    /// 调用方须与 take/finish 共用串行队列；在途时拒绝修改，保留完整的失败恢复记录。
+    @discardableResult
+    public func remove(_ path: String) throws -> [String] {
+        guard try inflightFiles().isEmpty else { throw RemovalError.pasteInProgress }
+        let remaining = read().filter { $0 != path }
+        try write(remaining)
+        return remaining
+    }
+
     /// 用户取消剪切：清空待剪切队列，并作废所有批次及旧版本的恢复记录。
     public func clear() {
         let fm = FileManager.default

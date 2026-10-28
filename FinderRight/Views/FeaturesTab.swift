@@ -49,6 +49,7 @@ struct FeaturesTab: View {
             copyPathSection
             copyFileNameSection
             copyContentSection
+            CutQueueSection()
             badgeSection
             quickLookSection
         }
@@ -339,5 +340,52 @@ private struct PreviewExtensionToggle: View {
                 }
             }
         }
+    }
+}
+
+/// 队列详情收在设置中，菜单栏保持简洁。
+private struct CutQueueSection: View {
+    @State private var paths: [String] = []
+    @State private var errorMessage: String?
+
+    var body: some View {
+        FRSection("剪切 / 粘贴") {
+            FRCard {
+                DisclosureGroup {
+                    ForEach(paths, id: \.self) { path in
+                        FRRow(title: Text(verbatim: (path as NSString).lastPathComponent),
+                              subtitle: Text(verbatim: path)) {
+                            Button("移除") { remove(path) }
+                                .buttonStyle(.frSecondary)
+                                .accessibilityLabel(Text(String(format: NSLocalizedString("移除：%@", comment: "cut queue"), path)))
+                        }
+                    }
+                } label: {
+                    Text(String(format: NSLocalizedString("已剪切 %d 项", comment: "cut queue"), paths.count))
+                }
+                .padding(16)
+                if let errorMessage {
+                    Text(verbatim: errorMessage)
+                        .foregroundColor(FRTheme.danger)
+                        .padding(16)
+                }
+            }
+        }
+        .onAppear { refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name(CutQueueChangeNotifier.name))) { _ in refresh() }
+    }
+
+    private func refresh() { paths = FinderRightService.pendingCutPaths() }
+
+    private func remove(_ path: String) {
+        do {
+            try FinderRightService.removePendingCutPath(path)
+            errorMessage = nil
+        } catch CutQueueStore.RemovalError.pasteInProgress {
+            errorMessage = NSLocalizedString("正在粘贴，请完成后再移除剪切项", comment: "cut queue")
+        } catch {
+            errorMessage = String(format: NSLocalizedString("移除剪切项失败：%@", comment: "cut queue"), error.localizedDescription)
+        }
+        refresh()
     }
 }

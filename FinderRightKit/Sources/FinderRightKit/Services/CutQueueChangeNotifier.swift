@@ -13,6 +13,7 @@ public enum CutQueueChangeNotifier {
     private static var handler: (() -> Void)?
 
     public static func post() {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Notification.Name(name), object: nil) }
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             CFNotificationName(name as CFString), nil, nil, true)
