@@ -12,3 +12,5 @@
 "FinderRight: New File in This Folder…" = "FinderRight：在此文件夹新建文件…";
 "FinderRight: Move to Favorite Folder…" = "FinderRight：移动到常用目录…";
 "FinderRight: Copy to Favorite Folder…" = "FinderRight：复制到常用目录…";
+"FinderRight: Copy SHA-256" = "FinderRight：复制 SHA-256";
+"FinderRight: Create Symbolic Link" = "FinderRight：创建符号链接";

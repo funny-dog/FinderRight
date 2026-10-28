@@ -121,7 +121,7 @@ killall Finder
 
 iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Provider 域，目录归云盘自己的扩展管理，第三方 Finder 扩展的右键菜单不会出现，完全磁盘访问也改变不了（见 [Keka #1327 中转述的 Apple DTS 答复](https://github.com/aonez/Keka/issues/1327)）。`/Applications`、`/Users/Shared` 等未注册目录同理。
 
-在这些位置，FinderRight 的操作改由 **右键 → 服务** 提供：复制路径 / 复制文件名 / 复制文件内容 / 打开路径 / 新建文件 / 移动到 / 复制到 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
+在这些位置，FinderRight 的操作改由 **右键 → 服务** 提供：复制路径 / 复制文件名 / 复制文件内容 / 复制 SHA-256 / 创建符号链接 / 打开路径 / 新建文件 / 移动到 / 复制到 / 打开终端 / 打开编辑器 / 剪切 / 粘贴到此文件夹 / 压缩 / 解压。
 
 - 粘贴：剪切后在目标目录空白处选「服务 → FinderRight：粘贴到此文件夹」；若空白处没有「服务」，可回到上一级右键目标文件夹。它移动的是 FinderRight 的剪切队列，而不是系统剪贴板。
 - 新建文件、移动到 / 复制到会先弹确认框；取消不会操作文件。
@@ -290,7 +290,7 @@ killall Finder
 
 iCloud Drive, Google Drive, OneDrive, Dropbox and similar services are File Provider domains on macOS, owned by the provider's own extension, so third-party Finder extension menus don't appear there, and Full Disk Access doesn't change that (see [the Apple DTS reply quoted in Keka #1327](https://github.com/aonez/Keka/issues/1327)). Unregistered folders such as `/Applications` and `/Users/Shared` behave the same way.
 
-In these places FinderRight's actions are available under **right-click → Services**: Copy Path / Copy File Name / Copy File Content / Go to Folder / New File / Move To / Copy To / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
+In these places FinderRight's actions are available under **right-click → Services**: Copy Path / Copy File Name / Copy File Content / Copy SHA-256 / Create Symbolic Link / Go to Folder / New File / Move To / Copy To / Open in Terminal / Open in Editor / Cut / Paste into This Folder / Compress / Extract.
 
 - Paste: after cutting, right-click empty space in the destination and choose "Services → FinderRight: Paste into This Folder"; if Services is missing there, right-click the destination folder from its parent. It moves FinderRight's cut queue, not the system clipboard.
 - New File and Move To / Copy To show a confirmation dialog first; cancelling does nothing.

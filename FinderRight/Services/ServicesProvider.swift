@@ -234,6 +234,39 @@ final class ServicesProvider: NSObject {
         returnFocusToFinderIfNeeded()
     }
 
+    /// 服务菜单不支持子菜单，保留最常用的 SHA-256；其余算法仍从 FinderSync 菜单选择。
+    @objc func copyFileHash(_ pboard: NSPasteboard,
+                            userData: String?,
+                            error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("copyFileHash") else {
+            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
+            return
+        }
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileHash) else {
+            showAlert(NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service"))
+            return
+        }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileHash", payload: [
+            "items": .stringArray(items.map(\.path)), "algorithm": .string(FileHasher.Algorithm.sha256.rawValue)
+        ]), feature: MenuFeatureCatalog.copyFileHash)
+        returnFocusToFinderIfNeeded()
+    }
+
+    @objc func createSymlink(_ pboard: NSPasteboard,
+                             userData: String?,
+                             error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard canStartFileAction(MenuFeatureCatalog.createSymlink, error: error) else { return }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        performFileAction(IPCRequest(id: UUID().uuidString, action: "createSymlink", payload: [
+            "items": .stringArray(items.map(\.path))
+        ]), feature: MenuFeatureCatalog.createSymlink)
+        returnFocusToFinderIfNeeded()
+    }
+
     @objc func goToDirectory(_ pboard: NSPasteboard,
                              userData: String?,
                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
