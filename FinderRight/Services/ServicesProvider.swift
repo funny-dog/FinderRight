@@ -130,13 +130,9 @@ final class ServicesProvider: NSObject {
         return (pboard.readObjects(forClasses: [NSURL.self], options: opts) as? [URL]) ?? []
     }
 
-    /// 终端工作目录：选中项是文件夹则用它本身，否则用其所在目录
+    /// 终端工作目录：下沉至 ServiceInvocationPolicy.targetDirectory
     private func directory(for url: URL) -> URL {
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-            return url
-        }
-        return url.deletingLastPathComponent()
+        ServiceInvocationPolicy.targetDirectory(for: url)
     }
 
     /// 剪切 / 粘贴 / 压缩 / 解压会以 FDA 身份读写文件，而 Services 可被任何 App 程序化调用；
@@ -206,7 +202,7 @@ final class ServicesProvider: NSObject {
             return
         }
         let items = fileURLs(from: pboard)
-        guard items.count == 1, let url = items.first else {
+        guard let url = ServiceInvocationPolicy.validateSingleFile(from: items) else {
             showAlert(NSLocalizedString("仅支持复制单个文件的内容", comment: "service"))
             return
         }
@@ -305,14 +301,13 @@ final class ServicesProvider: NSObject {
         let feature = mode == .move ? MenuFeatureCatalog.moveTo : MenuFeatureCatalog.copyTo
         guard canStartFileAction(feature, error: error) else { return }
         let items = fileURLs(from: pboard)
-        guard !items.isEmpty else {
-            showAlert(NSLocalizedString("请先选中要移动或复制的项目", comment: "service"))
-            return
-        }
-        // 与右键菜单、设置页同一顺序（开启「按最近使用排序」时最近用过的在前）
         let favorites = SharedConfig.shared.orderedFavoriteDirectories
-        guard !favorites.isEmpty else {
-            showAlert(NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service"))
+        guard ServiceInvocationPolicy.validateFavoritesTransfer(items: items, favorites: favorites) else {
+            if items.isEmpty {
+                showAlert(NSLocalizedString("请先选中要移动或复制的项目", comment: "service"))
+            } else {
+                showAlert(NSLocalizedString("尚未添加常用目录，请在设置中添加", comment: "service"))
+            }
             return
         }
         DispatchQueue.main.async { [self] in
@@ -531,7 +526,7 @@ final class ServicesProvider: NSObject {
         guard isInvokedFromFinder("decompress") else { return }
         // 服务对所有文件可见（受 NSFilenamesPboardType 限制无法只对压缩包显示），
         // 因此在此处过滤：只解压压缩包，普通文件忽略。
-        let archives = fileURLs(from: pboard).filter { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }
+        let archives = ServiceInvocationPolicy.filterArchives(from: fileURLs(from: pboard))
         guard !archives.isEmpty else { return }
         let paths = archives.map(\.path)
         workQueue.async { [service] in

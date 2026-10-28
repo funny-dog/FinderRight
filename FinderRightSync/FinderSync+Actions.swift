@@ -77,15 +77,6 @@ extension FinderSync {
         }
     }
 
-    /// 「复制哈希」子菜单：每种算法一项，tag 为其在 FileHasher.Algorithm.allCases 中的下标
-    func buildHashMenu() -> NSMenu {
-        let m = NSMenu(title: L("复制哈希"))
-        for (index, algorithm) in FileHasher.Algorithm.allCases.enumerated() {
-            m.addItem(makeItem(titleKey: algorithm.title, tint: .teal, systemImage: nil, action: #selector(copyFileHash(_:)), tag: index, style: .none))
-        }
-        return m
-    }
-
     @objc func copyFileHash(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         let algorithms = FileHasher.Algorithm.allCases
@@ -109,17 +100,6 @@ extension FinderSync {
         IPCClient.shared.callAsync(action: "createSymlink", payload: ["items": .stringArray(urls.map(\.path))]) { r in
             logToFile("createSymlink ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
-    }
-
-
-    func buildTerminalMenu(_ terminals: [KnownTerminal], style: MenuIconStyle) -> NSMenu {
-        let menu = NSMenu(title: L("打开终端"))
-        terminalMenuIds = terminals.map(\.bundleIdentifier)
-        for (index, terminal) in terminals.enumerated() {
-            menu.addItem(makeItem(titleKey: terminal.name, tint: .graphite, systemImage: terminal.icon,
-                                  action: #selector(openTerminal(_:)), tag: index, style: style))
-        }
-        return menu
     }
 
     @objc func openTerminal(_ sender: NSMenuItem) {
@@ -253,37 +233,6 @@ extension FinderSync {
 
     // MARK: - 移动到 / 复制到常用目录
 
-    /// 「移动到 / 复制到」子菜单：每个常用目录一项，末尾是「管理常用目录…」。
-    /// tag 为其在 orderedFavoriteDirectories 中的下标：访达转发菜单只保留 tag 与标题，带不了路径
-    func buildFavoritesMenu(mode: FileTransferCheck.Mode, selected: [URL], style: MenuIconStyle) -> NSMenu {
-        let m = NSMenu(title: L(mode == .move ? "移动到" : "复制到"))
-        m.autoenablesItems = false
-        let favorites = SharedConfig.shared.orderedFavoriteDirectories
-        let unavailable = Self.favoriteAvailability.unavailablePaths(in: favorites)
-        let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
-        let action = mode == .move ? #selector(moveToFavorite(_:)) : #selector(copyToFavorite(_:))
-
-        if favorites.isEmpty {
-            let empty = makeItem(titleKey: "尚未添加常用目录", tint: .gray, systemImage: nil, style: .none)
-            empty.isEnabled = false
-            m.addItem(empty)
-        }
-        for (index, (path, name)) in zip(favorites, names).enumerated() {
-            let item = makeItem(titleKey: name, tint: .cyan, systemImage: "folder", action: action, tag: index, style: style)
-            item.toolTip = path
-            if unavailable.contains(path) { item.title += " — " + L("目录不可用") }
-            // 没有任何一项能放过去时置灰：移动时全部已在该目录，或目标位于选中的文件夹内部
-            item.isEnabled = !unavailable.contains(path) && selected.contains {
-                FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: mode) == .ok
-            }
-            m.addItem(item)
-        }
-
-        m.addItem(.separator())
-        m.addItem(makeItem(titleKey: "管理常用目录…", tint: .gray, systemImage: "gearshape", action: #selector(manageFavorites(_:)), style: style))
-        return m
-    }
-
     @objc func moveToFavorite(_ sender: NSMenuItem) {
         transferToFavorite(sender, mode: .move)
     }
@@ -367,13 +316,5 @@ extension FinderSync {
         IPCClient.shared.callAsync(action: "toggleHiddenFiles", payload: [:]) { r in
             logToFile("toggleHiddenFiles ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
-    }
-
-    // MARK: - Utility
-
-    private func newFileTypeInfo(for tag: Int) -> (ext: String, content: String) {
-        let templates = BuiltInFileTemplates.text
-        let template = templates.indices.contains(tag) ? templates[tag] : templates[0]
-        return (template.fileExtension, template.content)
     }
 }

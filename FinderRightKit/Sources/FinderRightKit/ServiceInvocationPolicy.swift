@@ -65,4 +65,34 @@ public enum ServiceInvocationPolicy {
         guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
         return url
     }
+
+    /// 终端与操作目标目录：选中项若是文件夹则用它本身，否则用其所在目录
+    public static func targetDirectory(for url: URL) -> URL {
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+            return url
+        }
+        return url.deletingLastPathComponent()
+    }
+
+    /// 校验单选普通文件入参
+    public static func validateSingleFile(from urls: [URL]) -> URL? {
+        guard urls.count == 1, let first = urls.first else { return nil }
+        return first
+    }
+
+    /// 过滤出支持的解压归档文件
+    public static func filterArchives(from urls: [URL]) -> [URL] {
+        urls.filter { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }
+    }
+
+    /// 校验输入项非空
+    public static func validateNonEmpty(urls: [URL]) -> Bool {
+        !urls.isEmpty
+    }
+
+    /// 校验常用目录传输前置条件
+    public static func validateFavoritesTransfer(items: [URL], favorites: [String]) -> Bool {
+        !items.isEmpty && !favorites.isEmpty
+    }
 }

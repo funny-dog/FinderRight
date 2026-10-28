@@ -11,6 +11,12 @@ KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin
 echo "=== [CI] 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --package-path FinderRightKit
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-service-drift.swift -o "$KIT_BUILD_DIR/test-service-drift"
+"$KIT_BUILD_DIR/test-service-drift"
+
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --package-path FinderRightKit FinderRightKitTests
 

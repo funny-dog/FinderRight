@@ -64,6 +64,19 @@ public struct MenuTint: Equatable, Hashable {
     public static let yellow   = MenuTint(name: "yellow",   tile: (0xFFCC00, 0xFFD60A), line: (0xD4A000, 0xFFD60A), darkGlyph: true)
 }
 
+/// 对应 macOS「服务」菜单的声明项
+public struct ServiceMenuDeclaration: Equatable {
+    /// 对应的 NSMessage selector 名（如 "copyPath"、"cutFiles"）
+    public let message: String
+    /// Info.plist 中 NSMenuItem 的 default 英文标题（同时也是 ServicesMenu.strings 的 key，如 "FinderRight: Copy Path"）
+    public let menuItemTitle: String
+
+    public init(message: String, menuItemTitle: String) {
+        self.message = message
+        self.menuItemTitle = menuItemTitle
+    }
+}
+
 /// Finder 右键菜单中的一个功能项 —— 全应用的「单一事实来源」。
 ///
 /// 主 App 设置界面据此渲染功能开关；FinderSync 扩展据此决定每个菜单项是否显示。
@@ -79,13 +92,23 @@ public struct MenuFeature: Identifiable, Equatable {
     public let systemImage: String
     /// 彩色模式下的主题色分组
     public let tint: MenuTint
+    /// 若该功能进「服务」菜单，则提供对应的服务声明；否则为 nil
+    public let serviceDeclaration: ServiceMenuDeclaration?
 
-    public init(id: String, nameKey: String, descriptionKey: String, systemImage: String, tint: MenuTint = .blue) {
+    public init(
+        id: String,
+        nameKey: String,
+        descriptionKey: String,
+        systemImage: String,
+        tint: MenuTint = .blue,
+        serviceDeclaration: ServiceMenuDeclaration? = nil
+    ) {
         self.id = id
         self.nameKey = nameKey
         self.descriptionKey = descriptionKey
         self.systemImage = systemImage
         self.tint = tint
+        self.serviceDeclaration = serviceDeclaration
     }
 }
 
@@ -139,23 +162,39 @@ public enum MenuFeatureCatalog {
 
     public static let all: [MenuFeature] = [
         // 只在有可撤销的操作时出现，放最前面便于发现
-        MenuFeature(id: undo,         nameKey: "撤销",           descriptionKey: "撤销 FinderRight 的上一次文件操作，只在可撤销时出现", systemImage: "arrow.uturn.backward", tint: .gray),
-        MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus", tint: .blue),
-        MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link", tint: .indigo),
-        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制文件名（可选含/不含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo),
-        MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext", tint: .teal),
-        MenuFeature(id: copyFileHash, nameKey: "复制哈希",       descriptionKey: "计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致", systemImage: "number", tint: .teal),
-        MenuFeature(id: goToDirectory, nameKey: "打开路径…",     descriptionKey: "输入文件或文件夹路径，在访达中显示或直接打开", systemImage: "arrow.right.circle", tint: .cyan),
-        MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal", tint: .graphite),
-        MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces", tint: .purple),
-        MenuFeature(id: cut,          nameKey: "剪切",           descriptionKey: "剪切选中的文件",           systemImage: "scissors", tint: .orange),
-        MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard", tint: .orange),
-        MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "arrowshape.turn.up.right", tint: .green),
-        MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square", tint: .green),
-        MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green),
-        MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "doc.zipper", tint: .brown),
-        MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "shippingbox.and.arrow.backward", tint: .brown),
-        MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye", tint: .pink),
+        MenuFeature(id: undo,         nameKey: "撤销",           descriptionKey: "撤销 FinderRight 的上一次文件操作，只在可撤销时出现", systemImage: "arrow.uturn.backward", tint: .gray, serviceDeclaration: nil),
+        MenuFeature(id: newFile,      nameKey: "新建文件",       descriptionKey: "在当前目录新建文件",       systemImage: "doc.badge.plus", tint: .blue,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "newFile", menuItemTitle: "FinderRight: New File in This Folder…")),
+        MenuFeature(id: copyPath,     nameKey: "复制路径",       descriptionKey: "复制文件或文件夹的完整路径", systemImage: "link", tint: .indigo,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyPath", menuItemTitle: "FinderRight: Copy Path")),
+        MenuFeature(id: copyFileName, nameKey: "复制文件名",     descriptionKey: "复制文件名（可选含/不含扩展名），多选时每行一项", systemImage: "character.cursor.ibeam", tint: .indigo,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyFileName", menuItemTitle: "FinderRight: Copy File Name")),
+        MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext", tint: .teal,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyFileContent", menuItemTitle: "FinderRight: Copy File Content")),
+        MenuFeature(id: copyFileHash, nameKey: "复制哈希",       descriptionKey: "计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致", systemImage: "number", tint: .teal,
+                    serviceDeclaration: nil),
+        MenuFeature(id: goToDirectory, nameKey: "打开路径…",     descriptionKey: "输入文件或文件夹路径，在访达中显示或直接打开", systemImage: "arrow.right.circle", tint: .cyan,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "goToDirectory", menuItemTitle: "FinderRight: Go to Folder…")),
+        MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal", tint: .graphite,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "openTerminal", menuItemTitle: "FinderRight: Open in Terminal")),
+        MenuFeature(id: openEditor,   nameKey: "打开编辑器",     descriptionKey: "使用默认编辑器打开文件",     systemImage: "curlybraces", tint: .purple,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "openEditor", menuItemTitle: "FinderRight: Open in Editor")),
+        MenuFeature(id: cut,          nameKey: "剪切",           descriptionKey: "剪切选中的文件",           systemImage: "scissors", tint: .orange,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "cutFiles", menuItemTitle: "FinderRight: Cut")),
+        MenuFeature(id: paste,        nameKey: "粘贴",           descriptionKey: "粘贴已剪切的文件",         systemImage: "doc.on.clipboard", tint: .orange,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "pasteFiles", menuItemTitle: "FinderRight: Paste into This Folder")),
+        MenuFeature(id: moveTo,       nameKey: "移动到",         descriptionKey: "把选中项移动到常用目录",     systemImage: "arrowshape.turn.up.right", tint: .green,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "moveToFavorite", menuItemTitle: "FinderRight: Move to Favorite Folder…")),
+        MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square", tint: .green,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyToFavorite", menuItemTitle: "FinderRight: Copy to Favorite Folder…")),
+        MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green,
+                    serviceDeclaration: nil),
+        MenuFeature(id: compress,     nameKey: "压缩为 ZIP",     descriptionKey: "压缩选中的文件或文件夹",     systemImage: "doc.zipper", tint: .brown,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "compressZip", menuItemTitle: "FinderRight: Compress to ZIP")),
+        MenuFeature(id: decompress,   nameKey: "解压到当前目录", descriptionKey: "解压选中的压缩包",         systemImage: "shippingbox.and.arrow.backward", tint: .brown,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "decompress", menuItemTitle: "FinderRight: Extract Here")),
+        MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye", tint: .pink,
+                    serviceDeclaration: nil),
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
@@ -190,5 +229,140 @@ public enum MenuFeatureCatalog {
             seen.insert(id)
         }
         return result
+    }
+}
+
+/// 服务菜单防漂移校验器：保证 MenuFeatureCatalog 声明与 Info.plist / ServicesProvider / ServicesMenu.strings 保持一致。
+public enum ServiceMenuDriftChecker {
+
+    public struct VerificationIssue: CustomStringConvertible, Equatable {
+        public let featureId: String?
+        public let message: String
+        public let file: String
+        public let reason: String
+
+        public init(featureId: String?, message: String, file: String, reason: String) {
+            self.featureId = featureId
+            self.message = message
+            self.file = file
+            self.reason = reason
+        }
+
+        public var description: String {
+            if let featureId {
+                return "服务防漂移校验失败 [功能: \(featureId), 消息: \(message), 文件: \(file)]: \(reason)"
+            } else {
+                return "服务防漂移校验失败 [消息: \(message), 文件: \(file)]: \(reason)"
+            }
+        }
+    }
+
+    /// 从 Info.plist 的 NSServices 数据中提取 (message, defaultTitle)
+    public static func parseNSServices(fromPlistData data: Data) -> [(message: String, title: String)] {
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let services = plist["NSServices"] as? [[String: Any]] else {
+            return []
+        }
+        var result: [(message: String, title: String)] = []
+        for svc in services {
+            guard let msg = svc["NSMessage"] as? String else { continue }
+            let itemDict = svc["NSMenuItem"] as? [String: Any]
+            let defaultTitle = (itemDict?["default"] as? String) ?? ""
+            result.append((msg, defaultTitle))
+        }
+        return result
+    }
+
+    /// 从 ServicesMenu.strings 解析中文标题键集合
+    public static func parseServicesMenuKeys(fromStringContent content: String) -> Set<String> {
+        var keys = Set<String>()
+        let lines = content.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") { continue }
+            if let quote1 = trimmed.firstIndex(of: "\"") {
+                let rest = trimmed[trimmed.index(after: quote1)...]
+                if let quote2 = rest.firstIndex(of: "\"") {
+                    let key = String(rest[..<quote2])
+                    keys.insert(key)
+                }
+            }
+        }
+        return keys
+    }
+
+    /// 校验 Catalog 声明的服务与 Plist / ServicesProvider / Strings 是否完整双向对齐
+    public static func verify(
+        features: [MenuFeature] = MenuFeatureCatalog.all,
+        plistServices: [(message: String, title: String)],
+        providerSource: String,
+        servicesMenuKeys: Set<String>
+    ) -> [VerificationIssue] {
+        var issues: [VerificationIssue] = []
+
+        // 1. 检查已声明的服务是否在三个地方都存在
+        let declared = features.compactMap { f -> (feature: MenuFeature, decl: ServiceMenuDeclaration)? in
+            guard let d = f.serviceDeclaration else { return nil }
+            return (f, d)
+        }
+
+        let plistMap = Dictionary(plistServices.map { ($0.message, $0.title) }, uniquingKeysWith: { a, _ in a })
+
+        for (feature, decl) in declared {
+            // 检查 Info.plist
+            if let plistTitle = plistMap[decl.message] {
+                if plistTitle != decl.menuItemTitle {
+                    issues.append(VerificationIssue(
+                        featureId: feature.id,
+                        message: decl.message,
+                        file: "FinderRight/Info.plist",
+                        reason: "NSServices 中 default 标题 '\(plistTitle)' 与声明的 '\(decl.menuItemTitle)' 不一致"
+                    ))
+                }
+            } else {
+                issues.append(VerificationIssue(
+                    featureId: feature.id,
+                    message: decl.message,
+                    file: "FinderRight/Info.plist",
+                    reason: "缺少 NSServices 条目 (NSMessage: \(decl.message))"
+                ))
+            }
+
+            // 检查 ServicesProvider.swift
+            let hasMethod = providerSource.contains("func \(decl.message)(")
+            if !hasMethod {
+                issues.append(VerificationIssue(
+                    featureId: feature.id,
+                    message: decl.message,
+                    file: "FinderRight/Services/ServicesProvider.swift",
+                    reason: "缺少同名处理方法 func \(decl.message)(...)"
+                ))
+            }
+
+            // 检查 ServicesMenu.strings
+            if !servicesMenuKeys.contains(decl.menuItemTitle) {
+                issues.append(VerificationIssue(
+                    featureId: feature.id,
+                    message: decl.message,
+                    file: "FinderRight/zh-Hans.lproj/ServicesMenu.strings",
+                    reason: "缺少中文标题本地化映射 ('\(decl.menuItemTitle)')"
+                ))
+            }
+        }
+
+        // 2. 反向检查：NSServices 里不能有未在 Catalog 中声明的条目
+        let declaredMessages = Set(declared.map(\.decl.message))
+        for (msg, _) in plistServices {
+            if !declaredMessages.contains(msg) {
+                issues.append(VerificationIssue(
+                    featureId: nil,
+                    message: msg,
+                    file: "FinderRight/Info.plist",
+                    reason: "NSServices 中存在未在 MenuFeatureCatalog 声明的多余服务: \(msg)"
+                ))
+            }
+        }
+
+        return issues
     }
 }

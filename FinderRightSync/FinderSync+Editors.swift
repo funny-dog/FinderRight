@@ -103,27 +103,14 @@ extension FinderSync {
         return EditorCatalog.menuEditors(available: snap.editors, hidden: hidden, order: config.editorOrder)
     }
 
-    /// 构建「打开编辑器」子菜单。
-    ///
-    /// 注意：FIFinderSync 的菜单会跨进程传给 Finder 渲染，NSMenuItem 的
-    /// `representedObject`（Any）在跨进程序列化时会丢失，因此必须用 `tag`（Int）
-    /// 携带数据 —— 这里 tag = 编辑器在本次 editorMenuIds 快照中的下标。
-    func buildEditorMenu(_ editors: [KnownEditor], style: MenuIconStyle) -> NSMenu {
-        let m = NSMenu(title: L("打开编辑器"))
-        let icons = style != .none ? Self.editorSnapshot().icons : [:]
+    func cacheEditorMenuIds(_ editors: [KnownEditor]) {
         Self.editorCacheLock.lock()
         Self.editorMenuIds = editors.map(\.id)
         Self.editorCacheLock.unlock()
-        for (idx, ed) in editors.enumerated() {
-            let item = NSMenuItem(title: ed.name, action: #selector(openEditorWith(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = idx
-            if style != .none {
-                item.image = icons[ed.id]
-            }
-            m.addItem(item)
-        }
-        return m
+    }
+
+    func editorMenuIcon(for id: String) -> NSImage? {
+        Self.editorSnapshot().icons[id]
     }
 
     @objc func openEditorWith(_ sender: NSMenuItem) {

@@ -309,29 +309,13 @@ class FinderSync: FIFinderSync {
             + (selected.count > 10 ? "..." : "")
         logToFile("menu(for:) kind=\(menuKind.rawValue) selected=\(selected.count) exts=[\(exts)] dir=\(directory?.lastPathComponent ?? "nil")")
 
-        let menu = NSMenu(title: "FinderRight")
         let style = SharedConfig.shared.menuIconStyle
-
-        // 功能开关：默认开启，用户在设置里关闭后对应菜单项隐藏
-        func featureOn(_ id: String) -> Bool { SharedConfig.shared.isActionEnabled(id) }
-
-        let isContainerLike = menuKind == .contextualMenuForContainer
-            || menuKind == .contextualMenuForSidebar
-            || !hasSelection
-
-        // 在窗口空白处右键（容器菜单）时，Finder 会把当前目录本身放进 selectedItemURLs()，
-        // hasSelection 因此为真。复制路径、打开编辑器作用于当前目录无害且有用，照常显示；
-        // 但剪切 / 移动到 / 复制到 / 压缩会改动当前目录本身，必须是用户真正选中了条目才显示
-        let hasExplicitSelection = hasSelection && menuKind != .contextualMenuForContainer
 
         // 剪切队列状态：剪切 / 粘贴 / 取消剪切的显示与文案都依赖它
         let cutPaths = currentCutQueuePaths()
         let hasCut = !cutPaths.isEmpty
 
-        // 兜底刷新角标：对仍处于剪切队列的选中项再推一次角标标识，覆盖重绘时序问题。
-        // 注意这只在本扩展持有该目录角标归属时有效；归属被其他扩展占走时推多少次都不会显示
-        // （见 requestBadgeIdentifier 处的说明）。
-        // 上限 50 项，避免「全选大目录」时拖慢菜单构建。
+        // 兜底刷新角标：对仍处于剪切队列的选中项再推一次角标标识，覆盖重绘时序问题
         if hasSelection, hasCut {
             var pushed = 0
             for url in selected.prefix(50) where cutPaths.contains(normalizePath(url.path)) {
@@ -341,133 +325,107 @@ class FinderSync: FIFinderSync {
             if pushed > 0 { logToFile("menu(for:) badge refresh: \(pushed) cut item(s)") }
         }
 
-        let cancelCutItem = { self.makeItem(titleKey: "取消剪切", tint: .red, systemImage: "xmark.circle", action: #selector(self.cancelCut(_:)), shortcutId: nil, style: style) }
-
-        // 每个功能一个构建闭包，按用户在设置里拖拽排好的顺序依次添加。
-        // 显示条件与功能开关在闭包内判断；「取消剪切」没有独立开关，依附在剪切之后、随剪切一起排序
-        let builders: [String: () -> Void] = [
-            MenuFeatureCatalog.undo: {
-                // 主 App 有可撤销的记录时才写这个状态文件；文件里只有显示信息，不含路径
-                guard let state = UndoMenuState.read() else { return }
-                let item = self.makeItem(titleKey: "撤销", tint: .gray, systemImage: "arrow.uturn.backward", action: #selector(self.undoLast(_:)), shortcutId: "shortcut.undo", style: style)
-                item.title = UndoText.menuTitle(for: state, localize: self.L)
-                menu.addItem(item)
-            },
-            MenuFeatureCatalog.newFile: {
-                // 新建文件 —— 容器/侧边栏/空选中时
-                guard isContainerLike else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "新建文件", tint: .blue, systemImage: "doc.badge.plus", shortcutId: "shortcut.newFile", style: style, build: { self.buildNewFileMenu(style: style) }))
-            },
-            MenuFeatureCatalog.copyPath: {
-                guard hasSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "复制路径", tint: .indigo, systemImage: "link", action: #selector(self.copyPath(_:)), shortcutId: "shortcut.copyPath", style: style))
-            },
-            MenuFeatureCatalog.copyFileName: {
-                guard hasSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "复制文件名", tint: .indigo, systemImage: "character.cursor.ibeam", action: #selector(self.copyFileName(_:)), shortcutId: "shortcut.copyFileName", style: style))
-            },
-            MenuFeatureCatalog.copyFileContent: {
-                // 仅单选普通文本文件且在大小限制内时显示
-                guard selected.count == 1, let url = selected.first else { return }
-                guard FileContentReader.isEligible(url: url, maxBytes: SharedConfig.shared.copyFileContentMaxBytes) else { return }
-                menu.addItem(self.makeItem(titleKey: "复制文件内容", tint: .teal, systemImage: "doc.plaintext", action: #selector(self.copyFileContent(_:)), shortcutId: "shortcut.copyFileContent", style: style))
-            },
-            MenuFeatureCatalog.copyFileHash: {
-                // 至少有一个普通文件才显示；只看前 50 项，避免全选大目录时拖慢菜单
-                guard hasSelection, selected.prefix(50).contains(where: FileHasher.isRegularFile) else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "复制哈希", tint: .teal, systemImage: "number", shortcutId: nil, style: style, build: { self.buildHashMenu() }))
-            },
-            MenuFeatureCatalog.goToDirectory: {
-                menu.addItem(self.makeItem(titleKey: "打开路径…", tint: .cyan, systemImage: "arrow.right.circle", action: #selector(self.goToDirectory(_:)), shortcutId: "shortcut.goToDirectory", style: style))
-            },
-            MenuFeatureCatalog.openTerminal: {
-                let config = SharedConfig.shared
-                let terminals = TerminalCatalog.menuTerminals(
-                    selected: config.selectedTerminals, preferred: config.preferredTerminal,
-                    order: config.terminalOrder)
-                guard !terminals.isEmpty else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "打开终端", tint: .graphite, systemImage: "terminal", shortcutId: "shortcut.openTerminal", style: style, build: { self.buildTerminalMenu(terminals, style: style) }))
-            },
-            MenuFeatureCatalog.openEditor: {
-                guard hasSelection else { return }
-                let editors = self.installedEditors()
-                guard !editors.isEmpty else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "打开编辑器", tint: .purple, systemImage: "curlybraces", shortcutId: "shortcut.openEditor", style: style, build: { self.buildEditorMenu(editors, style: style) }))
-            },
-            MenuFeatureCatalog.cut: {
-                if hasExplicitSelection {
-                    let selectedPaths = Set(selected.map(\.path))
-                    let alreadyCut = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
-                    let cutTitleKey = alreadyCut ? "剪切 (已在剪切队列)" : "剪切"
-                    menu.addItem(self.makeItem(titleKey: cutTitleKey, tint: .orange, systemImage: "scissors", action: #selector(self.cutFiles(_:)), shortcutId: "shortcut.cut", style: style))
-                }
-                if hasCut {
-                    menu.addItem(cancelCutItem())
-                }
-            },
-            MenuFeatureCatalog.paste: {
-                if hasCut || isContainerLike {
-                    let pasteTitleKey = hasCut
-                        ? String(format: self.L("粘贴 (已剪切 %d 项)"), cutPaths.count)
-                        : "粘贴"
-                    let pasteItem = self.makeItem(titleKey: pasteTitleKey, tint: .orange, systemImage: "doc.on.clipboard", action: #selector(self.pasteFiles(_:)), shortcutId: "shortcut.paste", style: style)
-                    pasteItem.isEnabled = hasCut
-                    menu.addItem(pasteItem)
-                }
-            },
-            MenuFeatureCatalog.moveTo: {
-                guard hasExplicitSelection else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "移动到", tint: .green, systemImage: "arrowshape.turn.up.right", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .move, selected: selected, style: style) }))
-            },
-            MenuFeatureCatalog.copyTo: {
-                guard hasExplicitSelection else { return }
-                menu.addItem(self.makeSubmenuItem(titleKey: "复制到", tint: .green, systemImage: "plus.square.on.square", shortcutId: nil, style: style, build: { self.buildFavoritesMenu(mode: .copy, selected: selected, style: style) }))
-            },
-            MenuFeatureCatalog.createSymlink: {
-                guard hasExplicitSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "创建符号链接", tint: .green, systemImage: "link.badge.plus", action: #selector(self.createSymlink(_:)), shortcutId: nil, style: style))
-            },
-            MenuFeatureCatalog.compress: {
-                guard hasExplicitSelection else { return }
-                menu.addItem(self.makeItem(titleKey: "压缩为 ZIP", tint: .brown, systemImage: "doc.zipper", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.compress", tag: 0, style: style))
-            },
-            MenuFeatureCatalog.decompress: {
-                guard hasSelection, selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }) else { return }
-                menu.addItem(self.makeItem(titleKey: "解压到当前目录", tint: .brown, systemImage: "shippingbox.and.arrow.backward", action: #selector(self.archiveOperation(_:)), shortcutId: "shortcut.decompress", tag: 2, style: style))
-            },
-            MenuFeatureCatalog.toggleHidden: {
-                // 无状态固定文案：CGEvent 切换是 fire-and-forget（无回执），跨进程读
-                // com.apple.finder 偏好又命中 cfprefsd 客户端缓存，**不存在可靠的状态通道** ——
-                // 「显示/隐藏」状态文案曾两轮实测反转（并留下过 settings.plist 里的死值
-                // showHiddenFiles，该键已彻底删除）。固定文案永不撒谎，代价是不显示当前状态。
-                // 因此主 App 启动时也不需要把任何状态锚定到 Finder 真实状态（见 FinderRightApp）。
-                menu.addItem(self.makeItem(
-                    titleKey: "切换隐藏文件",
-                    tint: .pink,
-                    systemImage: "eye",
-                    action: #selector(self.toggleHiddenFiles(_:)),
-                    shortcutId: "shortcut.toggleHidden",
-                    style: style
-                ))
-            },
-        ]
-
-        for feature in MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder) where featureOn(feature.id) {
-            builders[feature.id]?()
+        // 解析位置
+        let location: MenuTargetLocation
+        switch menuKind {
+        case .contextualMenuForContainer:
+            location = .container
+        case .contextualMenuForSidebar:
+            location = .sidebar
+        case .contextualMenuForItems:
+            location = .items
+        case .toolbarItemMenu:
+            location = .items
+        @unknown default:
+            location = .items
         }
 
-        // 「取消剪切」平时紧跟「剪切」，但它不能跟着「剪切」开关一起消失：
-        // 用户可能先剪切了一批文件，再到设置里关掉「剪切」，此时队列仍在，
-        // 没有入口就只能靠「粘贴」或重启 App 才能清掉。开关关掉时补在「粘贴」后面。
-        if hasCut, !featureOn(MenuFeatureCatalog.cut) {
-            let item = cancelCutItem()
-            let pasteIndex = menu.items.firstIndex { $0.action == #selector(self.pasteFiles(_:)) }
-            if let pasteIndex {
-                menu.insertItem(item, at: pasteIndex + 1)
+        // 解析选中项类型
+        let selectionKind: SelectionKind
+        if selected.isEmpty {
+            selectionKind = .empty
+        } else if selected.count == 1, let first = selected.first {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir), isDir.boolValue {
+                selectionKind = .singleFolder
             } else {
-                menu.addItem(item)
+                let isText = FileContentReader.isEligible(url: first, maxBytes: SharedConfig.shared.copyFileContentMaxBytes)
+                let isArchive = ArchiveKind.isArchive(fileName: first.lastPathComponent)
+                selectionKind = .singleFile(isTextEligible: isText, isArchive: isArchive, isRegularFile: FileHasher.isRegularFile(first))
             }
+        } else {
+            let hasRegular = selected.prefix(50).contains(where: FileHasher.isRegularFile)
+            let hasArchives = selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) })
+            selectionKind = .multiple(count: selected.count, hasRegularFiles: hasRegular, hasArchives: hasArchives)
         }
+
+        // 剪切队列状态判断
+        let selectedPaths = Set(selected.map(\.path))
+        let isSubset = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
+        let cutState = CutState(count: cutPaths.count, isSelectionSubsetOfCut: isSubset)
+
+        // 新建文件模板缓存与纯数据
+        let customTemplates = SharedConfig.shared.customFileTemplates
+        let order = SharedConfig.shared.newFileOrder
+        let hidden = SharedConfig.shared.hiddenNewFileTemplates
+        let allTemplates = NewFileTemplateCatalog.resolvedTemplates(order: order, customTemplates: customTemplates)
+        let activeTemplates = allTemplates.filter { !hidden.contains($0.id) }
+        self.activeNewFileTemplates = activeTemplates
+        let templateData = activeTemplates.enumerated().map { index, item in
+            let name = item.isCustom ? (item.name.isEmpty ? ".\(item.fileExtension)" : "\(item.name) (.\(item.fileExtension))") : item.name
+            return MenuTemplateData(id: item.id, displayName: name, systemImage: item.systemImage, tint: item.tint, tag: index, isCustom: item.isCustom)
+        }
+
+        // 终端配置与纯数据
+        let terminals = TerminalCatalog.menuTerminals(
+            selected: SharedConfig.shared.selectedTerminals,
+            preferred: SharedConfig.shared.preferredTerminal,
+            order: SharedConfig.shared.terminalOrder)
+        self.terminalMenuIds = terminals.map(\.bundleIdentifier)
+        let terminalData = terminals.enumerated().map { index, t in
+            MenuTerminalData(bundleIdentifier: t.bundleIdentifier, name: t.name, icon: t.icon, tag: index)
+        }
+
+        // 编辑器配置与纯数据
+        let editors = self.installedEditors()
+        cacheEditorMenuIds(editors)
+        let editorData = editors.enumerated().map { index, e in
+            MenuEditorData(bundleIdentifier: e.id, name: e.name, icon: nil, tag: index)
+        }
+
+        // 常用目录配置与纯数据
+        let favorites = SharedConfig.shared.orderedFavoriteDirectories
+        let unavailable = Self.favoriteAvailability.unavailablePaths(in: favorites)
+        let names = FavoriteDirectories.displayNames(for: favorites, home: IPCBridge.realUserHomeDirectory.path)
+        let favoriteData = zip(favorites, names).enumerated().map { index, pair in
+            let (path, name) = pair
+            let isUnav = unavailable.contains(path)
+            let canTransfer = !isUnav && selected.contains {
+                FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: .move) == .ok
+            }
+            let canCopy = !isUnav && selected.contains {
+                FileTransferCheck.check(source: normalizePath($0.path), destinationDirectory: path, mode: .copy) == .ok
+            }
+            return MenuFavoriteData(path: path, displayName: name, isUnavailable: isUnav, canTransfer: canTransfer, tag: index, canCopy: canCopy)
+        }
+
+        let undoTitle: String? = UndoMenuState.read().map { UndoText.menuTitle(for: $0, localize: self.L) }
+
+        let input = MenuBuildInput(
+            location: location,
+            selection: selectionKind,
+            enabledFeatureIds: Set(MenuFeatureCatalog.all.map(\.id).filter { SharedConfig.shared.isActionEnabled($0) }),
+            menuOrder: SharedConfig.shared.menuOrder,
+            cutState: cutState,
+            undoTitle: undoTitle,
+            newFileTemplates: templateData,
+            terminals: terminalData,
+            editors: editorData,
+            favoriteDirectories: favoriteData
+        )
+
+        let nodes = MenuTreeBuilder.buildMenuTree(input: input)
+        let menu = renderMenu(nodes: nodes, editors: editors, style: style)
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
         if !didDeferredSetup {
@@ -479,7 +437,7 @@ class FinderSync: FIFinderSync {
         return menu
     }
 
-    // MARK: - 菜单构建辅助
+    // MARK: - 菜单构建与渲染
 
     private static let englishBundle: Bundle? = {
         guard let path = Bundle.main.path(forResource: "en", ofType: "lproj") else { return nil }
@@ -498,80 +456,98 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    /// 根据配置的图标风格（单色线条 / 彩色线条 / 彩色方块 / 无图标）设置菜单项的标题与图标
-    private func configureMenuItem(
-        _ item: NSMenuItem,
-        titleKey: String,
-        tint: MenuTint,
-        systemImage: String?,
-        style: MenuIconStyle
-    ) {
-        item.title = L(titleKey)
-        guard let systemImage else {
-            item.image = nil
-            return
-        }
-        switch style {
-        case .modern:
-            item.image = Self.getSymbolImage(named: systemImage)
-        case .tinted, .tile:
-            item.image = MenuIconRenderer.image(symbol: systemImage, tint: tint, style: style)
-        case .none:
-            item.image = nil
+    func selector(for actionId: String) -> Selector? {
+        switch actionId {
+        case "newFile": return #selector(self.newFile(_:))
+        case "copyPath": return #selector(self.copyPath(_:))
+        case "copyFileName": return #selector(self.copyFileName(_:))
+        case "copyFileContent": return #selector(self.copyFileContent(_:))
+        case "copyFileHash": return #selector(self.copyFileHash(_:))
+        case "goToDirectory": return #selector(self.goToDirectory(_:))
+        case "openTerminal": return #selector(self.openTerminal(_:))
+        case "openEditor": return #selector(self.openEditorWith(_:))
+        case "cutFiles": return #selector(self.cutFiles(_:))
+        case "cancelCut": return #selector(self.cancelCut(_:))
+        case "pasteFiles": return #selector(self.pasteFiles(_:))
+        case "moveToFavorite": return #selector(self.moveToFavorite(_:))
+        case "copyToFavorite": return #selector(self.copyToFavorite(_:))
+        case "manageFavorites": return #selector(self.manageFavorites(_:))
+        case "createSymlink": return #selector(self.createSymlink(_:))
+        case "archiveOperation": return #selector(self.archiveOperation(_:))
+        case "toggleHiddenFiles": return #selector(self.toggleHiddenFiles(_:))
+        case "undoLast": return #selector(self.undoLast(_:))
+        default: return nil
         }
     }
 
-    /// 构建通用菜单项（支持快捷键、tag 与图标风格自适应）
-    func makeItem(
-        titleKey: String,
-        tint: MenuTint,
-        systemImage: String?,
-        action: Selector? = nil,
-        shortcutId: String? = nil,
-        tag: Int = 0,
+    /// 将 Kit 纯数据树渲染为 NSMenu
+    func renderMenu(title: String = "FinderRight", nodes: [MenuDataNode], editors: [KnownEditor] = [], style: MenuIconStyle) -> NSMenu {
+        let menu = NSMenu(title: L(title))
+        menu.autoenablesItems = false
+        for node in nodes {
+            switch node.kind {
+            case .separator:
+                menu.addItem(.separator())
+            case .action(let actionId, let tag):
+                let item = makeItem(from: node, action: selector(for: actionId), tag: tag, style: style)
+                if case .action(let actionId, let index) = node.kind,
+                   actionId == "openEditor", editors.indices.contains(index), style != .none {
+                    item.image = editorMenuIcon(for: editors[index].id)
+                }
+                menu.addItem(item)
+            case .submenu(let children):
+                let item = makeItem(from: node, action: nil, tag: 0, style: style)
+                let subMenu = renderMenu(title: node.titleKey, nodes: children, editors: editors, style: style)
+                item.setSubmenuOrSingleAction(subMenu)
+                menu.addItem(item)
+            }
+        }
+        return menu
+    }
+
+    /// 根据纯数据节点生成 NSMenuItem
+    private func makeItem(
+        from node: MenuDataNode,
+        action: Selector?,
+        tag: Int,
         style: MenuIconStyle
     ) -> NSMenuItem {
-        let sc = shortcutId.flatMap { SharedConfig.shared.shortcut(forActionId: $0) }
+        let title: String
+        switch node.title {
+        case .key(let k):
+            title = L(k)
+        case .dynamic(let d):
+            title = d
+        case .unavailableDirectory(let name):
+            title = name + " — " + L("目录不可用")
+        case .formatted(let key, let count):
+            title = String(format: L(key), count)
+        }
+
+        let sc = node.shortcutId.flatMap { SharedConfig.shared.shortcut(forActionId: $0) }
         let key = sc?.key ?? ""
-        let i = NSMenuItem(title: "", action: action, keyEquivalent: key)
-        i.target = self
-        i.tag = tag
-        if let sc = sc, !key.isEmpty {
-            i.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: UInt(sc.modifiers))
-        }
-        configureMenuItem(i, titleKey: titleKey, tint: tint, systemImage: systemImage, style: style)
-        return i
-    }
-
-    private func makeSubmenuItem(
-        titleKey: String,
-        tint: MenuTint,
-        systemImage: String?,
-        shortcutId: String? = nil,
-        style: MenuIconStyle,
-        build: () -> NSMenu
-    ) -> NSMenuItem {
-        let i = makeItem(titleKey: titleKey, tint: tint, systemImage: systemImage, shortcutId: shortcutId, style: style)
-        i.setSubmenuOrSingleAction(build())
-        return i
-    }
-
-    private func buildNewFileMenu(style: MenuIconStyle) -> NSMenu {
-        let m = NSMenu(title: L("新建文件"))
-        let customTemplates = SharedConfig.shared.customFileTemplates
-        let order = SharedConfig.shared.newFileOrder
-        let hidden = SharedConfig.shared.hiddenNewFileTemplates
-        let allTemplates = NewFileTemplateCatalog.resolvedTemplates(order: order, customTemplates: customTemplates)
-        let activeTemplates = allTemplates.filter { !hidden.contains($0.id) }
-        self.activeNewFileTemplates = activeTemplates
-
-        for (index, item) in activeTemplates.enumerated() {
-            let title = item.isCustom ? (item.name.isEmpty ? ".\(item.fileExtension)" : "\(item.name) (.\(item.fileExtension))") : item.name
-            let menuItem = makeItem(titleKey: title, tint: item.tint, systemImage: item.systemImage, action: #selector(newFile(_:)), tag: index, style: style)
-            m.addItem(menuItem)
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        item.tag = tag
+        if let sc, !key.isEmpty {
+            item.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: UInt(sc.modifiers))
         }
 
-        return m
+        item.isEnabled = node.isEnabled
+        item.toolTip = node.toolTip
+
+        if let systemImage = node.systemImage {
+            switch style {
+            case .modern:
+                item.image = Self.getSymbolImage(named: systemImage)
+            case .tinted, .tile:
+                item.image = MenuIconRenderer.image(symbol: systemImage, tint: node.tint, style: style)
+            case .none:
+                item.image = nil
+            }
+        }
+
+        return item
     }
 
     /// 「打开终端」子菜单项对应的终端 id，按 tag 索引
