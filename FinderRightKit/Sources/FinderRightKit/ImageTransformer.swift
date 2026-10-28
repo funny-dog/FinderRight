@@ -79,33 +79,6 @@ public enum ImageTransformer {
         }
     }
 
-    /// 读取图片头部元数据（格式及有效尺寸），不完整解码大图
-    public static func inspectImageHeader(at url: URL) -> InspectedImageItem? {
-        let options: [CFString: Any] = [
-            kCGImageSourceShouldCache: kCFBooleanFalse as Any
-        ]
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, options as CFDictionary) else {
-            return nil
-        }
-        guard CGImageSourceGetCount(source) > 0 else {
-            return nil
-        }
-        guard let typeCF = CGImageSourceGetType(source) else {
-            return nil
-        }
-        guard CGImageSourceGetStatus(source) == .statusComplete else { return nil }
-        let format = ImageSourceFormat.from(uti: typeCF)
-        guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, options as CFDictionary) as? [CFString: Any] else {
-            return nil
-        }
-        let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0
-        let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
-        guard w > 0, h > 0 else {
-            return nil
-        }
-        return InspectedImageItem(format: format, width: w, height: h)
-    }
-
     /// 铺白底，用于将透明通道图片转为无透明度的 JPEG（避免透明区域变黑）
     public static func flattenOnWhiteBackground(_ image: CGImage) throws -> CGImage {
         let width = image.width

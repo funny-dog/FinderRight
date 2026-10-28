@@ -4837,63 +4837,25 @@ struct FinderRightKitTestsRunner {
             } catch PreviewDocumentError.invalid {}
         }
 
-        runTest("图片菜单：候选筛选无需内容读取且判定结果可经 IPC 往返") {
+        runTest("图片菜单：只按扩展名判定，不读取文件内容") {
+            // 路径不存在也能判定：证明构建菜单时不碰磁盘
             let root = URL(fileURLWithPath: "/not-readable")
             let images = ["a.PNG", "b.jpeg", "c.heic", "d.webp", "e.tiff"].map { root.appendingPathComponent($0) }
-            try assertTrue(ImageMenuState.canInspectSelection(images))
-            try assertTrue(!ImageMenuState.canInspectSelection([]))
-            try assertTrue(!ImageMenuState.canInspectSelection(images + [root.appendingPathComponent("note.txt")]))
-            for state in [ImageMenuState(isAllImages: true, formats: [.png, .jpeg, .heic]),
-                          ImageMenuState(isAllImages: false)] {
-                let decoded = try JSONDecoder().decode(ImageMenuState.self, from: JSONEncoder().encode(state))
-                try assertEqual(decoded, state)
-            }
+            let state = ImageMenuState.evaluate(selection: images)
+            try assertTrue(state.isAllImages)
+            try assertEqual(state.formats, [.png, .jpeg, .heic, .other, .other])
+            try assertTrue(ImageMenuState.evaluate(selection: [root.appendingPathComponent("x.jpg")]).allAreJPEG)
+            try assertTrue(ImageMenuState.evaluate(selection: [root.appendingPathComponent("x.heif")]).allAreHEIC)
+            try assertTrue(!ImageMenuState.evaluate(selection: []).isAllImages, "空选择不显示")
+            try assertTrue(!ImageMenuState.evaluate(selection: images + [root.appendingPathComponent("note.txt")]).isAllImages, "混有非图片不显示")
+            try assertTrue(!ImageMenuState.evaluate(selection: [root.appendingPathComponent("README")]).isAllImages, "无扩展名不显示")
+            try assertTrue(!ImageMenuState.evaluate(selection: [root.appendingPathComponent("foo.png", isDirectory: true)]).isAllImages,
+                           "名为 foo.png 的目录不显示")
         }
 
-        runTest("图片菜单：纯决策与真实文件检测（目录/文本伪装/损坏图/真实同格式隐藏）") {
+        runTest("图片菜单：按所选格式隐藏同格式转换项") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
-            let tempDir = makeTempDirectory()
-            defer { try? FileManager.default.removeItem(at: tempDir) }
-
-            // 1. 纯决策输入测试
-            let inspectedPNG = [InspectedImageItem(format: .png, width: 200, height: 100)]
-            let statePNG = ImageMenuState.evaluate(inspected: inspectedPNG)
-            try assertTrue(statePNG.isAllImages)
-            try assertTrue(statePNG.allArePNG)
-
-            let inspectedZero = [InspectedImageItem(format: .png, width: 0, height: 100)]
-            try assertTrue(!ImageMenuState.evaluate(inspected: inspectedZero).isAllImages, "尺寸为0纯决策判定为非图片")
-            try assertTrue(!ImageMenuState.evaluate(inspected: []).isAllImages, "空数组纯决策判定为非图片")
-
-            // 2. 真实正常图片
-            let (realPNG, imageDirectory) = makeTestPNG(width: 100, height: 80, fillColor: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-            defer { try? FileManager.default.removeItem(at: imageDirectory) }
-            let stateReal = ImageMenuState.evaluate(urls: [realPNG])
-            try assertTrue(stateReal.isAllImages)
-            try assertTrue(stateReal.allArePNG)
-
-            // 3. 目录名伪装为 foo.png：必须不显示图片菜单
-            let fakeDir = tempDir.appendingPathComponent("foo.png")
-            try FileManager.default.createDirectory(at: fakeDir, withIntermediateDirectories: false)
-            try assertTrue(!ImageMenuState.evaluate(urls: [fakeDir]).isAllImages, "名为 foo.png 的目录不应显示图片菜单")
-
-            // 4. 普通文本伪装为 text.png：必须不显示
-            let fakeText = tempDir.appendingPathComponent("text.png")
-            try Data("hello world this is not an image".utf8).write(to: fakeText)
-            try assertTrue(!ImageMenuState.evaluate(urls: [fakeText]).isAllImages, "文本伪装 png 不应显示图片菜单")
-
-            // 5. 损坏图像文件：必须不显示
-            let corruptFile = tempDir.appendingPathComponent("corrupt.jpg")
-            try Data([0xFF, 0xD8, 0x00, 0x01, 0x02, 0x03]).write(to: corruptFile)
-            try assertTrue(!ImageMenuState.evaluate(urls: [corruptFile]).isAllImages, "损坏图片不应显示图片菜单")
-
-            // 6. 真实同格式按检测类型隐藏：PNG 命名为 fake.jpg，实际按 PNG 隐藏「转换为 PNG」
-            let pngWithJpgExt = tempDir.appendingPathComponent("disguised.jpg")
-            try FileManager.default.copyItem(at: realPNG, to: pngWithJpgExt)
-            let detectedState = ImageMenuState.evaluate(urls: [pngWithJpgExt])
-            try assertTrue(detectedState.isAllImages)
-            try assertTrue(detectedState.allArePNG, "即使扩展名为 .jpg，通过 ImageIO 检测出其实际类型为 PNG")
-
+            let detectedState = ImageMenuState.evaluate(selection: [URL(fileURLWithPath: "/tmp/photo.png")])
             let input = MenuBuildInput(
                 location: .items,
                 selection: .singleFile(isTextEligible: false, isArchive: false),
@@ -4906,10 +4868,9 @@ struct FinderRightKitTestsRunner {
                 throw TestFailure(message: "应该显示图片子菜单")
             }
             let childIds = children.map(\.id)
-            try assertTrue(!childIds.contains("image.convertToPNG"), "真实类型为 PNG 应隐藏转换为 PNG")
+            try assertTrue(!childIds.contains("image.convertToPNG"), "PNG 应隐藏转换为 PNG")
             try assertTrue(childIds.contains("image.convertToJPEG"), "显示转换为 JPEG")
             try assertTrue(childIds.contains("image.convertToHEIC"), "显示转换为 HEIC")
-            try assertTrue(!ImageMenuState.evaluate(urls: [realPNG, fakeText]).isAllImages)
             var hiddenInput = input
             hiddenInput.location = .container
             try assertTrue(!MenuTreeBuilder.buildMenuTree(input: hiddenInput).contains { $0.id == MenuFeatureCatalog.imageTools })
@@ -4920,7 +4881,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(ImageSourceFormat.from(uti: "public.jpeg-2000" as CFString), .other)
             for (format, hiddenID) in [(ImageSourceFormat.jpeg, "image.convertToJPEG"), (.heic, "image.convertToHEIC")] {
                 var formatInput = input
-                formatInput.imageMenuState = ImageMenuState.evaluate(inspected: [InspectedImageItem(format: format, width: 100, height: 50)])
+                formatInput.imageMenuState = ImageMenuState(isAllImages: true, formats: [format])
                 guard let menu = MenuTreeBuilder.buildMenuTree(input: formatInput).first(where: { $0.id == MenuFeatureCatalog.imageTools }),
                       case .submenu(let formatChildren) = menu.kind else { throw TestFailure(message: "缺少图片子菜单") }
                 try assertTrue(!formatChildren.contains { $0.id == hiddenID })

@@ -95,19 +95,6 @@ public struct CutState: Equatable {
     }
 }
 
-/// 单个图片的探测结果（纯数据模型，用于 MenuModel 纯决策输入）
-public struct InspectedImageItem: Equatable {
-    public let format: ImageSourceFormat
-    public let width: Int
-    public let height: Int
-
-    public init(format: ImageSourceFormat, width: Int, height: Int) {
-        self.format = format
-        self.width = width
-        self.height = height
-    }
-}
-
 /// 图片源格式分类
 public enum ImageSourceFormat: String, Codable, Equatable, Hashable {
     case png
@@ -131,7 +118,7 @@ public enum ImageSourceFormat: String, Codable, Equatable, Hashable {
 }
 
 /// 纯数据图片选中状态与菜单可用性判定
-public struct ImageMenuState: Codable, Equatable {
+public struct ImageMenuState: Equatable {
     public let isAllImages: Bool
     public let formats: [ImageSourceFormat]
 
@@ -144,56 +131,18 @@ public struct ImageMenuState: Codable, Equatable {
         self.formats = formats
     }
 
-    /// 扩展只筛选候选类型，实际可读性与格式由主 App 检验，不依赖扩展的文件读取权限。
-    public static func canInspectSelection(_ urls: [URL]) -> Bool {
-        !urls.isEmpty && urls.allSatisfy {
-            UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true
-        }
-    }
-
-    /// 纯决策：由图片检测结果列表决定是否全为有效图片及各格式分布（MenuModel 纯逻辑）
-    public static func evaluate(inspected items: [InspectedImageItem]) -> ImageMenuState {
-        guard !items.isEmpty else {
-            return ImageMenuState(isAllImages: false, formats: [])
-        }
-        for item in items {
-            guard item.width > 0, item.height > 0 else {
-                return ImageMenuState(isAllImages: false, formats: [])
-            }
-        }
-        return ImageMenuState(isAllImages: true, formats: items.map(\.format))
-    }
-
-    /// 检验普通可读文件及 ImageIO 实际图像类型/有效尺寸（不完整解码大图）
-    public static func evaluate(urls: [URL]) -> ImageMenuState {
-        guard !urls.isEmpty else {
-            return ImageMenuState(isAllImages: false, formats: [])
-        }
-        var inspected: [InspectedImageItem] = []
-        inspected.reserveCapacity(urls.count)
-
+    /// 只按扩展名判断，不读文件内容：右键菜单在访达主线程上同步构建，既不能等 IPC 也不能读盘，
+    /// 且沙箱扩展未必有权读取所选文件。损坏或改名伪装的文件由主 App 执行时逐个校验并说明原因。
+    public static func evaluate(selection urls: [URL]) -> ImageMenuState {
+        var formats: [ImageSourceFormat] = []
         for url in urls {
-            let path = url.path
-            var isDir: ObjCBool = false
-            // 必须是已存在的文件、不可为目录、必须可读
-            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
-                  !isDir.boolValue,
-                  FileManager.default.isReadableFile(atPath: path) else {
-                return ImageMenuState(isAllImages: false, formats: [])
+            guard !url.hasDirectoryPath,
+                  let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) else {
+                return ImageMenuState(isAllImages: false)
             }
-            // 排除目录伪装为 .png 等非常规文件
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
-                  values.isRegularFile == true else {
-                return ImageMenuState(isAllImages: false, formats: [])
-            }
-            // 通过 ImageIO 读取头部实际类型与有效尺寸（不完整解码大图）
-            guard let item = ImageTransformer.inspectImageHeader(at: url) else {
-                return ImageMenuState(isAllImages: false, formats: [])
-            }
-            inspected.append(item)
+            formats.append(.from(uti: type.identifier as CFString))
         }
-
-        return evaluate(inspected: inspected)
+        return ImageMenuState(isAllImages: !formats.isEmpty, formats: formats)
     }
 }
 
