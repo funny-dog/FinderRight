@@ -3146,6 +3146,48 @@ struct FinderRightKitTestsRunner {
             try assertNil(reserved[pasteKey], "与访达 ⌘V 冲突的旧快捷键不写入服务")
         }
 
+        runTest("ServiceShortcuts 菜单开关覆盖全部服务并保留其他设置") {
+            let root = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+            let data = try Data(contentsOf: root.appendingPathComponent("FinderRight/Info.plist"))
+            let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            let services = (plist?["NSServices"] as? [[String: Any]]) ?? []
+            try assertTrue(services.count > ServiceShortcuts.bindings.count, "开关也应覆盖没有快捷键的服务")
+            let bid = "com.finderright.app"
+            let binding = ServiceShortcuts.bindings.first { $0.actionId == "shortcut.copyPath" }!
+            let key = ServiceShortcuts.statusEntryKey(bundleId: bid, binding: binding)
+            let shortcuts = ["shortcut.copyPath": ActionShortcut(key: "c", modifiers: cmdBit | ctlBit)]
+            let otherKey = "other.app - Other - doIt"
+            let existing: [String: Any] = [
+                otherKey: ["enabled_context_menu": true],
+                key: ["custom": "keep", "presentation_modes": ["CustomMode": true]],
+            ]
+            let untouched = ServiceShortcuts.mergedStatus(existing, bundleId: bid, shortcuts: shortcuts,
+                                                         services: services)
+            try assertNil((untouched[key] as? [String: Any])?["enabled_context_menu"], "未操作开关时不改系统显示偏好")
+            var status = existing
+            for enabled in [false, true] {
+                status = ServiceShortcuts.mergedStatus(status, bundleId: bid, shortcuts: shortcuts,
+                                                      services: services, showsInServicesMenu: enabled)
+                for service in services {
+                    let title = (service["NSMenuItem"] as! [String: String])["default"]!
+                    let message = service["NSMessage"] as! String
+                    let entry = status["\(bid) - \(title) - \(message)"] as? [String: Any]
+                    try assertEqual(entry?["enabled_context_menu"] as? Bool, enabled)
+                    try assertEqual(entry?["enabled_services_menu"] as? Bool, enabled)
+                    let modes = entry?["presentation_modes"] as? [String: Any]
+                    try assertEqual(modes?["ContextMenu"] as? Bool, enabled)
+                    try assertEqual(modes?["ServicesMenu"] as? Bool, enabled)
+                }
+                let entry = status[key] as? [String: Any]
+                try assertEqual(entry?["key_equivalent"] as? String, "@^c", "显示开关保留快捷键配置")
+                try assertEqual(entry?["custom"] as? String, "keep")
+                try assertEqual((entry?["presentation_modes"] as? [String: Any])?["CustomMode"] as? Bool, true)
+                try assertEqual(status[otherKey] as? [String: Bool], ["enabled_context_menu": true])
+            }
+        }
+
         runTest("ServiceShortcuts 写入偏好域并可读回，无变化时不重复写") {
             // 固定域名 + 用后删文件，避免在 ~/Library/Preferences 堆积测试残留
             let domain = "com.finderright.tests.pbs"
@@ -3168,6 +3210,16 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, domain: domain), "相同内容不应重复写")
             try assertTrue(ServiceShortcuts.sync(shortcuts: [:], bundleId: bid, domain: domain))
             try assertEqual(ServiceShortcuts.storedKeyEquivalents(bundleId: bid, domain: domain), [:])
+            let services: [[String: Any]] = [["NSMenuItem": ["default": "FinderRight: Copy Path"], "NSMessage": "copyPath"]]
+            try assertTrue(ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, services: services,
+                                                showsInServicesMenu: false, domain: domain))
+            let status = CFPreferencesCopyAppValue("NSServicesStatus" as CFString, domain as CFString) as? [String: Any]
+            let key = ServiceShortcuts.statusEntryKey(bundleId: bid, binding: ServiceShortcuts.bindings.first { $0.actionId == "shortcut.copyPath" }!)
+            try assertEqual((status?[key] as? [String: Any])?["enabled_services_menu"] as? Bool, false)
+            try assertTrue(!ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, services: services,
+                                                 showsInServicesMenu: false, domain: domain), "关闭状态不重复写入")
+            try assertTrue(ServiceShortcuts.sync(shortcuts: shortcuts, bundleId: bid, services: services,
+                                                showsInServicesMenu: true, domain: domain))
         }
 
         runTest("FinderReservedShortcuts 拦截访达原生 ⌘X / ⌘V，放行带 ⌃ 的组合") {

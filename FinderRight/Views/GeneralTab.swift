@@ -10,6 +10,8 @@ struct GeneralTab: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showDockIcon") private var showDockIcon = false
+    @AppStorage(ServiceShortcutSync.showsServicesMenuKey) private var showServicesMenu = true
+    @FRState private var servicesMenuNeedsRestart = ServiceShortcutSync.finderNeedsRelaunch
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
@@ -27,11 +29,13 @@ struct GeneralTab: View {
             calibrateLaunchAtLoginStatus()
             menuIconStyle = SharedConfig.shared.menuIconStyle
             appLanguage = SharedConfig.shared.appLanguage
+            servicesMenuNeedsRestart = ServiceShortcutSync.finderNeedsRelaunch
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             calibrateLaunchAtLoginStatus()
             menuIconStyle = SharedConfig.shared.menuIconStyle
             appLanguage = SharedConfig.shared.appLanguage
+            servicesMenuNeedsRestart = ServiceShortcutSync.finderNeedsRelaunch
         }
     }
 
@@ -153,6 +157,31 @@ struct GeneralTab: View {
                                 Text(LocalizedStringKey(style.titleKey)).tag(style)
                             }
                         }
+                    }
+                }
+
+                FRDivider()
+
+                FRRow(title: Text("在「服务」中显示 FinderRight"),
+                      subtitle: Text("控制系统与右键「服务」菜单中的全部 FinderRight 功能，云盘目录也使用此入口。")) {
+                    FRSwitch(label: "在「服务」中显示 FinderRight", isOn: $showServicesMenu)
+                }
+                .onChange(of: showServicesMenu) { _ in
+                    if ServiceShortcutSync.run() {
+                        NSUpdateDynamicServices()
+                        servicesMenuNeedsRestart = true
+                    }
+                }
+
+                if servicesMenuNeedsRestart {
+                    FRDivider()
+                    FRRow(title: Text("重启访达以刷新服务菜单"),
+                          subtitle: Text("访达可能仍显示缓存的服务项；重启会关闭所有访达窗口，可能中断正在进行的拷贝。")) {
+                        Button("重启访达") {
+                            FinderRelauncher.relaunch()
+                            servicesMenuNeedsRestart = false
+                        }
+                        .buttonStyle(.frSecondary)
                     }
                 }
 

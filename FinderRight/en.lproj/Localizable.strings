@@ -808,3 +808,7 @@
 "已处理 %d 项，%d 项无需缩放" = "Processed %d items; %d did not need resizing";
 
 "原图长边为 %d 像素，不超过目标 %d 像素；缩放只缩小、不放大，本次未执行。" = "The original long edge is %d px, at or below the %d px target. Resizing only reduces images; nothing was changed.";
+"在「服务」中显示 FinderRight" = "Show FinderRight in Services";
+"控制系统与右键「服务」菜单中的全部 FinderRight 功能，云盘目录也使用此入口。" = "Show all FinderRight actions in the system and right-click Services menus. Cloud folders also use this entry point.";
+"重启访达以刷新服务菜单" = "Relaunch Finder to refresh Services";
+"访达可能仍显示缓存的服务项；重启会关闭所有访达窗口，可能中断正在进行的拷贝。" = "Finder may still show cached service items. Relaunching closes all Finder windows and may interrupt copies in progress.";

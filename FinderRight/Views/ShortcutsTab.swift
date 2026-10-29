@@ -333,14 +333,19 @@ struct ShortcutCell: View {
 // MARK: - 服务快捷键同步
 
 enum ServiceShortcutSync {
+    static let showsServicesMenuKey = "showServicesMenu"
     /// 最近一次真正改写 pbs 的时间；访达早于它启动就说明还没读到新快捷键
     private static let syncedAtKey = "serviceShortcutsSyncedAt"
 
-    /// 把设置里的快捷键写入系统服务快捷键，返回是否有变化
+    /// 同步服务快捷键及用户明确设置过的菜单显示状态，返回是否有变化。
     @discardableResult
     static func run() -> Bool {
         guard let bundleId = Bundle.main.bundleIdentifier,
-              ServiceShortcuts.sync(shortcuts: SharedConfig.shared.shortcuts, bundleId: bundleId) else { return false }
+              ServiceShortcuts.sync(
+                shortcuts: SharedConfig.shared.shortcuts, bundleId: bundleId,
+                services: Bundle.main.object(forInfoDictionaryKey: "NSServices") as? [[String: Any]] ?? [],
+                showsInServicesMenu: UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool
+              ) else { return false }
         UserDefaults.standard.set(Date(), forKey: syncedAtKey)
         return true
     }

@@ -78,12 +78,14 @@ public enum ServiceShortcuts {
         return s + shortcut.key.lowercased()
     }
 
-    /// 把 shortcuts 合并进现有 NSServicesStatus：只动本 App 条目的 key_equivalent，
-    /// 保留用户在系统设置里改过的启用状态等其他字段，也不碰其他 App 的条目。
+    /// 合并本 App 的快捷键；指定 showsInServicesMenu 时，同时设置全部声明服务的菜单显示状态。
+    /// 未指定显示状态时保留系统设置，也不碰其他 App 的条目。
     /// 与访达 / 系统保留键冲突的快捷键（多为旧版本录入的 ⌘X、⌘V）不写入：它们永远不会触发服务。
     public static func mergedStatus(_ status: [String: Any],
                                     bundleId: String,
-                                    shortcuts: [String: ActionShortcut]) -> [String: Any] {
+                                    shortcuts: [String: ActionShortcut],
+                                    services: [[String: Any]] = [],
+                                    showsInServicesMenu: Bool? = nil) -> [String: Any] {
         var result = status
         for binding in bindings {
             let key = statusEntryKey(bundleId: bundleId, binding: binding)
@@ -97,6 +99,21 @@ public enum ServiceShortcuts {
             }
             result[key] = entry.isEmpty ? nil : entry
         }
+        if let enabled = showsInServicesMenu {
+            for service in services {
+                guard let title = (service["NSMenuItem"] as? [String: String])?["default"],
+                      let message = service["NSMessage"] as? String else { continue }
+                let key = "\(bundleId) - \(title) - \(message)"
+                var entry = (result[key] as? [String: Any]) ?? [:]
+                entry["enabled_context_menu"] = enabled
+                entry["enabled_services_menu"] = enabled
+                var modes = (entry["presentation_modes"] as? [String: Any]) ?? [:]
+                modes["ContextMenu"] = enabled
+                modes["ServicesMenu"] = enabled
+                entry["presentation_modes"] = modes
+                result[key] = entry
+            }
+        }
         return result
     }
 
@@ -105,11 +122,14 @@ public enum ServiceShortcuts {
     @discardableResult
     public static func sync(shortcuts: [String: ActionShortcut],
                             bundleId: String,
+                            services: [[String: Any]] = [],
+                            showsInServicesMenu: Bool? = nil,
                             domain: String = pbsDomain) -> Bool {
         let appId = domain as CFString
         CFPreferencesAppSynchronize(appId)
         let current = (CFPreferencesCopyAppValue(statusKey as CFString, appId) as? [String: Any]) ?? [:]
-        let merged = mergedStatus(current, bundleId: bundleId, shortcuts: shortcuts)
+        let merged = mergedStatus(current, bundleId: bundleId, shortcuts: shortcuts,
+                                  services: services, showsInServicesMenu: showsInServicesMenu)
         guard !NSDictionary(dictionary: current).isEqual(to: merged) else { return false }
 
         let value: CFPropertyList? = merged.isEmpty ? nil : merged as CFDictionary

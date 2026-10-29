@@ -127,6 +127,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - 粘贴：剪切后在目标目录空白处选「服务 → FinderRight：粘贴到此文件夹」；若空白处没有「服务」，可回到上一级右键目标文件夹。它移动的是 FinderRight 的剪切队列，而不是系统剪贴板。
 - 新建文件、移动到 / 复制到会先弹确认框；取消不会操作文件。
 - 「服务」菜单标题跟随系统语言，不随 FinderRight 的界面语言切换。
+- 可在「设置 → 通用 → 显示」切换 **在「服务」中显示 FinderRight**，统一显示或隐藏全部服务项（默认显示）。若访达仍显示旧菜单，可点击「重启访达」刷新；重启可能中断正在进行的拷贝。
 
 </details>
 
@@ -298,6 +299,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - Paste: after cutting, right-click empty space in the destination and choose "Services → FinderRight: Paste into This Folder"; if Services is missing there, right-click the destination folder from its parent. It moves FinderRight's cut queue, not the system clipboard.
 - New File and Move To / Copy To show a confirmation dialog first; cancelling does nothing.
 - Service titles follow the system language, not FinderRight's language setting.
+- In Settings → General → Display, use “Show FinderRight in Services” to show or hide all service items (shown by default). If Finder still shows the old menu, click “Relaunch Finder” to refresh it; relaunching may interrupt copies in progress.
 
 </details>
 
