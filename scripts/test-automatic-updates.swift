@@ -1,7 +1,8 @@
 import Foundation
+import CryptoKit
 import FinderRightKit
 
-// 真实更新器、隔离偏好和模拟网络；测试不会启动安装或替换应用。
+// 真实更新器、隔离偏好和模拟网络；仅使用无效更新包，不会替换或重启应用。
 enum FinderRightService {
     static let backgroundJobs = BackgroundJobs()
 }
@@ -334,6 +335,15 @@ struct AutomaticUpdateChecks {
             checker.startDownloadAndInstall(downloadURL: ReleaseProtocol.githubZIP, checksum: .digest(ReleaseProtocol.hash)) { _ in }
             wait { isFailed(checker) }
             precondition(checker.currentStatus == .failed("更新包校验失败: SHA256 不匹配"))
+            precondition(ReleaseProtocol.requests == [ReleaseProtocol.githubZIP])
+        }
+        scenario("跨块更新包摘要匹配后才进入解压，损坏归档不会替换应用") { checker, _ in
+            let bytes = Data(repeating: 0x61, count: (3 << 20) + 7)
+            let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+            ReleaseProtocol.replies[ReleaseProtocol.githubZIP.absoluteString] = .response(200, bytes)
+            checker.startDownloadAndInstall(downloadURL: ReleaseProtocol.githubZIP, checksum: .digest(hash)) { _ in }
+            wait { isFailed(checker) }
+            precondition(checker.currentStatus == .failed("安装失败: 解压更新包失败"))
             precondition(ReleaseProtocol.requests == [ReleaseProtocol.githubZIP])
         }
         scenario("其他仓库的资产不提供自动安装") { checker, _ in

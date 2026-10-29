@@ -3877,6 +3877,39 @@ struct FinderRightKitTestsRunner {
             try assertTrue(value.hasSuffix("…"))
         }
 
+        runTest("图标缩略图：只保留目标 2x 位图、透明背景与模板标记，不修改原图") {
+            let source = NSImage(size: NSSize(width: 256, height: 256), flipped: false) { rect in
+                NSColor.red.setFill()
+                rect.insetBy(dx: 64, dy: 64).fill()
+                return true
+            }
+            source.isTemplate = true
+            for size in [16, 28] {
+                guard let image = IconThumbnail.make(from: source, pointSize: size),
+                      let bitmap = image.representations.first as? NSBitmapImageRep else {
+                    throw TestFailure(message: "未生成图标位图")
+                }
+                try assertEqual(image.size, NSSize(width: size, height: size))
+                try assertEqual(image.representations.count, 1)
+                try assertEqual(bitmap.pixelsWide, size * 2)
+                try assertEqual(bitmap.pixelsHigh, size * 2)
+                try assertTrue(image.isTemplate)
+                try assertTrue((bitmap.colorAt(x: size, y: size)?.alphaComponent ?? 0) > 0.9)
+                let center = bitmap.colorAt(x: size, y: size)!.usingColorSpace(.sRGB)!
+                try assertTrue(center.redComponent > 0.9 && center.greenComponent < 0.1)
+                try assertEqual(bitmap.colorAt(x: 0, y: 0)?.alphaComponent, 0)
+                let data = try NSKeyedArchiver.archivedData(withRootObject: image, requiringSecureCoding: true)
+                let restored = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSImage.self, from: data)
+                try assertEqual(restored?.representations.count, 1)
+                try assertTrue(restored?.isTemplate == true)
+                try assertEqual(restored?.representations.first?.pixelsWide, size * 2)
+            }
+            try assertEqual(source.size, NSSize(width: 256, height: 256))
+            source.isTemplate = false
+            try assertTrue(IconThumbnail.make(from: source, pointSize: 16)?.isTemplate == false)
+            try assertNil(IconThumbnail.make(from: source, pointSize: 0))
+        }
+
         // MARK: - 复制哈希 / 创建符号链接
 
         runTest("复制哈希：三种算法与已知摘要一致，跨块读取结果不变") {
@@ -3899,6 +3932,7 @@ struct FinderRightKitTestsRunner {
             try bytes.write(to: big)
             let expected = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
             try assertEqual(FileHasher.hexDigest(of: big, algorithm: .sha256), expected)
+            try assertEqual(try FileHasher.hexDigest(reading: big, algorithm: .sha256), expected)
         }
 
         runTest("复制哈希：文件夹与不存在的文件不计算，取消即中止，符号链接按目标") {
@@ -3906,6 +3940,11 @@ struct FinderRightKitTestsRunner {
             defer { try? FileManager.default.removeItem(at: dir) }
             try assertNil(FileHasher.hexDigest(of: dir, algorithm: .sha256), "文件夹")
             try assertNil(FileHasher.hexDigest(of: dir.appendingPathComponent("missing"), algorithm: .sha256))
+            do {
+                _ = try FileHasher.hexDigest(reading: dir.appendingPathComponent("missing"), algorithm: .sha256)
+                throw TestFailure(message: "读取失败应抛出具体文件错误")
+            } catch is TestFailure { throw TestFailure(message: "读取失败未抛错") }
+            catch { try assertEqual((error as NSError).domain, NSCocoaErrorDomain) }
             let file = dir.appendingPathComponent("a")
             try Data("abc".utf8).write(to: file)
             try assertNil(FileHasher.hexDigest(of: file, algorithm: .sha256, isCancelled: { true }))
@@ -4812,6 +4851,56 @@ struct FinderRightKitTestsRunner {
             try assertTrue(table.rows[0][0].hasSuffix("…"))
         }
 
+        runTest("表格预览 丢弃的末尾宽行仍决定列数与单元格上限") {
+            let wide = (1...50).map { "c\($0)" }.joined(separator: ",")
+            let table = PreviewDelimited.parse("h\n" + String(repeating: "v\n", count: 500) + wide, delimiter: ",")
+            try assertEqual(table.columns.count, 50)
+            try assertEqual(table.columns[49], "列 50")
+            try assertEqual(table.rows.count, 200)
+            try assertEqual(table.rows.last?.first, "v")
+            try assertEqual(table.rows.last?.last, "")
+            try assertTrue(table.truncated)
+            for (columns, rows) in [(1, 500), (20, 500), (50, 200)] {
+                let line = Array(repeating: "v", count: columns).joined(separator: ",") + "\n"
+                let exact = PreviewDelimited.parse(line + String(repeating: line, count: rows), delimiter: ",")
+                try assertEqual(exact.rows.count, rows)
+                try assertTrue(!exact.truncated)
+                let extra = PreviewDelimited.parse(line + String(repeating: line, count: rows + 1), delimiter: ",")
+                try assertEqual(extra.rows.count, rows)
+                try assertTrue(extra.truncated)
+            }
+        }
+
+        runTest("表格预览 超出列数的字段仍正确处理引号与内嵌换行") {
+            let wide = Array(repeating: "x", count: 50).joined(separator: ",")
+            let table = PreviewDelimited.parse("h\n" + wide + ",\"ignored\nsay \"\"hi\"\"\"\na,b\n", delimiter: ",")
+            try assertEqual(table.rows.count, 2)
+            try assertEqual(table.rows[0], Array(repeating: "x", count: 50))
+            try assertEqual(Array(table.rows[1].prefix(2)), ["a", "b"])
+            try assertTrue(table.truncated)
+        }
+
+        runTest("表格预览 密集分隔符与空行只保留展示字段") {
+            let table = PreviewDelimited.parse(String(repeating: "a,", count: 524_287) + "a", delimiter: ",")
+            try assertEqual(table.columns, Array(repeating: "a", count: 50))
+            try assertTrue(table.rows.isEmpty && table.truncated)
+            let hint = PreviewDelimited.detectDelimiter(String(repeating: "\n", count: 10_000) + "a;b\n1;2")
+            try assertEqual(hint.delimiter, ";")
+            try assertTrue(!hint.skipFirstLine)
+            try assertTrue(PreviewDelimited.parse("\n\"\"\n", delimiter: ",").columns.isEmpty)
+        }
+
+        runTest("表格预览 长字段截断后仍正确解析转义引号与组合字符") {
+            let prefix = String(repeating: "e\u{301}", count: 299)
+            let table = PreviewDelimited.parse("a,b\n\"" + prefix + "\"\"tail\",ok\nlast,row", delimiter: ",")
+            try assertEqual(table.rows[0], [prefix + "…", "ok"])
+            try assertEqual(table.rows[1], ["last", "row"])
+            let boundary = PreviewDelimited.parse("a\n" + String(repeating: "字", count: 300), delimiter: ",")
+            try assertEqual(boundary.rows[0][0], String(repeating: "字", count: 300))
+            let merged = PreviewDelimited.parse("a\n\"" + String(repeating: "x", count: 298) + "\n\u{301}zq\"", delimiter: ",")
+            try assertEqual(merged.rows[0][0], String(repeating: "x", count: 298) + " \u{301}…")
+        }
+
         runTest("表格预览 GBK 编码的 CSV 读取") {
             let root = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: root) }
@@ -5109,6 +5198,38 @@ struct FinderRightKitTestsRunner {
 
             let convertSingle = UndoText.actionDescription(kind: .convertImage, count: 1, name: "photo.jpg", localize: id)
             try assertEqual(convertSingle, "转换“photo.jpg”")
+        }
+
+        runTest("图片处理：无透明通道时复用原图，不创建白底位图") {
+            for alpha in [CGImageAlphaInfo.none, .noneSkipFirst, .noneSkipLast] {
+                let space = CGColorSpace(name: alpha == .none ? CGColorSpace.genericGrayGamma2_2 : CGColorSpace.displayP3)!
+                let context = CGContext(data: nil, width: 20, height: 10, bitsPerComponent: 8,
+                                        bytesPerRow: 0, space: space, bitmapInfo: alpha.rawValue)!
+                context.setFillColor(CGColor(gray: 0.5, alpha: 1))
+                context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
+                let original = context.makeImage()!
+                let result = try ImageTransformer.flattenOnWhiteBackground(original)
+                try assertTrue(result === original, "无 Alpha 图像应直接复用，保持像素与色彩空间")
+                try assertEqual(result.colorSpace?.name, space.name)
+            }
+        }
+
+        runTest("图片处理：不透明图转 JPEG 保持颜色、校正方向并保留源文件") {
+            let (file, directory) = makeTestAsymmetricDualColorJPEG(width: 200, height: 100, orientation: 6)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let original = try Data(contentsOf: file)
+            let output = try transformTestImage(sourceURL: file, operation: .convert(format: .jpeg))
+            let source = CGImageSourceCreateWithURL(output as CFURL, nil)!
+            let (width, height, _, properties) = try ImageTransformer.inspectImageSource(source)
+            try assertEqual(width, 100)
+            try assertEqual(height, 200)
+            try assertEqual((properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue, 1)
+            let top = getPixelRGB(at: CGPoint(x: 50, y: 40), from: output)!
+            let bottom = getPixelRGB(at: CGPoint(x: 50, y: 160), from: output)!
+            try assertTrue(top.b > 200 && top.r < 50)
+            try assertTrue(bottom.r > 200 && bottom.b < 50)
+            try assertEqual(try Data(contentsOf: file), original)
+            try assertTrue(output != file)
         }
 
         runTest("图片处理：透明 PNG 转 JPEG 后角落像素为白色") {

@@ -24,14 +24,23 @@ public enum FileHasher {
     /// isCancelled 在每块之间检查，返回 true 时中止并返回 nil
     public static func hexDigest(of url: URL, algorithm: Algorithm,
                                  isCancelled: () -> Bool = { false }) -> String? {
-        guard isRegularFile(url), let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        try? hexDigest(reading: url, algorithm: algorithm, isCancelled: isCancelled)
+    }
+
+    /// 更新校验需要保留具体读取错误；复制哈希入口仍使用上面的可选结果。
+    public static func hexDigest(reading url: URL, algorithm: Algorithm,
+                                 isCancelled: () -> Bool = { false }) throws -> String {
+        guard try url.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+            throw CocoaError(.fileReadUnsupportedScheme)
+        }
+        let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var sha256 = SHA256(), sha1 = Insecure.SHA1(), md5 = Insecure.MD5()
         while true {
-            if isCancelled() { return nil }
+            if isCancelled() { throw CocoaError(.userCancelled) }
             // 读到末尾时返回 nil（不是空 Data）；抛错才是读取失败
-            let chunk: Data?
-            do { chunk = try handle.read(upToCount: chunkSize) } catch { return nil }
+            // Foundation 的临时读取对象也逐块释放，避免 autorelease 累积成整文件大小。
+            let chunk = try autoreleasepool { try handle.read(upToCount: chunkSize) }
             guard let data = chunk, !data.isEmpty else { break }
             switch algorithm {
             case .sha256: sha256.update(data: data)

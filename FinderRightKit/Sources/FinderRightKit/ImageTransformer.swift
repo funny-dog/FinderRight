@@ -79,12 +79,16 @@ public enum ImageTransformer {
         }
     }
 
-    /// 铺白底，用于将透明通道图片转为无透明度的 JPEG（避免透明区域变黑）
+    /// 无透明通道时复用原图；有透明通道时铺白底，避免转为 JPEG 后透明区域变黑。
     public static func flattenOnWhiteBackground(_ image: CGImage) throws -> CGImage {
         let width = image.width
         let height = image.height
         guard width > 0, height > 0 else {
             throw ImageTransformError.cannotCreateThumbnail
+        }
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: return image
+        default: break
         }
         // 尽量沿用原图的 RGB 色彩空间，保留 ICC
         let colorSpace: CGColorSpace

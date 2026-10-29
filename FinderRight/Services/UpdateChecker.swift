@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import CryptoKit
 import FinderRightKit
 
 public final class UpdateChecker: NSObject {
@@ -269,8 +268,7 @@ public final class UpdateChecker: NSObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             do {
-                let zipData = try Data(contentsOf: zipLocation)
-                let actualHash = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
+                let actualHash = try FileHasher.hexDigest(reading: zipLocation, algorithm: .sha256)
                 guard actualHash == expectedHash else {
                     try? FileManager.default.removeItem(at: zipLocation.deletingLastPathComponent())
                     DispatchQueue.main.async { self.fail("更新包校验失败: SHA256 不匹配", statusHandler: statusHandler) }

@@ -23,49 +23,77 @@ public enum PreviewDelimited {
         var rows: [[String]] = []
         var row: [String] = []
         var field = ""
+        var fieldCharacters = 0
+        var fieldHasContent = false
+        var fieldTruncated = false
+        var column = 0
+        var width = 0
+        var rowCount = 0
         var inQuotes = false
+
+        func append(_ char: Character) {
+            fieldHasContent = true
+            guard rowCount <= maxRows, column < maxColumns, !fieldTruncated else { return }
+            field.append(char.isNewline ? " " : char)
+            fieldCharacters += 1
+            if fieldCharacters > maxCellCharacters {
+                // 仅在边界重数：换行清洗后组合字符可能合并，逐字符 count 会反复扫描长字段。
+                fieldCharacters = field.count
+                if fieldCharacters > maxCellCharacters {
+                    field = String(field.prefix(maxCellCharacters - 1)) + "…"
+                    fieldTruncated = true
+                }
+            }
+        }
+        func finishField() {
+            if rowCount <= maxRows, column < maxColumns { row.append(field) }
+            column += 1
+            field = ""
+            fieldCharacters = 0
+            fieldHasContent = false
+            fieldTruncated = false
+        }
+        func finishRow() {
+            finishField()
+            width = max(width, column)
+            if rowCount <= maxRows { rows.append(row) }
+            rowCount += 1
+            row = []
+            column = 0
+        }
+        // 超出展示范围仍扫描引号和列数，但不再保存字段；末尾的宽行也会影响展示列数。
         while let char = advance() {
             if inQuotes {
                 if char == "\"" {
                     if lookahead == "\"" {
-                        field.append("\"")
+                        append("\"")
                         _ = advance()
                     } else {
                         inQuotes = false
                     }
                 } else {
-                    // 引号内的换行属于字段内容，显示前再清洗成空格
-                    field.append(char)
+                    append(char)
                 }
-            } else if char == "\"", field.isEmpty {
+            } else if char == "\"", !fieldHasContent {
                 inQuotes = true
             } else if char == delimiter {
-                row.append(field)
-                field = ""
+                finishField()
             } else if char.isNewline {
                 // 与末尾收尾同一条规则：只有行内有内容才算一条记录，空行跳过
-                if !row.isEmpty || !field.isEmpty {
-                    row.append(field)
-                    field = ""
-                    rows.append(row)
-                    row = []
-                }
+                if column > 0 || fieldHasContent { finishRow() }
             } else {
-                field.append(char)
+                append(char)
             }
         }
         // 末尾没有换行、或引号未闭合时，把已读到的内容作为最后一行收尾
-        if !row.isEmpty || !field.isEmpty {
-            row.append(field)
-            rows.append(row)
-        }
-        guard let width = rows.map(\.count).max(), width > 0 else {
+        if column > 0 || fieldHasContent { finishRow() }
+        guard width > 0 else {
             return PreviewDatabaseTable(name: "", columns: [], rows: [], truncated: false)
         }
         let columnCount = min(width, maxColumns)
-        var truncated = width > maxColumns
+        var truncated = width > maxColumns || rowCount > rows.count
         let columns = fit(rows[0], to: columnCount).enumerated().map { index, name in
-            name.isEmpty ? "列 \(index + 1)" : clean(name)
+            name.isEmpty ? "列 \(index + 1)" : name
         }
         var kept: [[String]] = []
         for fields in rows.dropFirst() {
@@ -73,7 +101,7 @@ public enum PreviewDelimited {
                 truncated = true
                 break
             }
-            kept.append(fit(fields, to: columnCount).map(clean(_:)))
+            kept.append(fit(fields, to: columnCount))
         }
         return PreviewDatabaseTable(name: "", columns: columns, rows: kept, truncated: truncated)
     }
@@ -82,12 +110,12 @@ public enum PreviewDelimited {
     public static func detectDelimiter(_ text: String) -> (delimiter: Character, skipFirstLine: Bool) {
         var source = text
         if source.hasPrefix("\u{FEFF}") { source.removeFirst() }
-        let lines = source.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        if let first = lines.first, first.hasPrefix("sep="), first.count == 5, let delimiter = first.last {
+        let first = source.split(maxSplits: 1, omittingEmptySubsequences: false, whereSeparator: \.isNewline).first
+        if let first, first.hasPrefix("sep="), first.count == 5, let delimiter = first.last {
             return (delimiter, true)
         }
         var counts: [Character: Int] = [",": 0, ";": 0, "\t": 0]
-        if let line = lines.first(where: { !$0.isEmpty }) {
+        if let line = source.split(maxSplits: 1, whereSeparator: \.isNewline).first {
             var inQuotes = false
             for char in line {
                 if char == "\"" { inQuotes.toggle() }
@@ -130,14 +158,5 @@ public enum PreviewDelimited {
         var fitted = Array(fields.prefix(count))
         fitted.append(contentsOf: repeatElement("", count: count - fitted.count))
         return fitted
-    }
-
-    /// 单元格清洗：换行会打乱以换行结尾的表格渲染，超长时截断并加省略号。
-    private static func clean(_ field: String) -> String {
-        var value = String(field.map { $0.isNewline ? " " : $0 })
-        if value.count > maxCellCharacters {
-            value = String(value.prefix(maxCellCharacters - 1)) + "…"
-        }
-        return value
     }
 }

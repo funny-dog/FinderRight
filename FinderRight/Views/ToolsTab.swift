@@ -150,7 +150,7 @@ struct ToolsTab: View {
             var icons: [String: NSImage] = [:]
             for terminal in installed {
                 if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: terminal.bundleIdentifier) {
-                    icons[terminal.bundleIdentifier] = NSWorkspace.shared.icon(forFile: url.path)
+                    icons[terminal.bundleIdentifier] = IconThumbnail.make(from: NSWorkspace.shared.icon(forFile: url.path), pointSize: 28)
                 }
             }
             DispatchQueue.main.async {
@@ -195,7 +195,7 @@ struct ToolsTab: View {
             if !availableTerminals.contains(where: { $0.bundleIdentifier == terminal.bundleIdentifier }) {
                 availableTerminals.append(terminal)
             }
-            terminalIcons[terminal.bundleIdentifier] = NSWorkspace.shared.icon(forFile: url.path)
+            terminalIcons[terminal.bundleIdentifier] = IconThumbnail.make(from: NSWorkspace.shared.icon(forFile: url.path), pointSize: 28)
             selectedTerminalIds.insert(terminal.bundleIdentifier)
             SharedConfig.shared.selectedTerminals = selectedTerminalIds
         }

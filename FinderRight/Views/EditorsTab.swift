@@ -162,7 +162,7 @@ struct EditorsTab: View {
                 if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: editor.id) {
                     // 图标与右键菜单取同一来源，避免两处显示不同副本的图标。
                     let iconURL = EditorDiscovery.preferredIconSourceURL(bundleIdentifier: editor.id) ?? url
-                    freshIcons[editor.id] = NSWorkspace.shared.icon(forFile: iconURL.path)
+                    freshIcons[editor.id] = IconThumbnail.make(from: NSWorkspace.shared.icon(forFile: iconURL.path), pointSize: 28)
                     // 旧手动记录不改变当前能自动识别的应用的显示来源。
                     if EditorDiscovery.isStandardInstallLocation(url.path, home: home),
                        EditorCatalog.declaresGeneralEditing(infoDictionary: Bundle(url: url)?.infoDictionary ?? [:]) {
