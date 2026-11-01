@@ -72,8 +72,14 @@ struct GlobalDirectoryShortcutTests {
                                        MemoryLayout<EventHotKeyID>.size, &id) == noErr)
         precondition(SendEventToEventTarget(event!, GetApplicationEventTarget()) == noErr)
         ReleaseEvent(event!)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        // CI 负载下主队列回调可能显著晚于单个 50ms 窗口。
+        let dispatchDeadline = Date(timeIntervalSinceNow: 5)
+        while invocations == 0 && Date() < dispatchDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
         precondition(invocations == 1, "系统热键事件应调用既有弹窗入口一次")
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        precondition(invocations == 1, "热键事件不应重复调用弹窗入口")
 
         controller.setRecording(true)
         precondition(canRegister(first), "录制时释放旧组合")
