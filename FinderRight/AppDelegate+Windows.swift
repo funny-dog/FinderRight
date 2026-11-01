@@ -66,8 +66,8 @@ extension AppDelegate {
             input: .text(initial: initialPath, placeholder: "/Users/… / ~/Documents/…",
                          accessibilityLabel: L("文件或文件夹路径"),
                          hint: { [weak self] input in self?.pathHint(for: input, home: home) }))
-        dialog.validate = { [weak self] index in
-            guard index != 2 else { return nil }
+        dialog.validate = { [weak self, weak dialog] index in
+            guard index != 2, let dialog else { return nil }
             do {
                 _ = try DirectoryPath.resolve(dialog.text, home: home)
                 return nil
@@ -78,39 +78,42 @@ extension AppDelegate {
             }
         }
         directoryDialog = dialog
-        let response = dialog.runModal()
-        directoryDialog = nil
+        // 后台应用的模态面板会触发 Dock 持续提醒，路径输入使用既有非模态接口。
+        dialog.show { [weak self, weak dialog] response in
+            guard let self, let dialog else { return }
+            self.directoryDialog = nil
 
-        guard response == 0 || response == 1,
-              let target = try? DirectoryPath.resolve(dialog.text, home: home) else { return }
-        let enteredPath = dialog.text
-        let reopenOnFailure: (Error?) -> Void = { [weak self] error in
-            guard let error else { return }
-            DispatchQueue.main.async {
-                self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
+            guard response == 0 || response == 1,
+                  let target = try? DirectoryPath.resolve(dialog.text, home: home) else { return }
+            let enteredPath = dialog.text
+            let reopenOnFailure: (Error?) -> Void = { [weak self] error in
+                guard let error else { return }
+                DispatchQueue.main.async {
+                    self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
+                }
             }
-        }
-        // 非激活面板关闭时会恢复原应用焦点，等模态循环退出后再交接前台。
-        DispatchQueue.main.async { [self] in
-            NSApp.activate(ignoringOtherApps: true)
-            switch target {
-            case .file(let file) where response == 0:
-                NSWorkspace.shared.activateFileViewerSelecting([file])
-                NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
-            case .file(let file):
-                // 与在访达中双击相同：交给该文件的默认 App
-                NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                    reopenOnFailure(error)
-                }
-            case .directory(let directory):
-                guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
-                    openGoToDirectory(initialPath: enteredPath, failure: L("无法打开目录，请检查访问权限"))
-                    return
-                }
-                NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { app, error in
-                    reopenOnFailure(error)
-                    if error == nil {
-                        DispatchQueue.main.async { app?.activate() }
+            // 面板关闭时会恢复原应用焦点，等关闭事件处理完后再交接前台。
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+                switch target {
+                case .file(let file) where response == 0:
+                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                    NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
+                case .file(let file):
+                    // 与在访达中双击相同：交给该文件的默认 App
+                    NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                        reopenOnFailure(error)
+                    }
+                case .directory(let directory):
+                    guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
+                        self.openGoToDirectory(initialPath: enteredPath, failure: self.L("无法打开目录，请检查访问权限"))
+                        return
+                    }
+                    NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { app, error in
+                        reopenOnFailure(error)
+                        if error == nil {
+                            DispatchQueue.main.async { app?.activate() }
+                        }
                     }
                 }
             }

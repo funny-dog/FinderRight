@@ -7,10 +7,41 @@ extension Notification.Name {
     static let openOnboarding = Notification.Name("FinderRight.openOnboarding")
 }
 
+private final class DialogTestApplication: NSApplication {
+    var modalCalls = 0
+    var attentionRequests = 0
+
+    override func runModal(for window: NSWindow) -> NSApplication.ModalResponse {
+        modalCalls += 1
+        return .cancel
+    }
+
+    override func requestUserAttention(_ requestType: NSApplication.RequestUserAttentionType) -> Int {
+        attentionRequests += 1
+        return 0
+    }
+}
+
 @main
 struct GlobalDirectoryShortcutTests {
     static func main() throws {
-        _ = NSApplication.shared
+        let application = DialogTestApplication.shared as! DialogTestApplication
+        application.setActivationPolicy(.prohibited)
+        let delegate = AppDelegate()
+        weak var releasedDialog: FRDialog?
+        autoreleasepool {
+            delegate.openGoToDirectory(initialPath: "/")
+            precondition(application.modalCalls == 0 && NSApp.modalWindow == nil, "打开路径不能进入后台模态循环")
+            guard let dialog = delegate.directoryDialog else { preconditionFailure("非模态输入框应保持可用") }
+            releasedDialog = dialog
+            delegate.openGoToDirectory()
+            precondition(delegate.directoryDialog === dialog, "重复唤起应复用输入框")
+            dialog.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+            precondition(delegate.directoryDialog == nil, "取消后应清除输入框状态")
+        }
+        precondition(releasedDialog == nil, "关闭后不能因校验闭包引用而泄漏")
+        precondition(application.attentionRequests == 0, "显示路径输入框不应请求 Dock 提醒")
+        print("✓ 路径输入框：非模态、重复唤起、取消清理与释放检查通过")
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
