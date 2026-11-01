@@ -102,8 +102,7 @@ extension AppDelegate {
     }
 
     func showUpToDateAlert() {
-        // 800 毫秒补充窗口结束会沿用已收到的结果，这里只陈述本次检查的结果
-        FRDialog(title: L("未发现新版本"),
+        FRDialog(title: L("已是最新版本"),
                  message: String(format: L("FinderRight %@ 是目前的最新版本。"), UpdateChecker.shared.currentAppVersion),
                  symbol: "checkmark.seal", buttons: [L("好")]).runModal()
     }
