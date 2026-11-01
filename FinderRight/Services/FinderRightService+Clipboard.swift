@@ -44,7 +44,7 @@ extension FinderRightService {
         }
         let skipped = urls.count - files.count
 
-        Self.backgroundJobs.run(on: Self.hashQueue) { [weak self] in
+        guard Self.runGuarded(on: Self.hashQueue, work: { [weak self] in
             var results: [(name: String, digest: String)] = []
             var failed = 0
             for url in files {
@@ -74,6 +74,8 @@ extension FinderRightService {
                     ClipboardToast.showCopied(message: String(format: L("已复制 %@"), algorithm.title))
                 }
             }
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
         return IPCResponse(id: req.id, success: true, message: "已受理，正在后台计算")
     }

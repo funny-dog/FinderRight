@@ -46,6 +46,23 @@ public enum CodeSignatureCheck {
         return Insecure.SHA1.hash(data: der).map { String(format: "%02X", $0) }.joined()
     }
 
+    /// 签名类型：证书签名返回叶子证书 SHA-1，ad-hoc 返回 `.adHoc`，未签名或读取失败返回 `.unreadable`。
+    ///
+    /// 与 `leafCertificateSHA1` 的区别：那个函数两种情况都返回 nil，自动更新无法区分
+    /// 「明确是 ad-hoc」和「读不到签名」，曾因此把读取失败降级成只校验 SHA-256。
+    public static func signatureStatus(ofCodeAt url: URL) -> UpdatePackageCheck.Signature {
+        guard let code = staticCode(at: url) else { return .unreadable }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dictionary = info as NSDictionary? else { return .unreadable }
+        // ad-hoc 也有一段签名信息，只是没有证书
+        if let certificates = dictionary[kSecCodeInfoCertificates] as? [SecCertificate], let leaf = certificates.first {
+            let der = SecCertificateCopyData(leaf) as Data
+            return .certificate(leafSHA1: Insecure.SHA1.hash(data: der).map { String(format: "%02X", $0) }.joined())
+        }
+        return .adHoc
+    }
+
     /// 由 audit token 标识的运行中进程，是否满足磁盘上 bundleURL 处代码自己的签名规则。
     ///
     /// ad-hoc 签名时规则是 cdhash，证书签名时是「标识 + 证书指纹」，两种情况都能准确认出

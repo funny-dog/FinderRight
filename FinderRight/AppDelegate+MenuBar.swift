@@ -102,7 +102,8 @@ extension AppDelegate {
     }
 
     func showUpToDateAlert() {
-        FRDialog(title: L("已是最新版本"),
+        // 800 毫秒补充窗口结束会沿用已收到的结果，这里只陈述本次检查的结果
+        FRDialog(title: L("未发现新版本"),
                  message: String(format: L("FinderRight %@ 是目前的最新版本。"), UpdateChecker.shared.currentAppVersion),
                  symbol: "checkmark.seal", buttons: [L("好")]).runModal()
     }
@@ -129,7 +130,7 @@ extension AppDelegate {
         switch dialog.runModal() {
         case 0:
             // 成功时安装脚本会退出并重新拉起新版，这里只需处理失败；进度显示在菜单项标题上
-            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum) { [weak self] status in
+            UpdateChecker.shared.startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum, version: version) { [weak self] status in
                 guard let self, case .failed(let message) = status else { return }
                 self.showUpdateFailure(title: self.L("自动更新失败"), message: message)
             }

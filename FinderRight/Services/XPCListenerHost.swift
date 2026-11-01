@@ -13,11 +13,25 @@ import FinderRightKit
 /// 这避免了不必要的 fswatch 后台开销，并保证"请求顺序"严格。
 final class IPCWatcher {
 
-    static let shared = IPCWatcher()
-    private init() {}
-
     private let service = FinderRightService()
-    private let queue = DispatchQueue(label: "com.finderright.app.ipc", qos: .userInitiated)
+    private let queue: DispatchQueue
+    /// 受理与排空经同一把锁登记到同一串行队列：关闭入口后，排空回调一定排在所有已受理请求之后
+    private let requestGate: RequestDrainGate
+
+    static let shared = IPCWatcher()
+
+    private init() {
+        let queue = DispatchQueue(label: "com.finderright.app.ipc", qos: .userInitiated)
+        self.queue = queue
+        self.requestGate = RequestDrainGate(queue: queue)
+    }
+
+    /// 退出前调用：关闭入口拒绝新请求，已受理请求全部处理完后在 IPC 队列上回调一次。
+    /// 调用方必须异步等待排空——已受理请求可能还要回到调用方线程完成（例如写剪贴板回主线程），
+    /// 在主线程同步等待队列会死锁
+    func shutdown(notifyDrained: @escaping () -> Void) {
+        requestGate.close(notifyDrained: notifyDrained)
+    }
 
     func start() {
         do {
@@ -65,10 +79,13 @@ final class IPCWatcher {
             NSLog("[IPCWatcher] 拒绝格式不合法的 URL: \(url)")
             return
         }
-        NSLog("[IPCWatcher] received request id=\(parsed.id)")
-        queue.async { [weak self] in
+        guard requestGate.accept({ [weak self] in
             self?.processRequest(id: parsed.id, expectedDigest: parsed.digest)
+        }) else {
+            NSLog("[IPCWatcher] 正在退出，忽略请求 id=\(parsed.id)")
+            return
         }
+        NSLog("[IPCWatcher] received request id=\(parsed.id)")
     }
 
     private func processRequest(id: String, expectedDigest: String) {

@@ -16,7 +16,10 @@ extension AppDelegate {
         }
     }
 
-    /// 检查上次更新是否有失败日志并弹窗提醒
+    /// 检查上次更新是否有失败日志并弹窗提醒。
+    ///
+    /// 失败文案由替换脚本写好后原样展示：可能是「已回滚旧版本」，也可能是「回滚也失败、备份留在哪」，
+    /// 不能一律说成自动更新失败或已回滚。
     func checkLastUpdateError() {
         let errorFileURL = IPCBridge.rootDirectory.appendingPathComponent("last-update-error.txt")
         let fm = FileManager.default
@@ -25,10 +28,21 @@ extension AppDelegate {
            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try? fm.removeItem(at: errorFileURL)
             DispatchQueue.main.async { [weak self] in
-                self?.showUpdateFailure(title: NSLocalizedString("自动更新失败", comment: "alert"),
+                self?.showUpdateFailure(title: NSLocalizedString("更新未能完成", comment: "alert"),
                                         message: content.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
+    }
+
+    /// 新版完成基本初始化后回执，替换脚本只在这之后清理旧版备份。
+    ///
+    /// 任何启动方式（含自动更新重启的后台启动）走到这里都说明初始化已完成；
+    /// 版本不低于待确认版本即确认，并核对运行实例后才清理，清理失败时保留回执下次重试。
+    func confirmInstalledVersion() {
+        guard UpdateInstallReceipt.decide(receipt: UpdateInstallReceipt.load(),
+                                          currentVersion: UpdateChecker.shared.currentAppVersion)
+        else { return }
+        UpdateInstallReceipt.complete()
     }
 
     /// 自动检查并向系统注册自身的 FinderSync 扩展

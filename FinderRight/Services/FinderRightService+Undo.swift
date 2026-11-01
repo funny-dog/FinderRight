@@ -31,14 +31,17 @@ extension FinderRightService {
     /// 撤销 FinderRight 记录的上一次操作。来源：⌘Z 拦截、扩展右键菜单、菜单栏。
     /// IPC 立即返回「已受理」，文件移动或送废纸篓在 transferQueue 上执行，结果用提示告知
     func undoLast(_ req: IPCRequest) -> IPCResponse {
+        guard Self.jobGate.isAcceptingJobs else { return Self.exitInProgressResponse(req) }
         guard let record = UndoCenter.shared.beginUndo() else {
             ClipboardToast.show(message: L("没有可撤销的操作"), style: .failure)
             return IPCResponse(id: req.id, success: false, message: L("没有可撤销的操作"))
         }
-        Self.backgroundJobs.run(on: Self.transferQueue) {
-            self.performUndo(record)
+        guard Self.runGuarded(on: Self.transferQueue, work: { [weak self] in
+            self?.performUndo(record)
             // 只清「撤销中」标记：撤销期间别的队列登记的新记录照常保留
             UndoCenter.shared.endUndo()
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
         return IPCResponse(id: req.id, success: true, message: "已受理撤销，正在后台处理")
     }

@@ -21,7 +21,7 @@ extension FinderRightService {
         // 异步派发到归档专用队列，IPC 立即返回「已受理」。最终文件名在任务完成时才原子确定
         // （见 ZipCompressor），排队中的同名压缩任务不会互相覆盖
         let subject = Self.subject(forPaths: items)
-        Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
+        guard Self.runGuarded(on: Self.archiveQueue, work: { [weak self] in
             do {
                 let zip = try ZipCompressor.compress(items: itemURLs, into: dir, baseName: name)
                 self?.registerUndo(.compress, name: zip.lastPathComponent, items: [(zip, nil)])
@@ -35,6 +35,8 @@ extension FinderRightService {
                 RecentOperations.shared.record(OperationRecord(
                     kind: .compress, subject: subject, failure: Self.describe(compressError: error), location: dir))
             }
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理压缩任务，正在后台处理")
@@ -50,7 +52,7 @@ extension FinderRightService {
         }
 
         // 异步派发到归档专用队列，XPC 立即返回“已受理”
-        Self.backgroundJobs.run(on: Self.archiveQueue) { [weak self] in
+        guard Self.runGuarded(on: Self.archiveQueue, work: { [weak self] in
             guard let self else { return }
             let subject = url.lastPathComponent
             switch self.performDecompress(url: url) {
@@ -62,6 +64,8 @@ extension FinderRightService {
             case .failure(let failure):
                 RecentOperations.shared.record(OperationRecord(kind: .decompress, subject: subject, failure: failure.message, location: url.deletingLastPathComponent()))
             }
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理解压任务，正在后台处理")

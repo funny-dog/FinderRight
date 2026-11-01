@@ -389,10 +389,13 @@ final class ServicesProvider: NSObject {
     private func performFileAction(_ request: IPCRequest, feature: String) {
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(feature) else { return }
-        FinderRightService.backgroundJobs.run(on: workQueue) { [service] in
+        guard FinderRightService.runGuarded(on: workQueue, work: { [service] in
             let response = service.handle(request)
             guard !response.success else { return }
             self.showAlert(NSLocalizedString("文件操作失败", comment: "service"), message: response.message ?? "")
+        }) else {
+            FinderRightService.reportExitInProgress()
+            return
         }
     }
 

@@ -42,9 +42,18 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Services/LaunchPresentation.swift FinderRight/Services/UpdateChecker.swift \
+  FinderRight/Services/LaunchPresentation.swift FinderRight/Services/ExitWaitPolicy.swift \
+  FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
   scripts/test-automatic-updates.swift -o "$KIT_BUILD_DIR/test-automatic-updates"
 "$KIT_BUILD_DIR/test-automatic-updates"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/Services/LaunchPresentation.swift FinderRight/Services/ExitWaitPolicy.swift \
+  FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
+  scripts/test-update-relaunch.swift -o "$KIT_BUILD_DIR/test-update-relaunch"
+"$KIT_BUILD_DIR/test-update-relaunch"
 
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

@@ -96,7 +96,7 @@ killall Finder
   tccutil reset Accessibility com.finderright.app
   ```
   然后重新打开 FinderRight 按引导授权。1.3.0 起使用固定证书，后续升级会保留授权。
-- **自动更新**：默认关闭；开启后每 6 小时检查一次，在文件操作空闲时安装并自动重启。更新同时请求官网与 GitHub，优先采用可安装的新版本；“已是最新”或缺少校验信息的响应会等待另一渠道，检查失败可立即重试。下载卡住会切换备用源，全程校验 SHA-256 与签名证书，校验失败不安装。
+- **自动更新**：默认关闭；开启后每 6 小时检查一次，等待在途文件操作完成后再安装并重启。更新同时请求官网与 GitHub，优先采用可安装的新版本；没有新版的结果会再等另一渠道最多 800 毫秒，若两边都没有有效结果则继续等待正常超时，不会仅凭计时器报告“未发现新版本”。下载卡住会切换备用源；安装前核对 SHA-256、预期版本、四个组件的版本一致性与系统要求。当前使用证书签名时要求同一证书，当前应用或新包的签名读取失败都直接拒装，ad-hoc 旧版升级继续兼容已有发布流程。旧版备份保留到新版完成初始化确认后才删除（自动更新重启的后台启动同样确认）；上次更新尚未确认时，新的更新会暂停并提示先完成确认。
 - **混用 Homebrew 与应用内更新**：应用内更新不会同步 Homebrew 的版本记录，可能导致重复安装；Cask 声明了 `auto_updates true`，普通 `brew upgrade` 会跳过它。
 
 </details>
@@ -268,7 +268,7 @@ killall Finder
   tccutil reset Accessibility com.finderright.app
   ```
   Then reopen FinderRight and follow the onboarding. Since 1.3.0 a fixed certificate is used, so later upgrades keep permissions.
-- **Auto-update**: off by default; when on, it checks every 6 hours and installs while file operations are idle, then restarts. It queries the website and GitHub and accepts an installable new version immediately. An up-to-date result or one missing verification information waits for the other source; failed checks can be retried immediately. Downloads switch to the alternate source if they stall, and SHA-256 and the signing certificate are always verified before installation.
+- **Auto-update**: off by default; when on, it checks every 6 hours, waits for in-flight file operations to finish, then installs and restarts. It queries the website and GitHub and accepts an installable new version immediately. A no-update result gives the other source up to 800 more milliseconds; if neither source has a valid result, the app waits for normal timeouts rather than reporting no update from a timer. Stalled downloads switch to the alternate source. SHA-256, the expected version, consistent component versions and system requirements are checked before installation. Certificate-signed builds require the same certificate; an unreadable signature — on either the current app or the update package — is rejected, while upgrading existing ad-hoc builds remains compatible. The old-version backup is removed only after the new version finishes initializing and confirms installation (the background relaunch of an automatic update confirms as well); while a previous update is unconfirmed, further updates pause and ask you to confirm first.
 - **Mixing Homebrew and in-app updates**: in-app updates don't update Homebrew's version record, which may cause reinstalls; the cask declares `auto_updates true`, so a plain `brew upgrade` skips it.
 
 </details>

@@ -25,6 +25,12 @@ public enum UpdateCheckStatus: Equatable, Sendable {
         default: return false
         }
     }
+
+    /// 可以据此开始下载安装的新版本（地址与校验和都已拿到）
+    public var installableVersion: String? {
+        if case .updateAvailable(let version, _, .some, .some) = self { return version }
+        return nil
+    }
 }
 
 /// 带可读描述的更新错误，供 Result 传递
@@ -64,6 +70,13 @@ public enum UpdatePolicy {
     public static let repoName = "FinderRight"
     public static let websiteOrigin = "https://finderright.erhuerhu.dpdns.org"
     public static let defaultReleaseAPI = URL(string: "https://api.github.com/repos/funny-dog/FinderRight/releases/latest")!
+
+    /// 首个「没有可安装新版」的结论之后，再给另一渠道的补充等待窗口。
+    ///
+    /// 慢渠道偶尔会在几秒后才返回更高版本；窗口内先到的可安装新版立即胜出，窗口结束仍无结果就用已有结论结束。
+    /// 这是首个有效结果之后的额外等待上限，不是整次检查的总耗时上限；代价是偶尔会漏掉刚出现的更高版本，
+    /// 因此这类结论只代表「本次检查未发现新版本」。
+    public static let supplementalCheckWindow: TimeInterval = 0.8
 
     /// 版本标签正则表达式（形如 v1.2.3）
     private static let tagRegex = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
@@ -186,6 +199,35 @@ public enum UpdatePolicy {
                 return .waitForRemaining(fallback: currentFallback)
             }
         }
+    }
+
+    /// 补充等待窗口结束时，用已经收到的结果收尾：没有有效结果就继续等各自超时，不能凭计时器报告「最新」。
+    public static func concludeSupplementalWindow(fallback: UpdateCheckStatus?) -> CheckArbitrationDecision {
+        guard let fallback else { return .waitForRemaining(fallback: nil) }
+        return .finish(status: fallback, recordSuccessDate: true)
+    }
+
+    /// 检查耗时较长时，即使已有旧结论也强制请求；其余情况沿用缓存。
+    ///
+    /// 返回 (force, waitsForResult)：force=需要真正请求；waitsForResult 只在非强制路径使用，
+    /// 表示「沿用缓存结论的同时在后台静默刷新」。强制检查不重放缓存结论——
+    /// 旧结论的展示由界面读取缓存状态完成，检查回调只回一次进行中与一次最终结果
+    public static func requestPolicy(force: Bool, automatic: Bool, currentStatus: UpdateCheckStatus,
+                                     lastCheckedDate: Date?, now: Date = Date(),
+                                     maxCacheAge: TimeInterval = 600,
+                                     maxAutomaticCacheAge: TimeInterval = 7200) -> (force: Bool, waitsForResult: Bool) {
+        if UpdatePolicy.shouldReuseCachedStatus(currentStatus: currentStatus, lastCheckedDate: lastCheckedDate,
+                                                now: now, force: force, maxAge: maxCacheAge) {
+            return (false, false)
+        }
+        if force {
+            return (true, false)
+        }
+        let stale = lastCheckedDate.map { now.timeIntervalSince($0) } ?? .infinity
+        if automatic, case .upToDate = currentStatus, stale < maxAutomaticCacheAge {
+            return (false, true)
+        }
+        return (true, false)
     }
 
     /// 判断是否应该复用缓存的更新状态（纯逻辑）

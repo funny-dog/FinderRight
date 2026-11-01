@@ -12,44 +12,55 @@ public final class UpdateChecker: NSObject {
     /// 状态变化后在主线程发出：菜单栏和关于页可能各自发起检查或更新，靠它保持显示一致
     public static let statusDidChangeNotification = Notification.Name("com.finderright.updateStatusDidChange")
 
+    /// 状态、自动安装标记与回调统一在主线程维护；哈希、解压、验签等耗时工作放在后台，回来时切回主线程
     private(set) public var currentStatus: UpdateCheckStatus = .idle {
         didSet {
             guard currentStatus != oldValue else { return }
-            // 部分状态在后台线程写入，通知统一回到主线程发出
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: Self.statusDidChangeNotification, object: self)
-            }
+            NotificationCenter.default.post(name: Self.statusDidChangeNotification, object: self)
         }
     }
-    private var lastCheckedDate: Date?
+    private(set) var lastCheckedDate: Date?
     static let automaticUpdatesKey = "automaticallyCheckAndInstallUpdates"
     private let defaults: UserDefaults
     private let checkSession: URLSession
     private let downloadConfiguration: URLSessionConfiguration
     private let firstByteTimeout: TimeInterval
     private let stallTimeout: TimeInterval
+    private let supplementalWindow: TimeInterval
     private var checkTasks: [URLSessionDataTask] = []
+    private var supplementalWork: DispatchWorkItem?
+    private var checkGeneration = 0
     private var automaticUpdateTimer: Timer?
     private var automaticUpdateGeneration = 0
+    /// 这次安装是不是定时触发的静默更新；与「是否因更新而退出」是两件事
     private(set) var isAutomaticInstall = false
+    /// 已开始替换安装：此后进程只会因更新而退出，退出前同样要等在途文件任务
+    private(set) var isInstallingUpdate = false
 
     private var activeDownloadSession: URLSession?
     private var downloadDelegate: UpdateDownloadDelegate?
 
     init(defaults: UserDefaults = .standard, checkSession: URLSession = .shared,
          downloadConfiguration: URLSessionConfiguration = .default,
-         firstByteTimeout: TimeInterval = 3, stallTimeout: TimeInterval = 10) {
+         firstByteTimeout: TimeInterval = 3, stallTimeout: TimeInterval = 10,
+         supplementalWindow: TimeInterval = UpdatePolicy.supplementalCheckWindow) {
         self.defaults = defaults
         self.checkSession = checkSession
         self.downloadConfiguration = downloadConfiguration
         self.firstByteTimeout = firstByteTimeout
         self.stallTimeout = stallTimeout
+        self.supplementalWindow = supplementalWindow
         super.init()
     }
 
     /// 启动和偏好变更时调用；关闭后不再发起更新，已开始的安装流程继续完成。
     func configureAutomaticUpdates() {
-        guard defaults.bool(forKey: Self.automaticUpdatesKey) else {
+        configureAutomaticUpdates(using: defaults)
+    }
+
+    /// 用指定偏好源配置自动更新（测试里用隔离的 UserDefaults，避免 .standard 残留影响）
+    func configureAutomaticUpdates(using source: UserDefaults) {
+        guard source.bool(forKey: Self.automaticUpdatesKey) else {
             if automaticUpdateTimer != nil { automaticUpdateGeneration += 1 }
             automaticUpdateTimer?.invalidate()
             automaticUpdateTimer = nil
@@ -66,7 +77,7 @@ public final class UpdateChecker: NSObject {
     private func checkAutomatically() {
         guard defaults.bool(forKey: Self.automaticUpdatesKey), !currentStatus.isInProgress else { return }
         let generation = automaticUpdateGeneration
-        check(force: true) { [weak self] status in
+        check(automatic: true) { [weak self] status in
             guard let self, self.automaticUpdateGeneration == generation,
                   self.defaults.bool(forKey: Self.automaticUpdatesKey),
                   case .updateAvailable(_, _, .some, .some) = status else { return }
@@ -77,14 +88,14 @@ public final class UpdateChecker: NSObject {
     private func installAutomaticUpdateWhenIdle(_ status: UpdateCheckStatus, generation: Int) {
         guard defaults.bool(forKey: Self.automaticUpdatesKey), automaticUpdateGeneration == generation,
               currentStatus == status,
-              case .updateAvailable(_, _, let downloadURL?, let checksum?) = status else { return }
+              case .updateAvailable(let version, _, let downloadURL?, let checksum?) = status else { return }
         guard FinderRightService.backgroundJobs.isIdle else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
                 self?.installAutomaticUpdateWhenIdle(status, generation: generation)
             }
             return
         }
-        startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum, automatically: true) { status in
+        startDownloadAndInstall(downloadURL: downloadURL, checksum: checksum, version: version, automatically: true) { status in
             if case .failed(let message) = status { NSLog("[UpdateChecker] 自动更新失败：%@", message) }
         }
     }
@@ -99,34 +110,85 @@ public final class UpdateChecker: NSObject {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 
+    /// 两路检查已完成、不会再有回调：主动检查或结果已经过时
     /// 执行更新检查
     /// - Parameters:
-    ///   - force: 是否强制刷新（默认若 10 分钟内检查过，则复用结果）
-    ///   - completion: 检查完成后的主线程回调
-    public func check(force: Bool = false, completion: @escaping (UpdateCheckStatus) -> Void) {
+    ///   - force: 是否强制刷新（默认十分钟内检查过则复用结果）
+    ///   - automatic: 定时触发的静默检查
+    ///   - completion: 主线程回调；只回调进行中状态与一次最终结果，不重放缓存结论——
+    ///     旧结论的展示由界面读取缓存状态完成，否则菜单栏会把重放结果当最终结论重复弹窗
+    public func check(force: Bool = false, automatic: Bool = false, completion: @escaping (UpdateCheckStatus) -> Void) {
         // 已有检查、下载或安装在进行时不再发起：避免重复请求，也避免把下载进度覆盖成「检查中」
         if currentStatus.isInProgress {
             completion(currentStatus)
             return
         }
-        if UpdatePolicy.shouldReuseCachedStatus(currentStatus: currentStatus, lastCheckedDate: lastCheckedDate, force: force) {
+        let policy = UpdatePolicy.requestPolicy(force: force, automatic: automatic, currentStatus: currentStatus,
+                                                lastCheckedDate: lastCheckedDate)
+        guard policy.force else {
+            // 结论不旧就直接用；定时检查再在后台静默刷新
             completion(currentStatus)
+            if policy.waitsForResult {
+                // 后台刷新仍把最终结果交给调用方（例如 checkAutomatically 的自动安装回调）；
+                // 这里不能再重复回调 completion（页面已用上面的缓存结论展示），
+                // 但自动安装依赖拿到真正的最终状态，所以把 completion 传给 startCheck，
+                // 由它在拿到新网络结果后回调一次。
+                DispatchQueue.main.async { [weak self] in self?.startCheck(notify: completion) }
+            }
             return
         }
+        startCheck(notify: completion)
+    }
+
+    private func startCheck(notify: @escaping (UpdateCheckStatus) -> Void) {
+        cancelSupplementalWindow()
+        checkTasks.forEach { $0.cancel() }
+        checkTasks.removeAll()
+        checkGeneration += 1
+        let generation = checkGeneration
 
         currentStatus = .checking
-        completion(.checking)
+        notify(.checking)
 
         let sources = [Self.releaseAPI, URL(string: Self.websiteOrigin + "/update/latest.json")!]
-        // 可安装的新版本立即生效；旧缓存或缺少校验信息的响应等待另一渠道，再作为回退。
         var remaining = sources.count
         var finished = false
         var fallback: UpdateCheckStatus?
+
+        func finish(_ status: UpdateCheckStatus, recordSuccessDate: Bool) {
+            guard !finished else { return }
+            finished = true
+            cancelSupplementalWindow()
+            checkTasks.forEach { $0.cancel() }
+            checkTasks.removeAll()
+            if recordSuccessDate { lastCheckedDate = Date() }
+            currentStatus = status
+            notify(status)
+        }
+
+        // 首个「没有可安装新版」的结论之后，给另一渠道 800 毫秒补充窗口；
+        // 窗口内先到的新版优先，窗口结束用已有结论收尾，两路都没有效结果则继续等各自超时。
+        func scheduleSupplementalWindow() {
+            guard supplementalWork == nil, !finished, remaining > 0 else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, !finished, self.checkGeneration == generation else { return }
+                self.supplementalWork = nil
+                switch UpdatePolicy.concludeSupplementalWindow(fallback: fallback) {
+                case .finish(let status, let recordSuccessDate):
+                    finish(status, recordSuccessDate: recordSuccessDate)
+                case .waitForRemaining:
+                    break
+                }
+            }
+            supplementalWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + supplementalWindow, execute: work)
+        }
+
         checkTasks = sources.map { source in
             let request = UpdatePolicy.makeCheckRequest(for: source)
             return checkSession.dataTask(with: request) { [weak self] data, response, error in
                 DispatchQueue.main.async {
-                    guard let self, !finished else { return }
+                    guard let self, !finished, self.checkGeneration == generation else { return }
                     let result: Result<UpdateCheckStatus, Error>
                     do {
                         if let error { throw error }
@@ -140,24 +202,23 @@ public final class UpdateChecker: NSObject {
                         result = .failure(error)
                     }
                     remaining -= 1
-                    let decision = UpdatePolicy.arbitrateCheck(result: result, currentFallback: fallback, remaining: remaining)
-                    switch decision {
+                    // 结果可安装就直接完成；否则把 fallback 交给仲裁，由补充等待窗口决定何时收尾
+                    switch UpdatePolicy.arbitrateCheck(result: result, currentFallback: fallback, remaining: remaining) {
                     case .finish(let status, let recordSuccessDate):
-                        finished = true
-                        if recordSuccessDate {
-                            self.lastCheckedDate = Date()
-                        }
-                        self.checkTasks.forEach { $0.cancel() }
-                        self.checkTasks.removeAll()
-                        self.currentStatus = status
-                        completion(status)
+                        finish(status, recordSuccessDate: recordSuccessDate)
                     case .waitForRemaining(let newFallback):
                         fallback = newFallback
+                        if remaining > 0 { scheduleSupplementalWindow() }
                     }
                 }
             }
         }
         checkTasks.forEach { $0.resume() }
+    }
+
+    private func cancelSupplementalWindow() {
+        supplementalWork?.cancel()
+        supplementalWork = nil
     }
 
     /// 双向映射仅限固定版本 ZIP 及其校验和；不允许任意 URL、查询串或 latest。
@@ -166,32 +227,39 @@ public final class UpdateChecker: NSObject {
     }
 
     /// 开始下载并自动安装更新
-    public func startDownloadAndInstall(downloadURL: URL, checksum: UpdateChecksum?, automatically: Bool = false,
+    /// - Parameter version: 检查更新时得到的版本，会一路带到安装前的核对
+    public func startDownloadAndInstall(downloadURL: URL, checksum: UpdateChecksum?, version: String,
+                                        automatically: Bool = false,
                                         statusHandler: @escaping (UpdateCheckStatus) -> Void) {
         guard !currentStatus.isInProgress else { return }
         isAutomaticInstall = automatically
+
+        // 安装会替换整个 App 并以原有的完全磁盘访问 / 辅助功能权限重启，未经校验的包一律拒装；
+        // 先判定再进入下载状态，缺校验和时不会留下一个假的「下载中 0%」
+        guard let checksum else {
+            NSLog("[UpdateChecker] 拒绝安装：发布中缺少校验和")
+            fail(NSLocalizedString("更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载", comment: "update error"), statusHandler: statusHandler)
+            return
+        }
+
         let updateStatus = UpdateCheckStatus.downloading(progress: 0.0)
-        self.currentStatus = updateStatus
+        currentStatus = updateStatus
         statusHandler(updateStatus)
 
-        // 安装会替换整个 App 并以原有的完全磁盘访问 / 辅助功能权限重启，未经校验的包一律拒装
         switch checksum {
         case .digest(let hash):
-            downloadPackage(downloadURL: downloadURL, expectedHash: hash, statusHandler: statusHandler)
+            downloadPackage(downloadURL: downloadURL, expectedHash: hash, version: version, statusHandler: statusHandler)
         case .file(let sha256URL):
             // 先拿校验和再下 ZIP：校验和拿不到就不必下载，也不会白白丢掉一个已下好的包
             fetchChecksum(from: sha256URL) { [weak self] result in
                 guard let self = self else { return }
                 switch result {
                 case .success(let hash):
-                    self.downloadPackage(downloadURL: downloadURL, expectedHash: hash, statusHandler: statusHandler)
+                    self.downloadPackage(downloadURL: downloadURL, expectedHash: hash, version: version, statusHandler: statusHandler)
                 case .failure(let error):
                     self.fail(error.localizedDescription, statusHandler: statusHandler)
                 }
             }
-        case nil:
-            NSLog("[UpdateChecker] 拒绝安装：发布中缺少校验和")
-            fail(NSLocalizedString("更新包缺少校验和文件，已取消自动安装，请前往发布页手动下载", comment: "update error"), statusHandler: statusHandler)
         }
     }
 
@@ -224,7 +292,8 @@ public final class UpdateChecker: NSObject {
         }.resume()
     }
 
-    private func downloadPackage(downloadURL: URL, expectedHash: String, allowFallback: Bool = true, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+    private func downloadPackage(downloadURL: URL, expectedHash: String, version: String, allowFallback: Bool = true,
+                                 statusHandler: @escaping (UpdateCheckStatus) -> Void) {
         let delegate = UpdateDownloadDelegate(
             onProgress: { [weak self] progress in
                 guard let self = self else { return }
@@ -239,11 +308,12 @@ public final class UpdateChecker: NSObject {
                 self.downloadDelegate = nil
                 switch result {
                 case .success(let zipLocation):
-                    self.verifyAndInstall(zipLocation: zipLocation, expectedHash: expectedHash, statusHandler: statusHandler)
+                    self.verifyAndInstall(zipLocation: zipLocation, expectedHash: expectedHash,
+                                          version: version, statusHandler: statusHandler)
 
                 case .failure(let error):
                     if let alternate = UpdatePolicy.fallbackAssetURL(for: downloadURL, allowFallback: allowFallback) {
-                        self.downloadPackage(downloadURL: alternate, expectedHash: expectedHash,
+                        self.downloadPackage(downloadURL: alternate, expectedHash: expectedHash, version: version,
                                              allowFallback: false, statusHandler: statusHandler)
                         return
                     }
@@ -263,7 +333,8 @@ public final class UpdateChecker: NSObject {
         downloadTask.resume()
     }
 
-    private func verifyAndInstall(zipLocation: URL, expectedHash: String, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+    private func verifyAndInstall(zipLocation: URL, expectedHash: String, version: String,
+                                  statusHandler: @escaping (UpdateCheckStatus) -> Void) {
         // 哈希放到后台算，不占主线程
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -279,28 +350,31 @@ public final class UpdateChecker: NSObject {
                 return
             }
 
-            self.proceedToInstall(zipLocation: zipLocation, statusHandler: statusHandler)
+            self.proceedToInstall(zipLocation: zipLocation, version: version, statusHandler: statusHandler)
         }
     }
 
     /// 在主线程调用：记录并上报失败状态
     private func fail(_ message: String, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
         isAutomaticInstall = false
+        isInstallingUpdate = false
         let failed = UpdateCheckStatus.failed(message)
         currentStatus = failed
         statusHandler(failed)
     }
 
-    private func proceedToInstall(zipLocation: URL, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
-        let status = UpdateCheckStatus.installing
-        self.currentStatus = status
-        DispatchQueue.main.async {
+    private func proceedToInstall(zipLocation: URL, version: String, statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        // 状态与通知只在主线程维护：这里从哈希校验的后台队列进入，切回主线程再发布安装状态
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let status = UpdateCheckStatus.installing
+            self.currentStatus = status
             statusHandler(status)
         }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            self.performInstallAndRelaunch(zipURL: zipLocation) { installError in
+            self.performInstallAndRelaunch(zipURL: zipLocation, version: version) { installError in
                 if let installError = installError {
                     DispatchQueue.main.async {
                         self.fail("安装失败: \(installError.localizedDescription)", statusHandler: statusHandler)
@@ -310,50 +384,63 @@ public final class UpdateChecker: NSObject {
         }
     }
 
-    /// 解压、覆盖替换当前应用并重新拉起新版
-    private func performInstallAndRelaunch(zipURL: URL, completion: @escaping (Error?) -> Void) {
+    /// 解压更新包，返回解压出的 App 位置；只认顶层 FinderRight.app，损坏或不完整的包按失败处理
+    static func extractUpdatePackage(from zipURL: URL, into baseDir: URL) throws -> URL {
+        let extractDir = baseDir.appendingPathComponent("FinderRight.app", isDirectory: true)
+        let unzipProc = Process()
+        unzipProc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        unzipProc.arguments = ["-q", "-o", zipURL.path, "-d", baseDir.path]
+        try unzipProc.run()
+        unzipProc.waitUntilExit()
+        guard unzipProc.terminationStatus == 0, FileManager.default.fileExists(atPath: extractDir.path) else {
+            throw NSError(domain: "UpdateChecker", code: 1, userInfo: [NSLocalizedDescriptionKey: "解压更新包失败"])
+        }
+        return extractDir
+    }
+
+    /// 解压并核对安装包，然后编写替换脚本并退出当前进程；能提前做的事都在退出前做完
+    private func performInstallAndRelaunch(zipURL: URL, version: String, completion: @escaping (Error?) -> Void) {
         let fileManager = FileManager.default
         let baseDir = zipURL.deletingLastPathComponent()
-        let extractDir = baseDir.appendingPathComponent("extracted")
+
+        func cleanupAndFail(_ error: Error) {
+            try? fileManager.removeItem(at: baseDir)
+            completion(error)
+        }
 
         do {
-            try fileManager.createDirectory(at: extractDir, withIntermediateDirectories: true)
+            // 1. 解压：发布包顶层是 FinderRight.app/，全量解出后再逐项校验。
+            //    不要按文件名挑选条目——ZIP 里目录条目常带尾斜杠，按名字匹配会漏掉主程序
+            let extractDir = try Self.extractUpdatePackage(from: zipURL, into: baseDir)
 
-            // 1. 解压 ZIP
-            let unzipProc = Process()
-            unzipProc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            unzipProc.arguments = ["-q", "-o", zipURL.path, "-d", extractDir.path]
-            try unzipProc.run()
-            unzipProc.waitUntilExit()
-
-            guard unzipProc.terminationStatus == 0 else {
-                throw NSError(domain: "UpdateChecker", code: 1, userInfo: [NSLocalizedDescriptionKey: "解压更新包失败"])
-            }
-
-            // 2. 找到解压后的 FinderRight.app
-            let newAppURL = extractDir.appendingPathComponent("FinderRight.app")
-            guard fileManager.fileExists(atPath: newAppURL.path) else {
-                throw NSError(domain: "UpdateChecker", code: 2, userInfo: [NSLocalizedDescriptionKey: "未在更新包中找到有效的 FinderRight.app"])
-            }
-
-            // 2.5 验签：新版本（主 App 与扩展）必须与当前运行版本由同一张证书签发、标识不变。
-            //     SHA-256 只能证明下载没损坏；发布渠道本身被冒用时，只有签名能挡住。
-            //     当前版本若是 ad-hoc 签名（过渡期，没有证书可比对），只能依赖前面的 SHA-256 校验。
-            if let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: Bundle.main.bundleURL) {
+            // 2. 验签：新版本（主 App 与扩展）必须与当前运行版本由同一张证书签发、标识不变。
+            //    SHA-256 只能证明下载没损坏；发布渠道本身被冒用时，只有签名能挡住。
+            let currentSignature = CodeSignatureCheck.signatureStatus(ofCodeAt: Bundle.main.bundleURL)
+            let newSignature = CodeSignatureCheck.signatureStatus(ofCodeAt: extractDir)
+            if case .certificate(let leaf) = currentSignature {
                 let required = UpdateIntegrity.signingRequirements(leafCertificateSHA1: leaf)
-                let newAppex = newAppURL.appendingPathComponent("Contents/PlugIns/FinderRightSync.appex")
-                guard CodeSignatureCheck.codeAt(newAppURL, satisfies: required.app),
+                let newAppex = extractDir.appendingPathComponent("Contents/PlugIns/FinderRightSync.appex")
+                guard CodeSignatureCheck.codeAt(extractDir, satisfies: required.app),
                       CodeSignatureCheck.codeAt(newAppex, satisfies: required.appex) else {
-                    throw NSError(domain: "UpdateChecker", code: 4, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("更新包的签名与当前版本不一致，已拒绝安装", comment: "update error")])
+                    cleanupAndFail(NSError(domain: "UpdateChecker", code: 4, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("更新包的签名与当前版本不一致，已拒绝安装", comment: "update error")]))
+                    return
                 }
-            } else {
-                NSLog("[UpdateChecker] 当前版本为 ad-hoc 签名，无证书可比对，仅依赖 SHA-256 校验")
             }
 
-            // 3. 确定目标路径：优先当前运行路径；若非 /Applications 且 /Applications 存在，则覆盖 /Applications
+            // 3. 版本、四个 bundle 的一致性、系统要求：检查到的版本必须一路对得上
+            let expectation = UpdatePackageCheck.Expectation(expectedVersion: version, currentVersion: currentAppVersion,
+                                                             operatingSystemVersion: Self.operatingSystemVersionString())
+            try UpdatePackageCheck.validate(appAt: extractDir, expectation: expectation,
+                                            signature: newSignature, currentSignature: currentSignature)
+
+            // 4. 确定目标路径：优先当前运行路径；若非 /Applications 且 /Applications 存在，则覆盖 /Applications
             var targetAppURL = Bundle.main.bundleURL
             if !targetAppURL.path.hasPrefix("/Applications") && fileManager.fileExists(atPath: "/Applications/FinderRight.app") {
                 targetAppURL = URL(fileURLWithPath: "/Applications/FinderRight.app")
+            }
+            guard !targetAppURL.isSameFileLayout(as: extractDir) else {
+                cleanupAndFail(NSError(domain: "UpdateChecker", code: 5, userInfo: [NSLocalizedDescriptionKey: "更新包与目标位置冲突"]))
+                return
             }
 
             // 检查目标路径及其父目录的写权限
@@ -367,112 +454,267 @@ public final class UpdateChecker: NSObject {
                         NSWorkspace.shared.open(releaseURL)
                     }
                 }
-                throw NSError(domain: "UpdateChecker", code: 3, userInfo: [NSLocalizedDescriptionKey: errMsg])
+                cleanupAndFail(NSError(domain: "UpdateChecker", code: 3, userInfo: [NSLocalizedDescriptionKey: errMsg]))
+                return
             }
 
-            // 4. 清除解压产物的隔离属性（Quarantine）
+            // 5. 清除解压产物的隔离属性（Quarantine）
             let xattrProc = Process()
             xattrProc.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
-            xattrProc.arguments = ["-dr", "com.apple.quarantine", newAppURL.path]
+            xattrProc.arguments = ["-dr", "com.apple.quarantine", extractDir.path]
             try? xattrProc.run()
             xattrProc.waitUntilExit()
 
-            // 5. 编写后台替换与重启脚本
-            let pid = ProcessInfo.processInfo.processIdentifier
-            // 失败文案先本地化再注入脚本：relaunch.sh 在 App 退出后独立运行，无法调用
-            // NSLocalizedString，写进 last-update-error.txt 的内容会由下次启动的
-            // checkLastUpdateError 弹窗原样展示，所以这里必须已经本地化。
-            // 注意：这三条译文不能含 " $ ` \ 等 shell 元字符（会破坏脚本）。
-            let errCopyFailed = NSLocalizedString("复制新版本到临时目录失败", comment: "update error")
-            let errBackupFailed = NSLocalizedString("备份旧版本失败", comment: "update error")
-            let errMoveFailed = NSLocalizedString("移动新版本到目标目录失败，已回滚旧版本", comment: "update error")
-            let relaunchArgument = isAutomaticInstall ? LaunchPresentation.backgroundArgument : LaunchPresentation.showSettingsArgument
-            let openOptions = isAutomaticInstall ? "-g -a" : "-a"
-            let scriptContent = """
-            #!/bin/bash
-            # 等待原进程退出
-            while /bin/kill -0 \(pid) 2>/dev/null; do
-                /bin/sleep 0.2
-            done
-
-            TARGET="\(targetAppURL.path)"
-            TARGET_DIR="$(dirname "$TARGET")"
-            NEW_APP="$TARGET_DIR/FinderRight.new.app"
-            OLD_APP="$TARGET_DIR/FinderRight.old.app"
-            ERROR_LOG="$HOME/Library/Application Support/FinderRight/last-update-error.txt"
-
-            /bin/mkdir -p "$(dirname "$ERROR_LOG")"
-
-            # 清理历史可能残留的临时文件
-            /bin/rm -rf "$NEW_APP" "$OLD_APP"
-
-            # 1. 先复制到同目录临时位置
-            if ! /bin/cp -R "\(newAppURL.path)" "$NEW_APP"; then
-                echo "\(errCopyFailed)" > "$ERROR_LOG"
-                /bin/rm -rf "$NEW_APP"
-                # 主进程此刻已 terminate，不重新拉起用户的 App 就凭空消失；旧版仍在 $TARGET 原位
-                /usr/bin/open "$TARGET" 2>/dev/null || true
-                exit 1
-            fi
-
-            # 2. 成功后 mv 旧 App 到备份位置
-            if ! /bin/mv "$TARGET" "$OLD_APP"; then
-                echo "\(errBackupFailed)" > "$ERROR_LOG"
-                /bin/rm -rf "$NEW_APP"
-                /usr/bin/open "$TARGET" 2>/dev/null || true
-                exit 1
-            fi
-
-            # 3. mv 新的到位
-            if ! /bin/mv "$NEW_APP" "$TARGET"; then
-                echo "\(errMoveFailed)" > "$ERROR_LOG"
-                # 若移动失败则将旧 App 回滚到位
-                /bin/mv "$OLD_APP" "$TARGET"
-                /bin/rm -rf "$NEW_APP"
-                /usr/bin/open "$TARGET" 2>/dev/null || true
-                exit 1
-            fi
-
-            # 4. 成功后清理 .old 备份
-            /bin/rm -rf "$OLD_APP"
-
-            # 确保清除隔离属性并刷新注册
-            /usr/bin/xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
-            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
-
-            # 重新打开新版
-            # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，
-            # 残留的旧扩展进程仍指向已删除的旧包，需由系统按新包重新拉起
-            /usr/bin/killall FinderRightSync 2>/dev/null || true
-            /usr/bin/open \(openOptions) "$TARGET" --args \(relaunchArgument)
-
-            # 清理下载解压临时文件
-            /bin/rm -rf "\(baseDir.path)"
-            """
-
+            // 6. 生成替换脚本，动态值一律走位置参数，不拼进脚本文本
             let scriptURL = baseDir.appendingPathComponent("relaunch.sh")
-            try scriptContent.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try Self.relaunchScript().write(to: scriptURL, atomically: true, encoding: .utf8)
             try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
 
-            // 6. 运行独立脚本
+            // 7. 运行独立脚本；安装已交接，此后进程只因更新而退出
             let relaunchProc = Process()
             relaunchProc.executableURL = URL(fileURLWithPath: "/bin/bash")
-            relaunchProc.arguments = [scriptURL.path]
-            try relaunchProc.run()
+            relaunchProc.arguments = [scriptURL.path, String(ProcessInfo.processInfo.processIdentifier),
+                                      targetAppURL.path, extractDir.path,
+                                      UpdatePackageCheck.trimmingLeadingV(version),
+                                      isAutomaticInstall ? "auto" : "manual"]
+            relaunchProc.environment = relaunchEnvironment(targetDirectory: targetDir.path)
+            do {
+                try relaunchProc.run()
+            } catch {
+                cleanupAndFail(error)
+                return
+            }
 
-            // 7. 退出当前进程以交接
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
+                self?.isInstallingUpdate = true
                 NSApp.terminate(nil)
             }
         } catch {
-            completion(error)
+            cleanupAndFail(error)
         }
+    }
+
+    /// 替换脚本要展示的失败文案（已本地化）与重启参数，全部经环境变量传入，不拼进脚本
+    func relaunchEnvironment(targetDirectory: String) -> [String: String] {
+        func text(_ key: String) -> String {
+            NSLocalizedString(key, comment: "update error")
+        }
+        var environment = ProcessInfo.processInfo.environment
+        environment["FR_COPY_FAILED"] = text("复制新版本到临时目录失败")
+        environment["FR_BACKUP_FAILED"] = text("备份旧版本失败")
+        environment["FR_MOVE_FAILED_ROLLED_BACK"] = text("移动新版本到目标目录失败，已回滚旧版本")
+        environment["FR_MOVE_FAILED_STUCK"] = String(format: text("移动新版本到目标目录失败，回滚旧版本也失败，旧版本保留在 %@/FinderRight.old.app"), targetDirectory)
+        environment["FR_LAUNCH_FAILED"] = text("新版启动失败")
+        environment["FR_LAUNCH_FAILED_ROLLED_BACK"] = text("新版启动失败，已恢复旧版本")
+        environment["FR_LAUNCH_FAILED_KEPT_BACKUP"] = String(format: text("新版启动失败，旧版本备份保留在 %@/FinderRight.old.app"), targetDirectory)
+        environment["FR_VERSION_MISMATCH"] = text("更新包缺少版本信息，已放弃替换，原版本保持不变")
+        environment["FR_VERSION_MISMATCH_DETAIL"] = text("更新包版本与检查到的版本不一致，已放弃替换，原版本保持不变")
+        environment["FR_UPDATE_SUSPENDED"] = String(format: text("上次更新尚未完成确认，本次更新已暂停；旧版本备份保留在 %@/FinderRight.old.app，打开 FinderRight 完成确认后会自动清理"), targetDirectory)
+        environment["FR_LAUNCH_ARG"] = isAutomaticInstall ? LaunchPresentation.backgroundArgument : LaunchPresentation.showSettingsArgument
+        return environment
+    }
+
+    /// 仅测试与集成脚本使用：把上次检查时间设为指定值，模拟「结论已过期」
+    func setLastCheckedDateForTesting(_ date: Date?) {
+        lastCheckedDate = date
+    }
+
+    /// 当前系统版本字符串（如 "13.6.1"）
+    static func operatingSystemVersionString() -> String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+    }
+
+    /// 替换脚本：$1 旧进程 PID，$2 目标 App，$3 新版本 App，$4 预期版本，$5 auto/manual。
+    ///
+    /// 失败文案先本地化再通过环境变量传入——脚本在 App 退出后独立运行，无法调用 NSLocalizedString，
+    /// 写进 last-update-error.txt 的内容会由下次启动的 checkLastUpdateError 原样展示。
+    /// 脚本不删除旧版备份：由新版启动后经 `ApplicationSupport/FinderRight/update-pending.plist` 回执确认，
+    /// 见 `UpdateInstallReceipt`。任何一步失败都尽量恢复旧版，并把真实结果写进错误文件。
+    static func relaunchScript() -> String {
+        """
+        #!/bin/bash
+        # 用法：relaunch.sh <旧进程 PID> <目标 App> <新版本 App> <预期版本> <auto|manual>
+        set -u
+        # 失败文案由 App 先本地化，经环境变量传入；脚本独立运行时调不到 NSLocalizedString
+        COPY_FAILED="${FR_COPY_FAILED:-Failed to copy the new version to a temporary location}"
+        BACKUP_FAILED="${FR_BACKUP_FAILED:-Failed to back up the old version}"
+        MOVE_FAILED_ROLLED_BACK="${FR_MOVE_FAILED_ROLLED_BACK:-Failed to move the new version into place; the old version was restored}"
+        MOVE_FAILED_STUCK="${FR_MOVE_FAILED_STUCK:-Failed to move the new version into place; restoring the old version also failed}"
+        LAUNCH_FAILED="${FR_LAUNCH_FAILED:-The new version failed to launch}"
+        LAUNCH_FAILED_ROLLED_BACK="${FR_LAUNCH_FAILED_ROLLED_BACK:-The new version failed to launch; the old version was restored}"
+        LAUNCH_FAILED_KEPT_BACKUP="${FR_LAUNCH_FAILED_KEPT_BACKUP:-The new version failed to launch; the backup of the old version was kept}"
+        VERSION_MISMATCH="${FR_VERSION_MISMATCH:-The update package has no version; the current version is unchanged}"
+        VERSION_MISMATCH_DETAIL="${FR_VERSION_MISMATCH_DETAIL:-The update package version does not match the expected version; the current version is unchanged}"
+        UPDATE_SUSPENDED="${FR_UPDATE_SUSPENDED:-update suspended: the previous update has not been confirmed yet}"
+        PID="$1"
+        TARGET="$2"
+        NEW_APP="$3"
+        EXPECTED="$4"
+        LAUNCH_MODE="$5"
+        TARGET_DIR="$(dirname "$TARGET")"
+        OLD_APP="$TARGET_DIR/FinderRight.old.app"
+        NEW_STAGE="$TARGET_DIR/FinderRight.new.app"
+        FAILED_APP="$TARGET_DIR/FinderRight.failed.app"
+        BASE_DIR="$(dirname "$NEW_APP")"
+        STATE_DIR="$HOME/Library/Application Support/FinderRight"
+        ERROR_LOG="$STATE_DIR/last-update-error.txt"
+        RECEIPT="$STATE_DIR/update-pending.plist"
+        # lsregister 不在 PATH：生产环境退回系统绝对路径；测试经 PATH 提供替身，避免触碰真实注册表
+        LSREGISTER="$(command -v lsregister 2>/dev/null || true)"
+        if [ -z "$LSREGISTER" ]; then
+            LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        fi
+
+        mkdir -p "$STATE_DIR"
+
+        finish() {
+            rm -rf "$BASE_DIR"
+        }
+
+        fail() {
+            echo "$1" > "$ERROR_LOG"
+            echo "[relaunch.sh] $1" >&2
+        }
+
+        launch_old() {
+            open -g -a "$TARGET" >/dev/null 2>&1 || true
+        }
+
+        while kill -0 "$PID" 2>/dev/null; do
+            sleep 0.2
+        done
+
+        # 上一轮的暂存与失败副本只属于上一轮，直接清掉；未确认的旧版备份不能动
+        rm -rf "$NEW_STAGE" "$FAILED_APP"
+
+        # 回执还在、备份已经不在：回执唯一的职责是保护备份，这时它已无事可做，清掉过期回执
+        if [ -f "$RECEIPT" ] && [ ! -d "$OLD_APP" ]; then
+            rm -f "$RECEIPT"
+        fi
+
+        # 上次失败的回滚把目标留空、备份还在：先把旧版放回目标位置，再继续本次安装
+        if [ ! -d "$TARGET" ] && [ -d "$OLD_APP" ]; then
+            mv "$OLD_APP" "$TARGET" || true
+        fi
+
+        # 仍有未确认的旧版备份：mv 到已存在的目录会把当前 App 嵌套进去、破坏恢复布局，
+        # 所以停止本次安装。打开一次新版完成确认（自动清备份）或手动删除备份后即可重试
+        if [ -d "$OLD_APP" ]; then
+            fail "${UPDATE_SUSPENDED:-update suspended}"
+            launch_old
+            finish
+            exit 1
+        fi
+
+        # 先核对解压出的版本与检查到的版本：不对就不进入替换，绝不让旧版离开原位
+        ACTUAL="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$NEW_APP/Contents/Info.plist" 2>/dev/null)"
+        if [ -z "$ACTUAL" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+            if [ -n "$ACTUAL" ]; then
+                fail "${VERSION_MISMATCH_DETAIL:-update package version mismatch}: $ACTUAL != $EXPECTED"
+            else
+                fail "${VERSION_MISMATCH:-update package has no version}"
+            fi
+            rm -rf "$NEW_STAGE"
+            launch_old
+            finish
+            exit 1
+        fi
+
+        if ! cp -R "$NEW_APP" "$NEW_STAGE"; then
+            fail "${COPY_FAILED:-copy failed}"
+            rm -rf "$NEW_STAGE"
+            launch_old
+            finish
+            exit 1
+        fi
+
+        if [ -d "$TARGET" ] && ! mv "$TARGET" "$OLD_APP"; then
+            # 目标被挪走后备份才失败：旧版还在备份位，先放回目标再报告，不能把用户留在空位上
+            if [ ! -d "$TARGET" ] && [ -d "$OLD_APP" ]; then
+                mv "$OLD_APP" "$TARGET" || true
+            fi
+            fail "${BACKUP_FAILED:-backup failed}"
+            rm -rf "$NEW_STAGE"
+            launch_old
+            finish
+            exit 1
+        fi
+
+        # 只有 mv 明确失败才算失败：mv 成功时暂存位置本来就该消失
+        if ! mv "$NEW_STAGE" "$TARGET"; then
+            if [ ! -d "$OLD_APP" ] || mv "$OLD_APP" "$TARGET"; then
+                fail "${MOVE_FAILED_ROLLED_BACK:-move failed; old version restored}"
+            else
+                fail "${MOVE_FAILED_STUCK:-move failed; old version kept as FinderRight.old.app}"
+            fi
+            rm -rf "$NEW_STAGE"
+            launch_old
+            finish
+            exit 1
+        fi
+
+        xattr -dr com.apple.quarantine "$TARGET" >/dev/null 2>&1 || true
+        "$LSREGISTER" -f "$TARGET" >/dev/null 2>&1 || true
+        rm -f "$ERROR_LOG"
+
+        # 旧版备份保留到新版完成初始化并回执；回执由新版启动时删除
+        # 用 plutil 结构化写入，避免路径含 & 或 < 时破坏 XML 格式
+        if plutil -create xml1 "$RECEIPT" \
+            && plutil -insert version -string "$EXPECTED" "$RECEIPT" \
+            && plutil -insert backup -string "$OLD_APP" "$RECEIPT" \
+            && plutil -insert installedAt -string "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RECEIPT"; then
+            :
+        else
+            # 回执写入失败：记录但不中止，清掉损坏的回执继续启动新版；
+            # 备份只能手动清理，下一次更新遇到旧备份会停止并提示
+            rm -f "$RECEIPT"
+            echo "[relaunch.sh] warning: failed to write receipt, backup must be cleaned manually" >&2
+        fi
+
+        # 先结束仍在运行的旧版 FinderSync 扩展进程：App 包已被替换，需由系统按新包重新拉起
+        killall FinderRightSync >/dev/null 2>&1 || true
+        if [ "$LAUNCH_MODE" = "auto" ]; then
+            launch=(-g -a)
+        else
+            launch=(-a)
+        fi
+        if ! open "${launch[@]}" "$TARGET" --args "${FR_LAUNCH_ARG:-}"; then
+            # 启动命令明确失败：目标位置是刚换上来的新版，要先挪开才能把旧版放回原位；
+            # 恢复不成时如实说明新版在哪、旧版备份在哪，回执一并作废
+            rm -f "$RECEIPT"
+            if [ -d "$TARGET" ] && ! mv "$TARGET" "$FAILED_APP"; then
+                fail "${LAUNCH_FAILED:-new version failed to launch}"
+            elif [ -d "$OLD_APP" ] && mv "$OLD_APP" "$TARGET"; then
+                fail "${LAUNCH_FAILED_ROLLED_BACK:-new version failed to launch; old version restored}"
+            elif [ -d "$OLD_APP" ]; then
+                fail "${LAUNCH_FAILED_KEPT_BACKUP:-new version failed to launch; old version backup kept}"
+            else
+                fail "${LAUNCH_FAILED:-new version failed to launch}"
+            fi
+            launch_old
+            finish
+            exit 1
+        fi
+
+        finish
+        exit 0
+        """
     }
 
     /// 比较两个版本字符串（例如 "v1.1.5" vs "1.1.4"）
     /// 返回 .orderedDescending 表示 v1 > v2
     public static func compareVersions(_ v1: String, _ v2: String) -> ComparisonResult {
         VersionComparator.compareVersions(v1, v2)
+    }
+}
+
+private extension URL {
+    /// 两个路径互为父子或相同（同一条替换链上不能既当源又当目标）
+    func isSameFileLayout(as other: URL) -> Bool {
+        let a = standardizedFileURL.path
+        let b = other.standardizedFileURL.path
+        return a == b || a.hasPrefix(b + "/") || b.hasPrefix(a + "/")
     }
 }
 

@@ -49,6 +49,49 @@ private func assertNil(_ value: Any?, _ message: String = "", file: StaticString
     }
 }
 
+private func assertThrows<E: Error & Equatable>(_ expected: E, _ message: String = "", file: StaticString = #file, line: UInt = #line,
+                                                _ block: () throws -> Void) throws {
+    do {
+        // 只关心是否抛出类型 E：其他错误同样说明没按要求失败，一并算失败
+        try block()
+        throw TestFailure(message: "断言失败: 应抛出 \(expected) \(message) (at \(file):\(line))")
+    } catch let error as E {
+        if error != expected {
+            throw TestFailure(message: "断言失败: 期望 \(expected)，实际 \(error) \(message) (at \(file):\(line))")
+        }
+    }
+}
+
+/// 造一个只含 Info.plist 的「更新包内 App」目录，不触碰真实应用
+private func makeUpdateAppFixture(version: String, build: String,
+                                  overrides: [String: (String, String)] = [:]) throws -> URL {
+    let root = makeTempDirectory().appendingPathComponent("FinderRight.app", isDirectory: true)
+    let bundles = [
+        "FinderRight.app",
+        "FinderRightSync.appex",
+        "FinderRightPreview.appex",
+        "FinderRightMarkdown.appex",
+    ]
+    for name in bundles {
+        let path = name == "FinderRight.app" ? root : root.appendingPathComponent("Contents/PlugIns/\(name)", isDirectory: true)
+        let plist = path.appendingPathComponent("Contents/Info.plist")
+        try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var values: [String: String] = [
+            "CFBundleShortVersionString": version,
+            "CFBundleVersion": build,
+            "LSMinimumSystemVersion": "13.0",
+        ]
+        if let override = overrides[name] { values[override.0] = override.1 }
+        let data = try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0)
+        try data.write(to: plist)
+    }
+    return root
+}
+
+private func expectation(version: String, current: String = "1.0.0", system: String = "13.6.1") -> UpdatePackageCheck.Expectation {
+    UpdatePackageCheck.Expectation(expectedVersion: version, currentVersion: current, operatingSystemVersion: system)
+}
+
 /// 每个用例独立的临时目录（真实文件系统语义，避免共享状态互相干扰）
 private func makeTempDirectory() -> URL {
     let url = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -1729,6 +1772,105 @@ struct FinderRightKitTestsRunner {
             try assertTrue(jobs.waitUntilIdle(timeout: 5), "最终应完成")
         }
 
+        // 30b. 退出交接：关闭后不再接受新任务，避免「确认空闲 → 接受任务 → 立刻退出」
+        runTest("BackgroundJobs 关闭后等待在途任务并拒绝新任务") {
+            let jobs = BackgroundJobs()
+            let queue = DispatchQueue(label: "test.jobs.close")
+            let started = DispatchSemaphore(value: 0)
+            try assertTrue(jobs.run(on: queue) { started.signal(); Thread.sleep(forTimeInterval: 0.3) }, "关闭前应接受任务")
+            started.wait()
+            try assertTrue(jobs.closeAndWait(timeout: 5), "关闭应等待在途任务完成")
+            try assertTrue(jobs.isIdle, "关闭后应空闲")
+            var ran = false
+            try assertTrue(!jobs.run(on: queue) { ran = true }, "关闭后不应再接受任务")
+            queue.sync {}
+            try assertTrue(!ran, "被拒绝的任务不应执行")
+        }
+
+        // 30c. 退出开关：关闭后拒绝新任务；只判断空闲挡不住「确认后挤进新任务」
+        runTest("BackgroundJobs.Gate 关闭后拒绝新任务") {
+            let gate = BackgroundJobs.Gate()
+            try assertTrue(gate.isAcceptingJobs, "默认接受")
+            gate.close()
+            try assertTrue(!gate.isAcceptingJobs, "关闭后拒绝")
+        }
+
+        // 32. IPC 请求闸门：退出排空必须异步——已受理请求可能回到发起关闭的线程完成收尾
+        runTest("RequestDrainGate 关闭后排空已受理请求并拒绝新请求") {
+            let queue = DispatchQueue(label: "test.drain.queue")
+            let gate = RequestDrainGate(queue: queue)
+            var order: [String] = []
+            try assertTrue(gate.accept { order.append("a") }, "关闭前应受理")
+            try assertTrue(gate.accept { order.append("b") }, "关闭前应受理")
+            let drained = DispatchSemaphore(value: 0)
+            gate.close(notifyDrained: { drained.signal() })
+            try assertTrue(!gate.accept { order.append("late") }, "关闭后应拒绝新请求")
+            queue.sync {}
+            try assertEqual(order, ["a", "b"], "排空回调应排在全部已受理请求之后")
+            try assertTrue(drained.wait(timeout: .now() + 5) == .success, "排空回调应恰好到达一次")
+        }
+
+        runTest("RequestDrainGate 关闭不阻塞，请求可在发起关闭的队列上完成收尾") {
+            let queue = DispatchQueue(label: "test.drain.queue2")
+            let mainLike = DispatchQueue(label: "test.drain.mainlike")
+            let gate = RequestDrainGate(queue: queue)
+            let started = DispatchSemaphore(value: 0)
+            let drained = DispatchSemaphore(value: 0)
+            var completed = false
+            // 请求块模拟「回主线程写剪贴板」：最后一步要在发起关闭的队列上同步完成
+            try assertTrue(gate.accept {
+                started.signal()
+                mainLike.sync { completed = true }
+            })
+            // 等请求真正运行并卡在 mainLike.sync（模拟主线程正忙于退出流程）
+            try assertTrue(started.wait(timeout: .now() + 5) == .success)
+            // 关闭调用绝不能阻塞在队列上——旧实现在这里 queue.sync 会死锁
+            gate.close(notifyDrained: { drained.signal() })
+            try assertTrue(!gate.accept { }, "关闭后应拒绝新请求")
+            // 服务「主线程」，让请求完成收尾
+            mainLike.sync {}
+            try assertTrue(completed, "请求应能在发起关闭的队列上完成收尾")
+            try assertTrue(drained.wait(timeout: .now() + 5) == .success, "请求完成后排空回调应到达")
+        }
+
+        // 32b. 更新退出：IPC 排空须无限等待，不被 30 秒超时放行
+        // 模拟"在途请求完成"场景：关闭后等待排空，排空信号延迟到达也应正确等到
+        runTest("RequestDrainGate 更新退出：排空不设时限（延迟完成的请求也等到）") {
+            let queue = DispatchQueue(label: "test.drain.update-quit")
+            let gate = RequestDrainGate(queue: queue)
+            let release = DispatchSemaphore(value: 0)
+            let drained = DispatchSemaphore(value: 0)
+            // 受理一个"慢请求"（需要外部释放才完成）
+            try assertTrue(gate.accept { release.wait() }, "关闭前应受理")
+            gate.close(notifyDrained: { drained.signal() })
+            // 模拟更新退出：无上限等待（此处用宽裕超时检测，不真正等 30s）
+            // 若用有界等待（30s），排空信号在 0ms 后就应到达——测试目标是验证「无超时」时排空等到了完成
+            var drainedBeforeRelease = false
+            DispatchQueue.global().async {
+                if drained.wait(timeout: .now() + 0.05) == .success {
+                    drainedBeforeRelease = true
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+            // 请求尚未完成，排空不应提前到达
+            try assertTrue(!drainedBeforeRelease, "请求完成前排空不应到达")
+            // 释放在途请求
+            release.signal()
+            // 排空应在请求完成后到达
+            try assertTrue(drained.wait(timeout: .now() + 5) == .success, "请求完成后排空应到达")
+        }
+
+        runTest("BackgroundJobs 关闭时未完成的任务让等待超时") {
+            let jobs = BackgroundJobs()
+            let release = DispatchSemaphore(value: 0)
+            let started = DispatchSemaphore(value: 0)
+            jobs.run(on: DispatchQueue(label: "test.jobs.close.timeout")) { started.signal(); release.wait() }
+            started.wait()
+            try assertTrue(!jobs.closeAndWait(timeout: 0.1), "任务未完成时关闭等待应超时")
+            release.signal()
+            try assertTrue(jobs.waitUntilIdle(timeout: 5))
+        }
+
         // 31. 代码签名校验（以系统自带、Apple 签名的 /bin/ls 和测试进程自身为样本）
         runTest("CodeSignatureCheck 读取签名规则与证书指纹") {
             let ls = URL(fileURLWithPath: "/bin/ls")
@@ -1763,6 +1905,86 @@ struct FinderRightKitTestsRunner {
             try assertEqual(sign.status, 0, "ad-hoc 签名失败: \(sign.stderr)")
             try assertNil(CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: copy), "ad-hoc 签名没有证书")
             try assertTrue(CodeSignatureCheck.designatedRequirement(ofCodeAt: copy)?.hasPrefix("cdhash") == true, "ad-hoc 签名规则应为 cdhash")
+            try assertEqual(CodeSignatureCheck.signatureStatus(ofCodeAt: copy), .adHoc, "应明确识别为 ad-hoc")
+        }
+
+        runTest("CodeSignatureCheck 区分证书签名与无法读取的签名") {
+            let ls = URL(fileURLWithPath: "/bin/ls")
+            guard case .certificate(let leaf) = CodeSignatureCheck.signatureStatus(ofCodeAt: ls) else {
+                throw TestFailure(message: "系统二进制应识别为证书签名")
+            }
+            try assertEqual(leaf, CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls), "指纹应与既有接口一致")
+            let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try assertEqual(CodeSignatureCheck.signatureStatus(ofCodeAt: missing), .unreadable, "不存在的路径不能当作 ad-hoc")
+        }
+
+        // 31b. 安装前校验：版本一直带到安装阶段，四个 bundle 一致且高于当前版本
+        runTest("UpdatePackageCheck 正常新版本通过校验") {
+            let root = try makeUpdateAppFixture(version: "1.2.3", build: "10")
+            defer { try? FileManager.default.removeItem(at: root) }
+            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+        }
+
+        runTest("UpdatePackageCheck 拒绝与预期版本不符或比当前更旧的包") {
+            let root = try makeUpdateAppFixture(version: "1.2.3", build: "10")
+            defer { try? FileManager.default.removeItem(at: root) }
+            try assertThrows(UpdatePackageCheck.Failure.versionMismatch(expected: "1.2.4", actual: "1.2.3"),
+                             "检查到 v1.2.4 却下载到 1.2.3") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.4"), signature: .adHoc, currentSignature: .adHoc)
+            }
+            try assertThrows(UpdatePackageCheck.Failure.notNewer(version: "1.2.3", current: "1.2.3"), "不高于当前版本") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3", current: "1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+            }
+        }
+
+        runTest("UpdatePackageCheck 拒绝四个 bundle 版本不一致与系统不兼容") {
+            let root = try makeUpdateAppFixture(version: "1.2.3", build: "10", overrides: [
+                "FinderRightMarkdown.appex": ("CFBundleShortVersionString", "1.2.2"),
+            ])
+            defer { try? FileManager.default.removeItem(at: root) }
+            do {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                throw TestFailure(message: "版本不一致应被拒绝")
+            } catch is UpdatePackageCheck.Failure {}
+            let old = try makeUpdateAppFixture(version: "1.2.3", build: "10", overrides: [
+                "FinderRightSync.appex": ("CFBundleVersion", "9"),
+            ])
+            defer { try? FileManager.default.removeItem(at: old) }
+            do {
+                try UpdatePackageCheck.validate(appAt: old, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                throw TestFailure(message: "构建号不一致应被拒绝")
+            } catch is UpdatePackageCheck.Failure {}
+
+            let future = try makeUpdateAppFixture(version: "1.2.3", build: "10", overrides: [
+                "FinderRight.app": ("LSMinimumSystemVersion", "26.0"),
+            ])
+            defer { try? FileManager.default.removeItem(at: future) }
+            try assertThrows(UpdatePackageCheck.Failure.unsupportedSystem(required: "26.0", current: "13.6.1"), "系统不兼容") {
+                try UpdatePackageCheck.validate(appAt: future, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+            }
+            try assertTrue(UpdatePackageCheck.version("13.6.1", isAtLeast: "13.0"), "13.6 满足 13.0")
+            try assertTrue(!UpdatePackageCheck.version("12.7", isAtLeast: "13.0"), "12.7 不满足 13.0")
+            try assertTrue(UpdatePackageCheck.version("14", isAtLeast: "13.0.1"), "14 满足 13.0.1")
+        }
+
+        runTest("UpdatePackageCheck 签名读取失败拒装且不放宽证书要求") {
+            let root = try makeUpdateAppFixture(version: "1.2.3", build: "10")
+            defer { try? FileManager.default.removeItem(at: root) }
+            try assertThrows(UpdatePackageCheck.Failure.signatureUnreadable, "读取失败不能降级为只校验 SHA-256") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .unreadable, currentSignature: .certificate(leafSHA1: "AA"))
+            }
+            try assertThrows(UpdatePackageCheck.Failure.currentSignatureUnreadable, "当前应用读不到签名时同样不能放行") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "AA"), currentSignature: .unreadable)
+            }
+            try assertThrows(UpdatePackageCheck.Failure.currentSignatureUnreadable, "新包是 ad-hoc 也一样拒绝") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .unreadable)
+            }
+            try assertThrows(UpdatePackageCheck.Failure.signatureMismatch, "证书签名版本只接受同一证书") {
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "BB"), currentSignature: .certificate(leafSHA1: "AA"))
+            }
+            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "AA"), currentSignature: .certificate(leafSHA1: "AA"))
+            // 当前为 ad-hoc（过渡期）沿用既有策略：依赖前面的 SHA-256，这里不额外放宽也不额外收紧
+            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
         }
 
         runTest("CodeSignatureCheck 按 audit token 校验运行中的进程") {
@@ -4467,6 +4689,72 @@ struct FinderRightKitTestsRunner {
                 }
                 try assertTrue(didThrow, "非法 tag [\(invalidTag)] 应抛出错误")
             }
+        }
+
+        runTest("UpdatePolicy 补充等待窗口：没有有效结果时不能报告最新") {
+            try assertEqual(UpdatePolicy.concludeSupplementalWindow(fallback: nil), .waitForRemaining(fallback: nil),
+                            "两路都没有有效结果时应继续等各自超时")
+            try assertEqual(UpdatePolicy.concludeSupplementalWindow(fallback: .upToDate),
+                            .finish(status: .upToDate, recordSuccessDate: true),
+                            "窗口结束用已收到的结论收尾")
+            let partial: UpdateCheckStatus = .updateAvailable(version: "v2.0.0", releaseURL: URL(string: "https://example.com/rel")!,
+                                                              downloadURL: nil, checksum: nil)
+            try assertEqual(UpdatePolicy.concludeSupplementalWindow(fallback: partial),
+                            .finish(status: partial, recordSuccessDate: true),
+                            "缺少校验信息的版本提示不能被窗口结束覆盖")
+            try assertEqual(UpdatePolicy.supplementalCheckWindow, 0.8, "内部常量固定 800 毫秒")
+        }
+
+        runTest("UpdatePolicy 检查时机：主动检查强制请求，自动检查利用旧结论") {
+            let now = Date()
+            let recent = now.addingTimeInterval(-60)
+            let staleButUseful = now.addingTimeInterval(-30 * 60)
+            let veryOld = now.addingTimeInterval(-5 * 3600)
+            try assertEqual(UpdatePolicy.requestPolicy(force: false, automatic: false, currentStatus: .upToDate,
+                                                       lastCheckedDate: recent, now: now).waitsForResult, false,
+                            "十分钟内的结论直接复用并立即返回")
+            let forced = UpdatePolicy.requestPolicy(force: true, automatic: false, currentStatus: .upToDate,
+                                                       lastCheckedDate: recent, now: now)
+            try assertTrue(forced.force && !forced.waitsForResult, "主动点击必须重新请求；旧结论由界面自行展示，不在回调里重放")
+            try assertTrue(!UpdatePolicy.requestPolicy(force: true, automatic: false, currentStatus: .idle,
+                                                       lastCheckedDate: nil, now: now).waitsForResult,
+                           "没有已有结论时不先回调")
+            try assertEqual(UpdatePolicy.requestPolicy(force: false, automatic: false, currentStatus: .upToDate,
+                                                       lastCheckedDate: staleButUseful, now: now).force, true,
+                            "结论较旧时后台请求新结果")
+            let automatic = UpdatePolicy.requestPolicy(force: false, automatic: true, currentStatus: .upToDate,
+                                                       lastCheckedDate: staleButUseful, now: now)
+            try assertTrue(!automatic.force && automatic.waitsForResult,
+                           "定时检查沿用两小时内的「最新」结论，后台静默刷新")
+            try assertEqual(UpdatePolicy.requestPolicy(force: false, automatic: true, currentStatus: .upToDate,
+                                                       lastCheckedDate: veryOld, now: now).force, true,
+                            "超过两小时则真正请求")
+        }
+
+        // P2 回归：waitsForResult=true 的路径必须把 completion 传给后台刷新，不能丢弃
+        // 这里验证 policy 层语义：10～120 分钟内旧缓存 + automatic=true 才走该路径；
+        // 后续 check() 的行为属于集成层，由测试用例描述覆盖
+        runTest("UpdatePolicy waitsForResult 仅在合法范围触发，不影响强制检查与超过上限的过期检查") {
+            let now = Date()
+            // 10～120 分钟之间：走 waitsForResult 路径
+            for minutesAgo in [11, 30, 60, 90, 119] {
+                let date = now.addingTimeInterval(-TimeInterval(minutesAgo * 60))
+                let policy = UpdatePolicy.requestPolicy(force: false, automatic: true, currentStatus: .upToDate,
+                                                       lastCheckedDate: date, now: now)
+                try assertTrue(!policy.force && policy.waitsForResult,
+                               "\(minutesAgo) 分钟前的旧缓存应走 waitsForResult 路径")
+            }
+            // 超过 120 分钟：必须真正请求，不走 waitsForResult
+            let tooOld = now.addingTimeInterval(-121 * 60)
+            let oldPolicy = UpdatePolicy.requestPolicy(force: false, automatic: true, currentStatus: .upToDate,
+                                                      lastCheckedDate: tooOld, now: now)
+            try assertTrue(oldPolicy.force && !oldPolicy.waitsForResult,
+                           "超过两小时的缓存应强制重新请求，不走 waitsForResult")
+            // 强制检查：不走 waitsForResult
+            let forced = UpdatePolicy.requestPolicy(force: true, automatic: true, currentStatus: .upToDate,
+                                                   lastCheckedDate: now.addingTimeInterval(-30 * 60), now: now)
+            try assertTrue(forced.force && !forced.waitsForResult,
+                           "强制检查不走 waitsForResult，completion 直接绑定网络结果")
         }
 
         runTest("UpdatePolicy 两路检查仲裁：首个完整可安装新版直接完成") {

@@ -35,6 +35,25 @@ final class FinderRightService {
     /// 在途的压缩 / 解压 / 粘贴 / 图片处理任务。AppDelegate 在退出前等待它们完成（见 applicationShouldTerminate）
     static let backgroundJobs = BackgroundJobs()
 
+    /// 退出流程开关：关闭后不再接受新的后台文件任务（见 AppDelegate.applicationShouldTerminate）
+    static let jobGate = BackgroundJobs.Gate()
+
+    /// 启动后台文件任务；退出流程已开始时返回 false，调用方应给出「正在退出」的失败结果
+    static func runGuarded(on queue: DispatchQueue, work: @escaping () -> Void) -> Bool {
+        guard jobGate.isAcceptingJobs else { return false }
+        return backgroundJobs.run(on: queue, work)
+    }
+
+    /// 拒绝新任务时的 IPC 结果：如实告诉请求方已经退出，而不是假装已受理
+    static func exitInProgressResponse(_ req: IPCRequest) -> IPCResponse {
+        IPCResponse(id: req.id, success: false, message: L("FinderRight 正在退出，请稍后重试"))
+    }
+
+    /// 服务菜单等不走 IPC 的入口：拒绝新任务时同样给出提示
+    static func reportExitInProgress() {
+        ClipboardToast.show(message: NSLocalizedString("FinderRight 正在退出，请稍后重试", comment: "notification"), style: .failure)
+    }
+
     /// 取消剪切代次：每次 cancelCut 自增，**只能在 cutPasteQueue 上访问**。
     ///
     /// 粘贴任务在 `takeCutQueue()` 时记下当时的代次，归还失败路径前比对：代次变了说明

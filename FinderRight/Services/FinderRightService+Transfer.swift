@@ -38,8 +38,10 @@ extension FinderRightService {
 
         // 受理即算一次使用：右键菜单、服务菜单与设置页按最近使用排序时据此排在前面
         SharedConfig.shared.markFavoriteUsed(destination)
-        Self.backgroundJobs.run(on: Self.transferQueue) { [weak self] in
+        guard Self.runGuarded(on: Self.transferQueue, work: { [weak self] in
             self?.performTransfer(sourcePaths: items, destDir: URL(fileURLWithPath: destination), mode: mode)
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
         return IPCResponse(id: req.id, success: true, message: "已受理，正在后台处理")
     }

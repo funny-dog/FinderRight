@@ -29,6 +29,14 @@ func serviceLog(_ message: String) {}
 final class FinderRightService {
     static let archiveQueue = DispatchQueue(label: "test.image")
     static let backgroundJobs = BackgroundJobs()
+    static let jobGate = BackgroundJobs.Gate()
+    static func runGuarded(on queue: DispatchQueue, work: @escaping () -> Void) -> Bool {
+        guard jobGate.isAcceptingJobs else { return false }
+        return backgroundJobs.run(on: queue, work)
+    }
+    static func exitInProgressResponse(_ req: IPCRequest) -> IPCResponse {
+        IPCResponse(id: req.id, success: false, message: "exit")
+    }
     var undo: UndoRecord?
     func isPathAllowed(_ path: String, role: PathAccessPolicy.Role) -> Bool {
         if role == .source, URL(fileURLWithPath: path).lastPathComponent == "denied.png" { return false }

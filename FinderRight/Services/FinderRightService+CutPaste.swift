@@ -127,8 +127,10 @@ extension FinderRightService {
         }
 
         // 异步派发到独立 pasteQueue 工作队列，物理移动不阻塞 cutPasteQueue 队列
-        Self.backgroundJobs.run(on: Self.pasteQueue) { [weak self] in
+        guard Self.runGuarded(on: Self.pasteQueue, work: { [weak self] in
             self?.performPaste(batchID: taken.id, sourcePaths: taken.paths, destDir: destDir, generation: taken.generation)
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
 
         return IPCResponse(id: req.id, success: true, message: "已受理粘贴请求，正在后台移动文件")

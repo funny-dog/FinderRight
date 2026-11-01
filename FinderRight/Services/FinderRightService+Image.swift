@@ -15,8 +15,10 @@ extension FinderRightService {
             return IPCResponse(id: req.id, success: false, message: "convertImage 参数缺失")
         }
 
-        Self.backgroundJobs.run(on: Self.archiveQueue) {
-            self.executeImageTransform(items: items, operation: .convert(format: targetFormat))
+        guard Self.runGuarded(on: Self.archiveQueue, work: { [weak self] in
+            self?.executeImageTransform(items: items, operation: .convert(format: targetFormat))
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
 
         return IPCResponse(id: req.id, success: true, message: "ok")
@@ -28,8 +30,10 @@ extension FinderRightService {
             return IPCResponse(id: req.id, success: false, message: "scaleImage 参数缺失")
         }
 
-        Self.backgroundJobs.run(on: Self.archiveQueue) {
-            self.executeImageTransform(items: items, operation: .scale(maxPixelSize: maxPixel))
+        guard Self.runGuarded(on: Self.archiveQueue, work: { [weak self] in
+            self?.executeImageTransform(items: items, operation: .scale(maxPixelSize: maxPixel))
+        }) else {
+            return Self.exitInProgressResponse(req)
         }
 
         return IPCResponse(id: req.id, success: true, message: "ok")

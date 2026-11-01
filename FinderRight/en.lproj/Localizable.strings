@@ -341,6 +341,7 @@
 /* Updates */
 "检查更新" = "Check for Updates";
 "已是最新版本" = "Up to Date";
+"未发现新版本" = "No new version found";
 "发现新版本 %@" = "New version %@";
 "点击在浏览器中打开最新版本下载页面" = "Click to open latest download page in browser";
 "立即更新到 %@" = "Update to %@ Now";
@@ -371,12 +372,24 @@
 "发现暂存区遗留文件" = "Leftover Files in Staging Area";
 "暂存区有 %d 个历史遗留文件，位于 ~/Library/Application Support/FinderRight/staging" = "%d leftover files from an older version are in ~/Library/Application Support/FinderRight/staging";
 "自动更新失败" = "Automatic Update Failed";
+"更新未能完成" = "Update Did Not Complete";
+"FinderRight 正在退出，请稍后重试" = "FinderRight is quitting. Please try again later.";
 "ditto 退出码: %d" = "ditto exit code: %d";
 "退出码 %d" = "Exit code %d";
 "创建解压目录失败: %@" = "Failed to create the destination folder: %@";
 "复制新版本到临时目录失败" = "Failed to copy the new version to a temporary location";
 "备份旧版本失败" = "Failed to back up the old version";
 "移动新版本到目标目录失败，已回滚旧版本" = "Failed to move the new version into place; the old version was restored";
+"移动新版本到目标目录失败，回滚旧版本也失败，旧版本保留在 %@/FinderRight.old.app" = "Failed to move the new version into place, and restoring the old version also failed. The old version is kept at %@/FinderRight.old.app";
+"新版启动失败，已恢复旧版本" = "The new version failed to launch; the old version was restored";
+"新版启动失败，旧版本备份保留在 %@/FinderRight.old.app" = "The new version failed to launch. The backup of the old version is kept at %@/FinderRight.old.app";
+"新版启动失败" = "The new version failed to launch";
+"上次更新尚未完成确认，本次更新已暂停；旧版本备份保留在 %@/FinderRight.old.app，打开 FinderRight 完成确认后会自动清理" = "The previous update is still awaiting confirmation, so this update was paused. The old-version backup is kept at %@/FinderRight.old.app and is cleaned up automatically after FinderRight confirms it on launch";
+"正在检查更新…" = "Checking for updates…";
+"刚刚检查" = "Checked just now";
+"%d 分钟前检查" = "Checked %d minutes ago";
+"%d 小时前检查" = "Checked %d hours ago";
+"%d 天前检查" = "Checked %d days ago";
 
 /* Custom File Templates */
 "自定义文件模板" = "Custom File Templates";
