@@ -541,6 +541,7 @@
 "压缩文件不存在：%@" = "Archive does not exist: %@";
 "选中的文件均不存在" = "None of the selected files exist";
 "写入剪切队列失败：%@" = "Failed to save the cut queue: %@";
+"取消剪切失败：%@" = "Failed to cancel cut: %@";
 "剪切队列为空，请先剪切文件" = "Nothing has been cut. Cut files first.";
 "保存粘贴恢复记录失败：%@" = "Failed to save the paste recovery record: %@";
 "目标不是常用目录" = "The destination is not a favorite folder";

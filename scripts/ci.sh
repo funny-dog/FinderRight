@@ -20,6 +20,22 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --package-path FinderRightKit FinderRightKitTests
 
+KIT_TEST_BINARY="$(swift build --package-path FinderRightKit --show-bin-path)/FinderRightKitTests" python3 - <<'PY'
+import os
+import subprocess
+
+for word in ("__finderright_no_matching_test__", "   "):
+    result = subprocess.run(
+        [os.environ["KIT_TEST_BINARY"]],
+        env={**os.environ, "FINDERRIGHT_TEST_FILTER": word},
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 1 and "总数 0" in result.stdout, (
+        f"过滤词 {word!r} 应因未匹配测试而失败：{result.returncode}\n{result.stdout}\n{result.stderr}"
+    )
+print("PASS: 无匹配与空白过滤词均拒绝空跑")
+PY
+
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
@@ -116,6 +132,13 @@ swiftc -typecheck -parse-as-library \
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRightSync/MenuIconRenderer.swift scripts/test-menu-icons.swift \
+  -o "$KIT_BUILD_DIR/test-menu-icons"
+"$KIT_BUILD_DIR/test-menu-icons"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
   scripts/test-syntax-highlight.swift -o "$KIT_BUILD_DIR/test-syntax-highlight"
 "$KIT_BUILD_DIR/test-syntax-highlight"
 
@@ -185,7 +208,8 @@ for text in missing:
 sys.exit(1 if missing else 0)
 PY
 
-echo "=== [CI] 7. 校验官网下载与更新代理 ==="
+echo "=== [CI] 7. 校验官网下载、页面与更新代理 ==="
+python3 website/check.py
 node --check website/worker/index.js
 node website/worker/test.mjs
 bash scripts/test-website-downloads.sh

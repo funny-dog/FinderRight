@@ -9,11 +9,10 @@ import CryptoKit
 private var totalTests = 0
 private var passedTests = 0
 private var failedTests = 0
+private let testFilter = ProcessInfo.processInfo.environment["FINDERRIGHT_TEST_FILTER"] ?? ""
 
 private func runTest(_ name: String, _ block: () throws -> Void) {
-    if let filter = ProcessInfo.processInfo.environment["FINDERRIGHT_TEST_FILTER"], !filter.isEmpty {
-        guard name.contains(filter) else { return }
-    }
+    guard testFilter.isEmpty || name.contains(testFilter) else { return }
     totalTests += 1
     print("▶ 运行测试: \(name)...", terminator: " ")
     do {
@@ -524,11 +523,75 @@ struct FinderRightKitTestsRunner {
 
             try store.write(["/tmp/x"])
             _ = try store.take()
-            store.clear()
+            try store.clear()
 
             try assertTrue(store.read().isEmpty)
             try assertTrue(!FileManager.default.fileExists(atPath: store.inflightURL.path))
             try assertTrue(try store.recover(existingOnly: false).isEmpty, "取消后不应再恢复出任何路径")
+        }
+
+        runTest("CutQueueStore clear 文件不存在时幂等成功且删除失败时抛出错误") {
+            let dir = makeTempDirectory()
+            defer {
+                chmod(dir.path, 0o755)
+                try? FileManager.default.removeItem(at: dir)
+            }
+            let store = CutQueueStore(directory: dir)
+            // 文件不存在时 clear 应幂等成功
+            try store.clear()
+
+            // 写入队列文件
+            try store.write(["/tmp/keep_me"])
+            try assertTrue(!store.read().isEmpty)
+
+            // 将目录设为不可写（去掉写权限，使得无法从中删除文件）
+            guard chmod(dir.path, 0o555) == 0 else {
+                throw TestFailure(message: "无法修改测试目录权限")
+            }
+
+            var clearFailed = false
+            do {
+                try store.clear()
+            } catch {
+                clearFailed = true
+            }
+
+            // 恢复目录写权限以便检查与清理
+            _ = chmod(dir.path, 0o755)
+
+            try assertTrue(clearFailed, "目录不可写导致删除失败时 clear 必须抛出错误")
+            try assertEqual(store.read(), ["/tmp/keep_me"], "清理失败时原队列文件必须保留在磁盘")
+        }
+
+        runTest("CutQueueStore 上级目录不可遍历时取消与恢复均须报错") {
+            let root = makeTempDirectory()
+            defer {
+                chmod(root.path, 0o700)
+                try? FileManager.default.removeItem(at: root)
+            }
+            let store = CutQueueStore(directory: root.appendingPathComponent("queue"))
+            try store.write(["/tmp/keep"])
+            _ = try store.take()
+            guard chmod(root.path, 0o000) == 0 else {
+                throw TestFailure(message: "无法修改测试目录权限")
+            }
+            var clearFailed = false
+            do { try store.clear() } catch { clearFailed = true }
+            var recoverFailed = false
+            do { _ = try store.recover(existingOnly: false) } catch { recoverFailed = true }
+            chmod(root.path, 0o700)
+
+            try assertTrue(clearFailed, "不可遍历不能当作取消成功")
+            try assertTrue(recoverFailed, "不可遍历不能当作没有恢复记录")
+            try assertEqual(try store.recover(existingOnly: false), ["/tmp/keep"], "失败后恢复记录必须保留")
+        }
+
+        runTest("CutQueueStore 目录不存在时取消与恢复幂等成功") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let store = CutQueueStore(directory: root.appendingPathComponent("missing"))
+            try store.clear()
+            try assertTrue(try store.recover(existingOnly: false).isEmpty)
         }
 
         runTest("CutQueueStore 两批未完成时都能崩溃恢复") {
@@ -604,7 +667,7 @@ struct FinderRightKitTestsRunner {
             let old = try store.take()!
             try store.write(["/tmp/also-old"])
             _ = try store.take()
-            store.clear()
+            try store.clear()
             try assertTrue(try store.recover(existingOnly: false).isEmpty)
             try store.write(["/tmp/new"])
             _ = try store.take()
@@ -1130,7 +1193,7 @@ struct FinderRightKitTestsRunner {
             try assertEqual(cache.normalizedPaths(), ["/tmp/a/one.txt"], "未变化时结果稳定")
             try store.write(["/tmp/a/one.txt", "/tmp/a/two/"])
             try assertEqual(cache.normalizedPaths(), ["/tmp/a/one.txt", "/tmp/a/two"], "改写后读到新内容，并去掉尾斜杠")
-            store.clear()
+            try store.clear()
             try assertTrue(cache.normalizedPaths().isEmpty, "清空后为空")
         }
 
@@ -2091,6 +2154,18 @@ struct FinderRightKitTestsRunner {
             try assertEqual(UniqueName.fileURL(baseName: "README", ext: "", in: dir).lastPathComponent, "README", "无后缀")
             try Data().write(to: dir.appendingPathComponent("README"))
             try assertEqual(UniqueName.fileURL(baseName: "README", ext: "", in: dir).lastPathComponent, "README 1", "无后缀时同样编号")
+        }
+
+        runTest("UniqueName 正确识别并避开悬空符号链接") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let danglingTarget = dir.appendingPathComponent("nonexistent_target.txt")
+            let linkURL = dir.appendingPathComponent("untitled.txt")
+            try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: danglingTarget)
+
+            // fileExists 会跟随符号链接返回 false，但 itemExists 能正确识别悬空链接
+            try assertTrue(UniqueName.itemExists(atPath: linkURL.path), "悬空符号链接应被识别为已存在")
+            try assertEqual(UniqueName.fileURL(baseName: "untitled", ext: "txt", in: dir).lastPathComponent, "untitled 1.txt")
         }
 
         // MARK: - ExtractedOutput（解压产物落位）
@@ -5607,6 +5682,11 @@ struct FinderRightKitTestsRunner {
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")
+
+        if !testFilter.isEmpty && totalTests == 0 {
+            print("⚠️ 过滤词 '\(testFilter)' 未匹配到任何测试用例")
+            exit(1)
+        }
 
         if failedTests > 0 {
             exit(1)

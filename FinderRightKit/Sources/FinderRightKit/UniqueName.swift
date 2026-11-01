@@ -13,12 +13,21 @@ public enum UniqueName {
         }
     }
 
+    /// 检查指定路径的目录项（文件、目录、套接字或符号链接，含悬空符号链接）是否存在。
+    public static func itemExists(atPath path: String, fileManager: FileManager = .default) -> Bool {
+        var statBuf = stat()
+        if lstat(path, &statBuf) == 0 {
+            return true
+        }
+        return (try? fileManager.attributesOfItem(atPath: path)) != nil
+    }
+
     public static func fileURL(baseName: String, ext: String, in directory: URL,
                                fileManager: FileManager = .default) -> URL {
         var counter = 0
         var name = candidateName(baseName: baseName, ext: ext, counter: counter)
         var url = directory.appendingPathComponent(name)
-        while fileManager.fileExists(atPath: url.path) {
+        while itemExists(atPath: url.path, fileManager: fileManager) {
             counter += 1
             name = candidateName(baseName: baseName, ext: ext, counter: counter)
             url = directory.appendingPathComponent(name)

@@ -72,15 +72,20 @@ extension FinderRightService {
     /// 无法撤回，但代次自增会让这批任务结束后不再把失败路径归还回队列（取消必须赢）。
     func cancelCut(_ req: IPCRequest) -> IPCResponse {
         // 与剪切/粘贴共用串行队列，避免与正在执行中的粘贴互踩 cut-queue.json
-        let response = Self.cutPasteQueue.sync {
-            Self.cutCancelGeneration += 1
-            cutQueue.clear()
-            CutQueueChangeNotifier.post()
-            return IPCResponse(id: req.id, success: true, message: "已取消剪切")
+        do {
+            let response = try Self.cutPasteQueue.sync {
+                try cutQueue.clear()
+                Self.cutCancelGeneration += 1
+                CutQueueChangeNotifier.post()
+                return IPCResponse(id: req.id, success: true, message: "已取消剪切")
+            }
+            // 剪切已被取消或已被 ⌘V 交给访达移动，剪切记录作废
+            UndoCenter.shared.invalidate(kind: .cut)
+            return response
+        } catch {
+            serviceLog("cancelCut 清理剪切队列失败: \(error)")
+            return IPCResponse(id: req.id, success: false, message: String(format: L("取消剪切失败：%@"), error.localizedDescription))
         }
-        // 剪切已被取消或已被 ⌘V 交给访达移动，剪切记录作废
-        UndoCenter.shared.invalidate(kind: .cut)
-        return response
     }
 
     static func pendingCutPaths() -> [String] {

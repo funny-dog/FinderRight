@@ -71,12 +71,28 @@ public struct CutQueueStore {
     }
 
     /// 用户取消剪切：清空待剪切队列，并作废所有批次及旧版本的恢复记录。
-    public func clear() {
+    /// 仅把“文件已经不存在”视为成功，其余删除错误向上传递。
+    public func clear() throws {
         let fm = FileManager.default
-        try? fm.removeItem(at: queueURL)
-        for url in (try? inflightFiles()) ?? [] {
-            try? fm.removeItem(at: url)
+        try Self.removeIfExists(queueURL, fileManager: fm)
+        for url in try inflightFiles() {
+            try Self.removeIfExists(url, fileManager: fm)
         }
+    }
+
+    private static func removeIfExists(_ url: URL, fileManager: FileManager) throws {
+        do {
+            try fileManager.removeItem(at: url)
+        } catch {
+            if !isMissingFile(error) { throw error }
+        }
+    }
+
+    private static func isMissingFile(_ error: Error) -> Bool {
+        let error = error as NSError
+        return (error.domain == NSCocoaErrorDomain
+                && (error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError))
+            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
     }
 
     /// 原子领取本批队列。改名失败时保留待剪切队列，拒绝开始无恢复保障的移动。
@@ -128,8 +144,14 @@ public struct CutQueueStore {
     }
 
     private func inflightFiles() throws -> [URL] {
-        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
-        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let files: [URL]
+        do {
+            files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        } catch {
+            if Self.isMissingFile(error) { return [] }
+            throw error
+        }
+        return files
             .filter { url in
                 let name = url.lastPathComponent
                 if name == Self.inflightFileName { return true }

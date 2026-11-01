@@ -104,24 +104,27 @@ extension FinderRightService {
         let isBareBz2 = lower.hasSuffix(".bz2") && !isTarBz2
         let isBareXz = lower.hasSuffix(".xz") && !isTarXz
 
-        // 裸 .gz / .bz2 / .xz 单文件（非 tar 归档）：bsdtar 无法识别此类单文件流，使用对应流式解压工具输出到文件
+        // 裸 .gz / .bz2 / .xz 单文件（非 tar 归档）：bsdtar 无法识别此类单文件流，使用对应流式解压工具输出到文件。
+        // 先解到同卷登记的暂存目录，解压成功后再排他落位，避免查重与创建之间的窗口覆盖或截断同名文件。
         if isBareGz || isBareBz2 || isBareXz {
             let rawTargetName = (filename as NSString).deletingPathExtension
             let rawURL = URL(fileURLWithPath: rawTargetName)
-            let rawBase = rawURL.deletingPathExtension().lastPathComponent
             let rawExt = rawURL.pathExtension
 
-            var targetFileURL = dir.appendingPathComponent(rawTargetName)
-            var counter = 2
-            while fileManager.fileExists(atPath: targetFileURL.path) {
-                let candidateName = rawExt.isEmpty ? "\(rawBase)-\(counter)" : "\(rawBase)-\(counter).\(rawExt)"
-                targetFileURL = dir.appendingPathComponent(candidateName)
-                counter += 1
+            let registry = ScratchDirectoryRegistry()
+            let scratch: URL
+            do {
+                scratch = try registry.makeScratchDirectory(in: dir)
+            } catch {
+                serviceLog("创建解压暂存目录失败: \(error.localizedDescription)")
+                return .failure(OperationFailure(message: L("无法在当前目录创建文件")))
             }
+            defer { registry.remove(scratch) }
 
-            fileManager.createFile(atPath: targetFileURL.path, contents: nil)
-            guard let outHandle = try? FileHandle(forWritingTo: targetFileURL) else {
-                serviceLog("无法创建解压目标文件: \(targetFileURL.path)")
+            let tempFileURL = scratch.appendingPathComponent(rawTargetName)
+            fileManager.createFile(atPath: tempFileURL.path, contents: nil)
+            guard let outHandle = try? FileHandle(forWritingTo: tempFileURL) else {
+                serviceLog("无法创建解压暂存文件: \(tempFileURL.path)")
                 return .failure(OperationFailure(message: L("无法在当前目录创建文件")))
             }
 
@@ -131,48 +134,49 @@ extension FinderRightService {
                 do {
                     try XZDecompressor.decompress(from: url, to: outHandle)
                     try? outHandle.close()
-                    DispatchQueue.main.async {
-                        NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
-                    }
-                    serviceLog("decompress single file succeeded: \(targetFileURL.path)")
-                    return .success(targetFileURL)
                 } catch {
                     try? outHandle.close()
-                    try? fileManager.removeItem(at: targetFileURL)
                     serviceLog("decompress .xz failed: \(error)")
                     return .failure(OperationFailure(message: L("文件已损坏或不是有效的 xz 格式")))
                 }
-            }
+            } else {
+                let tool: (executable: String, arguments: [String]) = isBareGz
+                    ? ("/usr/bin/gunzip", ["-kc", archive])
+                    : ("/usr/bin/bunzip2", ["-kc", archive])
 
-            let tool: (executable: String, arguments: [String]) = isBareGz
-                ? ("/usr/bin/gunzip", ["-kc", archive])
-                : ("/usr/bin/bunzip2", ["-kc", archive])
+                let result: ProcessRunner.Result
+                do {
+                    // ProcessRunner 先读完 stderr 再等待退出：错误输出超过管道缓冲时不会死锁
+                    result = try ProcessRunner.run(
+                        executableURL: URL(fileURLWithPath: tool.executable),
+                        arguments: tool.arguments,
+                        currentDirectoryURL: dir,
+                        standardOutput: outHandle)
+                    try? outHandle.close()
+                } catch {
+                    try? outHandle.close()
+                    serviceLog("decompress single file error: \(error.localizedDescription)")
+                    return .failure(OperationFailure(message: error.localizedDescription))
+                }
 
-            do {
-                // ProcessRunner 先读完 stderr 再等待退出：错误输出超过管道缓冲时不会死锁
-                let result = try ProcessRunner.run(
-                    executableURL: URL(fileURLWithPath: tool.executable),
-                    arguments: tool.arguments,
-                    currentDirectoryURL: dir,
-                    standardOutput: outHandle)
-                try? outHandle.close()
-
-                if result.status == 0 {
-                    DispatchQueue.main.async {
-                        NSWorkspace.shared.activateFileViewerSelecting([targetFileURL])
-                    }
-                    serviceLog("decompress single file succeeded: \(targetFileURL.path)")
-                    return .success(targetFileURL)
-                } else {
-                    try? fileManager.removeItem(at: targetFileURL)
+                guard result.status == 0 else {
                     serviceLog("decompress single file failed (exit \(result.status)): \(result.stderr)")
                     return .failure(Self.toolFailure(result))
                 }
+            }
+
+            do {
+                let placed = try ExclusiveRename.move(tempFileURL, into: dir) { n in
+                    ExtractedOutput.candidateName(rawTargetName, keepExtension: !rawExt.isEmpty, attempt: n)
+                }
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.activateFileViewerSelecting([placed])
+                }
+                serviceLog("decompress single file succeeded: \(placed.path)")
+                return .success(placed)
             } catch {
-                try? outHandle.close()
-                try? fileManager.removeItem(at: targetFileURL)
-                serviceLog("decompress single file error: \(error.localizedDescription)")
-                return .failure(OperationFailure(message: error.localizedDescription))
+                serviceLog("decompress single file finalize failed: \(error)")
+                return .failure(OperationFailure(message: (error as? LocalizedError)?.errorDescription ?? String(describing: error)))
             }
         }
 
