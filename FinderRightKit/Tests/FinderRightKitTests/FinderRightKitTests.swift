@@ -1788,11 +1788,11 @@ struct FinderRightKitTestsRunner {
         }
 
         // 30c. 退出开关：关闭后拒绝新任务；只判断空闲挡不住「确认后挤进新任务」
-        runTest("BackgroundJobs.Gate 关闭后拒绝新任务") {
-            let gate = BackgroundJobs.Gate()
-            try assertTrue(gate.isAcceptingJobs, "默认接受")
-            gate.close()
-            try assertTrue(!gate.isAcceptingJobs, "关闭后拒绝")
+        runTest("BackgroundJobs 关闭后拒绝新任务") {
+            let jobs = BackgroundJobs()
+            try assertTrue(jobs.isAcceptingJobs, "默认接受")
+            jobs.close()
+            try assertTrue(!jobs.isAcceptingJobs, "关闭后拒绝")
         }
 
         // 32. IPC 请求闸门：退出排空必须异步——已受理请求可能回到发起关闭的线程完成收尾
@@ -1876,7 +1876,9 @@ struct FinderRightKitTestsRunner {
             let ls = URL(fileURLWithPath: "/bin/ls")
             let requirement = CodeSignatureCheck.designatedRequirement(ofCodeAt: ls) ?? ""
             try assertTrue(requirement.contains("com.apple.ls"), "签名规则应包含标识: \(requirement)")
-            let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls) ?? ""
+            guard case .certificate(let leaf) = CodeSignatureCheck.signatureStatus(ofCodeAt: ls) else {
+                throw TestFailure(message: "系统二进制应为证书签名")
+            }
             try assertEqual(leaf.count, 40, "SHA-1 指纹应为 40 位十六进制")
             try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: "certificate leaf = H\"\(leaf)\""), "应满足自己的叶子证书规则")
             try assertTrue(CodeSignatureCheck.codeAt(ls, satisfies: requirement), "应满足自己的签名规则")
@@ -1903,17 +1905,15 @@ struct FinderRightKitTestsRunner {
             let sign = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/codesign"),
                                              arguments: ["-s", "-", "--force", copy.path])
             try assertEqual(sign.status, 0, "ad-hoc 签名失败: \(sign.stderr)")
-            try assertNil(CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: copy), "ad-hoc 签名没有证书")
             try assertTrue(CodeSignatureCheck.designatedRequirement(ofCodeAt: copy)?.hasPrefix("cdhash") == true, "ad-hoc 签名规则应为 cdhash")
             try assertEqual(CodeSignatureCheck.signatureStatus(ofCodeAt: copy), .adHoc, "应明确识别为 ad-hoc")
         }
 
         runTest("CodeSignatureCheck 区分证书签名与无法读取的签名") {
             let ls = URL(fileURLWithPath: "/bin/ls")
-            guard case .certificate(let leaf) = CodeSignatureCheck.signatureStatus(ofCodeAt: ls) else {
+            guard case .certificate = CodeSignatureCheck.signatureStatus(ofCodeAt: ls) else {
                 throw TestFailure(message: "系统二进制应识别为证书签名")
             }
-            try assertEqual(leaf, CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls), "指纹应与既有接口一致")
             let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try assertEqual(CodeSignatureCheck.signatureStatus(ofCodeAt: missing), .unreadable, "不存在的路径不能当作 ad-hoc")
         }
@@ -1922,7 +1922,7 @@ struct FinderRightKitTestsRunner {
         runTest("UpdatePackageCheck 正常新版本通过校验") {
             let root = try makeUpdateAppFixture(version: "1.2.3", build: "10")
             defer { try? FileManager.default.removeItem(at: root) }
-            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"))
         }
 
         runTest("UpdatePackageCheck 拒绝与预期版本不符或比当前更旧的包") {
@@ -1930,10 +1930,10 @@ struct FinderRightKitTestsRunner {
             defer { try? FileManager.default.removeItem(at: root) }
             try assertThrows(UpdatePackageCheck.Failure.versionMismatch(expected: "1.2.4", actual: "1.2.3"),
                              "检查到 v1.2.4 却下载到 1.2.3") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.4"), signature: .adHoc, currentSignature: .adHoc)
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.4"))
             }
             try assertThrows(UpdatePackageCheck.Failure.notNewer(version: "1.2.3", current: "1.2.3"), "不高于当前版本") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3", current: "1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3", current: "1.2.3"))
             }
         }
 
@@ -1943,48 +1943,71 @@ struct FinderRightKitTestsRunner {
             ])
             defer { try? FileManager.default.removeItem(at: root) }
             do {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"))
                 throw TestFailure(message: "版本不一致应被拒绝")
-            } catch is UpdatePackageCheck.Failure {}
+            } catch let error as UpdatePackageCheck.Failure {
+                if case .inconsistentBundles(let details) = error {
+                    try assertTrue(details.contains("FinderRightMarkdown.appex") && details.contains("1.2.2"), "错误信息应明确指出具体组件与版本")
+                } else {
+                    throw TestFailure(message: "应抛出 inconsistentBundles，实际 \(error)")
+                }
+            } catch {
+                throw TestFailure(message: "应抛出 UpdatePackageCheck.Failure，实际 \(error)")
+            }
             let old = try makeUpdateAppFixture(version: "1.2.3", build: "10", overrides: [
                 "FinderRightSync.appex": ("CFBundleVersion", "9"),
             ])
             defer { try? FileManager.default.removeItem(at: old) }
             do {
-                try UpdatePackageCheck.validate(appAt: old, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                try UpdatePackageCheck.validate(appAt: old, expectation: expectation(version: "v1.2.3"))
                 throw TestFailure(message: "构建号不一致应被拒绝")
-            } catch is UpdatePackageCheck.Failure {}
+            } catch let error as UpdatePackageCheck.Failure {
+                if case .inconsistentBundles(let details) = error {
+                    try assertTrue(details.contains("FinderRightSync.appex"), "构建号不一致应指出具体组件")
+                } else {
+                    throw TestFailure(message: "应抛出 inconsistentBundles，实际 \(error)")
+                }
+            } catch {
+                throw TestFailure(message: "应抛出 UpdatePackageCheck.Failure，实际 \(error)")
+            }
 
             let future = try makeUpdateAppFixture(version: "1.2.3", build: "10", overrides: [
                 "FinderRight.app": ("LSMinimumSystemVersion", "26.0"),
             ])
             defer { try? FileManager.default.removeItem(at: future) }
             try assertThrows(UpdatePackageCheck.Failure.unsupportedSystem(required: "26.0", current: "13.6.1"), "系统不兼容") {
-                try UpdatePackageCheck.validate(appAt: future, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+                try UpdatePackageCheck.validate(appAt: future, expectation: expectation(version: "v1.2.3"))
             }
             try assertTrue(UpdatePackageCheck.version("13.6.1", isAtLeast: "13.0"), "13.6 满足 13.0")
             try assertTrue(!UpdatePackageCheck.version("12.7", isAtLeast: "13.0"), "12.7 不满足 13.0")
             try assertTrue(UpdatePackageCheck.version("14", isAtLeast: "13.0.1"), "14 满足 13.0.1")
         }
 
-        runTest("UpdatePackageCheck 签名读取失败拒装且不放宽证书要求") {
-            let root = try makeUpdateAppFixture(version: "1.2.3", build: "10")
-            defer { try? FileManager.default.removeItem(at: root) }
-            try assertThrows(UpdatePackageCheck.Failure.signatureUnreadable, "读取失败不能降级为只校验 SHA-256") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .unreadable, currentSignature: .certificate(leafSHA1: "AA"))
+        runTest("UpdateIntegrity 校验更新包签名与当前应用一致性") {
+            let missing1 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let missing2 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let ls = URL(fileURLWithPath: "/bin/ls")
+            try assertThrows(UpdateIntegrity.SignatureFailure.currentSignatureUnreadable, "当前应用签名无法读取") {
+                try UpdateIntegrity.verifyUpdateSignatures(candidateApp: ls, currentApp: missing1)
             }
-            try assertThrows(UpdatePackageCheck.Failure.currentSignatureUnreadable, "当前应用读不到签名时同样不能放行") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "AA"), currentSignature: .unreadable)
+            try assertThrows(UpdateIntegrity.SignatureFailure.candidateSignatureUnreadable, "更新包签名无法读取") {
+                try UpdateIntegrity.verifyUpdateSignatures(candidateApp: missing2, currentApp: ls)
             }
-            try assertThrows(UpdatePackageCheck.Failure.currentSignatureUnreadable, "新包是 ad-hoc 也一样拒绝") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .unreadable)
+
+            // 签名可读但标识不符（/bin/ls 虽证书相同但标识是 com.apple.ls）应拒绝
+            try assertThrows(UpdateIntegrity.SignatureFailure.signatureMismatch, "签名可读但应用标识不符") {
+                try UpdateIntegrity.verifyUpdateSignatures(candidateApp: ls, currentApp: ls)
             }
-            try assertThrows(UpdatePackageCheck.Failure.signatureMismatch, "证书签名版本只接受同一证书") {
-                try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "BB"), currentSignature: .certificate(leafSHA1: "AA"))
-            }
-            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .certificate(leafSHA1: "AA"), currentSignature: .certificate(leafSHA1: "AA"))
-            // 当前为 ad-hoc（过渡期）沿用既有策略：依赖前面的 SHA-256，这里不额外放宽也不额外收紧
-            try UpdatePackageCheck.validate(appAt: root, expectation: expectation(version: "v1.2.3"), signature: .adHoc, currentSignature: .adHoc)
+
+            // ad-hoc 旧版过渡期兼容路径：两端均为合法 ad-hoc 时通过
+            let work = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: work) }
+            let copy = work.appendingPathComponent("adhoc-app")
+            try FileManager.default.copyItem(at: ls, to: copy)
+            let sign = try ProcessRunner.run(executableURL: URL(fileURLWithPath: "/usr/bin/codesign"),
+                                             arguments: ["-s", "-", "--force", copy.path])
+            try assertEqual(sign.status, 0, "制作 ad-hoc fixture 失败: \(sign.stderr)")
+            try UpdateIntegrity.verifyUpdateSignatures(candidateApp: copy, currentApp: copy)
         }
 
         runTest("CodeSignatureCheck 按 audit token 校验运行中的进程") {
@@ -2005,7 +2028,9 @@ struct FinderRightKitTestsRunner {
 
         runTest("UpdateIntegrity 签名规则同时约束证书与标识") {
             let ls = URL(fileURLWithPath: "/bin/ls")
-            let leaf = CodeSignatureCheck.leafCertificateSHA1(ofCodeAt: ls) ?? ""
+            guard case .certificate(let leaf) = CodeSignatureCheck.signatureStatus(ofCodeAt: ls) else {
+                throw TestFailure(message: "系统二进制应识别为证书签名")
+            }
             // /bin/ls 与规则证书相同但标识不同，必须被拒绝：只比证书会放行同一证书签出的其他程序
             try assertTrue(!CodeSignatureCheck.codeAt(ls, satisfies: UpdateIntegrity.signingRequirements(leafCertificateSHA1: leaf).app))
             // 同样写法、换成 /bin/ls 自己的标识则应通过：确认规则模板本身语法有效

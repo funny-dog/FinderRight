@@ -45,29 +45,26 @@ public final class BackgroundJobs {
         return true
     }
 
+    /// 是否仍在受理新任务
+    public var isAcceptingJobs: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return open
+    }
+
+    /// 关闭任务入口，不再受理新任务
+    public func close() {
+        lock.lock()
+        open = false
+        lock.unlock()
+    }
+
     /// 关闭后再也不接受新任务，并等待全部在途任务结束；超时返回 false。
     ///
     /// 关闭与等待在同一个锁内完成，避免「检查空闲 → 系统退出」之间挤进新任务。
     public func closeAndWait(timeout: TimeInterval) -> Bool {
-        lock.lock()
-        open = false
-        lock.unlock()
+        close()
         return group.wait(timeout: .now() + timeout) == .success
-    }
-
-    /// 退出流程开关：退出开始后不再接受新任务。
-    ///
-    /// 只看「是否空闲」再退出是不够的——从确认空闲到系统真正退出之间，新到的 IPC 请求仍可能启动任务，
-    /// 随后被系统直接终止。退出流程先关闭本开关，保持关闭直到进程结束。
-    public final class Gate {
-        private let lock = NSLock()
-        private var closed = false
-
-        public init() {}
-
-        public func close() { lock.lock(); closed = true; lock.unlock() }
-
-        public var isAcceptingJobs: Bool { lock.lock(); defer { lock.unlock() }; return !closed }
     }
 
     /// 阻塞等待全部在途任务结束；超时返回 false

@@ -34,22 +34,7 @@ public enum CodeSignatureCheck {
         return SecStaticCodeCheckValidity(code, flags, requirement) == errSecSuccess
     }
 
-    /// 叶子证书的 SHA-1 指纹（大写十六进制，40 位）；ad-hoc 签名没有证书，返回 nil。
-    /// 用 SHA-1 是因为 codesign 的 `certificate leaf = H"…"` 规则本身就以 SHA-1 表示证书
-    public static func leafCertificateSHA1(ofCodeAt url: URL) -> String? {
-        guard let code = staticCode(at: url) else { return nil }
-        var info: CFDictionary?
-        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
-              let certificates = (info as NSDictionary?)?[kSecCodeInfoCertificates] as? [SecCertificate],
-              let leaf = certificates.first else { return nil }
-        let der = SecCertificateCopyData(leaf) as Data
-        return Insecure.SHA1.hash(data: der).map { String(format: "%02X", $0) }.joined()
-    }
-
     /// 签名类型：证书签名返回叶子证书 SHA-1，ad-hoc 返回 `.adHoc`，未签名或读取失败返回 `.unreadable`。
-    ///
-    /// 与 `leafCertificateSHA1` 的区别：那个函数两种情况都返回 nil，自动更新无法区分
-    /// 「明确是 ad-hoc」和「读不到签名」，曾因此把读取失败降级成只校验 SHA-256。
     public static func signatureStatus(ofCodeAt url: URL) -> UpdatePackageCheck.Signature {
         guard let code = staticCode(at: url) else { return .unreadable }
         var info: CFDictionary?

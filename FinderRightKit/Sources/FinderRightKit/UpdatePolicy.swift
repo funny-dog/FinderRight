@@ -25,12 +25,6 @@ public enum UpdateCheckStatus: Equatable, Sendable {
         default: return false
         }
     }
-
-    /// 可以据此开始下载安装的新版本（地址与校验和都已拿到）
-    public var installableVersion: String? {
-        if case .updateAvailable(let version, _, .some, .some) = self { return version }
-        return nil
-    }
 }
 
 /// 带可读描述的更新错误，供 Result 传递

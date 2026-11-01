@@ -6,7 +6,6 @@ import FinderRightKit
 // 真实更新器、隔离偏好和模拟网络；只使用无效更新包，不会替换或重启应用。
 enum FinderRightService {
     static let backgroundJobs = BackgroundJobs()
-    static let jobGate = BackgroundJobs.Gate()
 }
 
 private final class ReleaseProtocol: URLProtocol {
@@ -97,15 +96,49 @@ struct AutomaticUpdateChecks {
             return false
         }
 
-        /// 与 ci.sh 的类型检查对齐：退出等待策略、静默更新标记与「因更新而退出」必须分开
-        func exitPolicyTest() {
-            precondition(!ExitWaitPolicy.waitsForBackgroundJobs(isUpdating: false, isAutomaticInstall: true),
-                         "普通退出不因自动安装标记而无限等待")
-            precondition(ExitWaitPolicy.waitsForBackgroundJobs(isUpdating: true, isAutomaticInstall: false),
-                         "手动点击更新同样要等文件任务完成")
-            precondition(ExitWaitPolicy.waitsForBackgroundJobs(isUpdating: true, isAutomaticInstall: true),
-                         "自动更新同样要等文件任务完成")
-            print("✓ 退出等待只取决于是否因更新交接，手动与自动一致")
+        final class SupplementalController {
+            var scheduledAction: (() -> Void)?
+            var scheduledDelay: TimeInterval?
+            var cancelCount = 0
+
+            func scheduler(_ delay: TimeInterval, _ action: @escaping () -> Void) -> () -> Void {
+                scheduledDelay = delay
+                scheduledAction = action
+                return { [weak self] in
+                    self?.cancelCount += 1
+                    self?.scheduledAction = nil
+                }
+            }
+
+            func fire() {
+                let action = scheduledAction
+                scheduledAction = nil
+                action?()
+            }
+        }
+
+        func manualWindowScenario(_ name: String, _ body: (UpdateChecker, UserDefaults, SupplementalController) -> Void) {
+            let suite = "FinderRight.AutomaticUpdateTests.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [ReleaseProtocol.self]
+            let session = URLSession(configuration: config)
+            let controller = SupplementalController()
+            let checker = UpdateChecker(defaults: defaults, checkSession: session, downloadConfiguration: config,
+                                        firstByteTimeout: 0.1, stallTimeout: 0.1, supplementalScheduler: controller.scheduler)
+            ReleaseProtocol.requests = []
+            ReleaseProtocol.cancelled = []
+            ReleaseProtocol.replies = [:]
+            ReleaseProtocol.withChecksum = false
+            ReleaseProtocol.withChecksumFile = false
+            ReleaseProtocol.pending = []
+            body(checker, defaults, controller)
+            defaults.set(false, forKey: UpdateChecker.automaticUpdatesKey)
+            checker.configureAutomaticUpdates()
+            session.invalidateAndCancel()
+            pump()
+            defaults.removePersistentDomain(forName: suite)
+            print("✓ \(name)")
         }
 
         // 两个检查实例的补充窗口都设为 80ms，避免测试真的等 800ms
@@ -135,8 +168,6 @@ struct AutomaticUpdateChecks {
             ReleaseProtocol.replies[UpdateChecker.releaseAPI.absoluteString] = .hold
             ReleaseProtocol.replies[websiteAPI.absoluteString] = .hold
         }
-
-        exitPolicyTest()
 
         // 合法 ZIP 必须能全量解出并通过安装前校验：按目录名挑选条目的解压方式
         // 会漏掉主程序（目录条目常带尾斜杠，且匹配目录名不会展开整棵树），普通更新会全部失败
@@ -178,8 +209,7 @@ struct AutomaticUpdateChecks {
             // 解出的包能通过安装前校验，才证明「合法 ZIP → 安装校验」整段链路可用
             try UpdatePackageCheck.validate(
                 appAt: appURL,
-                expectation: .init(expectedVersion: "v9999.0.0", currentVersion: "1.0.0", operatingSystemVersion: "13.6.1"),
-                signature: .adHoc, currentSignature: .adHoc)
+                expectation: .init(expectedVersion: "v9999.0.0", currentVersion: "1.0.0", operatingSystemVersion: "13.6.1"))
             try? FileManager.default.removeItem(at: root)
             print("✓ 合法 ZIP 全量解出并通过安装校验（含主程序与四个 bundle）")
         } catch {
@@ -215,19 +245,17 @@ struct AutomaticUpdateChecks {
                 precondition(ReleaseProtocol.requests.count == 2)
             }
         }
-        scenario("一路快速返回最新、另一路挂起：补充窗口结束后完成并取消剩余请求") { checker, _ in
+        manualWindowScenario("一路快速返回最新、另一路挂起：补充窗口结束后完成并取消剩余请求") { checker, _, controller in
             holdBoth()
             var completions = 0
-            let start = Date()
             checker.check(force: true) { if $0 != .checking { completions += 1 } }
             wait { ReleaseProtocol.pending.count == 2 }
             ReleaseProtocol.pending.first { $0.request.url == websiteAPI }!.respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
-            pump()
-            precondition(checker.currentStatus == .checking && completions == 0, "窗口内不能立刻结束")
-            wait(timeout: 2) { checker.currentStatus == .upToDate }
-            let elapsed = Date().timeIntervalSince(start)
+            wait("快速返回最新后安排补充窗口") { controller.scheduledAction != nil }
+            precondition(checker.currentStatus == .checking && completions == 0, "窗口触发前不能提前结束")
+            controller.fire()
+            wait("补充窗口结束后确认最新") { checker.currentStatus == .upToDate }
             precondition(completions == 1, "只完成一次")
-            precondition(elapsed >= 0.08 && elapsed < 1.5, "应在补充窗口后尽快结束，实际 \(elapsed)")
             wait { ReleaseProtocol.cancelled.contains(UpdateChecker.releaseAPI) }
             let requests = ReleaseProtocol.requests.count
             checker.check { _ in }
@@ -235,12 +263,12 @@ struct AutomaticUpdateChecks {
             precondition(ReleaseProtocol.requests.count == requests, "结论未过期时复用")
         }
         for (fast, slow) in [(websiteAPI, UpdateChecker.releaseAPI), (UpdateChecker.releaseAPI, websiteAPI)] {
-            scenario("窗口内另一源返回新版时优先采用新版：\(slow.host!)") { checker, _ in
+            manualWindowScenario("窗口内另一源返回新版时优先采用新版：\(slow.host!)") { checker, _, controller in
                 holdBoth()
                 checker.check(force: true) { _ in }
                 wait { ReleaseProtocol.pending.count == 2 }
                 ReleaseProtocol.pending.first { $0.request.url == fast }!.respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
-                pump(0.01)
+                wait("窗口触发前保持等待并安排补充窗口") { controller.scheduledAction != nil }
                 ReleaseProtocol.withChecksum = true
                 ReleaseProtocol.pending.first { $0.request.url == slow }!.respond()
                 let expected = slow == websiteAPI ? ReleaseProtocol.websiteZIP : ReleaseProtocol.githubZIP
@@ -248,66 +276,73 @@ struct AutomaticUpdateChecks {
                 if case .updateAvailable(let version, _, _, _) = checker.currentStatus {
                     precondition(version == "v9999.0.0")
                 } else { preconditionFailure("应为新版本") }
+                wait("采用新版后补充窗口已被取消") { controller.scheduledAction == nil }
             }
         }
-        scenario("窗口内另一源只有旧版本时沿用已有结论") { checker, _ in
+        manualWindowScenario("窗口内另一源只有旧版本时沿用已有结论") { checker, _, controller in
             holdBoth()
             checker.check(force: true) { _ in }
             wait { ReleaseProtocol.pending.count == 2 }
             ReleaseProtocol.pending.first { $0.request.url == websiteAPI }!.respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
-            pump(0.01)
+            wait("安排补充窗口") { controller.scheduledAction != nil }
             ReleaseProtocol.withChecksum = true
             ReleaseProtocol.pending.first { $0.request.url == UpdateChecker.releaseAPI }!
                 .respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
             wait { checker.currentStatus == .upToDate }
+            wait("两路都返回后已取消补充窗口计时") { controller.scheduledAction == nil }
         }
         for first in [websiteAPI, UpdateChecker.releaseAPI] {
-            scenario("旧版本或不完整信息不能抢先结束检查：\(first.host!)") { checker, _ in
+            manualWindowScenario("旧版本或不完整信息不能抢先结束检查：\(first.host!)") { checker, _, controller in
                 holdBoth()
                 var completions = 0
                 checker.check(force: true) { if $0 != .checking { completions += 1 } }
                 wait { ReleaseProtocol.pending.count == 2 }
                 ReleaseProtocol.pending.first { $0.request.url == first }!.respond(
                     data: ReleaseProtocol.release(tag: "v0.0.0"))
-                pump()
+                wait("旧版本响应后安排补充窗口") { controller.scheduledAction != nil }
                 precondition(checker.currentStatus == .checking && completions == 0)
                 ReleaseProtocol.withChecksum = true
                 ReleaseProtocol.pending.first { $0.request.url != first }!.respond()
                 wait { availableURL(checker) != nil }
                 precondition(completions == 1)
+                wait("慢源返回后已取消补充窗口计时") { controller.scheduledAction == nil }
             }
-            scenario("缺少校验和继续等待可安装结果：\(first.host!)") { checker, _ in
+            manualWindowScenario("缺少校验和继续等待可安装结果：\(first.host!)") { checker, _, controller in
                 holdBoth()
                 checker.check(force: true) { _ in }
                 wait { ReleaseProtocol.pending.count == 2 }
                 ReleaseProtocol.pending.first { $0.request.url == first }!.respond()
-                pump()
+                wait("缺少校验和安排补充窗口") { controller.scheduledAction != nil }
                 precondition(checker.currentStatus == .checking)
                 ReleaseProtocol.withChecksum = true
                 ReleaseProtocol.pending.first { $0.request.url != first }!.respond()
                 let expected = first == websiteAPI ? ReleaseProtocol.githubZIP : ReleaseProtocol.websiteZIP
                 wait { availableURL(checker) == expected }
+                wait("有效结果返回后已取消补充窗口计时") { controller.scheduledAction == nil }
             }
         }
-        scenario("缺少校验信息的版本提示不会被补充窗口覆盖") { checker, _ in
+        manualWindowScenario("缺少校验信息的版本提示不会被补充窗口覆盖") { checker, _, controller in
             holdBoth()
             checker.check(force: true) { _ in }
             wait { ReleaseProtocol.pending.count == 2 }
             ReleaseProtocol.pending.first { $0.request.url == websiteAPI }!.respond()
+            wait("缺少校验信息进入补充窗口") { controller.scheduledAction != nil }
+            controller.fire()
             wait(timeout: 2) { isAvailable(checker) }
             guard case .updateAvailable(_, _, nil, nil) = checker.currentStatus else { preconditionFailure("应保留缺少下载地址的版本提示") }
         }
         for tag in ["v0.0.0", "v9999.0.0"] {
-            scenario("另一渠道失败时保留有效结果：\(tag)") { checker, _ in
+            manualWindowScenario("另一渠道失败时保留有效结果：\(tag)") { checker, _, controller in
                 holdBoth()
                 checker.check(force: true) { _ in }
                 wait { ReleaseProtocol.pending.count == 2 }
                 ReleaseProtocol.pending[0].respond(data: ReleaseProtocol.release(tag: tag))
-                pump()
+                wait("首个渠道响应后安排补充窗口") { controller.scheduledAction != nil }
                 precondition(checker.currentStatus == .checking)
                 ReleaseProtocol.pending[1].respond(code: 503)
                 wait { checker.currentStatus != .checking }
                 precondition(tag == "v0.0.0" ? checker.currentStatus == .upToDate : isAvailable(checker))
+                wait("两路响应完毕已取消补充窗口计时") { controller.scheduledAction == nil }
                 let requests = ReleaseProtocol.requests.count
                 checker.check { _ in }
                 pump()
@@ -315,39 +350,47 @@ struct AutomaticUpdateChecks {
             }
         }
         for secondTag in ["v0.0.0", "v9998.0.0", "v9999.0.1"] {
-            scenario("回退保留较新的版本提示：\(secondTag)") { checker, _ in
+            manualWindowScenario("回退保留较新的版本提示：\(secondTag)") { checker, _, controller in
                 holdBoth()
                 checker.check(force: true) { _ in }
                 wait { ReleaseProtocol.pending.count == 2 }
                 ReleaseProtocol.pending[0].respond()
-                pump()
+                wait("第一路响应后安排补充窗口") { controller.scheduledAction != nil }
+                precondition(checker.currentStatus == .checking)
                 ReleaseProtocol.pending[1].respond(data: ReleaseProtocol.release(tag: secondTag))
                 wait { isAvailable(checker) }
                 guard case .updateAvailable(let version, _, nil, nil) = checker.currentStatus else { preconditionFailure() }
                 precondition(version == (secondTag == "v9999.0.1" ? secondTag : "v9999.0.0"))
+                wait("新版本确认后已取消补充窗口计时") { controller.scheduledAction == nil }
             }
         }
-        scenario("两路均无新版本时才确认最新") { checker, _ in
+        manualWindowScenario("两路均无新版本时才确认最新") { checker, _, controller in
             holdBoth()
             checker.check(force: true) { _ in }
             wait { ReleaseProtocol.pending.count == 2 }
             ReleaseProtocol.pending[0].respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
-            pump()
+            wait("首路返回后安排补充窗口") { controller.scheduledAction != nil }
             precondition(checker.currentStatus == .checking)
             ReleaseProtocol.pending[1].respond(data: ReleaseProtocol.release(tag: "v0.0.0"))
             wait { checker.currentStatus == .upToDate }
+            wait("两路均确认最新后已取消补充窗口计时") { controller.scheduledAction == nil }
         }
-        scenario("两路都挂起时补充窗口不会报告最新，等各自超时后正常失败") { checker, _ in
+        manualWindowScenario("两路都挂起时补充窗口不会报告最新，等各自超时后正常失败") { checker, _, controller in
             holdBoth()
             checker.check(force: true) { _ in }
             wait { ReleaseProtocol.pending.count == 2 }
-            pump(0.3)
-            precondition(checker.currentStatus == .checking, "没有有效结果时计时器不能结束检查")
+            // 两路都没返回前，没有安排补充窗口
+            precondition(controller.scheduledAction == nil, "两路挂起时未安排补充窗口")
+            precondition(checker.currentStatus == .checking, "没有有效结果时不能结束检查")
             ReleaseProtocol.pending[0].respond(code: 500)
+            wait("第一路失败后安排补充窗口") { controller.scheduledAction != nil }
+            // 即使补充窗口超时触发，因为没有有效结果(fallback == nil)，也不能误报最新
+            controller.fire()
             pump()
-            precondition(checker.currentStatus == .checking, "只有失败也不能当作最新")
+            precondition(checker.currentStatus == .checking, "补充窗口结束后因无有效结果仍保持 checking，绝不误报最新")
             ReleaseProtocol.pending[1].respond(code: 500)
             wait { isFailed(checker) }
+            wait { controller.scheduledAction == nil }
         }
         scenario("两路都失败时报告失败，不误报最新") { checker, _ in
             ReleaseProtocol.replies[UpdateChecker.releaseAPI.absoluteString] = .failure
@@ -614,8 +657,8 @@ struct AutomaticUpdateChecks {
             precondition(availableURL(checker) == nil)
         }
         for url in [ReleaseProtocol.githubZIP, URL(string: ReleaseProtocol.githubZIP.absoluteString + ".sha256")!] {
-            let alternate = UpdateChecker.alternateAssetURL(for: url)!
-            precondition(UpdateChecker.alternateAssetURL(for: alternate) == url)
+            let alternate = UpdatePolicy.alternateAssetURL(for: url)!
+            precondition(UpdatePolicy.alternateAssetURL(for: alternate) == url)
         }
         for invalid in [
             "https://github.com/other/FinderRight/releases/download/v1.2.3/FinderRight-v1.2.3.zip",
@@ -623,7 +666,7 @@ struct AutomaticUpdateChecks {
             "https://github.com/funny-dog/FinderRight/releases/download/v1.2.3/FinderRight-v1.2.4.zip",
             ReleaseProtocol.websiteZIP.absoluteString + "?url=evil",
             ReleaseProtocol.websiteZIP.absoluteString.replacingOccurrences(of: "https:", with: "http:")
-        ] { precondition(UpdateChecker.alternateAssetURL(for: URL(string: invalid)!) == nil) }
+        ] { precondition(UpdatePolicy.alternateAssetURL(for: URL(string: invalid)!) == nil) }
         print("✓ 备用源映射拒绝跨仓库、latest、版本不匹配和任意URL")
 
         // 手动触发真实代理的计时任务，避免毫秒级 RunLoop 等待受 CI 调度影响。

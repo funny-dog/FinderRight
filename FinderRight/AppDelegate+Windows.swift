@@ -174,13 +174,6 @@ extension AppDelegate {
 
     // MARK: - 窗口与激活策略
 
-    /// 打开普通窗口（设置/引导）前调用：
-    /// accessory App 无法正常显示并聚焦窗口，先临时切为 regular 再激活。
-    func beginShowingStandardWindow() {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
     /// 标准窗口关闭后，如果用户没要求常驻 Dock，且已无可见标准窗口，则切回 accessory
     @objc func windowWillClose(_ note: Notification) {
         if let closing = note.object as? NSWindow {

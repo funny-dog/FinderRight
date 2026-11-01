@@ -86,11 +86,6 @@ public enum ServiceInvocationPolicy {
         urls.filter { ArchiveKind.isArchive(fileName: $0.lastPathComponent) }
     }
 
-    /// 校验输入项非空
-    public static func validateNonEmpty(urls: [URL]) -> Bool {
-        !urls.isEmpty
-    }
-
     /// 校验常用目录传输前置条件
     public static func validateFavoritesTransfer(items: [URL], favorites: [String]) -> Bool {
         !items.isEmpty && !favorites.isEmpty

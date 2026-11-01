@@ -32,11 +32,47 @@ public enum UpdateIntegrity {
 }
 
 extension UpdateIntegrity {
+    public enum SignatureFailure: Error, Equatable, LocalizedError {
+        case candidateSignatureUnreadable
+        case currentSignatureUnreadable
+        case signatureMismatch
+
+        public var errorDescription: String? {
+            switch self {
+            case .candidateSignatureUnreadable:
+                return NSLocalizedString("无法读取更新包的代码签名，已拒绝安装", comment: "update error")
+            case .currentSignatureUnreadable:
+                return NSLocalizedString("无法读取当前应用的代码签名，已拒绝安装", comment: "update error")
+            case .signatureMismatch:
+                return NSLocalizedString("更新包的签名与当前版本不一致，已拒绝安装", comment: "update error")
+            }
+        }
+    }
+
     /// 新版本主 App 与扩展必须满足的签名规则：与当前运行版本由同一张证书签发，且 bundle 标识不变。
     ///
-    /// 只有当前版本是证书签名时才能使用（ad-hoc 签名没有证书可比对，见 CodeSignatureCheck.leafCertificateSHA1）。
+    /// 只有当前版本是证书签名时才能使用（ad-hoc 签名没有证书可比对，见 CodeSignatureCheck.signatureStatus）。
     public static func signingRequirements(leafCertificateSHA1 leaf: String) -> (app: String, appex: String) {
         ("identifier \"\(IPCBridge.mainAppBundleIdentifier)\" and certificate leaf = H\"\(leaf)\"",
          "identifier \"\(IPCBridge.extensionBundleIdentifier)\" and certificate leaf = H\"\(leaf)\"")
+    }
+
+    /// 校验更新包签名与当前运行应用签名的兼容性与一致性。
+    /// 集中处理签名策略：真正的签名有效性、标识、嵌套代码校验，以及读取失败时拒装。
+    public static func verifyUpdateSignatures(candidateApp: URL, currentApp: URL) throws {
+        let currentSig = CodeSignatureCheck.signatureStatus(ofCodeAt: currentApp)
+        let candidateSig = CodeSignatureCheck.signatureStatus(ofCodeAt: candidateApp)
+
+        guard currentSig != .unreadable else { throw SignatureFailure.currentSignatureUnreadable }
+        guard candidateSig != .unreadable else { throw SignatureFailure.candidateSignatureUnreadable }
+
+        if case .certificate(let leaf) = currentSig {
+            let required = signingRequirements(leafCertificateSHA1: leaf)
+            let syncAppex = candidateApp.appendingPathComponent("Contents/PlugIns/FinderRightSync.appex")
+            guard CodeSignatureCheck.codeAt(candidateApp, satisfies: required.app),
+                  CodeSignatureCheck.codeAt(syncAppex, satisfies: required.appex) else {
+                throw SignatureFailure.signatureMismatch
+            }
+        }
     }
 }

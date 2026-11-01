@@ -117,9 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// （粘贴另有崩溃恢复兜底）。等待期间顺手关闭任务入口，避免「确认空闲」之后又挤进新任务。
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let jobs = FinderRightService.backgroundJobs
-        // 先关闭两处入口；已受理的 IPC 请求可能还要回主线程完成（例如写剪贴板），
+        // 先关闭后台任务入口与 IPC 监听；已受理的 IPC 请求可能还要回主线程完成（例如写剪贴板），
         // 主线程必须保持可调度，所有等待都放在后台线程
-        FinderRightService.jobGate.close()
+        jobs.close()
         let quittingForUpdate = UpdateChecker.shared.isInstallingUpdate
         let ipcDrained = DispatchSemaphore(value: 0)
         IPCWatcher.shared.shutdown { ipcDrained.signal() }

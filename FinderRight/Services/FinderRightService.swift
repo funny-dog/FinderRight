@@ -35,13 +35,9 @@ final class FinderRightService {
     /// 在途的压缩 / 解压 / 粘贴 / 图片处理任务。AppDelegate 在退出前等待它们完成（见 applicationShouldTerminate）
     static let backgroundJobs = BackgroundJobs()
 
-    /// 退出流程开关：关闭后不再接受新的后台文件任务（见 AppDelegate.applicationShouldTerminate）
-    static let jobGate = BackgroundJobs.Gate()
-
     /// 启动后台文件任务；退出流程已开始时返回 false，调用方应给出「正在退出」的失败结果
     static func runGuarded(on queue: DispatchQueue, work: @escaping () -> Void) -> Bool {
-        guard jobGate.isAcceptingJobs else { return false }
-        return backgroundJobs.run(on: queue, work)
+        backgroundJobs.run(on: queue, work)
     }
 
     /// 拒绝新任务时的 IPC 结果：如实告诉请求方已经退出，而不是假装已受理
@@ -112,8 +108,9 @@ final class FinderRightService {
                 }
             }
         }
-        let isImageAction = (req.action == "convertImage" || req.action == "scaleImage")
-        if !isImageAction {
+        // 图片转换/缩放与哈希复制支持批量容错与逐项过滤，不因单项失效而拒绝整批
+        let skipsBatchPrecheck = (req.action == "convertImage" || req.action == "scaleImage" || req.action == "copyFileHash")
+        if !skipsBatchPrecheck {
             let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
             for (key, role) in arrayKeys {
                 if let paths = req.payload[key]?.stringArrayValue {

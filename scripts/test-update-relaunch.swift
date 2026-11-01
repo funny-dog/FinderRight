@@ -8,7 +8,6 @@ import FinderRightKit
 
 enum FinderRightService {
     static let backgroundJobs = BackgroundJobs()
-    static let jobGate = BackgroundJobs.Gate()
 }
 
 @main

@@ -14,7 +14,6 @@ import FinderRightKit
 final class IPCWatcher {
 
     private let service = FinderRightService()
-    private let queue: DispatchQueue
     /// 受理与排空经同一把锁登记到同一串行队列：关闭入口后，排空回调一定排在所有已受理请求之后
     private let requestGate: RequestDrainGate
 
@@ -22,7 +21,6 @@ final class IPCWatcher {
 
     private init() {
         let queue = DispatchQueue(label: "com.finderright.app.ipc", qos: .userInitiated)
-        self.queue = queue
         self.requestGate = RequestDrainGate(queue: queue)
     }
 

@@ -55,24 +55,14 @@ extension FinderRightService {
                 let source = URL(fileURLWithPath: (item as NSString).expandingTildeInPath).standardizedFileURL
                 let itemName = source.lastPathComponent
 
-                // 1. 检查源文件是否存在且为普通可读文件
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir),
-                      !isDir.boolValue,
-                      FileManager.default.isReadableFile(atPath: source.path) else {
-                    serviceLog("图片源文件不存在或不可读: \(source.path)")
-                    failures.append((itemName, String(format: L("文件不存在：%@"), itemName)))
-                    return
-                }
-
-                // 2. 源路径白名单校验
+                // 1. 源路径白名单校验
                 guard isPathAllowed(source.path, role: .source) else {
                     serviceLog("图片源路径越界被拦截: \(source.path)")
                     failures.append((itemName, String(format: L("路径越界：安全策略拒绝访问 %@"), source.path)))
                     return
                 }
 
-                // 3. 目标目录白名单校验
+                // 2. 目标目录白名单校验
                 let directory = source.deletingLastPathComponent()
                 guard isPathAllowed(directory.path, role: .destination) else {
                     serviceLog("图片输出目录越界被拦截: \(directory.path)")
@@ -80,7 +70,7 @@ extension FinderRightService {
                     return
                 }
 
-                // 4. 执行 ImageIO 转换或缩放
+                // 3. 执行 ImageIO 转换或缩放（底层统一负责文件类型判定与读取校验）
                 do {
                     let outputURL = try ImageTransformer.process(
                         sourceURL: source,

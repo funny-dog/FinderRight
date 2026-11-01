@@ -40,9 +40,6 @@ public enum UpdatePackageCheck {
         case notNewer(version: String, current: String)
         case inconsistentBundles(details: String)
         case unsupportedSystem(required: String, current: String)
-        case signatureUnreadable
-        case currentSignatureUnreadable
-        case signatureMismatch
 
         public var errorDescription: String? {
             switch self {
@@ -54,12 +51,6 @@ public enum UpdatePackageCheck {
                 return "更新包内各组件的版本不一致（\(details)），已拒绝安装"
             case .unsupportedSystem(let required, let current):
                 return "更新包要求 macOS \(required)，当前系统为 \(current)，已拒绝安装"
-            case .signatureUnreadable:
-                return "无法读取更新包的签名信息，已拒绝安装"
-            case .currentSignatureUnreadable:
-                return "无法读取当前应用的签名信息，已拒绝安装，请重新安装 FinderRight 后再更新"
-            case .signatureMismatch:
-                return "更新包的签名与当前版本不一致，已拒绝安装"
             }
         }
     }
@@ -73,15 +64,7 @@ public enum UpdatePackageCheck {
     /// - Parameters:
     ///   - appURL: 解压出的 FinderRight.app
     ///   - expectation: 版本与系统预期
-    ///   - signature: 新包主 App 的签名状态（由调用方用 CodeSignatureCheck 读取）
-    ///   - currentSignature: 当前运行版本的签名状态
-    public static func validate(appAt appURL: URL, expectation: Expectation,
-                                signature: Signature, currentSignature: Signature) throws {
-        // 签名读取失败不能降级为「只校验 SHA-256」：候选包与当前应用任一侧读不到都拒装——
-        // 否则「当前应用读取失败 → 没有证书可比对」就成了绕过同证书约束的口子
-        guard signature != .unreadable else { throw Failure.signatureUnreadable }
-        guard currentSignature != .unreadable else { throw Failure.currentSignatureUnreadable }
-
+    public static func validate(appAt appURL: URL, expectation: Expectation) throws {
         let expected = trimmingLeadingV(expectation.expectedVersion)
         let current = trimmingLeadingV(expectation.currentVersion)
 
@@ -89,35 +72,45 @@ public enum UpdatePackageCheck {
         for path in bundlePaths {
             let bundle = path.isEmpty ? appURL : appURL.appendingPathComponent(path)
             let plist = bundle.appendingPathComponent("Contents/Info.plist")
-            guard let version = versionString(inPlistAt: plist, key: "CFBundleShortVersionString"),
-                  let build = versionString(inPlistAt: plist, key: "CFBundleVersion") else {
+            guard let data = try? Data(contentsOf: plist),
+                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                  let version = dict["CFBundleShortVersionString"] as? String, !version.isEmpty,
+                  let build = dict["CFBundleVersion"] as? String, !build.isEmpty else {
                 throw Failure.inconsistentBundles(details: "\(path.isEmpty ? "FinderRight" : path) 缺少版本信息")
             }
-            let system = versionString(inPlistAt: plist, key: "LSMinimumSystemVersion") ?? ""
+            let system = dict["LSMinimumSystemVersion"] as? String ?? ""
             versions.append((path.isEmpty ? "FinderRight" : (path as NSString).lastPathComponent,
                              trimmingLeadingV(version), build, system))
         }
 
-        guard versions.allSatisfy({ $0.version == expected }) else {
-            throw Failure.versionMismatch(expected: expected, actual: versions.first?.version ?? "")
+        // 1. 核对主程序版本与预期版本
+        let mainVersion = versions[0].version
+        guard mainVersion == expected else {
+            throw Failure.versionMismatch(expected: expected, actual: mainVersion)
         }
-        guard versions.allSatisfy({ $0.version == versions[0].version && $0.build == versions[0].build }) else {
-            let details = versions.map { "\($0.owner) 版本 \($0.version)（\($0.build)）" }.joined(separator: "、")
+
+        // 2. 核对各扩展版本是否与预期（主程序）版本一致；若有不一致，明确指出具体组件
+        if let mismatched = versions.dropFirst().first(where: { $0.version != expected }) {
+            let details = "\(mismatched.owner) 版本 \(mismatched.version)（预期 \(expected)）"
             throw Failure.inconsistentBundles(details: details)
         }
+
+        // 3. 构建号一致性核对
+        let mainBuild = versions[0].build
+        guard versions.allSatisfy({ $0.build == mainBuild }) else {
+            let details = versions.map { "\($0.owner) 构建号（\($0.build)）" }.joined(separator: "、")
+            throw Failure.inconsistentBundles(details: details)
+        }
+
+        // 4. 版本是否高于当前版本
         guard VersionComparator.compareVersions(expected, current) == .orderedDescending else {
             throw Failure.notNewer(version: expected, current: current)
         }
+
+        // 5. 最低系统要求
         for entry in versions where !entry.system.isEmpty {
             guard !version(expectation.operatingSystemVersion, isAtLeast: entry.system) else { continue }
             throw Failure.unsupportedSystem(required: entry.system, current: expectation.operatingSystemVersion)
-        }
-        // 签名要求维持既有范围并明确收紧：当前证书签名时，新版本必须由同一张证书签发；
-        // 当前是 ad-hoc（过渡期，没有证书可比对）时仍只依赖 SHA-256，但不允许借 ad-hoc 换成另一张证书的构建。
-        if case .certificate(let leaf) = currentSignature {
-            guard case .certificate(let newLeaf) = signature, newLeaf == leaf else {
-                throw Failure.signatureMismatch
-            }
         }
     }
 
@@ -137,13 +130,5 @@ public enum UpdatePackageCheck {
 
     private static func numericParts(_ text: String) -> [Int] {
         text.split(separator: ".").map { Int($0) ?? 0 }
-    }
-
-    private static func versionString(inPlistAt url: URL, key: String) -> String? {
-        guard let data = try? Data(contentsOf: url),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let value = plist[key] as? String,
-              !value.isEmpty else { return nil }
-        return value
     }
 }

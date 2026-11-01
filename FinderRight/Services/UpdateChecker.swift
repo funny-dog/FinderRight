@@ -27,8 +27,10 @@ public final class UpdateChecker: NSObject {
     private let firstByteTimeout: TimeInterval
     private let stallTimeout: TimeInterval
     private let supplementalWindow: TimeInterval
+    public typealias SupplementalScheduler = (_ delay: TimeInterval, _ action: @escaping () -> Void) -> () -> Void
+    private let supplementalScheduler: SupplementalScheduler
     private var checkTasks: [URLSessionDataTask] = []
-    private var supplementalWork: DispatchWorkItem?
+    private var cancelSupplementalTimer: (() -> Void)?
     private var checkGeneration = 0
     private var automaticUpdateTimer: Timer?
     private var automaticUpdateGeneration = 0
@@ -43,13 +45,19 @@ public final class UpdateChecker: NSObject {
     init(defaults: UserDefaults = .standard, checkSession: URLSession = .shared,
          downloadConfiguration: URLSessionConfiguration = .default,
          firstByteTimeout: TimeInterval = 3, stallTimeout: TimeInterval = 10,
-         supplementalWindow: TimeInterval = UpdatePolicy.supplementalCheckWindow) {
+         supplementalWindow: TimeInterval = UpdatePolicy.supplementalCheckWindow,
+         supplementalScheduler: @escaping SupplementalScheduler = { delay, action in
+             let item = DispatchWorkItem(block: action)
+             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+             return { item.cancel() }
+         }) {
         self.defaults = defaults
         self.checkSession = checkSession
         self.downloadConfiguration = downloadConfiguration
         self.firstByteTimeout = firstByteTimeout
         self.stallTimeout = stallTimeout
         self.supplementalWindow = supplementalWindow
+        self.supplementalScheduler = supplementalScheduler
         super.init()
     }
 
@@ -169,10 +177,10 @@ public final class UpdateChecker: NSObject {
         // 首个「没有可安装新版」的结论之后，给另一渠道 800 毫秒补充窗口；
         // 窗口内先到的新版优先，窗口结束用已有结论收尾，两路都没有效结果则继续等各自超时。
         func scheduleSupplementalWindow() {
-            guard supplementalWork == nil, !finished, remaining > 0 else { return }
-            let work = DispatchWorkItem { [weak self] in
+            guard cancelSupplementalTimer == nil, !finished, remaining > 0 else { return }
+            cancelSupplementalTimer = supplementalScheduler(supplementalWindow) { [weak self] in
                 guard let self, !finished, self.checkGeneration == generation else { return }
-                self.supplementalWork = nil
+                self.cancelSupplementalTimer = nil
                 switch UpdatePolicy.concludeSupplementalWindow(fallback: fallback) {
                 case .finish(let status, let recordSuccessDate):
                     finish(status, recordSuccessDate: recordSuccessDate)
@@ -180,8 +188,6 @@ public final class UpdateChecker: NSObject {
                     break
                 }
             }
-            supplementalWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + supplementalWindow, execute: work)
         }
 
         checkTasks = sources.map { source in
@@ -217,13 +223,8 @@ public final class UpdateChecker: NSObject {
     }
 
     private func cancelSupplementalWindow() {
-        supplementalWork?.cancel()
-        supplementalWork = nil
-    }
-
-    /// 双向映射仅限固定版本 ZIP 及其校验和；不允许任意 URL、查询串或 latest。
-    static func alternateAssetURL(for url: URL) -> URL? {
-        UpdatePolicy.alternateAssetURL(for: url)
+        cancelSupplementalTimer?()
+        cancelSupplementalTimer = nil
     }
 
     /// 开始下载并自动安装更新
@@ -413,25 +414,13 @@ public final class UpdateChecker: NSObject {
             //    不要按文件名挑选条目——ZIP 里目录条目常带尾斜杠，按名字匹配会漏掉主程序
             let extractDir = try Self.extractUpdatePackage(from: zipURL, into: baseDir)
 
-            // 2. 验签：新版本（主 App 与扩展）必须与当前运行版本由同一张证书签发、标识不变。
-            //    SHA-256 只能证明下载没损坏；发布渠道本身被冒用时，只有签名能挡住。
-            let currentSignature = CodeSignatureCheck.signatureStatus(ofCodeAt: Bundle.main.bundleURL)
-            let newSignature = CodeSignatureCheck.signatureStatus(ofCodeAt: extractDir)
-            if case .certificate(let leaf) = currentSignature {
-                let required = UpdateIntegrity.signingRequirements(leafCertificateSHA1: leaf)
-                let newAppex = extractDir.appendingPathComponent("Contents/PlugIns/FinderRightSync.appex")
-                guard CodeSignatureCheck.codeAt(extractDir, satisfies: required.app),
-                      CodeSignatureCheck.codeAt(newAppex, satisfies: required.appex) else {
-                    cleanupAndFail(NSError(domain: "UpdateChecker", code: 4, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("更新包的签名与当前版本不一致，已拒绝安装", comment: "update error")]))
-                    return
-                }
-            }
+            // 2. 验签：集中签名策略（有效性、标识、嵌套代码、同证书约束，读取失败即拒装）
+            try UpdateIntegrity.verifyUpdateSignatures(candidateApp: extractDir, currentApp: Bundle.main.bundleURL)
 
             // 3. 版本、四个 bundle 的一致性、系统要求：检查到的版本必须一路对得上
             let expectation = UpdatePackageCheck.Expectation(expectedVersion: version, currentVersion: currentAppVersion,
                                                              operatingSystemVersion: Self.operatingSystemVersionString())
-            try UpdatePackageCheck.validate(appAt: extractDir, expectation: expectation,
-                                            signature: newSignature, currentSignature: currentSignature)
+            try UpdatePackageCheck.validate(appAt: extractDir, expectation: expectation)
 
             // 4. 确定目标路径：优先当前运行路径；若非 /Applications 且 /Applications 存在，则覆盖 /Applications
             var targetAppURL = Bundle.main.bundleURL
@@ -700,12 +689,6 @@ public final class UpdateChecker: NSObject {
         finish
         exit 0
         """
-    }
-
-    /// 比较两个版本字符串（例如 "v1.1.5" vs "1.1.4"）
-    /// 返回 .orderedDescending 表示 v1 > v2
-    public static func compareVersions(_ v1: String, _ v2: String) -> ComparisonResult {
-        VersionComparator.compareVersions(v1, v2)
     }
 }
 
