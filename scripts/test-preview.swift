@@ -80,6 +80,17 @@ struct PreviewChecks {
         outline.expandItem(directory)
         wait { directory.loaded }
         precondition(directory.children.count == 1 && directory.children[0].name == "子目录")
+        outline.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        let rowsBeforeClose = outline.numberOfRows
+        let selectedBeforeClose = (outline.item(atRow: 0) as! PreviewNode).path
+        controller.viewDidDisappear()
+        precondition(outline.numberOfRows == 0, "关闭后释放目录树")
+        controller.viewWillAppear()
+        wait { outline.numberOfRows == rowsBeforeClose }
+        let restored = (0..<outline.numberOfRows).compactMap { outline.item(atRow: $0) as? PreviewNode }
+            .first { $0.name == "目录" }!
+        precondition(restored.loaded && outline.isItemExpanded(restored), "重新显示时恢复已展开目录")
+        precondition((outline.item(atRow: outline.selectedRow) as? PreviewNode)?.path == selectedBeforeClose)
         prepare(controller, zip)
         precondition(outline.numberOfRows == 1)
         let archiveDirectory = outline.item(atRow: 0) as! PreviewNode
@@ -122,6 +133,13 @@ struct PreviewChecks {
         let footer = controller.view.subviews.compactMap { $0 as? NSStackView }.first!
         precondition(controller.view.bounds.contains(footer.frame), "状态栏必须在预览边界内")
         precondition(footer.frame.maxY < scroll.frame.minY, "状态栏不能与内容区重叠")
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 150))
+        let positionBeforeClose = scroll.contentView.bounds.origin
+        controller.viewDidDisappear()
+        precondition(outline.numberOfRows == 0)
+        controller.viewWillAppear()
+        wait { outline.numberOfRows == 30 }
+        precondition(abs(scroll.contentView.bounds.origin.y - positionBeforeClose.y) < 1, "目录重载后恢复滚动位置")
         let config = root.appendingPathComponent("sample.toml")
         try Data("name = \"中文\"\n".utf8).write(to: config)
         prepare(controller, config)
@@ -142,6 +160,10 @@ struct PreviewChecks {
         precondition(partialText.attribute(.foregroundColor, at: partialText.length - 3, effectiveRange: nil) as? NSColor != NSColor.textColor,
                      "截断提示后仍需保留语法着色")
         let literal = DocumentPreviewView.content(for: .text("<script>bad()</script>"), text: { $0 })
+        var cancellationChecks = 0
+        let abandoned = DocumentPreviewView.content(for: .markdown("# obsolete\nbody", frontMatter: nil), text: { $0 },
+            isCancelled: { cancellationChecks += 1; return cancellationChecks >= 3 })
+        precondition(abandoned.length == 0 && cancellationChecks == 3, "系统 Markdown 解析后仍须检查取消")
         precondition(literal.string == "<script>bad()</script>")
         precondition(literal.attribute(.attachment, at: 0, effectiveRange: nil) == nil)
 
@@ -202,6 +224,31 @@ struct PreviewChecks {
         wait { cancelled && newestFinished }
         precondition(document.textView.string.contains("苹果") && !document.textView.string.contains("print(1)"),
                      "快速切换文档后，旧的后台富文本结果不能覆盖新预览")
+        controller.viewDidDisappear()
+        precondition(document.textView.string.isEmpty, "关闭后释放富文本")
+        controller.viewWillAppear()
+        wait { document.textView.string.contains("苹果") }
+
+        let paused = PreviewController()
+        let pausedDocument = paused.view.subviews.compactMap { $0 as? DocumentPreviewView }.first!
+        let gate = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+        paused.queue.async { entered.signal(); gate.wait() }
+        entered.wait()
+        var callbacks = 0
+        for url in [notebook, database] {
+            paused.preparePreviewOfFile(at: url) { error in
+                precondition(Thread.isMainThread && (error as? CocoaError)?.code == .userCancelled)
+                callbacks += 1
+            }
+        }
+        paused.viewDidDisappear()
+        wait { callbacks == 2 }
+        precondition(pausedDocument.textView.string.isEmpty)
+        gate.signal()
+        paused.viewWillAppear()
+        wait { pausedDocument.textView.string.contains("苹果") }
+        precondition(callbacks == 2, "过期工作返回不能重复回调")
         prepare(controller, zip)
         precondition(document.isHidden && !scroll.isHidden && outline.numberOfRows == 1)
         let tar = root.appendingPathComponent("sample.tar")

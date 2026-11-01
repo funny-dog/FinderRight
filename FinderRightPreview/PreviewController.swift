@@ -13,10 +13,15 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
     private var showingDocument = false
     private let status = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
-    private let queue = DispatchQueue(label: "com.finderright.preview.read", qos: .userInitiated)
+    let queue = DispatchQueue(label: "com.finderright.preview.read", qos: .userInitiated)
     private var roots: [PreviewNode] = []
     private var folderURL: URL?
-    private var generation = UUID()
+    private var request: PreviewRequest?
+    private var sourceURL: URL?
+    private var needsReload = false
+    private var expandedPaths: Set<String> = []
+    private var savedScroll: NSPoint?
+    private var savedSelection: String?
     private var truncated = false
     private var sourceName = ""
     private var pendingFolders = 0
@@ -112,8 +117,16 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
 
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
         _ = view
-        let current = UUID()
-        generation = current
+        request?.cancel()
+        if !needsReload || sourceURL != url {
+            expandedPaths = []
+            savedScroll = nil
+            savedSelection = nil
+        }
+        sourceURL = url
+        needsReload = false
+        let current = PreviewRequest(completion: handler)
+        request = current
         roots = []
         showingDocument = false
         documentView.clear()
@@ -127,35 +140,47 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         status.stringValue = text("Loading…")
         progress.startAnimation(nil)
         queue.async { [weak self] in
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
             let result = Result { () -> (PreviewListing?, Bool, NSAttributedString?) in
-                let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
-                guard values.isSymbolicLink != true, values.isPackage != true else {
-                    throw CocoaError(.fileReadUnsupportedScheme)
+                try autoreleasepool {
+                    try current.checkCancellation()
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
+                    guard values.isSymbolicLink != true, values.isPackage != true else {
+                        throw CocoaError(.fileReadUnsupportedScheme)
+                    }
+                    let directory = values.isDirectory == true
+                    if !directory && PreviewDocument.supports(url) {
+                        // 与 Markdown 扩展一致，富文本生成也在后台完成，避免复杂文档阻塞主线程。
+                        do {
+                            let document = try PreviewDocument.read(url, request: current)
+                            try current.checkCancellation()
+                            let content = DocumentPreviewView.content(for: document, language: url.pathExtension,
+                                                                     text: Self.text, isCancelled: { current.isCancelled })
+                            try current.checkCancellation()
+                            return (nil, false, content)
+                        }
+                        catch where PreviewDocument.sniffsText(url) { throw SystemFallback(underlying: error) }
+                    }
+                    let listing: PreviewListing
+                    if directory { listing = try PreviewContents.folder(url, isCancelled: { current.isCancelled }) }
+                    else if PreviewContents.zipExtensions.contains(url.pathExtension.lowercased()) {
+                        listing = try PreviewContents.zip(url, isCancelled: { current.isCancelled })
+                    } else { listing = try PreviewArchive.read(url, request: current) }
+                    try current.checkCancellation()
+                    return (listing, directory, nil)
                 }
-                let directory = values.isDirectory == true
-                if !directory && PreviewDocument.supports(url) {
-                    // 与 Markdown 扩展一致，富文本生成也在后台完成，避免复杂文档阻塞主线程。
-                    do { return (nil, false, DocumentPreviewView.content(for: try PreviewDocument.read(url), language: url.pathExtension, text: Self.text)) }
-                    catch where PreviewDocument.sniffsText(url) { throw SystemFallback(underlying: error) }
-                }
-                let listing: PreviewListing
-                if directory { listing = try PreviewContents.folder(url) }
-                else if PreviewContents.zipExtensions.contains(url.pathExtension.lowercased()) { listing = try PreviewContents.zip(url) }
-                else { listing = try PreviewArchive.read(url) }
-                return (listing, directory, nil)
             }
             DispatchQueue.main.async {
-                guard let self, self.generation == current else {
-                    handler(CocoaError(.userCancelled))
+                guard let self, self.request === current, !current.isCancelled else {
+                    current.cancel()
                     return
                 }
                 self.progress.stopAnimation(nil)
                 if case .failure(let error as SystemFallback) = result {
                     // 按内容嗅探的文件不是文本（如 .DS_Store、可执行文件），交回系统显示默认图标预览。
                     self.status.stringValue = ""
-                    handler(error.underlying)
+                    current.finish(error.underlying)
                     return
                 }
                 do {
@@ -165,8 +190,9 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                         self.outline.enclosingScrollView?.isHidden = true
                         self.documentView.isHidden = false
                         self.documentView.show(content)
+                        self.restorePosition()
                         self.updateStatus()
-                        handler(nil)
+                        current.finish()
                         return
                     }
                     guard let listing else { throw PreviewDocumentError.invalid }
@@ -178,19 +204,75 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                     self.sort(self.roots)
                     self.roots = self.sorted(self.roots)
                     self.outline.reloadData()
+                    self.restoreExpandedItems()
                     self.updateStatus()
                 } catch {
                     self.show(error)
                 }
                 // 错误也在预览中显示，避免系统退回只显示一个文件图标。
-                handler(nil)
+                current.finish()
             }
         }
     }
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
-        generation = UUID()
+        guard !needsReload else { return }
+        request?.cancel()
+        request = nil
+        needsReload = sourceURL != nil
+        savedScroll = showingDocument ? documentView.contentView.bounds.origin : outline.enclosingScrollView?.contentView.bounds.origin
+        savedSelection = outline.selectedRow >= 0 ? (outline.item(atRow: outline.selectedRow) as? PreviewNode)?.path : nil
+        expandedPaths = []
+        func remember(_ nodes: [PreviewNode]) {
+            for node in nodes where outline.isItemExpanded(node) {
+                expandedPaths.insert(node.path)
+                remember(node.children)
+            }
+        }
+        remember(roots)
+        roots = []
+        folderURL = nil
+        pendingFolders = 0
+        documentView.clear()
+        outline.reloadData()
+        progress.stopAnimation(nil)
+        status.stringValue = ""
+        status.toolTip = nil
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        if needsReload, let sourceURL { preparePreviewOfFile(at: sourceURL) { _ in } }
+    }
+
+    deinit { request?.cancel() }
+
+    private func restoreExpandedItems() {
+        func expand(_ nodes: [PreviewNode]) {
+            for node in nodes where expandedPaths.contains(node.path) {
+                outline.expandItem(node)
+                if node.loaded { expand(node.children) }
+            }
+        }
+        expand(roots)
+        if pendingFolders == 0 {
+            if let path = savedSelection,
+               let row = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? PreviewNode)?.path == path }) {
+                outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            }
+            expandedPaths = []
+            savedSelection = nil
+            restorePosition()
+        }
+    }
+
+    private func restorePosition() {
+        guard let point = savedScroll else { return }
+        let scroll: NSScrollView? = showingDocument ? documentView : outline.enclosingScrollView
+        scroll?.contentView.scroll(to: point)
+        if let clip = scroll?.contentView { scroll?.reflectScrolledClipView(clip) }
+        savedScroll = nil
     }
 
     private func updateStatus() {
@@ -234,14 +316,21 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
         pendingFolders += 1
         progress.startAnimation(nil)
         status.stringValue = text("Loading…") + " " + node.name
-        let current = generation
+        guard let current = request, !current.isCancelled else {
+            node.loading = false
+            pendingFolders -= 1
+            return false
+        }
         let url = folderURL.appendingPathComponent(node.path, isDirectory: true)
-        queue.async { [weak self] in
-            let access = folderURL.startAccessingSecurityScopedResource()
-            defer { if access { folderURL.stopAccessingSecurityScopedResource() } }
-            let result = Result { try PreviewContents.folder(url) }
+        queue.async { [weak self, weak node] in
+            let result = Result { try autoreleasepool {
+                try current.checkCancellation()
+                let access = folderURL.startAccessingSecurityScopedResource()
+                defer { if access { folderURL.stopAccessingSecurityScopedResource() } }
+                return try PreviewContents.folder(url, isCancelled: { current.isCancelled })
+            } }
             DispatchQueue.main.async {
-                guard let self, self.generation == current else { return }
+                guard let self, let node, self.request === current, !current.isCancelled else { return }
                 node.loading = false
                 self.pendingFolders -= 1
                 if self.pendingFolders == 0 { self.progress.stopAnimation(nil) }
@@ -256,8 +345,10 @@ final class PreviewController: NSViewController, QLPreviewingController, NSOutli
                     self.outline.expandItem(node)
                     self.updateStatus()
                 } catch {
+                    self.expandedPaths.remove(node.path)
                     self.show(error)
                 }
+                self.restoreExpandedItems()
             }
         }
         return false

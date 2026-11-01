@@ -19,8 +19,10 @@ public enum PreviewArchive {
         timeout: TimeInterval = 5.0,
         maxPhysicalBytes: Int64 = 500 * 1024 * 1024,
         maxTotalPathBytes: Int = 10 * 1024 * 1024,
-        maxScannedEntries: Int = 100_000
+        maxScannedEntries: Int = 100_000,
+        request: PreviewRequest? = nil
     ) throws -> PreviewListing {
+        try request?.checkCancellation()
         guard timeout.isFinite, (0...60).contains(timeout), maxPhysicalBytes >= 0,
               maxTotalPathBytes >= 0, maxScannedEntries >= 0 else { throw PreviewArchiveError.tooLarge }
         guard url.isFileURL else {
@@ -55,7 +57,8 @@ public enum PreviewArchive {
         let context = ArchiveStreamContext(
             fd: fd,
             timeoutSeconds: timeout,
-            maxPhysicalBytes: maxPhysicalBytes
+            maxPhysicalBytes: maxPhysicalBytes,
+            request: request
         )
 
         guard let archive = archive_read_new() else {
@@ -95,6 +98,7 @@ public enum PreviewArchive {
         )
 
         if openResult != ARCHIVE_OK {
+            try request?.checkCancellation()
             if context.timedOut { throw PreviewArchiveError.timeout }
             if context.byteLimitExceeded { throw PreviewArchiveError.tooLarge }
             let errorString = archive_error_string(archive).map { String(cString: $0) } ?? ""
@@ -116,12 +120,14 @@ public enum PreviewArchive {
         let maxDecompressedBytes: Int64 = 1024 * 1024 * 1024 // 1GB
 
         while true {
+            try request?.checkCancellation()
             if context.isTimedOut() {
                 throw PreviewArchiveError.timeout
             }
 
             var entryPointer: OpaquePointer?
             let nextHeaderResult = archive_read_next_header(archive, &entryPointer)
+            try request?.checkCancellation()
 
             if context.timedOut { throw PreviewArchiveError.timeout }
             if context.byteLimitExceeded || archive_filter_bytes(archive, 0) > maxDecompressedBytes {
@@ -249,6 +255,7 @@ private final class ArchiveStreamContext {
     let startInstant: DispatchTime
     let timeoutNanoseconds: UInt64
     let maxPhysicalBytes: Int64
+    let request: PreviewRequest?
 
     let bufferSize = 65536
     let buffer: UnsafeMutableRawPointer
@@ -256,11 +263,12 @@ private final class ArchiveStreamContext {
     var timedOut: Bool = false
     var byteLimitExceeded: Bool = false
 
-    init(fd: Int32, timeoutSeconds: TimeInterval, maxPhysicalBytes: Int64) {
+    init(fd: Int32, timeoutSeconds: TimeInterval, maxPhysicalBytes: Int64, request: PreviewRequest?) {
         self.fd = fd
         self.startInstant = DispatchTime.now()
         self.timeoutNanoseconds = timeoutSeconds > 0 ? UInt64(timeoutSeconds * 1_000_000_000) : 0
         self.maxPhysicalBytes = maxPhysicalBytes
+        self.request = request
         self.buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 16)
     }
 
@@ -290,6 +298,7 @@ private let archiveOpenCallback: archive_open_callback = { _, _ in
 private let archiveReadCallback: archive_read_callback = { archive, clientData, bufferPointer in
     guard let clientData = clientData, let bufferPointer = bufferPointer else { return -1 }
     let ctx = Unmanaged<ArchiveStreamContext>.fromOpaque(clientData).takeUnretainedValue()
+    if ctx.request?.isCancelled == true { return -1 }
 
     if ctx.isTimedOut() {
         ctx.timedOut = true
@@ -319,6 +328,7 @@ private let archiveReadCallback: archive_read_callback = { archive, clientData, 
 private let archiveSkipCallback: archive_skip_callback = { _, clientData, request in
     guard let clientData = clientData else { return 0 }
     let ctx = Unmanaged<ArchiveStreamContext>.fromOpaque(clientData).takeUnretainedValue()
+    if ctx.request?.isCancelled == true { return 0 }
 
     if ctx.isTimedOut() {
         ctx.timedOut = true
@@ -335,6 +345,7 @@ private let archiveSkipCallback: archive_skip_callback = { _, clientData, reques
 private let archiveSeekCallback: archive_seek_callback = { _, clientData, request, whence in
     guard let clientData = clientData else { return -1 }
     let ctx = Unmanaged<ArchiveStreamContext>.fromOpaque(clientData).takeUnretainedValue()
+    if ctx.request?.isCancelled == true { return -1 }
 
     if ctx.isTimedOut() {
         ctx.timedOut = true

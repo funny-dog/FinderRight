@@ -17,7 +17,8 @@ public struct PreviewDatabaseTable {
 
 /// 仅查询普通实体表；不执行视图、虚拟表、触发器或数据库自带的 SQL。
 public enum PreviewDatabase {
-    public static func read(_ url: URL) throws -> PreviewDocument {
+    public static func read(_ url: URL, request: PreviewRequest? = nil) throws -> PreviewDocument {
+        try request?.checkCancellation()
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true else { throw PreviewDocumentError.database }
         var connection: OpaquePointer?
@@ -36,8 +37,9 @@ public enum PreviewDatabase {
         sqlite3_limit(db, SQLITE_LIMIT_COLUMN, 256)
         sqlite3_limit(db, SQLITE_LIMIT_SQL_LENGTH, 65_536)
         sqlite3_busy_timeout(db, 100)
-        let deadline = UnsafeMutablePointer<UInt64>.allocate(capacity: 1)
-        deadline.initialize(to: DispatchTime.now().uptimeNanoseconds + 2_000_000_000)
+        let deadline = UnsafeMutablePointer<DatabaseReadState>.allocate(capacity: 1)
+        deadline.initialize(to: DatabaseReadState(deadline: DispatchTime.now().uptimeNanoseconds + 2_000_000_000,
+                                                   request: request))
         defer {
             sqlite3_progress_handler(db, 0, nil, nil)
             deadline.deinitialize(count: 1)
@@ -45,15 +47,18 @@ public enum PreviewDatabase {
         }
         sqlite3_progress_handler(db, 1000, { context in
             guard let context else { return 1 }
-            return DispatchTime.now().uptimeNanoseconds > context.assumingMemoryBound(to: UInt64.self).pointee ? 1 : 0
+            let state = context.assumingMemoryBound(to: DatabaseReadState.self).pointee
+            return state.request?.isCancelled == true || DispatchTime.now().uptimeNanoseconds > state.deadline ? 1 : 0
         }, deadline)
         guard sqlite3_exec(db, "PRAGMA trusted_schema=OFF; PRAGMA query_only=ON;", nil, nil, nil) == SQLITE_OK else {
+            try request?.checkCancellation()
             throw PreviewDocumentError.database
         }
         func statement(_ sql: String) throws -> OpaquePointer {
             var result: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &result, nil) == SQLITE_OK, let result else {
                 if let result { sqlite3_finalize(result) }
+                try request?.checkCancellation()
                 throw PreviewDocumentError.database
             }
             return result
@@ -68,11 +73,13 @@ public enum PreviewDatabase {
             names.append(String(cString: name))
             step = sqlite3_step(schema)
         }
+        try request?.checkCancellation()
         guard step == SQLITE_DONE else { throw PreviewDocumentError.database }
         var tables: [PreviewDatabaseTable] = []
         var totalBytes = 0
         var totalCells = 0
         for name in names.prefix(20) {
+            try request?.checkCancellation()
             let quoted = "\"" + name.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             let literal = "'" + name.replacingOccurrences(of: "'", with: "''") + "'"
             let info = try statement("SELECT name FROM pragma_table_xinfo(\(literal)) WHERE hidden=0 ORDER BY cid LIMIT 257")
@@ -83,6 +90,7 @@ public enum PreviewDatabase {
                 step = sqlite3_step(info)
             }
             sqlite3_finalize(info)
+            try request?.checkCancellation()
             guard step == SQLITE_DONE, !fieldNames.isEmpty, fieldNames.count <= 256 else { throw PreviewDocumentError.database }
             let fields = fieldNames.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: ",")
             let query = try statement("SELECT \(fields) FROM main.\(quoted) LIMIT 51")
@@ -97,6 +105,7 @@ public enum PreviewDatabase {
             step = sqlite3_step(query)
             while step == SQLITE_ROW {
                 if rows.count == 50 { limited = true; break }
+                try request?.checkCancellation()
                 var row: [String] = []
                 for column in 0..<count {
                     let value: String
@@ -117,10 +126,16 @@ public enum PreviewDatabase {
                 if totalBytes > 1_048_576 || totalCells >= 10_000 { limited = true; break }
                 step = sqlite3_step(query)
             }
+            try request?.checkCancellation()
             guard limited || step == SQLITE_DONE else { throw PreviewDocumentError.database }
             tables.append(PreviewDatabaseTable(name: name, columns: columns, rows: rows, truncated: limited))
             if totalBytes > 1_048_576 || totalCells >= 10_000 { break }
         }
         return .database(tables, truncated: names.count > 20 || totalBytes > 1_048_576 || totalCells >= 10_000)
     }
+}
+
+private struct DatabaseReadState {
+    let deadline: UInt64
+    let request: PreviewRequest?
 }

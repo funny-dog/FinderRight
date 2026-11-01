@@ -24,13 +24,29 @@ public struct ZipProbe: Equatable {
     static let encryptedFlag: UInt16 = 0x0001
     static let utf8NameFlag: UInt16 = 0x0800
 
+    // 切片只在扫描回调中使用，展示结果不持有整个中央目录。
+    struct ScannedEntry {
+        let flags: UInt16
+        let nameBytes: Data
+        let uncompressedSize: UInt32
+        let externalAttributes: UInt32
+        let lastModFileTime: UInt16
+        let lastModFileDate: UInt16
+        let extraField: Data
+    }
+
     public static func inspect(_ url: URL) -> ZipProbe? {
-        guard let entries = centralDirectoryEntries(of: url) else { return nil }
-        return ZipProbe(
-            hasEncryptedEntries: entries.contains { $0.flags & encryptedFlag != 0 },
-            hasNonUTF8LegacyNames: entries.contains {
-                $0.flags & utf8NameFlag == 0 && String(bytes: $0.nameBytes, encoding: .utf8) == nil
-            })
+        var encrypted = false
+        var legacyNames = false
+        do {
+            try scanCentralDirectory(of: url) { entry in
+                encrypted = encrypted || entry.flags & encryptedFlag != 0
+                if !legacyNames, entry.flags & utf8NameFlag == 0 {
+                    legacyNames = String(bytes: entry.nameBytes, encoding: .utf8) == nil
+                }
+            }
+        } catch { return nil }
+        return ZipProbe(hasEncryptedEntries: encrypted, hasNonUTF8LegacyNames: legacyNames)
     }
 
     public static func centralDirectoryEntries(of url: URL) -> [Entry]? {
@@ -38,6 +54,19 @@ public struct ZipProbe: Equatable {
     }
 
     static func parseCentralDirectory(of url: URL) throws -> [Entry] {
+        var entries: [Entry] = []
+        try scanCentralDirectory(of: url) { entry in
+            entries.append(Entry(flags: entry.flags, nameBytes: Array(entry.nameBytes),
+                                 uncompressedSize: entry.uncompressedSize, externalAttributes: entry.externalAttributes,
+                                 lastModFileTime: entry.lastModFileTime, lastModFileDate: entry.lastModFileDate,
+                                 extraField: Array(entry.extraField)))
+        }
+        return entries
+    }
+
+    static func scanCentralDirectory(of url: URL, isCancelled: () -> Bool = { false },
+                                     visit: (ScannedEntry) throws -> Void) throws {
+        if isCancelled() { throw CocoaError(.userCancelled) }
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true else {
             throw CocoaError(.fileReadUnsupportedScheme)
@@ -49,12 +78,13 @@ public struct ZipProbe: Equatable {
         // EOCD 固定 22 字节，注释最多 65535 字节。
         let tailLength = min(fileSize, 22 + 65_535)
         try handle.seek(toOffset: fileSize - tailLength)
-        let tail = Array(try handle.read(upToCount: Int(tailLength)) ?? Data())
+        let tail = try autoreleasepool { try handle.read(upToCount: Int(tailLength)) ?? Data() }
         guard tail.count == Int(tailLength) else { throw PreviewError.invalidArchive }
         var index = tail.count - 22
         var header: (count: Int, size: Int, offset: UInt64)?
         var failure = PreviewError.invalidArchive
         while index >= 0 {
+            if isCancelled() { throw CocoaError(.userCancelled) }
             defer { index -= 1 }
             guard readUInt32(tail, index) == 0x0605_4b50,
                   index + 22 + Int(readUInt16(tail, index + 20)) == tail.count else { continue }
@@ -84,12 +114,11 @@ public struct ZipProbe: Equatable {
         }
         guard let header else { throw failure }
         try handle.seek(toOffset: header.offset)
-        let directory = Array(try handle.read(upToCount: header.size) ?? Data())
+        let directory = try autoreleasepool { try handle.read(upToCount: header.size) ?? Data() }
         guard directory.count == header.size else { throw PreviewError.invalidArchive }
-        var entries: [Entry] = []
-        entries.reserveCapacity(header.count)
         var offset = 0
         for _ in 0..<header.count {
+            if isCancelled() { throw CocoaError(.userCancelled) }
             guard offset + 46 <= directory.count, readUInt32(directory, offset) == 0x0201_4b50 else {
                 throw PreviewError.invalidArchive
             }
@@ -106,32 +135,34 @@ public struct ZipProbe: Equatable {
             let commentStart = extraStart + Int(readUInt16(directory, offset + 30))
             let next = commentStart + Int(readUInt16(directory, offset + 32))
             guard next <= directory.count else { throw PreviewError.invalidArchive }
-            let extra = Array(directory[extraStart..<commentStart])
-            var extraOffset = 0
-            while extraOffset < extra.count {
-                guard extraOffset + 4 <= extra.count else { throw PreviewError.invalidArchive }
-                let length = Int(readUInt16(extra, extraOffset + 2))
-                guard extraOffset + 4 + length <= extra.count else { throw PreviewError.invalidArchive }
-                guard readUInt16(extra, extraOffset) != 0x0001 else { throw PreviewError.zip64NotSupported }
+            var extraOffset = extraStart
+            while extraOffset < commentStart {
+                guard extraOffset + 4 <= commentStart else { throw PreviewError.invalidArchive }
+                let length = Int(readUInt16(directory, extraOffset + 2))
+                guard extraOffset + 4 + length <= commentStart else { throw PreviewError.invalidArchive }
+                guard readUInt16(directory, extraOffset) != 0x0001 else { throw PreviewError.zip64NotSupported }
                 extraOffset += 4 + length
             }
             let flags = readUInt16(directory, offset + 8)
             guard flags & 0x2000 == 0 else { throw PreviewError.encryptedDirectory }
-            entries.append(Entry(flags: flags, nameBytes: Array(directory[nameStart..<extraStart]),
-                                 uncompressedSize: size, externalAttributes: readUInt32(directory, offset + 38),
-                                 lastModFileTime: readUInt16(directory, offset + 12),
-                                 lastModFileDate: readUInt16(directory, offset + 14), extraField: extra))
+            try autoreleasepool {
+                try visit(ScannedEntry(flags: flags, nameBytes: directory[nameStart..<extraStart],
+                                       uncompressedSize: size, externalAttributes: readUInt32(directory, offset + 38),
+                                       lastModFileTime: readUInt16(directory, offset + 12),
+                                       lastModFileDate: readUInt16(directory, offset + 14),
+                                       extraField: directory[extraStart..<commentStart]))
+            }
             offset = next
         }
+        if isCancelled() { throw CocoaError(.userCancelled) }
         guard offset == directory.count else { throw PreviewError.invalidArchive }
-        return entries
     }
 
-    private static func readUInt16(_ bytes: [UInt8], _ at: Int) -> UInt16 {
+    private static func readUInt16(_ bytes: Data, _ at: Int) -> UInt16 {
         UInt16(bytes[at]) | UInt16(bytes[at + 1]) << 8
     }
 
-    private static func readUInt32(_ bytes: [UInt8], _ at: Int) -> UInt32 {
+    private static func readUInt32(_ bytes: Data, _ at: Int) -> UInt32 {
         UInt32(bytes[at]) | UInt32(bytes[at + 1]) << 8 | UInt32(bytes[at + 2]) << 16 | UInt32(bytes[at + 3]) << 24
     }
 }

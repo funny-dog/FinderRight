@@ -57,10 +57,11 @@ public enum PreviewDocument {
         return ext.isEmpty || sniffedTextExtensions.contains(ext)
     }
 
-    public static func read(_ url: URL) throws -> PreviewDocument {
+    public static func read(_ url: URL, request: PreviewRequest? = nil) throws -> PreviewDocument {
+        try request?.checkCancellation()
         let ext = url.pathExtension.lowercased()
         if databaseExtensions.contains(ext) {
-            return try PreviewDatabase.read(url)
+            return try PreviewDatabase.read(url, request: request)
         }
         if PreviewDelimited.csvExtensions.contains(ext) || PreviewDelimited.tsvExtensions.contains(ext) {
             return try PreviewDelimited.read(url)
@@ -81,6 +82,7 @@ public enum PreviewDocument {
         var cells: [PreviewNotebookCell] = []
         var truncated = rawCells.count > 200
         for raw in rawCells.prefix(200) {
+            try request?.checkCancellation()
             guard let kind = raw["cell_type"] as? String, ["markdown", "code", "raw"].contains(kind),
                   let source = notebookText(raw["source"]) else { throw PreviewDocumentError.invalid }
             var outputs: [String] = []
@@ -88,6 +90,7 @@ public enum PreviewDocument {
             if kind == "code", let rawOutputs = raw["outputs"] as? [[String: Any]] {
                 truncated = truncated || rawOutputs.count > 100
                 for output in rawOutputs.prefix(100) {
+                    try request?.checkCancellation()
                     if let text = notebookText(output["text"]) { outputs.append(text) }
                     else if let data = output["data"] as? [String: Any] {
                         if let text = notebookText(data["text/plain"]) { outputs.append(text) }
@@ -103,8 +106,10 @@ public enum PreviewDocument {
     }
 
     /// 供独立的 Markdown 预览扩展使用；上限与纯文本一致，1 MiB 文档解析排版约需 1 秒。
-    public static func readMarkdown(_ url: URL) throws -> PreviewDocument {
+    public static func readMarkdown(_ url: URL, request: PreviewRequest? = nil) throws -> PreviewDocument {
+        try request?.checkCancellation()
         var text = try decodeText(boundedData(url, limit: 1_048_576))
+        try request?.checkCancellation()
         if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
         // Swift 把 \r\n 视为一个字符，按任意换行切分才能兼容 Windows 换行；拼回时统一为 \n。
         let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)

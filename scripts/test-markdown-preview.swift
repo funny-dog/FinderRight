@@ -153,6 +153,28 @@ struct MarkdownPreviewChecks {
             let menu = document.textView(document.textView, menu: NSMenu(), for: event, at: index)!
             precondition(menu.items.isEmpty, "普通文字与范围外的位置不能出现复制链接菜单")
         }
+        controller.viewDidDisappear()
+        precondition(document.textView.string.isEmpty, "关闭 Markdown 预览后释放内容")
+        controller.viewWillAppear()
+        wait { !document.textView.string.isEmpty }
+        let gate = DispatchSemaphore(value: 0)
+        let entered = DispatchSemaphore(value: 0)
+        controller.queue.async { entered.signal(); gate.wait() }
+        entered.wait()
+        var callbacks = 0
+        for _ in 0..<2 {
+            controller.preparePreviewOfFile(at: file) { error in
+                precondition(Thread.isMainThread && (error as? CocoaError)?.code == .userCancelled)
+                callbacks += 1
+            }
+        }
+        controller.viewDidDisappear()
+        wait { callbacks == 2 }
+        precondition(document.textView.string.isEmpty)
+        gate.signal()
+        controller.viewWillAppear()
+        wait { !document.textView.string.isEmpty }
+        precondition(callbacks == 2)
         try Data([0x23, 0, 1]).write(to: file)
         prepare(controller, file)
         precondition(document.textView.string.isEmpty && status.stringValue.contains("Unable to read contents"), "读取失败应清空旧内容并提示原因")
@@ -165,10 +187,14 @@ struct MarkdownPreviewChecks {
             precondition(error == nil, String(describing: error))
             finished = true
         }
+        wait { finished }
+    }
+
+    private static func wait(_ completed: () -> Bool) {
         let deadline = Date().addingTimeInterval(10)
-        while !finished && Date() < deadline {
+        while !completed() && Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(0.01))
         }
-        precondition(finished, "预览异步操作超时")
+        precondition(completed(), "预览异步操作超时")
     }
 }

@@ -55,7 +55,9 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         textView.scrollToBeginningOfDocument(nil)
     }
 
-    static func content(for document: PreviewDocument, language: String? = nil, text: (String) -> String) -> NSAttributedString {
+    static func content(for document: PreviewDocument, language: String? = nil, text: (String) -> String,
+                        isCancelled: () -> Bool = { false }) -> NSAttributedString {
+        if isCancelled() { return NSAttributedString(string: "") }
         let result = NSMutableAttributedString(string: "")
         func append(_ source: String, font: NSFont = .systemFont(ofSize: 14)) {
             result.append(NSAttributedString(string: source, attributes: [.font: font, .foregroundColor: NSColor.textColor]))
@@ -65,6 +67,7 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
             let grid = NSTextTable()
             grid.numberOfColumns = table.columns.count
             for (row, values) in ([table.columns] + table.rows).enumerated() {
+                if isCancelled() { return }
                 for (column, value) in values.enumerated() {
                     // Kit 生成的默认列名固定是「列 N」，英文界面换成 Column N
                     var cell = value
@@ -105,10 +108,11 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
                     .paragraphStyle: codeStyle(NSTextBlock())
                 ]))
             }
-            result.append(markdown(source))
+            result.append(markdown(source, isCancelled: isCancelled))
         case .notebook(let cells, let truncated):
             for cell in cells {
-                if cell.kind == "markdown" { result.append(markdown(cell.source)) }
+                if isCancelled() { return NSAttributedString(string: "") }
+                if cell.kind == "markdown" { result.append(markdown(cell.source, isCancelled: isCancelled)) }
                 else { append(cell.source + "\n", font: .monospacedSystemFont(ofSize: 13, weight: .regular)) }
                 for output in cell.outputs { append(output + "\n", font: .monospacedSystemFont(ofSize: 13, weight: .regular)) }
                 if cell.omittedRichOutput { note("Image and HTML outputs are not shown") }
@@ -120,6 +124,7 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
             note("Database file snapshot; uncheckpointed WAL changes are not included")
             if tables.isEmpty { note("No ordinary tables") }
             for table in tables {
+                if isCancelled() { return NSAttributedString(string: "") }
                 append(table.name + "\n", font: .boldSystemFont(ofSize: 20))
                 appendTable(table)
             }
@@ -160,7 +165,8 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
     private static let footnoteDefinition = try! NSRegularExpression(
         pattern: #"(?m)^([ \t>]*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)*\[\^[^\]\r\n]+\])(:)"#)
 
-    private static func markdown(_ source: String) -> NSAttributedString {
+    private static func markdown(_ source: String, isCancelled: () -> Bool) -> NSAttributedString {
+        if isCancelled() { return NSAttributedString(string: "") }
         var input = source
         var footnoteMarker: String?
         if source.contains("[^"), footnoteDefinition.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)) != nil {
@@ -174,6 +180,7 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         guard let value = try? AttributedString(markdown: input) else {
             return NSAttributedString(string: source, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.textColor])
         }
+        if isCancelled() { return NSAttributedString(string: "") }
         let result = NSMutableAttributedString(string: "")
         var previousBlock: Int?
         var previousAttributes: [NSAttributedString.Key: Any] = [:]
@@ -184,6 +191,7 @@ final class DocumentPreviewView: NSScrollView, NSTextViewDelegate {
         // 自己记录末尾是否为换行：每次读 result.string 都会整段桥接，长文档会退化成平方复杂度。
         var endsWithNewline = true
         for run in value.runs {
+            if isCancelled() { return NSAttributedString(string: "") }
             let components = run.presentationIntent?.components ?? []
             let block = components.first?.identity
             let startsBlock = block != previousBlock

@@ -7,8 +7,11 @@ import FinderRightKit
 final class MarkdownPreviewController: NSViewController, QLPreviewingController {
     private let documentView = DocumentPreviewView()
     private let status = NSTextField(wrappingLabelWithString: "")
-    private let queue = DispatchQueue(label: "com.finderright.markdown.read", qos: .userInitiated)
-    private var generation = UUID()
+    let queue = DispatchQueue(label: "com.finderright.markdown.read", qos: .userInitiated)
+    private var request: PreviewRequest?
+    private var sourceURL: URL?
+    private var needsReload = false
+    private var savedScroll: NSPoint?
 
     private func text(_ key: String) -> String { Self.text(key) }
 
@@ -45,24 +48,40 @@ final class MarkdownPreviewController: NSViewController, QLPreviewingController 
 
     func preparePreviewOfFile(at url: URL, completionHandler handler: @escaping (Error?) -> Void) {
         _ = view
-        let current = UUID()
-        generation = current
+        request?.cancel()
+        if !needsReload || sourceURL != url { savedScroll = nil }
+        sourceURL = url
+        needsReload = false
+        let current = PreviewRequest(completion: handler)
+        request = current
         documentView.clear()
         status.stringValue = text("Loading…")
         let name = url.lastPathComponent
         queue.async { [weak self] in
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
             // Markdown 解析与富文本生成在后台完成，1 MiB 文档约 1 秒，不能卡住主线程。
-            let result = Result { DocumentPreviewView.content(for: try PreviewDocument.readMarkdown(url), text: Self.text) }
+            let result = Result { try autoreleasepool {
+                try current.checkCancellation()
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                let document = try PreviewDocument.readMarkdown(url, request: current)
+                try current.checkCancellation()
+                let content = DocumentPreviewView.content(for: document, text: Self.text, isCancelled: { current.isCancelled })
+                try current.checkCancellation()
+                return content
+            } }
             DispatchQueue.main.async {
-                guard let self, self.generation == current else {
-                    handler(CocoaError(.userCancelled))
+                guard let self, self.request === current, !current.isCancelled else {
+                    current.cancel()
                     return
                 }
                 switch result {
                 case .success(let content):
                     self.documentView.show(content)
+                    if let point = self.savedScroll {
+                        self.documentView.contentView.scroll(to: point)
+                        self.documentView.reflectScrolledClipView(self.documentView.contentView)
+                        self.savedScroll = nil
+                    }
                     self.status.stringValue = name + " · " + self.text("Read-only preview")
                 case .failure(let error):
                     let reason = self.text((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
@@ -70,13 +89,27 @@ final class MarkdownPreviewController: NSViewController, QLPreviewingController 
                 }
                 self.status.toolTip = self.status.stringValue
                 // 错误也在预览中显示，避免系统退回只显示一个文件图标。
-                handler(nil)
+                current.finish()
             }
         }
     }
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
-        generation = UUID()
+        guard !needsReload else { return }
+        request?.cancel()
+        request = nil
+        needsReload = sourceURL != nil
+        savedScroll = documentView.contentView.bounds.origin
+        documentView.clear()
+        status.stringValue = ""
+        status.toolTip = nil
     }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        if needsReload, let sourceURL { preparePreviewOfFile(at: sourceURL) { _ in } }
+    }
+
+    deinit { request?.cancel() }
 }

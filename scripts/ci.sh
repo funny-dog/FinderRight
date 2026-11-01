@@ -111,7 +111,7 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 "$KIT_BUILD_DIR/test-syntax-highlight"
 
 echo "=== [CI] 5. 编译 Quick Look 扩展代码并运行预览集成检查 ==="
-for check in documents archives; do
+for check in documents archives zip request; do
   swiftc -parse-as-library -target arm64-apple-macos13.0 \
     -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
     -L "$KIT_BUILD_DIR" -lFinderRightKit \
