@@ -90,21 +90,29 @@ extension AppDelegate {
                 self?.openGoToDirectory(initialPath: enteredPath, failure: error.localizedDescription)
             }
         }
-        switch target {
-        case .file(let file) where response == 0:
-            NSWorkspace.shared.activateFileViewerSelecting([file])
-        case .file(let file):
-            // 与在访达中双击相同：交给该文件的默认 App
-            NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                reopenOnFailure(error)
-            }
-        case .directory(let directory):
-            guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
-                openGoToDirectory(initialPath: enteredPath, failure: L("无法打开目录，请检查访问权限"))
-                return
-            }
-            NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                reopenOnFailure(error)
+        // 非激活面板关闭时会恢复原应用焦点，等模态循环退出后再交接前台。
+        DispatchQueue.main.async { [self] in
+            NSApp.activate(ignoringOtherApps: true)
+            switch target {
+            case .file(let file) where response == 0:
+                NSWorkspace.shared.activateFileViewerSelecting([file])
+                NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
+            case .file(let file):
+                // 与在访达中双击相同：交给该文件的默认 App
+                NSWorkspace.shared.open(file, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                    reopenOnFailure(error)
+                }
+            case .directory(let directory):
+                guard let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else {
+                    openGoToDirectory(initialPath: enteredPath, failure: L("无法打开目录，请检查访问权限"))
+                    return
+                }
+                NSWorkspace.shared.open([directory], withApplicationAt: finder, configuration: NSWorkspace.OpenConfiguration()) { app, error in
+                    reopenOnFailure(error)
+                    if error == nil {
+                        DispatchQueue.main.async { app?.activate() }
+                    }
+                }
             }
         }
     }

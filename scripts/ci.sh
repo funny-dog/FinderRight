@@ -69,6 +69,21 @@ swiftc -typecheck -parse-as-library \
   FinderRight/Views/*.swift \
   FinderRight/Views/Components/*.swift
 
+# 使用真实热键注册与事件派发，但仅写临时配置，不启动窗口或更改用户快捷键。
+APP_TEST_SOURCES=()
+for source in FinderRight/*.swift; do
+  if [ "$source" != "FinderRight/FinderRightApp.swift" ]; then
+    APP_TEST_SOURCES+=("$source")
+  fi
+done
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  "${APP_TEST_SOURCES[@]}" FinderRight/Services/*.swift \
+  FinderRight/Views/*.swift FinderRight/Views/Components/*.swift \
+  scripts/test-global-directory-shortcut.swift -o "$KIT_BUILD_DIR/test-global-directory-shortcut"
+"$KIT_BUILD_DIR/test-global-directory-shortcut"
+
 swiftc -parse-as-library \
   -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

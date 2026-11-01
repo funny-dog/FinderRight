@@ -95,6 +95,7 @@ final class FinderShortcutInterceptor {
 
     /// 恢复默认快捷键：全部换成默认值，没有默认值的行清空
     static func restoreDefaultShortcuts() {
+        GlobalDirectoryShortcut.shared.setEnabled(false)
         SharedConfig.shared.shortcuts = FinderKeyTakeover.defaultShortcuts
         markDefaultsApplied([])
     }
@@ -114,10 +115,13 @@ final class FinderShortcutInterceptor {
 
     /// 按快捷键设置、授权与访达是否在前台决定是否拦截。设置页改了快捷键也调用它。
     func refresh() {
+        GlobalDirectoryShortcut.shared.refresh()
         let front = NSWorkspace.shared.frontmostApplication
         let finderFront = front?.bundleIdentifier == Self.finderBundleId
         var newChords: [String: FinderKeyTakeover.KeyChord] = [:]
         for (actionId, shortcut) in SharedConfig.shared.shortcuts where Self.canHandle(actionId) {
+            if actionId == FinderKeyTakeover.goToDirectoryActionId,
+               GlobalDirectoryShortcut.shared.isEnabled { continue }
             newChords[actionId] = Self.chord(for: shortcut)
         }
         let newCopy = Self.chord(for: FinderKeyTakeover.copyShortcut)
@@ -406,7 +410,7 @@ final class FinderShortcutInterceptor {
     // MARK: - 键码换算（主线程）
 
     /// 录制的快捷键 → 当前键盘布局下的键码。TIS / UCKeyTranslate 只在主线程调用。
-    private static func chord(for shortcut: ActionShortcut) -> FinderKeyTakeover.KeyChord? {
+    static func chord(for shortcut: ActionShortcut) -> FinderKeyTakeover.KeyChord? {
         let character = shortcut.key.lowercased()
         guard let keyCode = FinderKeyTakeover.functionKeyCode(for: character) ?? keyCode(for: character) else {
             ServicesProvider.trace("takeover: 当前键盘布局里找不到按键「\(character)」")

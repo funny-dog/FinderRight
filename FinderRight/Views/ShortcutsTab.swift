@@ -29,6 +29,7 @@ struct ShortcutsTab: View {
     @FRState private var hasAccessibility = AccessibilityChecker.check()
     /// 恢复默认后递增，让各行重新读取快捷键
     @FRState private var reloadToken = 0
+    @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
 
     var body: some View {
         FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
@@ -70,7 +71,8 @@ struct ShortcutsTab: View {
                                      actionName: action.name,
                                      actionIcon: action.icon,
                                      allActions: actions,
-                                     interceptorAvailable: hasAccessibility,
+                                     interceptorAvailable: hasAccessibility ||
+                                         (action.id == FinderKeyTakeover.goToDirectoryActionId && globalShortcut.isEnabled),
                                      onConflict: { msg in
                                          conflictMessage = msg
                                      },
@@ -253,6 +255,7 @@ struct ShortcutCell: View {
 
     private func startRecording() {
         isRecording = true
+        GlobalDirectoryShortcut.shared.setRecording(true)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
                 self.cancelRecording()
@@ -315,7 +318,11 @@ struct ShortcutCell: View {
     }
 
     private func removeMonitor() {
-        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if let m = monitor {
+            NSEvent.removeMonitor(m)
+            monitor = nil
+            GlobalDirectoryShortcut.shared.setRecording(false)
+        }
     }
 
     private func displayString(_ s: ActionShortcut) -> String {
@@ -340,9 +347,14 @@ enum ServiceShortcutSync {
     /// 同步服务快捷键及用户明确设置过的菜单显示状态，返回是否有变化。
     @discardableResult
     static func run() -> Bool {
+        var shortcuts = SharedConfig.shared.shortcuts
+        if SharedConfig.shared.globalOpenPathShortcut {
+            // 全局热键独占入口，移除服务回退，避免同一组合触发两次。
+            shortcuts.removeValue(forKey: FinderKeyTakeover.goToDirectoryActionId)
+        }
         guard let bundleId = Bundle.main.bundleIdentifier,
               ServiceShortcuts.sync(
-                shortcuts: SharedConfig.shared.shortcuts, bundleId: bundleId,
+                shortcuts: shortcuts, bundleId: bundleId,
                 services: Bundle.main.object(forInfoDictionaryKey: "NSServices") as? [[String: Any]] ?? [],
                 showsInServicesMenu: UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool
               ) else { return false }

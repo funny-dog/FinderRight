@@ -11,6 +11,7 @@ struct FeaturesTab: View {
     @FRState private var copyFileContentMaxSizeKB: Int = SharedConfig.shared.copyFileContentMaxSizeKB
     @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder)
     @FRState private var dropTargetId: String?
+    @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
 
     /// 把拖动的功能放到目标行的位置：下移时落在目标之后，上移时落在目标之前
     private func moveFeature(_ id: String, to targetId: String) -> Bool {
@@ -49,10 +50,65 @@ struct FeaturesTab: View {
             copyPathSection
             copyFileNameSection
             copyContentSection
+            openPathSection
             CutQueueSection()
             badgeSection
             quickLookSection
         }
+    }
+
+    // MARK: 打开路径
+
+    private var openPathSection: some View {
+        FRSection("打开路径") {
+            FRCard {
+                FRRow(title: Text("全局生效"),
+                      subtitle: Text("默认关闭。开启后，同一快捷键可在其他应用中唤起打开路径；FinderRight 需保持运行。")) {
+                    FRSwitch(label: "打开路径快捷键全局生效", isOn: Binding(
+                        get: { globalShortcut.isEnabled },
+                        set: { setGlobalShortcut($0) }))
+                }
+                if let message = globalShortcut.errorMessage {
+                    Text(message)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.warnText)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+                }
+            }
+        }
+    }
+
+    private func setGlobalShortcut(_ enabled: Bool) {
+        guard enabled else {
+            globalShortcut.setEnabled(false)
+            refreshGlobalShortcut()
+            return
+        }
+        guard SharedConfig.shared.shortcut(forActionId: FinderKeyTakeover.goToDirectoryActionId) != nil else {
+            globalShortcut.setEnabled(true)
+            return
+        }
+        let dialog = FRDialog(
+            title: NSLocalizedString("让打开路径快捷键全局生效？", comment: ""),
+            message: NSLocalizedString("开启后，在其他应用中按下该组合也会打开 FinderRight，可能覆盖原有操作（包括打开、保存对话框中的按键）。无法检测所有应用的快捷键冲突；注册成功也不代表没有冲突。", comment: ""),
+            symbol: "keyboard", tone: .warning,
+            buttons: [NSLocalizedString("开启全局生效", comment: ""), NSLocalizedString("取消", comment: "")])
+        let completion: (Int?) -> Void = { response in
+            guard response == 0 else { return }
+            globalShortcut.setEnabled(true)
+            refreshGlobalShortcut()
+        }
+        if let window = NSApp.keyWindow {
+            dialog.beginSheet(for: window, completion: completion)
+        } else {
+            completion(dialog.runModal())
+        }
+    }
+
+    private func refreshGlobalShortcut() {
+        FinderShortcutInterceptor.shared.refresh()
+        if ServiceShortcutSync.run() { NSUpdateDynamicServices() }
     }
 
     // MARK: 快速查看

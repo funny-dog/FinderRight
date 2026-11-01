@@ -812,3 +812,15 @@
 "控制系统与右键「服务」菜单中的全部 FinderRight 功能，云盘目录也使用此入口。" = "Show all FinderRight actions in the system and right-click Services menus. Cloud folders also use this entry point.";
 "重启访达以刷新服务菜单" = "Relaunch Finder to refresh Services";
 "访达可能仍显示缓存的服务项；重启会关闭所有访达窗口，可能中断正在进行的拷贝。" = "Finder may still show cached service items. Relaunching closes all Finder windows and may interrupt copies in progress.";
+
+// Global Open Path shortcut
+"全局生效" = "Use Globally";
+"默认关闭。开启后，同一快捷键可在其他应用中唤起打开路径；FinderRight 需保持运行。" = "Off by default. When enabled, the same shortcut opens Open Path from other apps. FinderRight must be running.";
+"打开路径快捷键全局生效" = "Use the Open Path shortcut globally";
+"让打开路径快捷键全局生效？" = "Use the Open Path shortcut globally?";
+"开启后，在其他应用中按下该组合也会打开 FinderRight，可能覆盖原有操作（包括打开、保存对话框中的按键）。无法检测所有应用的快捷键冲突；注册成功也不代表没有冲突。" = "This combination will also open FinderRight from other apps and may override existing actions, including shortcuts in Open and Save dialogs. Conflicts with every app cannot be detected; successful registration does not guarantee there are no conflicts.";
+"开启全局生效" = "Enable Globally";
+"请先设置打开路径的快捷键" = "Set an Open Path shortcut first.";
+"当前键盘布局无法使用这个快捷键，请重新录制" = "This shortcut is unavailable in the current keyboard layout. Record it again.";
+"该组合不能用作全局快捷键，或已被系统使用，请重新录制" = "This combination cannot be used globally or is already used by the system. Record another shortcut.";
+"无法注册全局快捷键（错误 %d），请换一个组合。其他应用可能已注册此快捷键。" = "Could not register the global shortcut (error %d). Choose another combination; another app may have registered this shortcut.";

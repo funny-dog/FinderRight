@@ -3082,6 +3082,25 @@ struct FinderRightKitTestsRunner {
             }
         }
 
+        runTest("打开路径全局快捷键：升级默认关闭、独立持久化且不改已有组合") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: url)
+            let shortcut = ActionShortcut(key: "g", modifiers: (1 << 20) | (1 << 17))
+            config.setShortcut(shortcut, forActionId: FinderKeyTakeover.goToDirectoryActionId)
+            try assertTrue(!SharedConfig(fileURL: url).globalOpenPathShortcut, "已有快捷键升级后也不扩大作用范围")
+            config.globalOpenPathShortcut = true
+            let reloaded = SharedConfig(fileURL: url)
+            try assertTrue(reloaded.globalOpenPathShortcut)
+            try assertEqual(reloaded.shortcut(forActionId: FinderKeyTakeover.goToDirectoryActionId), shortcut)
+            config.globalOpenPathShortcut = false
+            try assertTrue(!SharedConfig(fileURL: url).globalOpenPathShortcut)
+            config.globalOpenPathShortcut = true
+            config.resetToDefaults()
+            try assertTrue(!SharedConfig(fileURL: url).globalOpenPathShortcut, "恢复默认后关闭")
+        }
+
         // MARK: - 服务快捷键同步
 
         let cmdBit = 1 << 20, optBit = 1 << 19, ctlBit = 1 << 18, sftBit = 1 << 17
@@ -3309,28 +3328,36 @@ struct FinderRightKitTestsRunner {
             let opt = 1 << 19
             let optCmdC = ActionShortcut(key: "c", modifiers: cmd | opt)
             let sftCmdDot = ActionShortcut(key: ".", modifiers: cmd | shift)
+            let sftCmdG = ActionShortcut(key: "g", modifiers: cmd | shift)
             let cmdZ = ActionShortcut(key: "z", modifiers: cmd)
             let all = ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": optCmdC,
-                       "shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ]
+                       "shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG]
             try assertEqual(T.defaultShortcuts, all, "默认值与访达原生一致")
-            try assertNil(T.defaultShortcuts["shortcut.goToDirectory"], "前往目录不占用访达的 ⇧⌘G")
+            try assertEqual(T.defaultShortcuts[T.goToDirectoryActionId], sftCmdG, "打开路径默认 ⇧⌘G")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: []), all, "全新安装")
             try assertEqual(T.defaultsToApply(current: [
                 "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
                 "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
                 "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl),
-            ], alreadyApplied: []).keys.sorted(), ["shortcut.toggleHidden", "shortcut.undo"], "用户设置过的行一律保留")
+            ], alreadyApplied: []).keys.sorted(), ["shortcut.goToDirectory", "shortcut.toggleHidden", "shortcut.undo"], "用户设置过的行一律保留")
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": ActionShortcut(key: "v", modifiers: cmd | ctl)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory"]),
                             ["shortcut.cut": cmdX], "只补没设置的那一行")
             try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory"]),
                             ["shortcut.cut": cmdX], "⌘V 已被其他动作占用则不填")
-            // 1.6.4 升级：剪切 / 粘贴补过（用户之后清空了剪切），新增的三项默认只补空位
+            // 1.6.4 升级：剪切 / 粘贴补过（用户之后清空了剪切），新增默认只补空位
             let legacy = T.legacyAppliedActionIds(cutPasteApplied: true)
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": cmdV, "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl)],
                                               alreadyApplied: legacy),
-                            ["shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ], "清空的剪切不补回，用户的复制路径不覆盖；升级时补上新增的撤销")
+                            ["shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG], "清空的剪切不补回，用户的复制路径不覆盖；升级时补上新增默认")
+            let oldDefaults = Set(all.keys).subtracting([T.goToDirectoryActionId])
+            try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: oldDefaults),
+                            [T.goToDirectoryActionId: sftCmdG], "升级时给打开路径补上 ⇧⌘G")
+            try assertEqual(T.defaultsToApply(current: [T.goToDirectoryActionId: ActionShortcut(key: "g", modifiers: cmd | ctl)], alreadyApplied: oldDefaults),
+                            [:], "保留用户自定义的打开路径组合")
+            try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "G", modifiers: cmd | shift)], alreadyApplied: oldDefaults),
+                            [:], "⇧⌘G 已被其他动作占用则不补打开路径")
             try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": cmdZ], alreadyApplied: Set(all.keys).subtracting(["shortcut.undo"])),
                             [:], "⌘Z 已被用户占用则不补撤销")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: Set(all.keys)), [:], "补过的行清空后不再补回")

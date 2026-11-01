@@ -59,6 +59,7 @@ public final class SharedConfig {
         static let removedNewFileTemplates = "removedNewFileTemplates"
         static let appLanguage = "appLanguage"
         static let shortcuts = "shortcuts"
+        static let globalOpenPathShortcut = "globalOpenPathShortcut"
         static let badgeOwnershipReclaim = "badgeOwnershipReclaim"
         static let copyPathFormat = "copyPathFormat"
         static let copyFileNameFormat = "copyFileNameFormat"

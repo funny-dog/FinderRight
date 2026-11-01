@@ -44,8 +44,8 @@ public enum FinderKeyTakeover {
     }
 
     /// 默认快捷键与访达原生一致；用户可改成别的组合，清空即停用。
-    /// 未授权「辅助功能」时这些组合照旧由访达自己响应，效果相同。
-    /// 打开路径不设默认：⇧⌘G 会把访达自带的「前往文件夹」换成 FinderRight 的输入框，改变用户已有习惯。
+    /// 未授权「辅助功能」时这些组合照旧由访达自己响应。
+    /// 打开路径默认 ⇧⌘G：在访达中用 FinderRight 的输入框替代「前往文件夹」。
     public static let defaultShortcuts: [String: ActionShortcut] = {
         let cmd = ModifierBits.commandBit, opt = ModifierBits.optionBit, sft = ModifierBits.shiftBit
         return [
@@ -53,6 +53,7 @@ public enum FinderKeyTakeover {
             pasteActionId: ActionShortcut(key: "v", modifiers: cmd),
             copyPathActionId: ActionShortcut(key: "c", modifiers: cmd | opt),        // 访达「拷贝路径名」
             toggleHiddenActionId: ActionShortcut(key: ".", modifiers: cmd | sft),    // 访达「显示隐藏文件」
+            goToDirectoryActionId: ActionShortcut(key: "g", modifiers: cmd | sft),  // 访达「前往文件夹」
             undoActionId: ActionShortcut(key: "z", modifiers: cmd),                  // 与访达撤销共存，见 UndoCenter
         ]
     }()

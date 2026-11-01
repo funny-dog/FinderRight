@@ -31,7 +31,7 @@
 - ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动；设置「功能 → 剪切 / 粘贴」可查看待剪切项目并逐项移除
 - 💻 **打开终端 / 编辑器** —— 可自定义终端 / 编辑器
 - 📋 **复制路径 / 文件名 / 文件内容** —— 支持设置各种格式的路径 / 文件名可选择是否带后缀
-- 📂 **打开路径** —— 粘贴一个路径，直接在 Finder 中定位或打开
+- 📂 **打开路径** —— 默认 ⇧⌘G 在 Finder 中唤起，替代系统「前往文件夹」，粘贴路径即可定位或打开；在设置「功能 → 打开路径」可选「全局生效」（默认关闭），从其他应用唤起
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
 - 🔗 **复制哈希 / 创建符号链接**（默认关闭）—— 复制 SHA-256 / SHA-1 / MD5（多选与 shasum 格式一致）；在原位置创建终端可识别的符号链接
 - 🖼️ **图片快速转换 / 缩放** —— 转换为 PNG / JPEG / HEIC，或按长边等比缩放至 2560px / 1920px / 1280px / 800px；仅在选中项全为图片时显示，支持批量与撤销
@@ -201,7 +201,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste; view and remove individual queued items in Settings → Features → Cut / Paste
 - 💻 **Open in Terminal / Editor** — customize your terminal and editor
 - 📋 **Copy Path / File Name / File Content** — choose from various path formats and whether file names include extensions
-- 📂 **Go to Folder** — paste a path to reveal or open it in Finder
+- 📂 **Open Path** — press ⇧⌘G in Finder by default to replace Go to Folder, then paste a path to reveal or open it; optionally enable “Use Globally” in Settings → Features → Open Path (off by default) to invoke it from other apps
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
 - 🔗 **Copy Hash / Make Symbolic Link** (off by default) — copy SHA-256 / SHA-1 / MD5 (multiple files use the shasum format); create symbolic links that Terminal understands, next to the originals
 - 🖼️ **Image Convert / Scale** — convert to PNG / JPEG / HEIC, or scale proportionally by long edge to 2560px / 1920px / 1280px / 800px; shown only when all selected items are images, with batch support and undo

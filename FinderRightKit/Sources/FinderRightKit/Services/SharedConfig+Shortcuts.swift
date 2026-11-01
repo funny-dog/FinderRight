@@ -3,6 +3,21 @@ import Foundation
 extension SharedConfig {
     // MARK: - Shortcuts
 
+    /// 仅由用户主动开启，不改变升级前快捷键的作用范围。
+    public var globalOpenPathShortcut: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.globalOpenPathShortcut] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.globalOpenPathShortcut] = newValue
+            save()
+        }
+    }
+
     /// 菜单项快捷键，key 为 action ID（如 "shortcut.cut"）
     public var shortcuts: [String: ActionShortcut] {
         get {
