@@ -108,6 +108,7 @@ killall Finder
 | 右键完全没有 FinderRight 菜单 | 在「设置 → 权限与扩展 → 右键菜单排查」中一键启用访达扩展并重启访达。 |
 | 升级后菜单或角标还是旧的 | 重启访达：`killall Finder`。 |
 | 云盘、`/Applications` 等目录没有菜单 | 系统限制，改用 **右键 → 服务** 子菜单（见下方说明）。 |
+| 只读磁盘或安装镜像没有菜单 | 为避免侧边栏图标被替换，只读卷不启用扩展菜单，请使用 **右键 → 服务**。 |
 | 菜单里没有压缩 / 解压、复制哈希、创建符号链接 | 默认关闭，在「设置 → 功能」中开启。 |
 | 快捷键按了没反应 | 授予「辅助功能」权限；多数快捷键需要先选中文件。 |
 | 剪切后没有剪刀角标 | 可能被其他扩展（如 Keka）占用，不影响粘贴；可在「设置 → 功能」开启「自动解决角标冲突」。 |
@@ -280,6 +281,7 @@ killall Finder
 | No FinderRight items in the right-click menu | Use Settings → Permissions & Extensions → Troubleshooting to enable the Finder extension and relaunch Finder. |
 | Menu or badges look old after upgrading | Relaunch Finder: `killall Finder`. |
 | No menu in cloud folders, `/Applications`, etc. | A system limitation; use **right-click → Services** instead (see below). |
+| No menu on read-only disks or installer images | To preserve sidebar icons, extension menus are disabled on read-only volumes. Use **right-click → Services**. |
 | No Compress / Extract, Copy Hash or Make Symbolic Link in the menu | Off by default; turn them on in Settings → Features. |
 | Shortcuts do nothing | Grant Accessibility; most shortcuts need a selected item. |
 | No scissors badge after cutting | Another extension (such as Keka) may hold the badge; paste still works. Turn on "Resolve Badge Conflicts Automatically" in Settings → Features. |

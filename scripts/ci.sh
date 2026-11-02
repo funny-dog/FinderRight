@@ -119,6 +119,14 @@ swiftc -parse-as-library \
 
 echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  -framework FinderSync -framework AppKit \
+  FinderRightSync/*.swift scripts/test-monitored-volumes.swift \
+  -o "$KIT_BUILD_DIR/test-monitored-volumes"
+"$KIT_BUILD_DIR/test-monitored-volumes"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
   FinderRightSync/SingleOptionMenu.swift scripts/test-single-option-menu.swift \
   -o "$KIT_BUILD_DIR/test-single-option-menu"
 "$KIT_BUILD_DIR/test-single-option-menu"

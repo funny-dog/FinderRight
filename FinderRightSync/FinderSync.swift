@@ -168,19 +168,25 @@ class FinderSync: FIFinderSync {
             home.appendingPathComponent("Documents")
         ]
 
-        // 已挂载的物理 / 网络卷（/Volumes/E 等外接硬盘；也可能是 ~/OrbStack 这类挂载点）。
-        // 不包含启动卷 /：系统目录的右键操作由 Services 覆盖。
+        // 只读卷不注册：FinderSync 会把卷的侧边栏图标替换为主 App 图标，安装镜像改用 Services。
         if let volumes = fm.mountedVolumeURLs(
-            includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) {
+            includingResourceValuesForKeys: [.volumeIsReadOnlyKey], options: [.skipHiddenVolumes]) {
             for vol in volumes {
-                let p = vol.path
-                if p != "/" && !p.hasPrefix("/System") && !p.hasPrefix("/private") {
+                guard let isReadOnly = try? vol.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly else {
+                    continue
+                }
+                if Self.shouldMonitorVolume(at: vol, isReadOnly: isReadOnly) {
                     dirs.insert(vol)
                 }
             }
         }
 
         return dirs
+    }
+
+    static func shouldMonitorVolume(at url: URL, isReadOnly: Bool) -> Bool {
+        let path = url.path
+        return !isReadOnly && path != "/" && !path.hasPrefix("/System") && !path.hasPrefix("/private")
     }
 
     // MARK: - 上下文
