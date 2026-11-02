@@ -62,7 +62,7 @@ private struct GitHubReleaseAsset: Decodable {
 public enum UpdatePolicy {
     public static let repoOwner = "funny-dog"
     public static let repoName = "FinderRight"
-    public static let websiteOrigin = "https://finderright.erhuerhu.dpdns.org"
+    public static let websiteOrigin = "https://finderright.erhutech.com"
     public static let defaultReleaseAPI = URL(string: "https://api.github.com/repos/funny-dog/FinderRight/releases/latest")!
 
     /// 首个「没有可安装新版」的结论之后，再给另一渠道的补充等待窗口。

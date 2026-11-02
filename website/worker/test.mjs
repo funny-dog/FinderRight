@@ -47,7 +47,7 @@ globalThis.fetch = async (...args) => {
     return fetchHandler(...args);
 };
 
-const BASE_URL = "https://finderright.erhuerhu.dpdns.org";
+const BASE_URL = "https://finderright.erhutech.com";
 
 test.beforeEach(() => {
     memoryCache.clear();

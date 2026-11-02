@@ -65,7 +65,7 @@ brew install --cask funny-dog/tap/finderright
 
 #### 方式二：DMG 手动安装
 
-下载 [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg)（中国大陆自动转到 [Gitee](https://gitee.com/no_ink_no_book/FinderRight/releases)），拖入 `Applications`。当前版本为自签名、未经 Apple 公证，首次打开被拦截时，到 **系统设置 → 隐私与安全性 → 仍要打开**，或执行：
+下载 [FinderRight.dmg](https://finderright.erhutech.com/download/FinderRight.dmg)（中国大陆自动转到 [Gitee](https://gitee.com/no_ink_no_book/FinderRight/releases)），拖入 `Applications`。当前版本为自签名、未经 Apple 公证，首次打开被拦截时，到 **系统设置 → 隐私与安全性 → 仍要打开**，或执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FinderRight.app
@@ -237,7 +237,7 @@ brew install --cask funny-dog/tap/finderright
 
 #### Method 2: DMG
 
-Download [FinderRight.dmg](https://finderright.erhuerhu.dpdns.org/download/FinderRight.dmg) and drag it into `Applications`. The app is self-signed and not notarized by Apple; if the first launch is blocked, go to **System Settings → Privacy & Security → Open Anyway**, or run:
+Download [FinderRight.dmg](https://finderright.erhutech.com/download/FinderRight.dmg) and drag it into `Applications`. The app is self-signed and not notarized by Apple; if the first launch is blocked, go to **System Settings → Privacy & Security → Open Anyway**, or run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FinderRight.app

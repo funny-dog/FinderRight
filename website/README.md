@@ -75,7 +75,7 @@ npx --yes wrangler@4.147.0 deploy --dry-run
 npx --yes wrangler@4.147.0 deploy
 ```
 
-从网站目录执行。首次发布前确认登录账号及同名 Worker，避免覆盖已有项目。`wrangler.jsonc` 保存正式域名，后续部署沿用此绑定；账户由 Wrangler 登录状态选择。访客无需登录。修改应用功能、截图或安装要求时，同步更新网站内容；应用发布与网站部署各自执行。
+从网站目录执行。首次发布前确认登录账号及同名 Worker，避免覆盖已有项目。`wrangler.jsonc` 保存正式域名 `finderright.erhutech.com`，同时保留旧域名 `finderright.erhuerhu.dpdns.org`，供已安装的旧版 App 继续下载和检查更新；后续部署保留这两个绑定。账户由 Wrangler 登录状态选择。访客无需登录。修改应用功能、截图或安装要求时，同步更新网站内容；应用发布与网站部署各自执行。
 
 正式 Release 公开后立即同步并部署官网镜像；同步失败时停止部署，保留现有线上版本。单个镜像文件受 Static Assets 的 25 MiB 限制，超过时脚本会报错，需要改用对象存储。
 

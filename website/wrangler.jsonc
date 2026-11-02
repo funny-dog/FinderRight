@@ -5,6 +5,11 @@
   "preview_urls": false,
   "routes": [
     {
+      "pattern": "finderright.erhutech.com",
+      "zone_name": "erhutech.com",
+      "custom_domain": true
+    },
+    {
       "pattern": "finderright.erhuerhu.dpdns.org",
       "zone_name": "erhuerhu.dpdns.org",
       "custom_domain": true
