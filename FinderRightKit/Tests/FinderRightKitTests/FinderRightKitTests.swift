@@ -1907,17 +1907,8 @@ struct FinderRightKitTestsRunner {
             // 受理一个"慢请求"（需要外部释放才完成）
             try assertTrue(gate.accept { release.wait() }, "关闭前应受理")
             gate.close(notifyDrained: { drained.signal() })
-            // 模拟更新退出：无上限等待（此处用宽裕超时检测，不真正等 30s）
-            // 若用有界等待（30s），排空信号在 0ms 后就应到达——测试目标是验证「无超时」时排空等到了完成
-            var drainedBeforeRelease = false
-            DispatchQueue.global().async {
-                if drained.wait(timeout: .now() + 0.05) == .success {
-                    drainedBeforeRelease = true
-                }
-            }
-            Thread.sleep(forTimeInterval: 0.1)
-            // 请求尚未完成，排空不应提前到达
-            try assertTrue(!drainedBeforeRelease, "请求完成前排空不应到达")
+            // 在同一线程检查，避免后台等待者抢走请求完成后的排空信号。
+            try assertTrue(drained.wait(timeout: .now() + 0.05) == .timedOut, "请求完成前排空不应到达")
             // 释放在途请求
             release.signal()
             // 排空应在请求完成后到达
