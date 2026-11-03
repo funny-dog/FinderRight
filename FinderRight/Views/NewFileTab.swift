@@ -13,6 +13,7 @@ struct NewFileTab: View {
     @FRState private var showingAddSheet = false
     @FRState private var editingTemplate: FileTemplate?
     @FRState private var dropTargetId: String?
+    @FRState private var newFileFromClipboard = SharedConfig.shared.newFileFromClipboard
 
     /// 列表中的项：已移除的内置类型不列出
     private var items: [NewFileTemplateItem] {
@@ -38,6 +39,18 @@ struct NewFileTab: View {
 
     var body: some View {
         FRPage(title: "文件模板", subtitle: "右键「新建文件」子菜单里可以新建的文件类型，拖动调整顺序") {
+            FRSection("剪贴板") {
+                FRCard {
+                    FRRow(title: Text("从剪贴板新建"), subtitle: Text("将复制的文字保存为文本，或将图片保存为 PNG/JPEG/HEIC；默认开启。")) {
+                        FRSwitch(label: "从剪贴板新建", isOn: Binding(
+                            get: { newFileFromClipboard },
+                            set: {
+                                newFileFromClipboard = $0
+                                SharedConfig.shared.newFileFromClipboard = $0
+                            }))
+                    }
+                }
+            }
             templatesSection
             if !removedItems.isEmpty {
                 removedSection
@@ -291,6 +304,7 @@ struct NewFileTab: View {
     }
 
     private func reload() {
+        newFileFromClipboard = SharedConfig.shared.newFileFromClipboard
         customTemplates = SharedConfig.shared.customFileTemplates
         newFileOrder = SharedConfig.shared.newFileOrder
         hiddenTemplates = SharedConfig.shared.hiddenNewFileTemplates

@@ -271,18 +271,25 @@ final class ServicesProvider: NSObject {
             let hidden = SharedConfig.shared.hiddenNewFileTemplates
             let allTemplates = NewFileTemplateCatalog.resolvedTemplates(order: order, customTemplates: customTemplates)
             let activeTemplates = allTemplates.filter { !hidden.contains($0.id) }
-            guard !activeTemplates.isEmpty else {
+            let fromClipboard = SharedConfig.shared.newFileFromClipboard
+            guard !activeTemplates.isEmpty || fromClipboard else {
                 showAlert(NSLocalizedString("未启用任何新建文件模板，请在设置中开启", comment: "service"))
                 return
             }
-            let choices = activeTemplates.map { item -> String in
+            var choices = activeTemplates.map { item -> String in
                 if item.isCustom {
                     return item.name.isEmpty ? ".\(item.fileExtension)" : "\(item.name) (.\(item.fileExtension))"
                 }
                 return NSLocalizedString(item.name, comment: "service")
             }
+            if fromClipboard { choices.append(NSLocalizedString("从剪贴板新建…", comment: "service")) }
             guard let index = chooseFileAction(title: "在此文件夹新建文件…", symbol: "doc.badge.plus", details: destination.path,
                                               choices: choices, button: "创建") else { return }
+            if index == activeTemplates.count {
+                performFileAction(IPCRequest(id: UUID().uuidString, action: "createFileFromClipboard",
+                                            payload: ["directory": .string(destination.path)]), feature: MenuFeatureCatalog.newFile)
+                return
+            }
             let item = activeTemplates[index]
             var payload: [String: AnyJSON] = ["directory": .string(destination.path), "baseName": .string("untitled")]
             if item.isOffice {

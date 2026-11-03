@@ -3,6 +3,7 @@ import AppKit
 import FinderRightKit
 import Compression
 import CryptoKit
+import ImageIO
 
 // MARK: - 测试辅助断言
 
@@ -4021,6 +4022,182 @@ struct FinderRightKitTestsRunner {
             // 其余未列出的项应追加在后
             try assertTrue(resolved.contains(where: { $0.id == "c2" }))
             try assertTrue(resolved.contains(where: { $0.id == "txt" }))
+        }
+
+        runTest("剪贴板新建：默认开启、开关持久化与菜单入口") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: file)
+            try assertTrue(config.newFileFromClipboard)
+            config.newFileFromClipboard = false
+            try assertTrue(!SharedConfig(fileURL: file).newFileFromClipboard)
+            config.newFileFromClipboard = true
+            try assertTrue(SharedConfig(fileURL: file).newFileFromClipboard)
+
+            var input = MenuBuildInput(location: .container, selection: .empty,
+                                       enabledFeatureIds: [MenuFeatureCatalog.newFile])
+            func children() -> [MenuDataNode] {
+                let node = MenuTreeBuilder.buildMenuTree(input: input).first { $0.id == MenuFeatureCatalog.newFile }
+                if case .submenu(let children) = node?.kind { return children }
+                return []
+            }
+            try assertEqual(children().map(\.id), ["newFile.clipboard"], "没有启用模板时仍可从剪贴板新建")
+            input.newFileFromClipboard = false
+            try assertTrue(children().isEmpty)
+            input.newFileFromClipboard = true
+            input.enabledFeatureIds = []
+            try assertTrue(children().isEmpty, "关闭新建功能后不暴露剪贴板入口")
+        }
+
+        runTest("剪贴板新建：文字、空内容、文件引用与损坏图片") {
+            let board = NSPasteboard.withUniqueName()
+            defer { board.releaseGlobally() }
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) { _ = try ClipboardFileContent.read(from: board) }
+            let text = "你好 👋\n  保留空格\n"
+            board.setString(text, forType: .string)
+            let count = board.changeCount
+            let result = try ClipboardFileContent.read(from: board)
+            try assertEqual(result.fileExtension, "txt")
+            try assertEqual(String(decoding: result.data, as: UTF8.self), text)
+            try assertEqual(board.changeCount, count, "保存不得修改剪贴板")
+            board.clearContents()
+            board.setString("", forType: .string)
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) { _ = try ClipboardFileContent.read(from: board) }
+            board.clearContents()
+            board.setString("file:///tmp/photo.png", forType: .fileURL)
+            board.setString("photo.png", forType: .string)
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) { _ = try ClipboardFileContent.read(from: board) }
+            board.clearContents()
+            board.setPropertyList(["/tmp/photo.png"], forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) { _ = try ClipboardFileContent.read(from: board) }
+            board.clearContents()
+            board.setData(Data("invalid".utf8), forType: .png)
+            board.setString("fallback", forType: .string)
+            try assertThrows(ClipboardFileContent.ReadError.invalidImage) { _ = try ClipboardFileContent.read(from: board) }
+        }
+
+        runTest("剪贴板新建：PNG 与 TIFF 输出 PNG，保留尺寸和透明度，优先图片") {
+            let board = NSPasteboard.withUniqueName()
+            defer { board.releaseGlobally() }
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 1,
+                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            bitmap.setColor(NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 0.5), atX: 0, y: 0)
+            bitmap.setColor(NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0), atX: 1, y: 0)
+            for (format, type) in [(NSBitmapImageRep.FileType.png, NSPasteboard.PasteboardType.png), (.tiff, .tiff)] {
+                board.clearContents()
+                board.setData(bitmap.representation(using: format, properties: [:])!, forType: type)
+                board.setString("image description", forType: .string)
+                let result = try ClipboardFileContent.read(from: board)
+                try assertEqual(result.fileExtension, "png")
+                let source = CGImageSourceCreateWithData(result.data as CFData, nil)!
+                try assertEqual(CGImageSourceGetType(source)! as String, "public.png")
+                let decoded = NSBitmapImageRep(data: result.data)!
+                try assertEqual(decoded.pixelsWide, 2)
+                try assertEqual(decoded.pixelsHigh, 1)
+                try assertTrue(abs(decoded.colorAt(x: 0, y: 0)!.alphaComponent - 0.5) < 0.01)
+                try assertTrue(decoded.colorAt(x: 1, y: 0)!.alphaComponent < 0.01)
+            }
+        }
+
+        runTest("剪贴板新建：实际导出 PNG、JPEG、HEIC，JPEG 透明区铺白底") {
+            let board = NSPasteboard.withUniqueName()
+            defer { board.releaseGlobally() }
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 20,
+                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            for y in 0..<20 {
+                for x in 0..<40 {
+                    bitmap.setColor(NSColor(deviceRed: 1, green: 0, blue: 0, alpha: x < 20 ? 0 : 1), atX: x, y: y)
+                }
+            }
+            board.setData(bitmap.representation(using: .png, properties: [:])!, forType: .png)
+            let content = try ClipboardFileContent.read(from: board)
+            for format in ImageTargetFormat.allCases {
+                let data = try content.encodedData(for: format.fileExtension)
+                let source = CGImageSourceCreateWithData(data as CFData, nil)!
+                try assertEqual(CGImageSourceGetType(source)! as String, format.utType as String)
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
+                try assertEqual(image.width, 40)
+                try assertEqual(image.height, 20)
+                if format == .jpeg {
+                    let color = NSBitmapImageRep(cgImage: image).colorAt(x: 2, y: 10)!.usingColorSpace(.deviceRGB)!
+                    try assertTrue(color.redComponent > 0.9 && color.greenComponent > 0.9 && color.blueComponent > 0.9,
+                                   "JPEG 不支持透明度，透明区域应为白色")
+                }
+                if format == .png { try assertEqual(data, content.data, "PNG 不做重复编码") }
+            }
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) { _ = try content.encodedData(for: "gif") }
+            board.clearContents()
+            board.setString("{\"ok\":true}", forType: .string)
+            let text = try ClipboardFileContent.read(from: board)
+            try assertEqual(try text.encodedData(for: "json"), text.data, "文本选择类型时保持原文")
+        }
+
+        runTest("剪贴板新建：Finder 复制单张图片、路径授权与非法文件") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let board = NSPasteboard.withUniqueName()
+            defer { board.releaseGlobally() }
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 1,
+                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            bitmap.setColor(NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 0.5), atX: 0, y: 0)
+            bitmap.setColor(NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0), atX: 1, y: 0)
+            let file = root.appendingPathComponent("复制的图片.png")
+            let original = bitmap.representation(using: .png, properties: [:])!
+            try original.write(to: file)
+            func copy(_ urls: [URL]) {
+                board.clearContents()
+                board.writeObjects(urls as [NSURL])
+            }
+            copy([file])
+            let count = board.changeCount
+            var checked: [URL] = []
+            let content = try ClipboardFileContent.read(from: board, allowFile: { checked.append($0); return $0 == file })
+            try assertEqual(checked, [file])
+            try assertEqual(content.fileExtension, "png")
+            try assertEqual(board.changeCount, count)
+            try assertEqual(try Data(contentsOf: file), original, "原图保持不变")
+            let decoded = NSBitmapImageRep(data: content.data)!
+            try assertEqual(decoded.pixelsWide, 2)
+            try assertEqual(decoded.pixelsHigh, 1)
+            try assertTrue(abs(decoded.colorAt(x: 0, y: 0)!.alphaComponent - 0.5) < 0.01)
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) {
+                _ = try ClipboardFileContent.read(from: board, allowFile: { _ in false })
+            }
+            copy([file, file])
+            try assertThrows(ClipboardFileContent.ReadError.unsupported) {
+                _ = try ClipboardFileContent.read(from: board, allowFile: { _ in true })
+            }
+            let text = root.appendingPathComponent("file.txt")
+            try Data("text".utf8).write(to: text)
+            for url in [root, text, root.appendingPathComponent("missing.png")] {
+                copy([url])
+                try assertThrows(ClipboardFileContent.ReadError.unsupported) {
+                    _ = try ClipboardFileContent.read(from: board, allowFile: { _ in true })
+                }
+            }
+            let broken = root.appendingPathComponent("broken.png")
+            try Data("invalid".utf8).write(to: broken)
+            copy([broken])
+            try assertThrows(ClipboardFileContent.ReadError.invalidImage) {
+                _ = try ClipboardFileContent.read(from: board, allowFile: { _ in true })
+            }
+            board.clearContents()
+            board.setPropertyList([file.path], forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+            try assertEqual(try ClipboardFileContent.read(from: board, allowFile: { $0 == file }).fileExtension, "png")
+
+            let jpeg = root.appendingPathComponent("rotated.jpg")
+            let destination = CGImageDestinationCreateWithURL(jpeg as CFURL, "public.jpeg" as CFString, 1, nil)!
+            CGImageDestinationAddImage(destination, bitmap.cgImage!, [kCGImagePropertyOrientation: 6] as CFDictionary)
+            try assertTrue(CGImageDestinationFinalize(destination))
+            copy([jpeg])
+            let rotated = try ClipboardFileContent.read(from: board, allowFile: { $0 == jpeg })
+            let rotatedBitmap = NSBitmapImageRep(data: rotated.data)!
+            try assertEqual(rotatedBitmap.pixelsWide, 1, "保存 JPEG 时应用 EXIF 方向")
+            try assertEqual(rotatedBitmap.pixelsHigh, 2)
         }
 
         runTest("SharedConfig 新建文件模板顺序、隐藏与编辑持久化") {

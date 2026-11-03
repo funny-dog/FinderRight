@@ -428,6 +428,7 @@ class FinderSync: FIFinderSync {
             cutState: cutState,
             undoTitle: undoTitle,
             newFileTemplates: templateData,
+            newFileFromClipboard: SharedConfig.shared.newFileFromClipboard,
             terminals: terminalData,
             editors: editorData,
             favoriteDirectories: favoriteData,
@@ -469,6 +470,7 @@ class FinderSync: FIFinderSync {
     func selector(for actionId: String) -> Selector? {
         switch actionId {
         case "newFile": return #selector(self.newFile(_:))
+        case "newFileFromClipboard": return #selector(self.newFileFromClipboard(_:))
         case "copyPath": return #selector(self.copyPath(_:))
         case "copyFileName": return #selector(self.copyFileName(_:))
         case "copyFileContent": return #selector(self.copyFileContent(_:))

@@ -6,6 +6,13 @@ extension FinderSync {
 
     // MARK: - Actions
 
+    @objc func newFileFromClipboard(_ sender: NSMenuItem) {
+        guard let directory = currentContext().directory else { return }
+        IPCClient.shared.callAsync(action: "createFileFromClipboard", payload: ["directory": .string(directory.path)]) { r in
+            logToFile("newFileFromClipboard ipc result: success=\(r.success)")
+        }
+    }
+
     @objc func newFile(_ sender: NSMenuItem) {
         guard let dir = currentContext().directory else {
             logToFile("newFile: no directory"); return

@@ -1,6 +1,20 @@
 import Foundation
 
 extension SharedConfig {
+    public var newFileFromClipboard: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.newFileFromClipboard] as? Bool ?? true
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.newFileFromClipboard] = newValue
+            save()
+        }
+    }
+
     // MARK: - Custom File Templates
 
     /// 自定义文件模板列表

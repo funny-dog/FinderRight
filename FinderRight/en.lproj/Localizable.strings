@@ -840,3 +840,13 @@
 "当前键盘布局无法使用这个快捷键，请重新录制" = "This shortcut is unavailable in the current keyboard layout. Record it again.";
 "该组合不能用作全局快捷键，或已被系统使用，请重新录制" = "This combination cannot be used globally or is already used by the system. Record another shortcut.";
 "无法注册全局快捷键（错误 %d），请换一个组合。其他应用可能已注册此快捷键。" = "Could not register the global shortcut (error %d). Choose another combination; another app may have registered this shortcut.";
+"从剪贴板新建" = "Create from Clipboard";
+"从剪贴板新建…" = "Create from Clipboard…";
+"将复制的文字保存为文本，或将图片保存为 PNG/JPEG/HEIC；默认开启。" = "Save copied text as a text file or an image as PNG/JPEG/HEIC. Enabled by default.";
+"剪贴板中没有可保存的文字或图片" = "The clipboard contains no text or image to save";
+"无法读取剪贴板图片" = "Cannot read the clipboard image";
+"请输入有效的文件名和后缀" = "Enter a valid file name and extension";
+"文件名" = "File name";
+"自定义后缀，例如 yaml 或 log" = "Custom extension, e.g. yaml or log";
+"自定义文件后缀" = "Custom file extension";
+"文件类型" = "File type";

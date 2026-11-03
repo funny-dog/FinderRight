@@ -28,6 +28,7 @@ final class FRDialog: NSObject, NSWindowDelegate {
         case text(initial: String, placeholder: String, accessibilityLabel: String, hint: ((String) -> Hint?)? = nil)
         case secure(placeholder: String)
         case choice([String], accessibilityLabel: String)
+        case file(initialName: String, extensions: [String], allowsCustomExtension: Bool)
     }
 
     /// 点按钮时的校验：返回错误文字则弹窗不关闭、以红字显示错误；返回 nil 正常关闭。
@@ -53,6 +54,7 @@ final class FRDialog: NSObject, NSWindowDelegate {
 
     var text: String { model.text }
     var selectedIndex: Int { model.selected }
+    var fileExtension: String? { model.fileExtension }
 
     private let model: FRDialogModel
     private let panel: FRDialogPanel
@@ -205,7 +207,8 @@ final class FRDialogModel: ObservableObject {
     @Published var message: String { didSet { onLayoutChange?() } }
     @Published var isError = false
     @Published var text: String { didSet { updateHint() } }
-    @Published var selected = 0
+    @Published var selected = 0 { didSet { if case .file = input { onLayoutChange?() } } }
+    @Published var customExtension = ""
     @Published private(set) var hint: FRDialog.Hint? { didSet { if hint != oldValue { onLayoutChange?() } } }
 
     var onPress: ((Int) -> Void)?
@@ -221,10 +224,22 @@ final class FRDialogModel: ObservableObject {
         cancelIndex = buttons.count > 1 ? buttons.count - 1 : nil
         if case .text(let initial, _, _, _) = input {
             text = initial
+        } else if case .file(let initial, _, _) = input {
+            text = initial
         } else {
             text = ""
         }
         updateHint()
+    }
+
+    var fileExtension: String? {
+        guard case .file(_, let extensions, let allowsCustom) = input else { return nil }
+        if extensions.indices.contains(selected) { return extensions[selected] }
+        guard allowsCustom, selected == extensions.count else { return nil }
+        var ext = customExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ext.hasPrefix(".") { ext.removeFirst() }
+        guard !ext.isEmpty, SafeFileName.isValid(baseName: text, ext: ext) else { return nil }
+        return ext
     }
 
     private func updateHint() {
@@ -354,6 +369,33 @@ private struct FRDialogView: View {
             .pickerStyle(.menu)
             .frame(maxWidth: .infinity)
             .accessibilityLabel(label)
+            .padding(.top, 12)
+        case .file(_, let extensions, let allowsCustom):
+            VStack(alignment: .leading, spacing: 10) {
+                field(symbol: "doc") {
+                    TextField("文件名", text: $model.text)
+                        .textFieldStyle(.plain)
+                        .focused($fieldFocused)
+                        .onSubmit { model.onPress?(0) }
+                        .accessibilityLabel(Text("文件名"))
+                }
+                Picker("文件类型", selection: $model.selected) {
+                    ForEach(extensions.indices, id: \.self) { index in
+                        Text(verbatim: ".\(extensions[index])").tag(index)
+                    }
+                    if allowsCustom { Text("自定义").tag(extensions.count) }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity)
+                if allowsCustom && model.selected == extensions.count {
+                    field(symbol: "textformat") {
+                        TextField("自定义后缀，例如 yaml 或 log", text: $model.customExtension)
+                            .textFieldStyle(.plain)
+                            .onSubmit { model.onPress?(0) }
+                            .accessibilityLabel(Text("自定义文件后缀"))
+                    }
+                }
+            }
             .padding(.top, 12)
         }
     }

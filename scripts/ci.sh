@@ -46,6 +46,14 @@ echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/Components/FRDialog.swift scripts/test-clipboard-file-dialog.swift \
+  -o "$KIT_BUILD_DIR/test-clipboard-file-dialog"
+"$KIT_BUILD_DIR/test-clipboard-file-dialog"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/Views/FavoriteDirectoryStatus.swift scripts/test-favorite-directory-status.swift \
   -o "$KIT_BUILD_DIR/test-favorite-directory-status"
 "$KIT_BUILD_DIR/test-favorite-directory-status"

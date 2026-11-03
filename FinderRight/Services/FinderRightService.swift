@@ -152,6 +152,8 @@ final class FinderRightService {
                     location: req.payload["directory"]?.stringValue.map { URL(fileURLWithPath: $0) }))
             }
             return response
+        case "createFileFromClipboard":
+            return createFileFromClipboard(req)
         case "compressZip":
             return compressZip(req)
         case "decompress":

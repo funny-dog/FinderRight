@@ -155,6 +155,7 @@ public struct MenuBuildInput: Equatable {
     public var cutState: CutState
     public var undoTitle: String?
     public var newFileTemplates: [MenuTemplateData]
+    public var newFileFromClipboard: Bool
     public var terminals: [MenuTerminalData]
     public var editors: [MenuEditorData]
     public var favoriteDirectories: [MenuFavoriteData]
@@ -169,6 +170,7 @@ public struct MenuBuildInput: Equatable {
         cutState: CutState = CutState(count: 0, isSelectionSubsetOfCut: false),
         undoTitle: String? = nil,
         newFileTemplates: [MenuTemplateData] = [],
+        newFileFromClipboard: Bool = true,
         terminals: [MenuTerminalData] = [],
         editors: [MenuEditorData] = [],
         favoriteDirectories: [MenuFavoriteData] = [],
@@ -182,6 +184,7 @@ public struct MenuBuildInput: Equatable {
         self.cutState = cutState
         self.undoTitle = undoTitle
         self.newFileTemplates = newFileTemplates
+        self.newFileFromClipboard = newFileFromClipboard
         self.terminals = terminals
         self.editors = editors
         self.favoriteDirectories = favoriteDirectories
@@ -433,7 +436,7 @@ public enum MenuTreeBuilder {
                 }
             case MenuFeatureCatalog.newFile:
                 if isContainerLike {
-                    let children = input.newFileTemplates.map { t in
+                    var children = input.newFileTemplates.map { t in
                         MenuDataNode(
                             id: "newFile.\(t.id)",
                             title: t.isCustom ? .dynamic(t.displayName) : .key(t.displayName),
@@ -441,6 +444,10 @@ public enum MenuTreeBuilder {
                             tint: t.tint,
                             kind: .action(actionId: "newFile", tag: t.tag)
                         )
+                    }
+                    if input.newFileFromClipboard {
+                        children.append(.action(id: "newFile.clipboard", titleKey: "从剪贴板新建…",
+                                                systemImage: "doc.on.clipboard", actionId: "newFileFromClipboard"))
                     }
                     items.append(.submenu(
                         id: MenuFeatureCatalog.newFile,

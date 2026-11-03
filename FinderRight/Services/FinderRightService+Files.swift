@@ -18,14 +18,18 @@ extension FinderRightService {
               let content = req.payload["content"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "createFile 参数缺失")
         }
-        // 白名单只校验了 directory；baseName / ext 会直接拼进路径，含 `/` 或 `..` 时
-        // 可穿越到白名单之外（如 ~/Desktop/../../../../tmp/x.txt），必须单独拦截
+        return writeNewFile(req, directory: directory, baseName: baseName, ext: ext, data: Data(content.utf8))
+    }
+
+    private func writeNewFile(_ req: IPCRequest, directory: String, baseName: String, ext: String, data: Data) -> IPCResponse {
         guard SafeFileName.isValid(baseName: baseName, ext: ext) else {
-            serviceLog("非法文件名被拦截: baseName=\(baseName) ext=\(ext)")
             return IPCResponse(id: req.id, success: false, message: L("非法的文件名"))
         }
+        // 剪贴板命名框可能停留很久，写入前重新校验目标（包括符号链接）。
+        guard isPathAllowed(directory, role: .destination) else {
+            return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), directory))
+        }
         let dirURL = URL(fileURLWithPath: directory)
-        let data = Data(content.utf8)
         // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
         for _ in 0..<5 {
             let fileURL = UniqueName.fileURL(baseName: baseName, ext: ext, in: dirURL)
@@ -43,6 +47,76 @@ extension FinderRightService {
             }
         }
         return IPCResponse(id: req.id, success: false, message: L("目标目录同名文件冲突，请重试"))
+    }
+
+    func createFileFromClipboard(_ req: IPCRequest) -> IPCResponse {
+        guard let directory = req.payload["directory"]?.stringValue else {
+            return IPCResponse(id: req.id, success: false, message: "createFileFromClipboard 参数缺失")
+        }
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.newFileFromClipboard,
+              SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.newFile) else {
+            return IPCResponse(id: req.id, success: false, message: L("此功能已关闭，请在设置中启用"))
+        }
+        guard Self.runGuarded(on: .global(qos: .userInitiated), work: { [self] in
+            let content: ClipboardFileContent
+            do {
+                content = try ClipboardFileContent.read(from: .general, allowFile: { isPathAllowed($0.path, role: .source) })
+            } catch {
+                reportClipboardFileFailure(error.localizedDescription, directory: directory)
+                return
+            }
+            DispatchQueue.main.async {
+                let isImage = content.fileExtension == "png"
+                let extensions = isImage ? ImageTargetFormat.allCases.map(\.fileExtension) : BuiltInFileTemplates.text.map(\.fileExtension)
+                let dialog = FRDialog(
+                    title: L("从剪贴板新建…"), message: directory, symbol: "doc.on.clipboard",
+                    buttons: [L("创建"), L("取消")],
+                    input: .file(initialName: "untitled", extensions: extensions, allowsCustomExtension: !isImage))
+                dialog.validate = { [weak dialog] index in
+                    guard index == 0, let dialog else { return nil }
+                    guard let ext = dialog.fileExtension, SafeFileName.isValid(baseName: dialog.text, ext: ext) else {
+                        return L("请输入有效的文件名和后缀")
+                    }
+                    return nil
+                }
+                dialog.show { [weak dialog] index in
+                    guard index == 0, let dialog, let ext = dialog.fileExtension else { return }
+                    let name = dialog.text
+                    guard Self.runGuarded(on: Self.archiveQueue, work: { [self] in
+                        SharedConfig.shared.reload()
+                        guard SharedConfig.shared.newFileFromClipboard,
+                              SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.newFile) else {
+                            reportClipboardFileFailure(L("此功能已关闭，请在设置中启用"), directory: directory)
+                            return
+                        }
+                        let data: Data
+                        do {
+                            data = try content.encodedData(for: ext)
+                        } catch {
+                            reportClipboardFileFailure(error.localizedDescription, directory: directory)
+                            return
+                        }
+                        let response = writeNewFile(req, directory: directory, baseName: name, ext: ext, data: data)
+                        if !response.success {
+                            reportClipboardFileFailure(response.message ?? L("文件操作失败"), directory: directory)
+                        }
+                    }) else {
+                        Self.reportExitInProgress()
+                        return
+                    }
+                }
+            }
+        }) else {
+            return Self.exitInProgressResponse(req)
+        }
+        return IPCResponse(id: req.id, success: true, message: nil)
+    }
+
+    private func reportClipboardFileFailure(_ message: String, directory: String) {
+        RecentOperations.shared.record(OperationRecord(kind: .createFile, subject: L("从剪贴板新建"),
+                                                      failure: message, location: URL(fileURLWithPath: directory)))
+        ClipboardToast.show(message: message, style: .failure)
     }
 
     /// 从主 App 内置的空白模板新建 Office 文档。
@@ -76,24 +150,7 @@ extension FinderRightService {
         } catch {
             return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
         }
-        let dirURL = URL(fileURLWithPath: directory)
-        // 查重与写入之间若恰好出现同名文件，withoutOverwriting 让写入失败而不是覆盖，换下一个序号重试
-        for _ in 0..<5 {
-            let fileURL = UniqueName.fileURL(baseName: baseName, ext: template.fileExtension, in: dirURL)
-            do {
-                try data.write(to: fileURL, options: .withoutOverwriting)
-                registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
-                RecentOperations.shared.record(OperationRecord(kind: .createFile, subject: fileURL.lastPathComponent,
-                                                                results: [fileURL], location: dirURL))
-                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                return IPCResponse(id: req.id, success: true, message: fileURL.path)
-            } catch let error as CocoaError where error.code == .fileWriteFileExists {
-                continue
-            } catch {
-                return IPCResponse(id: req.id, success: false, message: error.localizedDescription)
-            }
-        }
-        return IPCResponse(id: req.id, success: false, message: L("目标目录同名文件冲突，请重试"))
+        return writeNewFile(req, directory: directory, baseName: baseName, ext: template.fileExtension, data: data)
     }
 
     // MARK: - 创建符号链接

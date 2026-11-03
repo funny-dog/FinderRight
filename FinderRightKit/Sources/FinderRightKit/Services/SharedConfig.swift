@@ -55,6 +55,7 @@ public final class SharedConfig {
         static let hiddenEditors = "hiddenEditors"
         static let customFileTemplates = "customFileTemplates"
         static let newFileOrder = "newFileOrder"
+        static let newFileFromClipboard = "newFileFromClipboard"
         static let hiddenNewFileTemplates = "hiddenNewFileTemplates"
         static let removedNewFileTemplates = "removedNewFileTemplates"
         static let appLanguage = "appLanguage"

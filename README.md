@@ -27,7 +27,7 @@
 
 ### ✨ 功能
 
-- 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板
+- 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板；支持从剪贴板新建文本或 PNG/JPEG/HEIC 图片（包括在 Finder 中复制的单张图片文件），在「设置 → 文件模板」中开关（默认开启）
 - ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动；设置「功能 → 剪切 / 粘贴」可查看待剪切项目并逐项移除
 - 💻 **打开终端 / 编辑器** —— 可自定义终端 / 编辑器
 - 📋 **复制路径 / 文件名 / 文件内容** —— 支持设置各种格式的路径 / 文件名可选择是否带后缀
@@ -156,6 +156,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 
 - **加密 / 分卷压缩包**：加密 ZIP 会弹密码框；加密的 7z / RAR 和分卷包无法解压，会提示失败并自动清理临时文件。
 - **撤销**：只支持单级撤销，与访达自己的撤销按先后顺序共存；文件被改过或原位置有同名项时跳过，删除一律进废纸篓。
+- **剪贴板新建**：文件名默认 `untitled`，可修改；文本类型从下拉框选择，最后一项「自定义」可填写后缀；图片可选 PNG、JPEG 或 HEIC，JPEG 的透明区域会铺白底。
 - **操作历史**：仅保存在本机，默认保留最近 100 条（可选 0 / 50 / 500）；清空历史不影响文件和撤销。
 - **剪切状态**：粘贴过程中主 App 崩溃，未移动的项目会在下次启动时恢复回剪切队列。取消剪切失败时会提示原因，排除权限等问题后可重试。
 - **语言**：右键菜单即时切换，剪切角标文案需重启访达后生效。
@@ -198,7 +199,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 ### ✨ Features
 
-- 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates
+- 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates; create text files or PNG/JPEG/HEIC images from the clipboard, including a single image file copied in Finder; enabled by default in Settings → File Templates
 - ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste; view and remove individual queued items in Settings → Features → Cut / Paste
 - 💻 **Open in Terminal / Editor** — customize your terminal and editor
 - 📋 **Copy Path / File Name / File Content** — choose from various path formats and whether file names include extensions
@@ -329,6 +330,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 
 - **Encrypted / multi-volume archives**: encrypted ZIPs prompt for a password; encrypted 7z / RAR and split archives fail with a message, and temporary files are cleaned up.
 - **Undo**: single-level only, interleaved with Finder's own undo; items that changed or whose original location is taken are skipped, and deletions always go to the Trash.
+- **Create from Clipboard**: the file name defaults to `untitled` and can be changed. Select a text file type from the dropdown, or use its final Custom option to enter an extension. Images can be saved as PNG, JPEG or HEIC; transparent areas are filled white for JPEG.
 - **Operation history**: stored only on this Mac, keeping the latest 100 entries by default (0 / 50 / 500 also available); clearing it doesn't affect files or undo.
 - **Cut state**: if the main app crashes mid-paste, unmoved items return to the cut queue on next launch. If canceling cut fails, the app explains why; resolve the issue, such as permissions, and retry.
 - **Language**: the context menu switches immediately; the cut badge label updates after Finder restarts.
