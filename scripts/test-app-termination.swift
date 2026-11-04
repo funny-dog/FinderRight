@@ -22,6 +22,11 @@ final class CustomCommandController {
     func cancelAll() { cancelled = true }
 }
 
+final class GitStatusController {
+    static let shared = GitStatusController()
+    var isPerforming = false
+}
+
 final class UpdateChecker {
     static let shared = UpdateChecker()
     var isInstallingUpdate = true
@@ -46,7 +51,7 @@ final class IPCWatcher {
 struct TerminationChecks {
     static func main() throws {
         if CommandLine.arguments.count == 1 {
-            for scenario in ["更新退出", "普通退出"] {
+            for scenario in ["更新退出", "普通退出", "Git 操作中退出"] {
                 let child = Process()
                 child.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
                 child.arguments = [scenario]
@@ -58,6 +63,7 @@ struct TerminationChecks {
         }
 
         UpdateChecker.shared.isInstallingUpdate = CommandLine.arguments[1] == "更新退出"
+        GitStatusController.shared.isPerforming = CommandLine.arguments[1] == "Git 操作中退出"
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         let delegate = AppDelegate()

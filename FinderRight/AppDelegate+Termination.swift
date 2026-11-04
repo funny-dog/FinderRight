@@ -14,6 +14,7 @@ extension AppDelegate {
         // 主线程必须保持可调度，所有等待都放在后台线程
         jobs.close()
         let quittingForUpdate = UpdateChecker.shared.isInstallingUpdate
+        let finishingGitOperation = GitStatusController.shared.isPerforming
         let ipcDrained = DispatchSemaphore(value: 0)
         IPCWatcher.shared.shutdown { ipcDrained.signal() }
         DispatchQueue.global(qos: .userInitiated).async {
@@ -28,10 +29,10 @@ extension AppDelegate {
                 }
             }
             var finished = false
-            // 因更新而退出时不打断耗时文件操作；普通退出沿用原有 30 秒上限
+            // Git hooks / 签名可能超过 30 秒，写入期间退出也必须等操作完成。
             repeat {
                 finished = jobs.closeAndWait(timeout: 30)
-            } while quittingForUpdate && !finished
+            } while (quittingForUpdate || finishingGitOperation) && !finished
             NSLog("[AppDelegate] 后台任务\(finished ? "已完成" : "等待超时（30s）")，继续退出")
             RunLoop.main.perform(inModes: [.common, .modalPanel]) {
                 // 任务入口保持关闭到进程结束，防止收尾瞬间再挤进新任务。

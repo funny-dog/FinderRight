@@ -199,6 +199,24 @@ final class FinderRightService {
             return copyDeveloperText(req)
         case "runCustomCommand":
             return runCustomCommand(req)
+        case "gitStatus":
+            SharedConfig.shared.reload()
+            guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.gitStatus) else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
+            }
+            guard let path = req.payload["path"]?.stringValue else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("请选择文件或目录", comment: ""))
+            }
+            DispatchQueue.main.async { GitStatusController.shared.show(at: URL(fileURLWithPath: path)) }
+            return IPCResponse(id: req.id, success: true, message: nil)
+        case "compareFiles":
+            SharedConfig.shared.reload()
+            guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.compareFiles) else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
+            }
+            let files = (req.payload["items"]?.stringArrayValue ?? []).prefix(2).map { URL(fileURLWithPath: $0) }
+            DispatchQueue.main.async { FileComparisonController.shared.show(files: files) }
+            return IPCResponse(id: req.id, success: true, message: nil)
         case "copyFileHash":
             return copyFileHash(req)
         case "createSymlink":

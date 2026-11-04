@@ -175,7 +175,9 @@ public enum MenuFeatureCatalog {
     public static let toggleHidden = "feature.toggleHidden"
     public static let copyProjectRelativePath = "feature.copyProjectRelativePath"
     public static let copyDirectoryTree = "feature.copyDirectoryTree"
-    public static let developerFeatureIds = [copyProjectRelativePath, copyDirectoryTree]
+    public static let compareFiles = "feature.compareFiles"
+    public static let gitStatus = "feature.gitStatus"
+    public static let developerFeatureIds = [copyProjectRelativePath, copyDirectoryTree, compareFiles, gitStatus]
 
     /// 显示选中项的磁盘占用。默认排在最前：它是一条状态信息，不是操作
     public static let diskUsageFeature = MenuFeature(
@@ -232,6 +234,10 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyProjectRelativePath", menuItemTitle: "FinderRight: Copy Project Relative Path")),
         MenuFeature(id: copyDirectoryTree, nameKey: "复制目录树", descriptionKey: "复制文件夹结构，跳过常见依赖与构建目录，不读取文件内容", systemImage: "list.bullet.indent", tint: .purple,
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyDirectoryTree", menuItemTitle: "FinderRight: Copy Directory Tree")),
+        MenuFeature(id: compareFiles, nameKey: "比较文件…", descriptionKey: "拖入两个文本文件，并排查看差异", systemImage: "doc.on.doc", tint: .purple,
+                    serviceDeclaration: nil),
+        MenuFeature(id: gitStatus, nameKey: "Git 状态…", descriptionKey: "查看改动，切换分支、暂存与提交", systemImage: "arrow.triangle.branch", tint: .purple,
+                    serviceDeclaration: nil),
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。

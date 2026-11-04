@@ -34,7 +34,7 @@
 - 💾 **查看磁盘占用** —— 在访达空白处或单选文件/文件夹时，在右键菜单顶部查看占用大小，点击文件夹或空白处可查看直属子项占用排行；设置「功能 → 显示大小」可关闭（默认开启）
 - 📂 **打开路径** —— 默认 ⇧⌘G 在 Finder 中唤起，替代系统「前往文件夹」，粘贴路径即可定位或打开；在设置「功能 → 打开路径」可选「全局生效」（默认关闭），从其他应用唤起
 - 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
-- 🛠 **开发者工具**（默认关闭）—— 复制项目相对路径、复制目录树，以及对文件 / 目录执行自定义命令；各项直接显示在常规菜单之后，在「设置 → 开发者工具」中单独开关和拖动排序。命令支持多选，可查看、复制输出和停止执行
+- 🛠 **开发者工具**（默认关闭）—— 复制项目相对路径、复制目录树、内置文件比较、本地 Git 状态，以及对文件 / 目录执行自定义命令；各项直接显示在常规菜单之后，在「设置 → 开发者工具」中单独开关和拖动排序。命令支持多选，可查看、复制输出和停止执行
 - 🔗 **复制哈希 / 创建符号链接**（默认关闭）—— 复制 SHA-256 / SHA-1 / MD5（多选与 shasum 格式一致）；在原位置创建终端可识别的符号链接
 - 🖼️ **图片快速转换 / 缩放** —— 转换为 PNG / JPEG / HEIC，或按长边等比缩放至 2560px / 1920px / 1280px / 800px；仅在选中项全为图片时显示，支持批量与撤销
 - 📦 **压缩 / 解压** —— 默认关闭：ZIP 使用 UTF-8 文件名
@@ -161,7 +161,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - **撤销**：只支持单级撤销，与访达自己的撤销按先后顺序共存；文件被改过或原位置有同名项时跳过，删除一律进废纸篓。
 - **新建文件**：桌面新建不弹出访达窗口，其他目录仍自动选中新文件。
 - **剪贴板新建**：文件名默认 `untitled`，可修改；文本类型从下拉框选择，最后一项「自定义」可填写后缀；图片可选 PNG、JPEG 或 HEIC，JPEG 的透明区域会铺白底。文本和图片分别记住上次成功创建时的格式，包括自定义文本后缀；取消或创建失败不更新记忆。
-- **开发者工具**：项目相对路径以最近 Git 仓库为基准；目录树最多 4 层、1,000 项和 128 KiB，跳过常见依赖与构建目录，不展开符号链接或文件包。自定义命令以 `zsh` 登录环境在后台执行，选中项通过 `"$@"` 传入；不支持交互输入和撤销，关闭输出窗口或退出应用会停止命令。自定义命令暂不提供云盘「服务」入口。
+- **开发者工具**：项目相对路径以最近 Git 仓库为基准；目录树最多 4 层、1,000 项和 128 KiB，跳过常见依赖与构建目录，不展开符号链接或文件包。文件比较使用紧凑窗口，未选齐时显示左右拖入框，选齐后收成顶部窄栏，下方按行并排显示新增、删除与行号；只读支持 UTF-8 和带 BOM 的 UTF-16，每个文件最多 1 MiB、20,000 行。Git 状态支持切换和新建本地分支、暂存／取消暂存、提交，以及目录筛选和已暂存／未暂存 diff。提交前列出整个仓库的暂存文件，沿用 Git 身份、hooks 与签名配置；需要终端交互的流程暂不支持。暂不提供拉取／推送，也不比较符号链接或子模块内容。自定义命令以 `zsh` 登录环境在后台执行，选中项通过 `"$@"` 传入；不支持交互输入和撤销，关闭输出窗口或退出应用会停止命令。自定义命令暂不提供云盘「服务」入口。
 - **操作历史**：仅保存在本机，默认保留最近 100 条（可选 0 / 50 / 500）；清空历史不影响文件和撤销。
 - **剪切状态**：粘贴过程中主 App 崩溃，未移动的项目会在下次启动时恢复回剪切队列。取消剪切失败时会提示原因，排除权限等问题后可重试。
 - **语言**：右键菜单即时切换，剪切角标文案需重启访达后生效。
@@ -211,7 +211,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 💾 **Disk Usage** — see the size at the top of Finder’s right-click menu for empty areas or a selected file/folder, and click folders to view direct children breakdown; turn it off in Settings → Features → Show Size (on by default)
 - 📂 **Open Path** — press ⇧⌘G in Finder by default to replace Go to Folder, then paste a path to reveal or open it; optionally enable “Use Globally” in Settings → Features → Open Path (off by default) to invoke it from other apps
 - 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
-- 🛠 **Developer Tools** (off by default) — copy project-relative paths and directory trees, or run custom commands on files and folders. Actions appear directly after the regular menu; toggle and reorder them separately in Settings → Developer Tools. Commands support multiple items, output viewing and copying, and stopping
+- 🛠 **Developer Tools** (off by default) — copy project-relative paths and directory trees, compare text files in a built-in window, view local Git status, or run custom commands on files and folders. Actions appear directly after the regular menu; toggle and reorder them separately in Settings → Developer Tools. Commands support multiple items, output viewing and copying, and stopping
 - 🔗 **Copy Hash / Make Symbolic Link** (off by default) — copy SHA-256 / SHA-1 / MD5 (multiple files use the shasum format); create symbolic links that Terminal understands, next to the originals
 - 🖼️ **Image Convert / Scale** — convert to PNG / JPEG / HEIC, or scale proportionally by long edge to 2560px / 1920px / 1280px / 800px; shown only when all selected items are images, with batch support and undo
 - 📦 **Compress / Extract** — off by default; ZIPs use UTF-8 filenames
@@ -340,7 +340,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - **Undo**: single-level only, interleaved with Finder's own undo; items that changed or whose original location is taken are skipped, and deletions always go to the Trash.
 - **New File**: creating a file on the desktop does not open a Finder window; other folders still select the new file automatically.
 - **Create from Clipboard**: the file name defaults to `untitled` and can be changed. Select a text file type from the dropdown, or use its final Custom option to enter an extension. Images can be saved as PNG, JPEG or HEIC; transparent areas are filled white for JPEG. Text and images separately remember the last successfully used format, including custom text extensions; cancelling or a failed creation keeps the previous choice.
-- **Developer Tools**: relative paths use the nearest Git repository. Directory trees show up to 4 levels, 1,000 items and 128 KiB, skip common dependency and build folders, and do not expand symbolic links or packages. Custom commands run in a background login `zsh`, with selected items passed as `"$@"`; interactive input and undo are unavailable. Closing the output window or quitting stops the command. Custom commands are not currently available through Services in cloud folders.
+- **Developer Tools**: relative paths use the nearest Git repository. Directory trees show up to 4 levels, 1,000 items and 128 KiB, skip common dependency and build folders, and do not expand symbolic links or packages. File comparison uses a compact window: two drop areas before both files are selected, then slim file bars above aligned line numbers and additions/deletions. It is read-only and supports UTF-8 and UTF-16 with a BOM, up to 1 MiB and 20,000 lines per file. Git status supports switching and creating local branches, staging/unstaging, commits, folder filtering and staged/unstaged diffs. Review all staged files across the repository before committing. Git identity, hooks and signing settings are respected; workflows requiring terminal input are unsupported. Pull/push and content diffs for symbolic links or submodules are not provided. Custom commands run in a background login `zsh`, with selected items passed as `"$@"`; interactive input and undo are unavailable. Closing the output window or quitting stops the command. Custom commands are not currently available through Services in cloud folders.
 - **Operation history**: stored only on this Mac, keeping the latest 100 entries by default (0 / 50 / 500 also available); clearing it doesn't affect files or undo.
 - **Cut state**: if the main app crashes mid-paste, unmoved items return to the cut queue on next launch. If canceling cut fails, the app explains why; resolve the issue, such as permissions, and retry.
 - **Language**: the context menu switches immediately; the cut badge label updates after Finder restarts.

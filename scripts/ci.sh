@@ -23,6 +23,14 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-developer-menu.swift -o "$KIT_BUILD_DIR/test-developer-menu"
 "$KIT_BUILD_DIR/test-developer-menu"
 
+for check in git-status git-operations; do
+  swiftc -parse-as-library -target arm64-apple-macos13.0 \
+    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+    -L "$KIT_BUILD_DIR" -lFinderRightKit \
+    "scripts/test-$check.swift" -o "$KIT_BUILD_DIR/test-$check"
+  "$KIT_BUILD_DIR/test-$check"
+done
+
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
 
@@ -61,6 +69,22 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   FinderRight/Views/SettingsPresentation.swift scripts/test-settings-presentation.swift \
   -o "$KIT_BUILD_DIR/test-settings-presentation"
 "$KIT_BUILD_DIR/test-settings-presentation"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/FileComparisonView.swift scripts/test-file-comparison-view.swift \
+  -o "$KIT_BUILD_DIR/test-file-comparison-view"
+"$KIT_BUILD_DIR/test-file-comparison-view"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/FileComparisonView.swift FinderRight/Views/GitStatusView.swift scripts/test-git-status-view.swift \
+  -o "$KIT_BUILD_DIR/test-git-status-view"
+"$KIT_BUILD_DIR/test-git-status-view"
 
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \

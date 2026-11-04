@@ -57,6 +57,22 @@ struct DeveloperToolsTab: View {
                                     .help("拖动调整在右键菜单中的顺序")
                                 if let feature = MenuFeatureCatalog.feature(forId: id) {
                                     FeatureToggleRow(feature: feature)
+                                    if id == MenuFeatureCatalog.compareFiles {
+                                        Button { FileComparisonController.shared.show() } label: {
+                                            Image(systemName: "arrow.up.right.square")
+                                        }
+                                        .buttonStyle(.frLink)
+                                        .help("打开文件比较")
+                                        .accessibilityLabel("打开文件比较")
+                                    }
+                                    if id == MenuFeatureCatalog.gitStatus {
+                                        Button { GitStatusController.shared.show() } label: {
+                                            Image(systemName: "arrow.up.right.square")
+                                        }
+                                        .buttonStyle(.frLink)
+                                        .help("打开 Git 状态")
+                                        .accessibilityLabel("打开 Git 状态")
+                                    }
                                 } else if let command = commands.first(where: { $0.menuId == id }) {
                                     commandRow(command)
                                 }

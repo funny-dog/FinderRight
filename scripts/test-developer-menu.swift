@@ -10,7 +10,9 @@ struct DeveloperMenuChecks {
         let config = SharedConfig(fileURL: directory.appendingPathComponent("settings.plist"))
         let relative = MenuFeatureCatalog.copyProjectRelativePath
         let tree = MenuFeatureCatalog.copyDirectoryTree
-        assert(!config.developerToolsEnabled && !config.isActionEnabled(relative) && !config.isActionEnabled(tree))
+        let compare = MenuFeatureCatalog.compareFiles
+        let git = MenuFeatureCatalog.gitStatus
+        assert(!config.developerToolsEnabled && !config.isActionEnabled(relative) && !config.isActionEnabled(tree) && !config.isActionEnabled(compare) && !config.isActionEnabled(git))
         config.developerToolsEnabled = true
         assert(config.isActionEnabled(relative) && config.isActionEnabled(tree))
         config.setActionEnabled(tree, enabled: false)
@@ -22,13 +24,13 @@ struct DeveloperMenuChecks {
 
         let original = MenuFeatureCatalog.all.map(\.id).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0) }.reversed()
         let upgraded = MenuFeatureCatalog.ordered(by: Array(original)).map(\.id)
-        assert(Array(upgraded.suffix(2)) == [relative, tree])
-        assert(Array(upgraded.dropLast(2)) == Array(original))
+        assert(Array(upgraded.suffix(4)) == [relative, tree, compare, git])
+        assert(Array(upgraded.dropLast(4)) == Array(original))
         let reordered = MenuFeatureCatalog.ordered(by: [tree] + Array(original) + [relative]).map(\.id)
-        assert(Array(reordered.suffix(2)) == [relative, tree])
+        assert(Array(reordered.suffix(4)) == [relative, tree, compare, git])
         let independent = MenuFeatureCatalog.ordered(by: Array(original), developerOrder: [tree, relative]).map(\.id)
-        assert(Array(independent.dropLast(2)) == Array(original))
-        assert(Array(independent.suffix(2)) == [tree, relative])
+        assert(Array(independent.dropLast(4)) == Array(original))
+        assert(Array(independent.suffix(4)) == [tree, compare, git, relative])
         reloaded.developerMenuOrder = [tree, relative]
         assert(SharedConfig(fileURL: directory.appendingPathComponent("settings.plist")).developerMenuOrder == [tree, relative])
 
@@ -51,6 +53,27 @@ struct DeveloperMenuChecks {
         let disabledMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
             location: .items, selection: .singleFolder, enabledFeatureIds: []))
         assert(disabledMenu.isEmpty)
+        for selection in [SelectionKind.empty, .singleFolder, .singleFile(isTextEligible: true, isArchive: false),
+                          .multiple(count: 2, hasRegularFiles: true, hasArchives: false)] {
+            let menu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+                location: .items, selection: selection, enabledFeatureIds: [compare]))
+            assert(menu.map(\.id) == [compare])
+            guard case .action(let action, _) = menu[0].kind else { fatalError("文件比较必须直接显示") }
+            assert(action == "compareFiles")
+        }
+
+        for selection in [SelectionKind.empty, .singleFolder, .singleFile(isTextEligible: true, isArchive: false)] {
+            let menu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+                location: .items, selection: selection, enabledFeatureIds: [git]))
+            assert(menu.map(\.id) == [git])
+            guard case .action(let action, _) = menu[0].kind else { fatalError("Git 状态必须直接显示") }
+            assert(action == "gitStatus")
+        }
+        assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .items, selection: .multiple(count: 2, hasRegularFiles: true, hasArchives: false), enabledFeatureIds: [git])).isEmpty)
+
+        assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .container, selection: .multiple(count: 2, hasRegularFiles: true, hasArchives: false), enabledFeatureIds: [git])).map(\.id) == [git])
 
         let command = DeveloperCommand(name: "检查项目", script: "pwd")
         reloaded.developerCommands = [command]

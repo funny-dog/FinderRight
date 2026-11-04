@@ -121,6 +121,25 @@ extension FinderSync {
         }
     }
 
+    @objc func gitStatus(_ sender: NSMenuItem) {
+        guard let url = commandSelection.first ?? commandDirectory else { return }
+        IPCClient.shared.callAsync(action: "gitStatus", payload: ["path": .string(url.path)]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开 Git 状态", comment: ""), style: .failure)
+            }
+        }
+    }
+
+    @objc func compareFiles(_ sender: NSMenuItem) {
+        let items = commandSelection
+        let files = items.count <= 2 ? items.filter(FileHasher.isRegularFile) : []
+        IPCClient.shared.callAsync(action: "compareFiles", payload: ["items": .stringArray(files.map(\.path))]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开文件比较", comment: ""), style: .failure)
+            }
+        }
+    }
+
     @objc func copyFileContent(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard urls.count == 1, let url = urls.first else {

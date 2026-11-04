@@ -87,3 +87,10 @@
 "复制失败" = "Copy failed";
 
 "命令执行失败" = "Command failed";
+
+"比较文件…" = "Compare Files…";
+"无法打开文件比较" = "Could not open file comparison";
+
+// Local Git status
+"Git 状态…" = "Git Status…";
+"无法打开 Git 状态" = "Unable to open Git status";
