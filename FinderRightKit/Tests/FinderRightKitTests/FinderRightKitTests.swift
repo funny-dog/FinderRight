@@ -1005,6 +1005,26 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!SafeFileName.isValid(baseName: String(repeating: "a", count: 300), ext: "txt"), "超过 255 字节")
         }
 
+        runTest("NewFilePresentation 只跳过桌面本身的自动定位") {
+            let desktop = URL(fileURLWithPath: "/Users/tester/Desktop", isDirectory: true)
+            try assertTrue(!NewFilePresentation.shouldReveal(in: desktop, desktopDirectory: desktop))
+            try assertTrue(!NewFilePresentation.shouldReveal(in: desktop.appendingPathComponent("./"), desktopDirectory: desktop))
+            try assertTrue(NewFilePresentation.shouldReveal(in: desktop.appendingPathComponent("子目录"), desktopDirectory: desktop))
+            try assertTrue(NewFilePresentation.shouldReveal(in: URL(fileURLWithPath: "/Users/tester/Downloads/Desktop"), desktopDirectory: desktop))
+            try assertTrue(NewFilePresentation.shouldReveal(in: desktop, desktopDirectory: nil), "桌面位置未知时保留原行为")
+        }
+
+        runTest("NewFilePresentation 桌面与目标目录的符号链接指向同一位置") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+            let link = root.appendingPathComponent("desktop-link", isDirectory: true)
+            try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: desktop)
+            try assertTrue(!NewFilePresentation.shouldReveal(in: link, desktopDirectory: desktop))
+            try assertTrue(!NewFilePresentation.shouldReveal(in: desktop, desktopDirectory: link))
+        }
+
         // 19. 子进程执行：stderr 超过管道缓冲（约 64KB）时不得死锁
         runTest("ProcessRunner 大量 stderr 输出不死锁") {
             var result: ProcessRunner.Result?

@@ -38,7 +38,9 @@ extension FinderRightService {
                 registerUndo(.createFile, name: fileURL.lastPathComponent, items: [(fileURL, nil)])
                 RecentOperations.shared.record(OperationRecord(kind: .createFile, subject: fileURL.lastPathComponent,
                                                                 results: [fileURL], location: dirURL))
-                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                if NewFilePresentation.shouldReveal(in: dirURL) {
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                }
                 return IPCResponse(id: req.id, success: true, message: fileURL.path)
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
                 continue
