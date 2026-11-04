@@ -25,8 +25,36 @@ enum SettingsPresentationTests {
         presentation.toggle(reduceMotion: false)
         precondition(presentation.isCompact && !presentation.isTransitioning)
         precondition(SettingsPresentation(defaults: defaults).isCompact)
+
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let window = RestoredSettingsWindow(contentRect: full, styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                                            backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let compactPresentation = SettingsPresentation(defaults: defaults)
+        compactPresentation.attach(to: window)
+        precondition(window.frame.size == SettingsWindowLayout.compactSize)
+        precondition(window.minSize == window.maxSize)
+        precondition(!window.styleMask.contains(.resizable))
+        precondition(window.isMovable && window.styleMask.contains(.titled))
+
         presentation.toggle(reduceMotion: true)
         precondition(!presentation.isCompact && !SettingsPresentation(defaults: defaults).isCompact)
-        print("PASS: 简洁模式尺寸、右上角锚点、屏幕边界、多屏坐标与模式持久化")
+        SettingsPresentation(defaults: defaults).attach(to: window)
+        precondition(window.styleMask.contains(.resizable))
+        precondition(window.frame.size == full.size)
+        window.close()
+        print("PASS: 简洁模式固定尺寸、可移动、旧尺寸恢复、完整模式缩放、屏幕边界与模式持久化")
     }
+}
+
+/// 模拟旧窗口尺寸缓存，避免测试读写用户的真实窗口位置。
+private final class RestoredSettingsWindow: NSWindow {
+    override func setFrameUsingName(_ name: NSWindow.FrameAutosaveName) -> Bool {
+        setFrame(NSRect(x: 400, y: 200, width: 780, height: 620), display: false)
+        return true
+    }
+
+    override func setFrameAutosaveName(_ name: NSWindow.FrameAutosaveName) -> Bool { true }
+    override func saveFrame(usingName name: NSWindow.FrameAutosaveName) {}
 }

@@ -41,7 +41,7 @@
 - ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
 - 🕘 **操作历史** —— 按日期查看每次操作的结果与失败原因，可搜索、筛选、在访达中定位
 - ☁️ **云盘里也能用** —— iCloud / Google Drive 等目录通过右键「服务」菜单使用
-- **简洁模式** —— 点击设置窗口右上角的胶囊按钮，收拢为小窗口；再次点击恢复完整设置，自动记住所选模式
+- **简洁模式** —— 点击设置窗口右上角的胶囊按钮，收拢为固定大小、可拖动的小窗口；再次点击恢复完整设置，自动记住所选模式
 - ⌨️ **自定义快捷键与菜单顺序**，🌗 **中英双语**，🔄 **应用内自动更新**
 
 ### 📸 截图
@@ -215,7 +215,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
 - 🕘 **Operation History** — review each action's result or failure reason by date; search, filter and reveal in Finder
 - ☁️ **Works in cloud folders** — use it in iCloud / Google Drive via the right-click Services menu
-- **Compact mode** — click the capsule at the top right of Settings to fold it into a small window; click again to restore full settings. Your choice is remembered.
+- **Compact mode** — click the capsule at the top right of Settings to fold it into a small, fixed-size window you can drag; click again to restore full settings. Your choice is remembered.
 - ⌨️ **Custom shortcuts and menu order**, 🌗 **English & Chinese**, 🔄 **in-app auto-update**
 
 ### 📸 Screenshots

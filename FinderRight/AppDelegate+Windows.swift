@@ -218,7 +218,8 @@ private final class WindowDragBar: NSView {
             switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
             case "Minimize": window.performMiniaturize(nil)
             case "None": break
-            default: window.zoom(nil)
+            default:
+                if window.styleMask.contains(.resizable) { window.zoom(nil) }
             }
             return
         }

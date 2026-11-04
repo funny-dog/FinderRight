@@ -110,6 +110,14 @@ final class SettingsPresentation: ObservableObject {
     }
 
     private func applySizeLimits(to window: NSWindow) {
+        if isCompact {
+            window.styleMask.remove(.resizable)
+            let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+            window.setFrame(SettingsWindowLayout.frame(from: window.frame,
+                            size: SettingsWindowLayout.compactSize, visibleFrame: visibleFrame), display: false)
+        } else {
+            window.styleMask.insert(.resizable)
+        }
         window.minSize = isCompact ? SettingsWindowLayout.compactSize : SettingsWindowLayout.minimumFullSize
         window.maxSize = isCompact ? SettingsWindowLayout.compactSize
             : NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
