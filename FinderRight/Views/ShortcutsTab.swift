@@ -6,21 +6,27 @@ import FinderRightKit
 
 struct ShortcutsTab: View {
 
-    private let actions: [(id: String, name: String, icon: String)] = [
-        ("shortcut.undo",         "撤销",           "arrow.uturn.backward"),
-        ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
-        ("shortcut.copyPath",     "复制路径",       "link"),
-        ("shortcut.copyFileName", "复制文件名",     "character.cursor.ibeam"),
-        ("shortcut.copyFileContent", "复制文件内容", "doc.plaintext"),
-        ("shortcut.goToDirectory", "打开路径…",     "arrow.right.circle"),
-        ("shortcut.openTerminal", "打开终端",       "terminal"),
-        ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
-        ("shortcut.cut",          "剪切",           "scissors"),
-        ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
-        ("shortcut.compress",     "压缩为 ZIP",     "doc.zipper"),
-        ("shortcut.decompress",   "解压到当前目录", "shippingbox.and.arrow.backward"),
-        ("shortcut.toggleHidden", "切换隐藏文件",   "eye"),
-    ]
+    private var actions: [(id: String, name: String, icon: String)] {
+        let regular: [(id: String, name: String, icon: String)] = [
+            ("shortcut.undo",         "撤销",           "arrow.uturn.backward"),
+            ("shortcut.newFile",      "新建文件",       "doc.badge.plus"),
+            ("shortcut.copyPath",     "复制路径",       "link"),
+            ("shortcut.copyFileName", "复制文件名",     "character.cursor.ibeam"),
+            ("shortcut.copyFileContent", "复制文件内容", "doc.plaintext"),
+            ("shortcut.goToDirectory", "打开路径…",     "arrow.right.circle"),
+            ("shortcut.openTerminal", "打开终端",       "terminal"),
+            ("shortcut.openEditor",   "打开编辑器",     "curlybraces"),
+            ("shortcut.cut",          "剪切",           "scissors"),
+            ("shortcut.paste",        "粘贴",           "doc.on.clipboard"),
+            ("shortcut.compress",     "压缩为 ZIP",     "doc.zipper"),
+            ("shortcut.decompress",   "解压到当前目录", "shippingbox.and.arrow.backward"),
+            ("shortcut.toggleHidden", "切换隐藏文件",   "eye"),
+        ]
+        return regular + (SharedConfig.shared.developerToolsEnabled ? [
+            ("shortcut.copyProjectRelativePath", "复制项目相对路径", "point.topleft.down.curvedto.point.bottomright.up"),
+            ("shortcut.copyDirectoryTree", "复制目录树", "list.bullet.indent")
+        ] : [])
+    }
 
     @FRState private var conflictMessage: String?
     /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
@@ -352,11 +358,21 @@ enum ServiceShortcutSync {
             // 全局热键独占入口，移除服务回退，避免同一组合触发两次。
             shortcuts.removeValue(forKey: FinderKeyTakeover.goToDirectoryActionId)
         }
+        let showsMenu = UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool
+        var developerVisibility: [String: Bool] = [:]
+        for id in MenuFeatureCatalog.developerFeatureIds {
+            let enabled = SharedConfig.shared.isActionEnabled(id)
+            if !enabled { shortcuts.removeValue(forKey: id.replacingOccurrences(of: "feature.", with: "shortcut.")) }
+            for service in MenuFeatureCatalog.feature(forId: id)?.serviceDeclarations ?? [] {
+                developerVisibility[service.message] = enabled && showsMenu != false
+            }
+        }
         guard let bundleId = Bundle.main.bundleIdentifier,
               ServiceShortcuts.sync(
                 shortcuts: shortcuts, bundleId: bundleId,
                 services: Bundle.main.object(forInfoDictionaryKey: "NSServices") as? [[String: Any]] ?? [],
-                showsInServicesMenu: UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool
+                showsInServicesMenu: showsMenu,
+                serviceVisibility: developerVisibility
               ) else { return false }
         UserDefaults.standard.set(Date(), forKey: syncedAtKey)
         return true

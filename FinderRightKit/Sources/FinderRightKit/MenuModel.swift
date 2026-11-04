@@ -152,6 +152,8 @@ public struct MenuBuildInput: Equatable {
     public var selection: SelectionKind
     public var enabledFeatureIds: Set<String>
     public var menuOrder: [String]
+    public var developerMenuOrder: [String]
+    public var developerCommands: [DeveloperCommand]
     public var cutState: CutState
     public var undoTitle: String?
     public var newFileTemplates: [MenuTemplateData]
@@ -173,6 +175,8 @@ public struct MenuBuildInput: Equatable {
         selection: SelectionKind,
         enabledFeatureIds: Set<String>,
         menuOrder: [String] = MenuFeatureCatalog.all.map(\.id),
+        developerMenuOrder: [String] = [],
+        developerCommands: [DeveloperCommand] = [],
         cutState: CutState = CutState(count: 0, isSelectionSubsetOfCut: false),
         undoTitle: String? = nil,
         newFileTemplates: [MenuTemplateData] = [],
@@ -190,6 +194,8 @@ public struct MenuBuildInput: Equatable {
         self.selection = selection
         self.enabledFeatureIds = enabledFeatureIds
         self.menuOrder = menuOrder
+        self.developerMenuOrder = developerMenuOrder
+        self.developerCommands = developerCommands
         self.cutState = cutState
         self.undoTitle = undoTitle
         self.newFileTemplates = newFileTemplates
@@ -431,7 +437,7 @@ public enum MenuTreeBuilder {
             input.enabledFeatureIds.contains(id)
         }
 
-        let orderedFeatures = MenuFeatureCatalog.ordered(by: input.menuOrder)
+        let orderedFeatures = MenuFeatureCatalog.ordered(by: input.menuOrder, developerOrder: input.developerMenuOrder)
 
         for feature in orderedFeatures where featureOn(feature.id) {
             switch feature.id {
@@ -492,6 +498,18 @@ public enum MenuTreeBuilder {
                         actionId: "copyPath",
                         shortcutId: "shortcut.copyPath"
                     ))
+                }
+            case MenuFeatureCatalog.copyProjectRelativePath:
+                if hasSelection {
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint,
+                                         actionId: "copyProjectRelativePath", shortcutId: "shortcut.copyProjectRelativePath"))
+                }
+            case MenuFeatureCatalog.copyDirectoryTree:
+                if input.selection == .singleFolder || (input.selection == .empty && input.location == .container) {
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint,
+                                         actionId: "copyDirectoryTree", shortcutId: "shortcut.copyDirectoryTree"))
                 }
             case MenuFeatureCatalog.copyFileName:
                 if hasSelection {
@@ -780,7 +798,15 @@ public enum MenuTreeBuilder {
             }
         }
 
-        return items
+        let commands = input.developerCommands.filter { $0.isEnabled && $0.isValid }
+        for (index, command) in input.developerCommands.enumerated() where command.isEnabled && command.isValid {
+            items.append(.dynamicAction(id: command.menuId, title: command.name, systemImage: "terminal", tint: .purple,
+                                        actionId: "runCustomCommand", tag: index))
+        }
+        let developerIds = MenuFeatureCatalog.developerFeatureIds + commands.map(\.menuId)
+        let developerOrder = MenuFeatureCatalog.normalizedOrder(input.developerMenuOrder, defaults: developerIds)
+        let developerNodes = Dictionary(items.filter { developerIds.contains($0.id) }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return items.filter { !developerIds.contains($0.id) } + developerOrder.compactMap { developerNodes[$0] }
     }
 
     private static func buildFavoritesSubmenu(

@@ -45,6 +45,9 @@ public final class SharedConfig {
 
     enum Keys {
         static let enabledActions = "enabledActions"
+        static let developerToolsEnabled = "developerToolsEnabled"
+        static let developerMenuOrder = "developerMenuOrder"
+        static let developerCommands = "developerCommands"
         static let menuIconStyle = "menuIconStyle"
         static let preferredTerminal = "preferredTerminal"
         static let selectedTerminals = "selectedTerminals"

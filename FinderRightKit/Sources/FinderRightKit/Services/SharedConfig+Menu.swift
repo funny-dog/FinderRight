@@ -1,6 +1,56 @@
 import Foundation
 
 extension SharedConfig {
+    public func developerCommand(id: String) -> DeveloperCommand? {
+        guard developerToolsEnabled else { return nil }
+        return developerCommands.first { $0.id == id && $0.isEnabled && $0.isValid }
+    }
+
+    public var developerCommands: [DeveloperCommand] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let data = store[Keys.developerCommands] as? Data else { return [] }
+            return (try? JSONDecoder().decode([DeveloperCommand].self, from: data)) ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if let data = try? JSONEncoder().encode(newValue) {
+                store[Keys.developerCommands] = data
+                save()
+            }
+        }
+    }
+
+    public var developerMenuOrder: [String] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.developerMenuOrder] as? [String] ?? []
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.developerMenuOrder] = newValue
+            save()
+        }
+    }
+
+    public var developerToolsEnabled: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.developerToolsEnabled] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.developerToolsEnabled] = newValue
+            save()
+        }
+    }
+
     // MARK: - Enabled Actions
 
     /// 每个 action 的开关状态，key 为 action id
@@ -20,6 +70,7 @@ extension SharedConfig {
 
     /// 检查指定 action 是否启用（未设置时默认启用，MenuFeatureCatalog.disabledByDefault 中的除外）
     public func isActionEnabled(_ actionId: String) -> Bool {
+        if MenuFeatureCatalog.developerFeatureIds.contains(actionId), !developerToolsEnabled { return false }
         return enabledActions[actionId] ?? !MenuFeatureCatalog.disabledByDefault.contains(actionId)
     }
 

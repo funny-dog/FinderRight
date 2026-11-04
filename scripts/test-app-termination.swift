@@ -7,12 +7,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         precondition(IPCWatcher.shared.completed, "退出前必须排空 IPC")
         precondition(FinderRightService.backgroundJobs.isIdle, "退出前必须完成文件任务")
         precondition(IPCWatcher.shared.shutdownCount == 1, "退出应排空一次")
+        precondition(CustomCommandController.shared.cancelled, "退出前必须停止自定义命令")
         print("PASS: \(CommandLine.arguments[1]) 主队列发起退出并完成收尾")
     }
 }
 
 enum FinderRightService {
     static let backgroundJobs = BackgroundJobs()
+}
+
+final class CustomCommandController {
+    static let shared = CustomCommandController()
+    private(set) var cancelled = false
+    func cancelAll() { cancelled = true }
 }
 
 final class UpdateChecker {

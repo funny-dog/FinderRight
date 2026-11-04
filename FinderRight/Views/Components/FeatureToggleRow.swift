@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import FinderRightKit
 
 /// 单个功能开关行：前导图标 + 名称与说明 + 开关。直接读写 SharedConfig，开关状态即时持久化。
@@ -31,6 +32,10 @@ struct FeatureToggleRow: View {
                 set: { newValue in
                     isEnabled = newValue
                     SharedConfig.shared.setActionEnabled(feature.id, enabled: newValue)
+                    if MenuFeatureCatalog.developerFeatureIds.contains(feature.id) {
+                        if ServiceShortcutSync.run() { NSUpdateDynamicServices() }
+                        FinderShortcutInterceptor.shared.refresh()
+                    }
                 }
             ))
         }

@@ -915,3 +915,35 @@
 "在访达中选中文件右键选择「剪切」或按 ⌘X 后，待移动的项目会显示在这里" = "Select files in Finder and choose Cut or press ⌘X to see pending items here.";
 "已剪切项目" = "Cut Items";
 "提示：前往目标目录右键选择「粘贴」或按 ⌘V 即可完成移动" = "Tip: Right-click Paste in the destination or press ⌘V to move files.";
+
+"开发者工具" = "Developer Tools";
+"启用开发者工具" = "Enable Developer Tools";
+"复制项目相对路径" = "Copy Project Relative Path";
+"复制目录树" = "Copy Directory Tree";
+"复制相对于最近 Git 仓库根目录的路径，多选时每行一项" = "Copy paths relative to the nearest Git repository root, one per line for multiple items";
+"复制文件夹结构，跳过常见依赖与构建目录，不读取文件内容" = "Copy the folder structure, skipping common dependency and build folders without reading file contents";
+"无法访问所选路径" = "Cannot access the selected path";
+"请选择一个文件夹" = "Select one folder";
+
+"找不到 Git 仓库，剪贴板未改变" = "No Git repository found. The clipboard was not changed.";
+"请选择普通文件夹，不支持符号链接或文件包" = "Select a regular folder, not a symbolic link or package.";
+"无法完整读取目录，剪贴板未改变" = "Could not read the entire directory. The clipboard was not changed.";
+
+"自定义命令" = "Custom Command";
+"添加命令…" = "Add Command…";
+"编辑命令" = "Edit Command";
+"删除命令" = "Delete Command";
+"启用命令" = "Enable Command";
+"菜单名称" = "Menu Name";
+"命令（zsh）" = "Command (zsh)";
+"选中项通过 \"$@\" 传入；后台运行，不支持交互输入。" = "Selected items are passed as \"$@\". Runs in the background without interactive input.";
+"命令可修改文件，不支持撤销。" = "Commands can modify files and cannot be undone.";
+"正在停止…" = "Stopping…";
+"正在运行…" = "Running…";
+"已停止" = "Stopped";
+"退出码：%d" = "Exit code: %d";
+"复制输出" = "Copy Output";
+"停止" = "Stop";
+"仅显示最后 128 KiB 输出" = "Showing only the last 128 KiB of output";
+"命令不存在或已关闭" = "The command is unavailable or disabled";
+"命令执行失败" = "Command failed";

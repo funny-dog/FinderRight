@@ -2819,12 +2819,12 @@ struct FinderRightKitTestsRunner {
         }
 
         runTest("前往目录升级后默认显示并保留原菜单顺序") {
-            let oldSaved = MenuFeatureCatalog.all.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
+            let oldSaved = MenuFeatureCatalog.regular.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
             let ids = MenuFeatureCatalog.ordered(by: Array(oldSaved)).map(\.id)
             let predId = MenuFeatureCatalog.all[MenuFeatureCatalog.all.firstIndex(where: { $0.id == MenuFeatureCatalog.goToDirectory })! - 1].id
             let predIndex = ids.firstIndex(of: predId)!
             try assertEqual(ids[predIndex + 1], MenuFeatureCatalog.goToDirectory)
-            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory }, Array(oldSaved))
+            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory && !MenuFeatureCatalog.developerFeatureIds.contains($0) }, Array(oldSaved))
 
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
@@ -6311,6 +6311,212 @@ struct FinderRightKitTestsRunner {
             let fileURL = root.appendingPathComponent("small.txt")
             try assertNil(DiskUsage.inspectDirectChildren(at: fileURL), "对非目录调用应返回 nil")
         }
+
+        // MARK: - 开发者工具与自定义命令
+
+        runTest("开发者工具：项目相对路径、多选、嵌套仓库与仓库根") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            let folder = root.appendingPathComponent("中文 空格's/src")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("main.swift")
+            try Data().write(to: file)
+            try assertEqual(try ProjectRelativePath.paths(for: [file, folder, root]), ["中文 空格's/src/main.swift", "中文 空格's/src", "."])
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try assertEqual(try ProjectRelativePath.paths(for: [file]), ["main.swift"])
+        }
+
+        runTest("开发者工具：worktree 标记与无效标记") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let marker = root.appendingPathComponent(".git")
+            let file = root.appendingPathComponent("readme.md")
+            try Data().write(to: file)
+            try Data("gitdir: ../repo/.git/worktrees/test\n".utf8).write(to: marker)
+            try assertEqual(try ProjectRelativePath.paths(for: [file]), ["readme.md"])
+            try Data("gitdir: \n".utf8).write(to: marker)
+            try assertThrows(DeveloperFileToolError.noRepository) { _ = try ProjectRelativePath.paths(for: [file]) }
+        }
+
+        runTest("开发者工具：保留符号链接名称且多选失败不返回部分路径") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let repo = root.appendingPathComponent("repo")
+            try FileManager.default.createDirectory(at: repo.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            let outside = root.appendingPathComponent("outside.txt")
+            try Data().write(to: outside)
+            let link = repo.appendingPathComponent("链接.txt")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+            try assertEqual(try ProjectRelativePath.paths(for: [link]), ["链接.txt"])
+            try assertThrows(DeveloperFileToolError.noRepository) { _ = try ProjectRelativePath.paths(for: [link, outside]) }
+            try FileManager.default.removeItem(at: outside)
+            try assertEqual(try ProjectRelativePath.paths(for: [link]), ["链接.txt"])
+        }
+
+        runTest("开发者工具：目录树排序、常见目录过滤和控制字符转义") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for name in ["src", "assets", ".git", "node_modules", ".venv", "venv", "__pycache__", ".build", "build", "dist", ".next"] {
+                try FileManager.default.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: true)
+            }
+            for name in ["z.txt", "a\n\t.txt", ".env", ".DS_Store"] { try Data().write(to: root.appendingPathComponent(name)) }
+            let tree = try DirectoryTree.render(at: root)
+            let expected = "\(root.lastPathComponent)/\n├── assets/\n├── src/\n├── .env\n├── a\\n\\t.txt\n└── z.txt"
+            try assertEqual(tree, expected)
+        }
+
+        runTest("开发者工具：目录树不展开符号链接环或文件包") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let package = root.appendingPathComponent("Example.app")
+            try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+            try Data().write(to: package.appendingPathComponent("inside.txt"))
+            let link = root.appendingPathComponent("loop")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("Example.app/") && tree.contains("loop"))
+            try assertTrue(!tree.contains("inside.txt"))
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: link) }
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: package) }
+        }
+
+        runTest("开发者工具：目录树深度限制明确标记") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let deep = root.appendingPathComponent("a/b/c/d/e")
+            try FileManager.default.createDirectory(at: deep, withIntermediateDirectories: true)
+            try Data().write(to: deep.appendingPathComponent("hidden.txt"))
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("d/ …"))
+            try assertTrue(!tree.contains("e/") && !tree.contains("hidden.txt"))
+        }
+
+        runTest("开发者工具：目录树项数上限") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for index in 0..<1_005 { try Data().write(to: root.appendingPathComponent("file-\(index)")) }
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("…"))
+            try assertEqual(tree.split(separator: "\n").filter { $0.contains("file-") }.count, 1_000)
+        }
+
+        runTest("开发者工具：目录树输出字节上限") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for index in 0..<700 {
+                try Data().write(to: root.appendingPathComponent(String(repeating: "a", count: 230) + "-\(index)"))
+            }
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("…"))
+            try assertTrue(tree.utf8.count <= 128 * 1024)
+        }
+
+        runTest("开发者工具：不可读目录与错误输入不返回空结果") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("plain.txt")
+            try Data().write(to: file)
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: file) }
+            var missingFailed = false
+            do { _ = try ProjectRelativePath.paths(for: [root.appendingPathComponent("missing")]) } catch { missingFailed = true }
+            try assertTrue(missingFailed)
+            let locked = root.appendingPathComponent("locked")
+            try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
+            if !FileManager.default.isReadableFile(atPath: locked.path) {
+                try assertThrows(DeveloperFileToolError.unreadableDirectory) { _ = try DirectoryTree.render(at: root) }
+            }
+        }
+
+        runTest("自定义命令：文件、目录、空白处和多选的工作目录") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("main.py")
+            try Data().write(to: file)
+            let folder = root.appendingPathComponent("src")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let second = folder.appendingPathComponent("sub.py")
+            try Data().write(to: second)
+            try assertEqual(try DeveloperCommand.context(selection: [file], directory: nil).directory.path, root.path)
+            try assertEqual(try DeveloperCommand.context(selection: [folder], directory: root).directory.path, folder.path)
+            try assertEqual(try DeveloperCommand.context(selection: [], directory: root).items, [root])
+            try assertEqual(try DeveloperCommand.context(selection: [file, second], directory: root).directory.path, root.path)
+            var rejected = false
+            do { _ = try DeveloperCommand.context(selection: [], directory: nil) } catch { rejected = true }
+            try assertTrue(rejected)
+        }
+
+        runTest("自定义命令：参数保留中文空格引号且不执行文件名中的命令") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let first = root.appendingPathComponent("中文 空格 ' $(touch injected).txt")
+            let second = root.appendingPathComponent("second.txt")
+            let result = try DeveloperCommandRunner().run(script: "printf '%s\\n' \"$@\"", items: [first, second], directory: root)
+            try assertEqual(result.status, 0)
+            try assertTrue(result.output.contains(first.path + "\n" + second.path))
+            try assertTrue(!FileManager.default.fileExists(atPath: root.appendingPathComponent("injected").path))
+        }
+
+        runTest("自定义命令：收集标准输出与错误并保留退出码") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let result = try DeveloperCommandRunner().run(script: "printf STDOUT; printf STDERR >&2; exit 7", items: [], directory: root)
+            try assertEqual(result.status, 7)
+            try assertTrue(result.output.contains("STDOUT") && result.output.contains("STDERR"))
+            try assertTrue(!result.cancelled)
+        }
+
+        runTest("自定义命令：输出超过管道容量时不死锁并限制内存") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let result = try DeveloperCommandRunner().run(
+                script: "for i in {1..10000}; do printf 0123456789abcdef >&2; done; printf END", items: [], directory: root)
+            try assertEqual(result.status, 0)
+            try assertTrue(result.truncated)
+            try assertTrue(result.output.utf8.count <= DeveloperCommandRunner.outputLimit)
+            try assertTrue(result.output.hasSuffix("END"))
+        }
+
+        runTest("自定义命令：停止命令同时终止普通子进程") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            let start = ProcessInfo.processInfo.systemUptime
+            let result = try runner.run(script: "/bin/sleep 20 & print READY; wait", items: [], directory: root) { output, _ in
+                if output.contains("READY") { runner.cancel() }
+            }
+            try assertTrue(result.cancelled)
+            try assertTrue(ProcessInfo.processInfo.systemUptime - start < 5)
+        }
+
+        runTest("自定义命令：忽略终止信号时升级停止且不会遗留等待") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            let start = ProcessInfo.processInfo.systemUptime
+            let result = try runner.run(script: "trap '' TERM; /bin/sleep 20 & print READY; wait", items: [], directory: root) { output, _ in
+                if output.contains("READY") { runner.cancel() }
+            }
+            try assertTrue(result.cancelled)
+            try assertTrue(ProcessInfo.processInfo.systemUptime - start < 5)
+        }
+
+        runTest("自定义命令：执行前停止与非法配置") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            runner.cancel()
+            let result = try runner.run(script: "touch unexpected", items: [], directory: root)
+            try assertTrue(result.cancelled)
+            try assertTrue(!FileManager.default.fileExists(atPath: root.appendingPathComponent("unexpected").path))
+            try assertTrue(!DeveloperCommand(name: "", script: "pwd").isValid)
+            try assertTrue(!DeveloperCommand(name: "title\nforged", script: "pwd").isValid)
+            try assertTrue(!DeveloperCommand(name: "title", script: " \n").isValid)
+            try assertTrue(!DeveloperCommand(id: "../../command", name: "title", script: "pwd").isValid)
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

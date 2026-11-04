@@ -43,6 +43,8 @@ public enum ServiceShortcuts {
         Binding(actionId: "shortcut.paste",           menuTitle: "FinderRight: Paste into This Folder",   message: "pasteFiles"),
         Binding(actionId: "shortcut.compress",        menuTitle: "FinderRight: Compress to ZIP",          message: "compressZip"),
         Binding(actionId: "shortcut.decompress",      menuTitle: "FinderRight: Extract Here",             message: "decompress"),
+        Binding(actionId: "shortcut.copyProjectRelativePath", menuTitle: "FinderRight: Copy Project Relative Path", message: "copyProjectRelativePath"),
+        Binding(actionId: "shortcut.copyDirectoryTree", menuTitle: "FinderRight: Copy Directory Tree", message: "copyDirectoryTree"),
     ]
 
     public static let pbsDomain = "pbs"
@@ -85,7 +87,8 @@ public enum ServiceShortcuts {
                                     bundleId: String,
                                     shortcuts: [String: ActionShortcut],
                                     services: [[String: Any]] = [],
-                                    showsInServicesMenu: Bool? = nil) -> [String: Any] {
+                                    showsInServicesMenu: Bool? = nil,
+                                    serviceVisibility: [String: Bool] = [:]) -> [String: Any] {
         var result = status
         for binding in bindings {
             let key = statusEntryKey(bundleId: bundleId, binding: binding)
@@ -99,20 +102,19 @@ public enum ServiceShortcuts {
             }
             result[key] = entry.isEmpty ? nil : entry
         }
-        if let enabled = showsInServicesMenu {
-            for service in services {
-                guard let title = (service["NSMenuItem"] as? [String: String])?["default"],
-                      let message = service["NSMessage"] as? String else { continue }
-                let key = "\(bundleId) - \(title) - \(message)"
-                var entry = (result[key] as? [String: Any]) ?? [:]
-                entry["enabled_context_menu"] = enabled
-                entry["enabled_services_menu"] = enabled
-                var modes = (entry["presentation_modes"] as? [String: Any]) ?? [:]
-                modes["ContextMenu"] = enabled
-                modes["ServicesMenu"] = enabled
-                entry["presentation_modes"] = modes
-                result[key] = entry
-            }
+        for service in services {
+            guard let title = (service["NSMenuItem"] as? [String: String])?["default"],
+                  let message = service["NSMessage"] as? String else { continue }
+            guard let enabled = serviceVisibility[message] ?? showsInServicesMenu else { continue }
+            let key = "\(bundleId) - \(title) - \(message)"
+            var entry = (result[key] as? [String: Any]) ?? [:]
+            entry["enabled_context_menu"] = enabled
+            entry["enabled_services_menu"] = enabled
+            var modes = (entry["presentation_modes"] as? [String: Any]) ?? [:]
+            modes["ContextMenu"] = enabled
+            modes["ServicesMenu"] = enabled
+            entry["presentation_modes"] = modes
+            result[key] = entry
         }
         return result
     }
@@ -124,12 +126,14 @@ public enum ServiceShortcuts {
                             bundleId: String,
                             services: [[String: Any]] = [],
                             showsInServicesMenu: Bool? = nil,
+                            serviceVisibility: [String: Bool] = [:],
                             domain: String = pbsDomain) -> Bool {
         let appId = domain as CFString
         CFPreferencesAppSynchronize(appId)
         let current = (CFPreferencesCopyAppValue(statusKey as CFString, appId) as? [String: Any]) ?? [:]
         let merged = mergedStatus(current, bundleId: bundleId, shortcuts: shortcuts,
-                                  services: services, showsInServicesMenu: showsInServicesMenu)
+                                  services: services, showsInServicesMenu: showsInServicesMenu,
+                                  serviceVisibility: serviceVisibility)
         guard !NSDictionary(dictionary: current).isEqual(to: merged) else { return false }
 
         let value: CFPropertyList? = merged.isEmpty ? nil : merged as CFDictionary

@@ -9,7 +9,7 @@ struct FeaturesTab: View {
     @FRState private var copyPathFormat: CopyPathFormat = SharedConfig.shared.copyPathFormat
     @FRState private var copyFileNameFormat: CopyFileNameFormat = SharedConfig.shared.copyFileNameFormat
     @FRState private var copyFileContentMaxSizeKB: Int = SharedConfig.shared.copyFileContentMaxSizeKB
-    @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder)
+    @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0.id) }
     @FRState private var dropTargetId: String?
     @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
 
@@ -53,6 +53,9 @@ struct FeaturesTab: View {
             openPathSection
             badgeSection
             quickLookSection
+        }
+        .onAppear {
+            featureOrder = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0.id) }
         }
     }
 
@@ -141,10 +144,10 @@ struct FeaturesTab: View {
                 Spacer()
                 Button("恢复默认顺序") {
                     SharedConfig.shared.menuOrder = []
-                    featureOrder = MenuFeatureCatalog.ordered(by: [])
+                    featureOrder = MenuFeatureCatalog.regular
                 }
                 .buttonStyle(.frLink)
-                .disabled(featureOrder.map(\.id) == MenuFeatureCatalog.all.map(\.id))
+                .disabled(featureOrder.map(\.id) == MenuFeatureCatalog.regular.map(\.id))
                 .padding(.trailing, 4)
             }
         } content: {
