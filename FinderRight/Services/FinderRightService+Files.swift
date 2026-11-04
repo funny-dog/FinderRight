@@ -75,6 +75,7 @@ extension FinderRightService {
                     title: L("从剪贴板新建…"), message: directory, symbol: "doc.on.clipboard",
                     buttons: [L("创建"), L("取消")],
                     input: .file(initialName: "untitled", extensions: extensions, allowsCustomExtension: !isImage))
+                dialog.fileExtension = SharedConfig.shared.clipboardFileExtension(isImage: isImage)
                 dialog.validate = { [weak dialog] index in
                     guard index == 0, let dialog else { return nil }
                     guard let ext = dialog.fileExtension, SafeFileName.isValid(baseName: dialog.text, ext: ext) else {
@@ -100,7 +101,10 @@ extension FinderRightService {
                             return
                         }
                         let response = writeNewFile(req, directory: directory, baseName: name, ext: ext, data: data)
-                        if !response.success {
+                        if response.success {
+                            SharedConfig.shared.reload()
+                            SharedConfig.shared.setClipboardFileExtension(ext, isImage: isImage)
+                        } else {
                             reportClipboardFileFailure(response.message ?? L("文件操作失败"), directory: directory)
                         }
                     }) else {

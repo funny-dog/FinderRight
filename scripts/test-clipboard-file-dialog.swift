@@ -8,6 +8,15 @@ struct ClipboardFileDialogChecks {
         let model = FRDialogModel(title: "", message: "", symbol: "doc", tone: .normal, buttons: ["创建", "取消"],
                                   input: .file(initialName: "untitled", extensions: extensions, allowsCustomExtension: true))
         precondition(model.text == "untitled" && model.fileExtension == "txt")
+        model.fileExtension = "md"
+        precondition(model.fileExtension == "md" && model.selected == extensions.firstIndex(of: "md"))
+        model.fileExtension = "yaml"
+        precondition(model.fileExtension == "yaml" && model.selected == extensions.count && model.customExtension == "yaml")
+        for ext in [nil, "", "../bad", "a/b", "bad\nname"] as [String?] {
+            model.fileExtension = ext
+            precondition(model.fileExtension == "yaml", "无效记忆不覆盖当前类型")
+        }
+        precondition(model.text == "untitled", "恢复格式不恢复旧文件名")
         model.text = "报告"
         model.customExtension = "exe"
         for (index, ext) in extensions.enumerated() {
@@ -36,6 +45,10 @@ struct ClipboardFileDialogChecks {
         let image = FRDialogModel(title: "", message: "", symbol: "photo", tone: .normal, buttons: ["创建"],
                                   input: .file(initialName: "untitled", extensions: imageExtensions, allowsCustomExtension: false))
         precondition(image.fileExtension == "png")
+        image.fileExtension = "heic"
+        precondition(image.fileExtension == "heic")
+        image.fileExtension = "yaml"
+        precondition(image.fileExtension == "heic", "图片只恢复支持的图片格式")
         for (index, ext) in imageExtensions.enumerated() {
             image.selected = index
             precondition(image.fileExtension == ext)

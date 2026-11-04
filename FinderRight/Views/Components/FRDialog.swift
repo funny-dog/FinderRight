@@ -54,7 +54,10 @@ final class FRDialog: NSObject, NSWindowDelegate {
 
     var text: String { model.text }
     var selectedIndex: Int { model.selected }
-    var fileExtension: String? { model.fileExtension }
+    var fileExtension: String? {
+        get { model.fileExtension }
+        set { model.fileExtension = newValue }
+    }
 
     private let model: FRDialogModel
     private let panel: FRDialogPanel
@@ -233,13 +236,24 @@ final class FRDialogModel: ObservableObject {
     }
 
     var fileExtension: String? {
-        guard case .file(_, let extensions, let allowsCustom) = input else { return nil }
-        if extensions.indices.contains(selected) { return extensions[selected] }
-        guard allowsCustom, selected == extensions.count else { return nil }
-        var ext = customExtension.trimmingCharacters(in: .whitespacesAndNewlines)
-        if ext.hasPrefix(".") { ext.removeFirst() }
-        guard !ext.isEmpty, SafeFileName.isValid(baseName: text, ext: ext) else { return nil }
-        return ext
+        get {
+            guard case .file(_, let extensions, let allowsCustom) = input else { return nil }
+            if extensions.indices.contains(selected) { return extensions[selected] }
+            guard allowsCustom, selected == extensions.count else { return nil }
+            var ext = customExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+            if ext.hasPrefix(".") { ext.removeFirst() }
+            guard !ext.isEmpty, SafeFileName.isValid(baseName: text, ext: ext) else { return nil }
+            return ext
+        }
+        set {
+            guard let ext = newValue, case .file(_, let extensions, let allowsCustom) = input else { return }
+            if let index = extensions.firstIndex(of: ext) {
+                selected = index
+            } else if allowsCustom, !ext.isEmpty, SafeFileName.isValid(baseName: "untitled", ext: ext) {
+                customExtension = ext
+                selected = extensions.count
+            }
+        }
     }
 
     private func updateHint() {

@@ -56,6 +56,8 @@ public final class SharedConfig {
         static let customFileTemplates = "customFileTemplates"
         static let newFileOrder = "newFileOrder"
         static let newFileFromClipboard = "newFileFromClipboard"
+        static let clipboardTextFileExtension = "clipboardTextFileExtension"
+        static let clipboardImageFileExtension = "clipboardImageFileExtension"
         static let hiddenNewFileTemplates = "hiddenNewFileTemplates"
         static let removedNewFileTemplates = "removedNewFileTemplates"
         static let appLanguage = "appLanguage"

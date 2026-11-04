@@ -4035,6 +4035,22 @@ struct FinderRightKitTestsRunner {
             try assertTrue(resolved.contains(where: { $0.id == "txt" }))
         }
 
+        runTest("剪贴板新建：文本与图片格式分别持久化") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: file)
+            try assertNil(config.clipboardFileExtension(isImage: false))
+            try assertNil(config.clipboardFileExtension(isImage: true))
+            config.setClipboardFileExtension("md", isImage: false)
+            config.setClipboardFileExtension("jpeg", isImage: true)
+            config.setClipboardFileExtension("yaml", isImage: false)
+            let reloaded = SharedConfig(fileURL: file)
+            try assertEqual(reloaded.clipboardFileExtension(isImage: false), "yaml")
+            try assertEqual(reloaded.clipboardFileExtension(isImage: true), "jpeg")
+            try assertTrue(reloaded.newFileFromClipboard, "记忆格式不改变功能开关")
+        }
+
         runTest("剪贴板新建：默认开启、开关持久化与菜单入口") {
             let root = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: root) }

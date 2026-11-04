@@ -15,6 +15,19 @@ extension SharedConfig {
         }
     }
 
+    public func clipboardFileExtension(isImage: Bool) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return store[isImage ? Keys.clipboardImageFileExtension : Keys.clipboardTextFileExtension] as? String
+    }
+
+    public func setClipboardFileExtension(_ ext: String, isImage: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        store[isImage ? Keys.clipboardImageFileExtension : Keys.clipboardTextFileExtension] = ext
+        save()
+    }
+
     // MARK: - Custom File Templates
 
     /// 自定义文件模板列表

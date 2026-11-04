@@ -158,7 +158,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - **加密 / 分卷压缩包**：加密 ZIP 会弹密码框；加密的 7z / RAR 和分卷包无法解压，会提示失败并自动清理临时文件。
 - **撤销**：只支持单级撤销，与访达自己的撤销按先后顺序共存；文件被改过或原位置有同名项时跳过，删除一律进废纸篓。
 - **新建文件**：桌面新建不弹出访达窗口，其他目录仍自动选中新文件。
-- **剪贴板新建**：文件名默认 `untitled`，可修改；文本类型从下拉框选择，最后一项「自定义」可填写后缀；图片可选 PNG、JPEG 或 HEIC，JPEG 的透明区域会铺白底。
+- **剪贴板新建**：文件名默认 `untitled`，可修改；文本类型从下拉框选择，最后一项「自定义」可填写后缀；图片可选 PNG、JPEG 或 HEIC，JPEG 的透明区域会铺白底。文本和图片分别记住上次成功创建时的格式，包括自定义文本后缀；取消或创建失败不更新记忆。
 - **操作历史**：仅保存在本机，默认保留最近 100 条（可选 0 / 50 / 500）；清空历史不影响文件和撤销。
 - **剪切状态**：粘贴过程中主 App 崩溃，未移动的项目会在下次启动时恢复回剪切队列。取消剪切失败时会提示原因，排除权限等问题后可重试。
 - **语言**：右键菜单即时切换，剪切角标文案需重启访达后生效。
@@ -334,7 +334,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - **Encrypted / multi-volume archives**: encrypted ZIPs prompt for a password; encrypted 7z / RAR and split archives fail with a message, and temporary files are cleaned up.
 - **Undo**: single-level only, interleaved with Finder's own undo; items that changed or whose original location is taken are skipped, and deletions always go to the Trash.
 - **New File**: creating a file on the desktop does not open a Finder window; other folders still select the new file automatically.
-- **Create from Clipboard**: the file name defaults to `untitled` and can be changed. Select a text file type from the dropdown, or use its final Custom option to enter an extension. Images can be saved as PNG, JPEG or HEIC; transparent areas are filled white for JPEG.
+- **Create from Clipboard**: the file name defaults to `untitled` and can be changed. Select a text file type from the dropdown, or use its final Custom option to enter an extension. Images can be saved as PNG, JPEG or HEIC; transparent areas are filled white for JPEG. Text and images separately remember the last successfully used format, including custom text extensions; cancelling or a failed creation keeps the previous choice.
 - **Operation history**: stored only on this Mac, keeping the latest 100 entries by default (0 / 50 / 500 also available); clearing it doesn't affect files or undo.
 - **Cut state**: if the main app crashes mid-paste, unmoved items return to the cut queue on next launch. If canceling cut fails, the app explains why; resolve the issue, such as permissions, and retry.
 - **Language**: the context menu switches immediately; the cut badge label updates after Finder restarts.
