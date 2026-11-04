@@ -63,6 +63,12 @@ public enum FileContentReader {
             return .readFailed
         }
 
+        return decodeText(data)
+    }
+
+    /// 供有界读取等其他文本入口复用同一编码与二进制判定。
+    public static func decodeText(_ data: Data) -> FileContentReadResult {
+
         // 1. 检查 UTF-16 BOM (FE FF 或 FF FE)
         if (data.starts(with: [0xFE, 0xFF]) || data.starts(with: [0xFF, 0xFE])),
            let text = String(data: data, encoding: .utf16),

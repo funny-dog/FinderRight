@@ -487,6 +487,16 @@ public enum MenuTreeBuilder {
                                          systemImage: feature.systemImage, tint: feature.tint,
                                          actionId: "copyDirectoryTree", shortcutId: "shortcut.copyDirectoryTree"))
                 }
+            case MenuFeatureCatalog.gitStatus:
+                switch input.selection {
+                case .multiple where input.location != .container: break
+                default:
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint, actionId: "gitStatus"))
+                }
+            case MenuFeatureCatalog.compareFiles:
+                items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                     systemImage: feature.systemImage, tint: feature.tint, actionId: "compareFiles"))
             case MenuFeatureCatalog.copyFileName:
                 if hasSelection {
                     items.append(.action(

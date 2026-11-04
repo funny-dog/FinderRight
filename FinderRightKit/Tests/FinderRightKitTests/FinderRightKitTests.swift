@@ -6086,6 +6086,92 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!DeveloperCommand(id: "../../command", name: "title", script: "pwd").isValid)
         }
 
+        func compareTextFixtures(_ left: String, _ right: String) throws -> FileComparisonResult {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let l = root.appendingPathComponent("left.txt"), r = root.appendingPathComponent("right.txt")
+            try left.write(to: l, atomically: true, encoding: .utf8)
+            try right.write(to: r, atomically: true, encoding: .utf8)
+            let ld = try ComparisonDocument.read(l), rd = try ComparisonDocument.read(r)
+            let result = try FileComparisonResult.compare(ld, rd)
+            try assertEqual(result.rows.compactMap(\.left), ld.lines)
+            try assertEqual(result.rows.compactMap(\.right), rd.lines)
+            try assertEqual(result.rows.compactMap(\.leftNumber), Array(1..<(ld.lines.count + 1)))
+            try assertEqual(result.rows.compactMap(\.rightNumber), Array(1..<(rd.lines.count + 1)))
+            try assertEqual(try String(contentsOf: l, encoding: .utf8), left, "比较不能修改左侧文件")
+            try assertEqual(try String(contentsOf: r, encoding: .utf8), right, "比较不能修改右侧文件")
+            return result
+        }
+
+        runTest("文件比较：相同文本和空文件") {
+            let identical = try compareTextFixtures("first\nsecond\n", "first\nsecond\n")
+            try assertEqual(identical.additions, 0)
+            try assertEqual(identical.deletions, 0)
+            try assertTrue(identical.rows.allSatisfy { $0.kind == .unchanged })
+            try assertTrue(try compareTextFixtures("", "").rows.isEmpty)
+        }
+
+        runTest("文件比较：开头中间末尾的插入删除替换与行号对齐") {
+            let cases = [("", "one\n"), ("one\n", ""), ("a\nc\n", "a\nb\nc\n"),
+                         ("a\nb\nc\n", "a\nc\n"), ("b\nc\n", "a\nb\nc\n"),
+                         ("a\nb\n", "a\nb\nc\n"), ("a\nold\nc\n", "a\nnew\nextra\nc\n"),
+                         ("a\nb\na\n", "b\na\nb\n")]
+            for (left, right) in cases {
+                let result = try compareTextFixtures(left, right)
+                try assertTrue(result.additions + result.deletions > 0)
+                try assertTrue(result.rows.filter { $0.kind == .unchanged }.allSatisfy { $0.left == $0.right })
+            }
+            let replaced = try compareTextFixtures("a\nold\nc\n", "a\nnew\nextra\nc\n")
+            try assertEqual(replaced.deletions, 1)
+            try assertEqual(replaced.additions, 2)
+            try assertEqual(replaced.rows[2].left, nil)
+            try assertEqual(replaced.rows[2].right, "extra")
+        }
+
+        runTest("文件比较：内容像 diff 标头时不会误解析") {
+            let result = try compareTextFixtures("1c1\n< old\n---\n", "2a3\n> new\n---\n")
+            try assertEqual(result.rows.last?.left, "---")
+            try assertEqual(result.rows.last?.kind, .unchanged)
+        }
+
+        runTest("文件比较：末尾换行和换行格式差异") {
+            let finalNewline = try compareTextFixtures("last", "last\n")
+            try assertEqual(finalNewline.additions, 1)
+            try assertEqual(finalNewline.deletions, 1)
+            let crlf = try compareTextFixtures("a\r\nb\r\n", "a\nb\n")
+            try assertEqual(crlf.additions + crlf.deletions, 0)
+            try assertTrue(crlf.differentLineEndings)
+            let cr = try compareTextFixtures("a\rb\r", "a\r\nb\r\n")
+            try assertTrue(cr.differentLineEndings)
+        }
+
+        runTest("文件比较：中文 UTF-8 BOM 与 UTF-16 BOM") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let l = root.appendingPathComponent("中文 空格's.txt"), r = root.appendingPathComponent("right.txt")
+            let text = "中文🙂\n第二行\n"
+            try (Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8)).write(to: l)
+            try (Data([0xFF, 0xFE]) + text.data(using: .utf16LittleEndian)!).write(to: r)
+            let result = try FileComparisonResult.compare(ComparisonDocument.read(l), ComparisonDocument.read(r))
+            try assertEqual(result.additions + result.deletions, 0)
+            try assertEqual(result.rows.first?.left, "中文🙂")
+        }
+
+        runTest("文件比较：拒绝二进制目录大文件及过多行") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let url = root.appendingPathComponent("input")
+            try Data([0x61, 0x00, 0x62]).write(to: url)
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(url) }
+            try Data([0xFF, 0xFD]).write(to: url)
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(url) }
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(root) }
+            try Data(repeating: 0x61, count: ComparisonDocument.maxBytes + 1).write(to: url)
+            try assertThrows(FileComparisonError.tooLarge) { _ = try ComparisonDocument.read(url) }
+            try String(repeating: "line\n", count: 20_001).write(to: url, atomically: true, encoding: .utf8)
+            try assertThrows(FileComparisonError.tooManyLines) { _ = try ComparisonDocument.read(url) }
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

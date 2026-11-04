@@ -486,6 +486,8 @@ class FinderSync: FIFinderSync {
         case "copyProjectRelativePath": return #selector(self.copyProjectRelativePath(_:))
         case "copyDirectoryTree": return #selector(self.copyDirectoryTree(_:))
         case "runCustomCommand": return #selector(self.runCustomCommand(_:))
+        case "compareFiles": return #selector(self.compareFiles(_:))
+        case "gitStatus": return #selector(self.gitStatus(_:))
         case "copyFileName": return #selector(self.copyFileName(_:))
         case "copyFileContent": return #selector(self.copyFileContent(_:))
         case "copyFileHash": return #selector(self.copyFileHash(_:))
