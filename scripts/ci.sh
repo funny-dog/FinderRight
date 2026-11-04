@@ -44,6 +44,11 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  FinderRight/Views/SettingsPresentation.swift scripts/test-settings-presentation.swift \
+  -o "$KIT_BUILD_DIR/test-settings-presentation"
+"$KIT_BUILD_DIR/test-settings-presentation"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \

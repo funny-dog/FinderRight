@@ -26,6 +26,7 @@ extension AppDelegate {
             let page = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             if let tab = SettingsView.SettingsTab.allCases.first(where: { $0.urlName == page }) {
                 SettingsNavigation.shared.selectedTab = tab
+                SettingsPresentation.shared.showFullSettings()
             }
             // 冷启动时先完成激活策略初始化，再切为 regular 显示窗口。
             DispatchQueue.main.async { [weak self] in self?.openSettings() }

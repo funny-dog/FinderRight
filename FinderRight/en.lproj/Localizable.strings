@@ -21,6 +21,12 @@
 "退出 FinderRight" = "Quit FinderRight";
 
 /* Settings tabs */
+"简洁模式" = "Compact Mode";
+"完整模式" = "Full Mode";
+"恢复完整设置窗口" = "Restore the full settings window";
+"收起为简洁窗口" = "Fold into a compact window";
+"切换到完整模式" = "Switch to full mode";
+"切换到简洁模式" = "Switch to compact mode";
 "通用" = "General";
 "功能" = "Features";
 "快捷键" = "Shortcuts";

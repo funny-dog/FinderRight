@@ -57,9 +57,54 @@ struct SettingsView: View {
     }
 
     @ObservedObject private var navigation = SettingsNavigation.shared
+    @ObservedObject private var presentation = SettingsPresentation.shared
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if presentation.isCompact {
+                        CompactSettingsView {
+                            navigation.selectedTab = .permissions
+                            presentation.showFullSettings()
+                        }
+                        .transition(.opacity.combined(with: .offset(y: 8)))
+                    } else {
+                        fullLayout
+                            .frame(width: max(680, geometry.size.width), height: max(500, geometry.size.height))
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                    }
+                }
+                .opacity(presentation.showsContent ? 1 : 0)
+                .blur(radius: reduceMotion || presentation.showsContent ? 0 : 4)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: presentation.showsContent)
+                if presentation.isTransitioning && !reduceMotion {
+                    SettingsModeEffect(isCollapsing: presentation.isCompact)
+                        .id(presentation.isCompact)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: presentation.isCompact)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .clipped()
+            .overlay(alignment: .topTrailing) {
+                SettingsModeButton(isCompact: presentation.isCompact,
+                                   isTransitioning: presentation.isTransitioning,
+                                   reduceMotion: reduceMotion) {
+                    presentation.toggle(reduceMotion: reduceMotion)
+                }
+                .padding(.top, 8)
+                .padding(.trailing, 12)
+            }
+        }
+        // 主题色变化时整棵视图重建，让所有动态颜色按新主题重新取值
+        .id(themeRaw)
+        .background(FRTheme.window)
+        .ignoresSafeArea()
+    }
+
+    private var fullLayout: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $navigation.selectedTab)
 
@@ -68,14 +113,10 @@ struct SettingsView: View {
                 .frame(width: 1)
 
             page
+                .padding(.top, 28)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(FRTheme.window)
         }
-        // 主题色变化时整棵视图重建，让所有动态颜色按新主题重新取值
-        .id(themeRaw)
-        .frame(minWidth: 680, idealWidth: 780, maxWidth: .infinity,
-               minHeight: 500, idealHeight: 620, maxHeight: .infinity)
-        .background(FRTheme.window)
     }
 
     @ViewBuilder

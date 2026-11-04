@@ -20,10 +20,7 @@ extension AppDelegate {
                 win.titlebarAppearsTransparent = true
                 win.titleVisibility = .hidden
                 win.isReleasedWhenClosed = false
-                // 先确定 SwiftUI 内容尺寸，避免按尚未布局的小窗口居中后再扩展而偏移。
-                win.setContentSize(hosting.view.fittingSize)
-                win.center()
-                win.setFrameAutosaveName("FinderRightSettings")
+                SettingsPresentation.shared.attach(to: win)
                 installTitleDragBar(in: win)
                 self.settingsWindow = win
             }
@@ -45,7 +42,8 @@ extension AppDelegate {
             bar.topAnchor.constraint(equalTo: content.topAnchor),
             // 让开红绿灯：即使它们与内容区的层叠顺序变化也不会被拖动条盖住
             bar.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 78),
-            bar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            // 右上角留给模式胶囊，避免拖动条抢走按钮点击。
+            bar.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -170),
             bar.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
