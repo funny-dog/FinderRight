@@ -172,6 +172,9 @@ public enum MenuFeatureCatalog {
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
+    public static let copyProjectRelativePath = "feature.copyProjectRelativePath"
+    public static let copyDirectoryTree = "feature.copyDirectoryTree"
+    public static let developerFeatureIds = [copyProjectRelativePath, copyDirectoryTree]
 
     public static let all: [MenuFeature] = [
         // 只在有可撤销的操作时出现，放最前面便于发现
@@ -214,6 +217,10 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "decompress", menuItemTitle: "FinderRight: Extract Here")),
         MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye", tint: .pink,
                     serviceDeclaration: nil),
+        MenuFeature(id: copyProjectRelativePath, nameKey: "复制项目相对路径", descriptionKey: "复制相对于最近 Git 仓库根目录的路径，多选时每行一项", systemImage: "point.topleft.down.curvedto.point.bottomright.up", tint: .purple,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyProjectRelativePath", menuItemTitle: "FinderRight: Copy Project Relative Path")),
+        MenuFeature(id: copyDirectoryTree, nameKey: "复制目录树", descriptionKey: "复制文件夹结构，跳过常见依赖与构建目录，不读取文件内容", systemImage: "list.bullet.indent", tint: .purple,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyDirectoryTree", menuItemTitle: "FinderRight: Copy Directory Tree")),
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
@@ -225,9 +232,15 @@ public enum MenuFeatureCatalog {
         all.first { $0.id == id }
     }
 
-    /// 按用户保存的顺序排列全部功能（保存的顺序先经 normalizedOrder 归一化）
-    public static func ordered(by savedOrder: [String]) -> [MenuFeature] {
-        normalizedOrder(savedOrder, defaults: all.map(\.id)).compactMap { feature(forId: $0) }
+    public static var regular: [MenuFeature] {
+        all.filter { !developerFeatureIds.contains($0.id) }
+    }
+
+    /// 两组独立排序，开发者功能始终接在常规菜单之后。
+    public static func ordered(by savedOrder: [String], developerOrder: [String] = []) -> [MenuFeature] {
+        let order = normalizedOrder(savedOrder, defaults: regular.map(\.id))
+            + normalizedOrder(developerOrder, defaults: developerFeatureIds)
+        return order.compactMap { feature(forId: $0) }
     }
 
     /// 把用户保存的顺序归一化为 defaults 的一个排列：

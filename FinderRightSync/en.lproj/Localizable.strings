@@ -73,3 +73,9 @@
 "转换图片（%d 项）" = "Convert Images (%d items)";
 "图片处理“%@”" = "Process Image “%@”";
 "图片处理（%d 项）" = "Process Images (%d items)";
+
+"复制项目相对路径" = "Copy Project Relative Path";
+"复制目录树" = "Copy Directory Tree";
+"复制失败" = "Copy failed";
+
+"命令执行失败" = "Command failed";

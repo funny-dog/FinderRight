@@ -20,6 +20,7 @@ struct SettingsView: View {
         case shortcuts = "快捷键"
         case tools = "终端"
         case editors = "编辑器"
+        case developer = "开发者工具"
         case history = "操作历史"
         case permissions = "权限与扩展"
         case about = "关于"
@@ -33,6 +34,7 @@ struct SettingsView: View {
             case .newFile: return "doc.badge.plus"
             case .tools: return "terminal"
             case .editors: return "curlybraces"
+            case .developer: return "hammer"
             case .history: return "clock.arrow.circlepath"
             case .permissions: return "checkmark.shield"
             case .about: return "info.circle"
@@ -49,6 +51,7 @@ struct SettingsView: View {
             case .newFile: return "newfile"
             case .tools: return "tools"
             case .editors: return "editors"
+            case .developer: return "developer"
             case .history: return "history"
             case .permissions: return "permissions"
             case .about: return "about"
@@ -129,6 +132,7 @@ struct SettingsView: View {
         case .newFile: NewFileTab()
         case .tools: ToolsTab()
         case .editors: EditorsTab()
+        case .developer: DeveloperToolsTab()
         case .history: OperationHistoryView()
         case .permissions: PermissionsTab()
         case .about: AboutTab()
@@ -156,10 +160,12 @@ private struct SettingsSidebar: View {
             .padding(.top, 46)
             .padding(.horizontal, 16)
 
-            VStack(spacing: 2) {
-                ForEach(SettingsView.SettingsTab.allCases, id: \.self) { tab in
-                    SidebarItem(tab: tab, isSelected: selection == tab) {
-                        selection = tab
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 2) {
+                    ForEach(SettingsView.SettingsTab.allCases, id: \.self) { tab in
+                        SidebarItem(tab: tab, isSelected: selection == tab) {
+                            selection = tab
+                        }
                     }
                 }
             }

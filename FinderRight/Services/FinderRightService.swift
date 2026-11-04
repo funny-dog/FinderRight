@@ -174,6 +174,10 @@ final class FinderRightService {
             return transferItems(req)
         case "copyFileContent":
             return copyFileContent(req)
+        case "copyProjectRelativePath", "copyDirectoryTree":
+            return copyDeveloperText(req)
+        case "runCustomCommand":
+            return runCustomCommand(req)
         case "copyFileHash":
             return copyFileHash(req)
         case "createSymlink":

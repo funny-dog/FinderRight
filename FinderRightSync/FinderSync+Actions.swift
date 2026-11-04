@@ -72,6 +72,36 @@ extension FinderSync {
         logToFile("copyFileName ok: count=\(urls.count) format=\(format.rawValue)")
     }
 
+    @objc func copyProjectRelativePath(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { return }
+        IPCClient.shared.callAsync(action: "copyProjectRelativePath", payload: ["items": .stringArray(urls.map(\.path))]) { r in
+            logToFile("copyProjectRelativePath result: success=\(r.success)")
+            if !r.success { ClipboardToast.show(message: r.message ?? NSLocalizedString("复制失败", comment: ""), style: .failure) }
+        }
+    }
+
+    @objc func copyDirectoryTree(_ sender: NSMenuItem) {
+        guard let directory = directoryTreeTarget else { return }
+        IPCClient.shared.callAsync(action: "copyDirectoryTree", payload: ["directory": .string(directory.path)]) { r in
+            logToFile("copyDirectoryTree result: success=\(r.success)")
+            if !r.success { ClipboardToast.show(message: r.message ?? NSLocalizedString("复制失败", comment: ""), style: .failure) }
+        }
+    }
+
+    @objc func runCustomCommand(_ sender: NSMenuItem) {
+        guard activeDeveloperCommands.indices.contains(sender.tag), let directory = commandDirectory else { return }
+        let command = activeDeveloperCommands[sender.tag]
+        IPCClient.shared.callAsync(action: "runCustomCommand", payload: [
+            "commandId": .string(command.id), "directory": .string(directory.path),
+            "items": .stringArray(commandSelection.map(\.path))
+        ]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("命令执行失败", comment: ""), style: .failure)
+            }
+        }
+    }
+
     @objc func copyFileContent(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard urls.count == 1, let url = urls.first else {

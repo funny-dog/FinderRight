@@ -17,3 +17,6 @@
 "FinderRight: Convert to PNG" = "FinderRight：转换为 PNG";
 "FinderRight: Convert to JPEG" = "FinderRight：转换为 JPEG";
 "FinderRight: Convert to HEIC" = "FinderRight：转换为 HEIC";
+
+"FinderRight: Copy Project Relative Path" = "FinderRight：复制项目相对路径";
+"FinderRight: Copy Directory Tree" = "FinderRight：复制目录树";

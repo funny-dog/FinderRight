@@ -30,6 +30,10 @@ class FinderSync: FIFinderSync {
     private var didDeferredSetup = false
     /// 当前构建的新建文件菜单项缓存，供 newFile(_ sender:) 按 tag 索引
     var activeNewFileTemplates: [NewFileTemplateItem] = []
+    var directoryTreeTarget: URL?
+    var activeDeveloperCommands: [DeveloperCommand] = []
+    var commandSelection: [URL] = []
+    var commandDirectory: URL?
     static let favoriteAvailability = FavoriteDirectoryAvailability()
 
     override init() {
@@ -364,6 +368,11 @@ class FinderSync: FIFinderSync {
             let hasArchives = selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) })
             selectionKind = .multiple(count: selected.count, hasRegularFiles: hasRegular, hasArchives: hasArchives)
         }
+        directoryTreeTarget = location == .container ? directory
+            : (selectionKind == .singleFolder ? selected.first : nil)
+        activeDeveloperCommands = SharedConfig.shared.developerToolsEnabled ? SharedConfig.shared.developerCommands : []
+        commandSelection = location == .container ? [] : selected
+        commandDirectory = directory
 
         // 剪切队列状态判断
         let selectedPaths = Set(selected.map(\.path))
@@ -425,6 +434,8 @@ class FinderSync: FIFinderSync {
             selection: selectionKind,
             enabledFeatureIds: Set(MenuFeatureCatalog.all.map(\.id).filter { SharedConfig.shared.isActionEnabled($0) }),
             menuOrder: SharedConfig.shared.menuOrder,
+            developerMenuOrder: SharedConfig.shared.developerMenuOrder,
+            developerCommands: activeDeveloperCommands,
             cutState: cutState,
             undoTitle: undoTitle,
             newFileTemplates: templateData,
@@ -472,6 +483,9 @@ class FinderSync: FIFinderSync {
         case "newFile": return #selector(self.newFile(_:))
         case "newFileFromClipboard": return #selector(self.newFileFromClipboard(_:))
         case "copyPath": return #selector(self.copyPath(_:))
+        case "copyProjectRelativePath": return #selector(self.copyProjectRelativePath(_:))
+        case "copyDirectoryTree": return #selector(self.copyDirectoryTree(_:))
+        case "runCustomCommand": return #selector(self.runCustomCommand(_:))
         case "copyFileName": return #selector(self.copyFileName(_:))
         case "copyFileContent": return #selector(self.copyFileContent(_:))
         case "copyFileHash": return #selector(self.copyFileHash(_:))

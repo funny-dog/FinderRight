@@ -17,6 +17,12 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-service-drift.swift -o "$KIT_BUILD_DIR/test-service-drift"
 "$KIT_BUILD_DIR/test-service-drift"
 
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-developer-menu.swift -o "$KIT_BUILD_DIR/test-developer-menu"
+"$KIT_BUILD_DIR/test-developer-menu"
+
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
 

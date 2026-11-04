@@ -120,6 +120,9 @@ final class FinderShortcutInterceptor {
         let finderFront = front?.bundleIdentifier == Self.finderBundleId
         var newChords: [String: FinderKeyTakeover.KeyChord] = [:]
         for (actionId, shortcut) in SharedConfig.shared.shortcuts where Self.canHandle(actionId) {
+            let featureId = actionId.replacingOccurrences(of: "shortcut.", with: "feature.")
+            if MenuFeatureCatalog.developerFeatureIds.contains(featureId),
+               !SharedConfig.shared.isActionEnabled(featureId) { continue }
             if actionId == FinderKeyTakeover.goToDirectoryActionId,
                GlobalDirectoryShortcut.shared.isEnabled { continue }
             newChords[actionId] = Self.chord(for: shortcut)

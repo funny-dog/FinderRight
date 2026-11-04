@@ -233,6 +233,39 @@ final class ServicesProvider: NSObject {
         returnFocusToFinderIfNeeded()
     }
 
+    @objc func copyProjectRelativePath(_ pboard: NSPasteboard,
+                                       userData: String?,
+                                       error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("copyProjectRelativePath") else {
+            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
+            return
+        }
+        let items = fileURLs(from: pboard)
+        guard !items.isEmpty else { return }
+        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyProjectRelativePath", payload: [
+            "items": .stringArray(items.map(\.path))
+        ]), feature: MenuFeatureCatalog.copyProjectRelativePath)
+        returnFocusToFinderIfNeeded()
+    }
+
+    @objc func copyDirectoryTree(_ pboard: NSPasteboard,
+                                userData: String?,
+                                error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard isInvokedFromFinder("copyDirectoryTree") else {
+            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
+            return
+        }
+        let items = fileURLs(from: pboard)
+        guard items.count == 1, let directory = items.first else {
+            showAlert(NSLocalizedString("请选择一个文件夹", comment: "service"))
+            return
+        }
+        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyDirectoryTree", payload: [
+            "directory": .string(directory.path)
+        ]), feature: MenuFeatureCatalog.copyDirectoryTree)
+        returnFocusToFinderIfNeeded()
+    }
+
     @objc func createSymlink(_ pboard: NSPasteboard,
                              userData: String?,
                              error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
