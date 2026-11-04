@@ -6,10 +6,10 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 # 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
-KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
+KIT_BUILD_DIR="$(swift build -c release --disable-sandbox --package-path FinderRightKit --show-bin-path)"
 
 echo "=== [CI] 1. 编译 FinderRightKit (Release) ==="
-swift build -c release --package-path FinderRightKit
+swift build -c release --disable-sandbox --package-path FinderRightKit
 
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
@@ -18,9 +18,9 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 "$KIT_BUILD_DIR/test-service-drift"
 
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
-swift run --package-path FinderRightKit FinderRightKitTests
+swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
 
-KIT_TEST_BINARY="$(swift build --package-path FinderRightKit --show-bin-path)/FinderRightKitTests" python3 - <<'PY'
+KIT_TEST_BINARY="$(swift build --disable-sandbox --package-path FinderRightKit --show-bin-path)/FinderRightKitTests" python3 - <<'PY'
 import os
 import subprocess
 
