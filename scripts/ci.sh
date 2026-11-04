@@ -44,6 +44,14 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  FinderRight/AppDelegate+Termination.swift FinderRight/Services/ApplicationTermination.swift \
+  scripts/test-app-termination.swift \
+  -o "$KIT_BUILD_DIR/test-app-termination"
+"$KIT_BUILD_DIR/test-app-termination"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
   FinderRight/Views/SettingsPresentation.swift scripts/test-settings-presentation.swift \
   -o "$KIT_BUILD_DIR/test-settings-presentation"
 "$KIT_BUILD_DIR/test-settings-presentation"
@@ -72,6 +80,7 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/Services/LaunchPresentation.swift \
+  FinderRight/Services/ApplicationTermination.swift \
   FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
   scripts/test-automatic-updates.swift -o "$KIT_BUILD_DIR/test-automatic-updates"
 "$KIT_BUILD_DIR/test-automatic-updates"
@@ -80,6 +89,7 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/Services/LaunchPresentation.swift \
+  FinderRight/Services/ApplicationTermination.swift \
   FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
   scripts/test-update-relaunch.swift -o "$KIT_BUILD_DIR/test-update-relaunch"
 "$KIT_BUILD_DIR/test-update-relaunch"

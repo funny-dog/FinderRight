@@ -225,8 +225,6 @@ struct GeneralTab: View {
         proc.executableURL = URL(fileURLWithPath: "/bin/bash")
         proc.arguments = ["-c", script]
         try? proc.run()
-        DispatchQueue.main.async {
-            NSApp.terminate(nil)
-        }
+        ApplicationTermination.request()
     }
 }

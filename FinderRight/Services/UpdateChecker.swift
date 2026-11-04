@@ -476,7 +476,7 @@ public final class UpdateChecker: NSObject {
 
             DispatchQueue.main.async { [weak self] in
                 self?.isInstallingUpdate = true
-                NSApp.terminate(nil)
+                ApplicationTermination.request()
             }
         } catch {
             cleanupAndFail(error)

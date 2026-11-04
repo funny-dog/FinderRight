@@ -162,7 +162,7 @@ extension AppDelegate {
     }
 
     @objc func quitApp() {
-        NSApplication.shared.terminate(nil)
+        ApplicationTermination.request()
     }
 
     // MARK: - 偏好变化
