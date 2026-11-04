@@ -22,16 +22,18 @@ Xcode 构建、签名和安装说明见 [README](README.md)。不要提交签名
 版本号分散在四个 Info.plist（`FinderRight`、`FinderRightSync`、`FinderRightPreview`、`FinderRightMarkdown`），必须一致；`CFBundleVersion` 每次发版递增。
 
 ```bash
-bash scripts/release.sh --check         # 只校验：分支、工作区、三处版本号、CI 状态
-bash scripts/release.sh 1.9.0           # bump → ci.sh → 提交 → 打 tag → RELEASE=1 构建
-bash scripts/release.sh 1.9.0 --publish # 继续推送 main 与 tag，并创建 draft Release
+bash scripts/release.sh --check           # 只校验：分支、工作区、四处版本号、CI、签名证书
+bash scripts/release.sh 1.12.4             # 仅本地准备：bump → CI → 提交 → tag → 签名构建
+bash scripts/release.sh 1.12.4 --publish   # 推送、远端 CI、校验后正式公开、全渠道同步
 ```
 
-日常 `bash scripts/build.sh` 只写 `build/`，不会碰仓库根目录已发布的 `FinderRight.dmg` 与 `FinderRight-v<版本>.zip`；`RELEASE=1` 或经 `release.sh` 才会生成发布件。Release 资产名必须保持 `FinderRight.dmg`、`FinderRight-v<版本>.zip`、`FinderRight-v<版本>.zip.sha256`：`UpdateChecker` 按前者下载、按后者校验。draft Release 建好后补完更新说明再点 Publish。
+日常 `bash scripts/build.sh` 只写 `build/`，不会碰仓库根目录已发布的 `FinderRight.dmg` 与 `FinderRight-v<版本>.zip`；`RELEASE=1` 或经 `release.sh` 才会生成发布件。Release 资产名必须保持 `FinderRight.dmg`、`FinderRight.dmg.sha256`、`FinderRight-v<版本>.zip`、`FinderRight-v<版本>.zip.sha256`，供自动更新下载与校验。
+
+用 `--notes-file <文件>` 指定「### 新增与优化」更新说明。`--publish` 内部先建 draft 并核验四个资产的大小、状态与 SHA-256，全部通过后自动正式公开并设为 Latest，再同步官网、Gitee、部署及 Homebrew。明确要求发布即授权全流程，无需再次确认；只有明确要求草稿时才加 `--draft`。任一步失败立即停止，保留已有提交、tag 或 draft。已有本地 tag 的恢复流程会重新校验工作区、四处版本与签名资产，不重复构建和本地 CI；`--sync-only` 在任何渠道写入前确认请求版本是最新正式版。每次执行会输出阶段耗时表。
 
 正式 Release 发布后，同步维护 [Homebrew Tap](https://github.com/funny-dog/homebrew-tap#维护-cask)：下载该版本 ZIP 和 `.sha256` 并校验，更新 `Casks/finderright.rb` 的 `version` 与 ZIP 的 `sha256`，复核签名、架构和系统要求，运行 Tap README 中的 style、audit、fetch 检查后提交推送。Tap 直接安装同一份正式 ZIP，保持发布证书不变；此步骤不需要重新打包 App。不要在正式 Release 公开前让 Tap 指向新版本。
 
-正式 Release 公开后，在 `website/` 执行 `bash ../scripts/sync-website-downloads.sh`，再执行 `bash ../scripts/sync-gitee-release.sh`：自动把 GitHub 的 `main` 与本次标签推到 Gitee，并把同一批资产同步到 Gitee 发行版（国内下载）。令牌取环境变量 `GITEE_TOKEN`，未设置时读钥匙串（`security add-generic-password -U -s finderright-gitee -a gitee -w` 存入一次即可），最后按 [官网部署说明](website/README.md#cloudflare-部署) 部署。镜像同步会校验原始发布资产，不能跳过同步后直接部署空目录；Gitee 同步失败时可照常部署，国内下载会留在官网镜像。
+正式 Release 公开后，在 `website/` 执行 `bash ../scripts/sync-website-downloads.sh`，再执行 `bash ../scripts/sync-gitee-release.sh`：自动把 GitHub 的 `main` 与本次标签推到 Gitee，并把同一批资产同步到 Gitee 发行版（国内下载）。令牌取环境变量 `GITEE_TOKEN`，未设置时读钥匙串（`security add-generic-password -U -s finderright-gitee -a gitee -w` 存入一次即可），最后按 [官网部署说明](website/README.md#cloudflare-部署) 部署。镜像同步会校验原始发布资产，不能跳过同步后直接部署空目录；同步失败时停止部署，保留线上现有版本。
 
 ## English
 
@@ -43,6 +45,6 @@ Development requires macOS 13+, Apple Silicon, and the Swift toolchain. Run `bas
 
 Keep changes focused and verification proportional to risk. State any checks you could not run. Keep both README languages and the website consistent when changing user-facing behavior. Follow `website/README.md` for website-only checks. Never commit signing keys, exported certificates, tokens, personal logs, or build artifacts.
 
-For releases: the version lives in four Info.plist files (`FinderRight`, `FinderRightSync`, `FinderRightPreview`, `FinderRightMarkdown`) and must match, with `CFBundleVersion` bumped every time. `scripts/release.sh --check` verifies the branch, a clean tree, the three plists and CI; `scripts/release.sh <x.y.z>` bumps, runs CI, commits, tags and builds with `RELEASE=1`; add `--publish` to push and open a draft release. A plain `scripts/build.sh` only writes to `build/` and never touches published artifacts. Keep the asset names `FinderRight.dmg`, `FinderRight-v<version>.zip` and its `.sha256` — the updater downloads and verifies exactly those.
+For releases: the version lives in four Info.plist files (`FinderRight`, `FinderRightSync`, `FinderRightPreview`, `FinderRightMarkdown`) and must match, with `CFBundleVersion` bumped every time. `scripts/release.sh --check` verifies the branch, clean tree, four plists, CI and signing identity; `scripts/release.sh <x.y.z>` bumps, runs CI, commits, tags and builds with `RELEASE=1`. Add `--publish` to push main and tag atomically, wait for CI, upload to a draft, verify all four assets, publish as Latest, and sync the website, Gitee and Homebrew. An explicit release request authorizes this whole sequence without a second confirmation; use `--draft` only when a draft was requested. Failures stop the sequence. Resuming a local tag rechecks the worktree, versions and signed assets; `--sync-only` checks that the requested version is the latest stable release before writing. A plain `scripts/build.sh` only writes to `build/` and never touches published artifacts. Keep the names `FinderRight.dmg`, `FinderRight-v<version>.zip` and both `.sha256` files — the updater depends on them.
 
 After publishing the final Release, update the [Homebrew tap](https://github.com/funny-dog/homebrew-tap#维护-cask): verify the published ZIP against its `.sha256`, update `version` and the ZIP's `sha256` in `Casks/finderright.rb`, and check signing, architecture and macOS requirements. Run the tap README's style, audit and fetch checks, then commit and push. Use the original release ZIP and the same signing certificate; no separate App build is needed. Publish the Release before updating the tap.

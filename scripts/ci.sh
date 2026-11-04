@@ -234,6 +234,7 @@ python3 website/check.py
 node --check website/worker/index.js
 node website/worker/test.mjs
 bash scripts/test-website-downloads.sh
+bash scripts/test-release.sh
 
 echo ""
 echo "========================================="

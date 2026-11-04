@@ -53,8 +53,15 @@ run_timed_step() {
   start_time=$(date +%s)
   echo ""
   echo ">>> [开始] $name"
-  local status=0
-  "$@" || status=$?
+  # 不把函数放进 || / if：Bash 会因此忽略函数内部的 errexit，吞掉中间失败。
+  local status
+  set +e
+  (
+    set -e
+    "$@"
+  )
+  status=$?
+  set -e
   local end_time
   end_time=$(date +%s)
   local duration=$((end_time - start_time))
@@ -160,7 +167,7 @@ check_installed_app_safety() {
     local installed_ver installed_build
     installed_ver="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$installed/Contents/Info.plist" 2>/dev/null || true)"
     installed_build="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$installed/Contents/Info.plist" 2>/dev/null || true)"
-    echo "本机已安装应用：/Applications/FinderRight.app (v$installed_ver build ${installed_build}，已确认未被修改覆盖)"
+    echo "本机已安装应用：/Applications/FinderRight.app (v$installed_ver build ${installed_build}，发布流程不安装)"
   fi
 }
 
@@ -198,7 +205,7 @@ verify_assets() {
   (shasum -a 256 -c "FinderRight.dmg.sha256" >/dev/null) || fail "dmg sha256 校验不通过"
 
   python3 - "$version" "$build" <<'PY'
-import sys, plistlib, subprocess, zipfile
+import sys, plistlib, subprocess, zipfile, os
 from pathlib import Path
 
 version, build = sys.argv[1], sys.argv[2]
@@ -213,6 +220,9 @@ for bundle in bundles:
         info = plistlib.load(f)
     assert (info["CFBundleShortVersionString"], info["CFBundleVersion"]) == (version, build), f"{bundle.name} 版本或构建号不匹配: {info['CFBundleShortVersionString']} ({info['CFBundleVersion']})"
     subprocess.run(["codesign", "--verify", "--strict", str(bundle)], check=True)
+    signature = subprocess.run(["codesign", "-d", "--verbose=2", str(bundle)], check=True, capture_output=True, text=True)
+    identity = os.environ.get("FINDERRIGHT_SIGN_IDENTITY", "FinderRight Self-Signed")
+    assert f"Authority={identity}" in signature.stderr.splitlines(), f"{bundle.name} 未使用发布证书签名（禁止 ad-hoc）"
 
 installed = Path("/Applications/FinderRight.app")
 if installed.exists():
@@ -262,8 +272,7 @@ git_commit_and_tag() {
 git_push_main_and_tag() {
   local version="$1"
   echo "推送 main 与 tag v$version 到 GitHub..."
-  git push origin main
-  git push origin "v$version"
+  git push --atomic origin main "v$version"
 }
 
 wait_for_remote_ci() {
@@ -290,52 +299,58 @@ create_and_verify_release() {
 
   local title="v$version"
   local tag="v$version"
-  local draft_flags=()
-  if [ "$is_draft" = "1" ]; then
-    draft_flags=("--draft")
-  fi
-
-  echo "创建 GitHub Release ($tag)..."
-  gh release create "$tag" \
-    "${draft_flags[@]}" \
-    --title "$title" \
-    --notes-file "$notes_file" \
-    "FinderRight.dmg" "FinderRight.dmg.sha256" \
-    "FinderRight-v${version}.zip" "FinderRight-v${version}.zip.sha256"
+  echo "创建 GitHub draft Release ($tag)，校验后再公开..."
+  gh release create "$tag" --draft --verify-tag --title "$title" --notes-file "$notes_file" \
+    "FinderRight.dmg" "FinderRight.dmg.sha256" "FinderRight-v$version.zip" "FinderRight-v$version.zip.sha256"
 
   echo "核验远端 Release 资产与 SHA-256..."
-  local dmg_sha zip_sha
-  dmg_sha="$(awk '{print $1}' FinderRight.dmg.sha256)"
-  zip_sha="$(awk '{print $1}' "FinderRight-v${version}.zip.sha256")"
-
-  python3 - "$tag" "$dmg_sha" "$zip_sha" "$is_draft" <<'PY'
-import sys, json, subprocess
+  python3 - "$tag" "$is_draft" <<'PYTHON'
+import sys, json, subprocess, hashlib
+from pathlib import Path
 
 tag = sys.argv[1]
-expected_dmg_sha = sys.argv[2]
-expected_zip_sha = sys.argv[3]
-is_draft = sys.argv[4] == "1"
-
-output = subprocess.check_output([
+keep_draft = sys.argv[2] == "1"
+data = json.loads(subprocess.check_output([
     "gh", "release", "view", tag,
-    "--json", "tagName,isDraft,isPrerelease,assets"
-])
-data = json.loads(output)
+    "--json", "tagName,isDraft,isPrerelease,assets",
+]))
 assert data.get("tagName") == tag
-if not is_draft:
-    assert not data.get("isDraft"), "Release 不应为 draft"
-    assert not data.get("isPrerelease"), "Release 不应为 prerelease"
+assert data.get("isDraft") is True, "校验资产时 Release 必须仍为 draft"
+assert data.get("isPrerelease") is False, "Release 不应为 prerelease"
 
-assets = {a["name"]: a for a in data.get("assets", [])}
-required_names = ["FinderRight.dmg", "FinderRight.dmg.sha256", f"FinderRight-{tag}.zip", f"FinderRight-{tag}.zip.sha256"]
-for name in required_names:
+names = ["FinderRight.dmg", "FinderRight.dmg.sha256", f"FinderRight-{tag}.zip", f"FinderRight-{tag}.zip.sha256"]
+selected = [a for a in data.get("assets", []) if a.get("name") in names]
+assert len(selected) == 4, "四个资产必须齐备且无重复"
+assets = {a["name"]: a for a in selected}
+for name in names:
     assert name in assets, f"远端 Release 缺少资产: {name}"
     assert assets[name]["state"] == "uploaded", f"资产 {name} 未上传完成"
-
-assert assets["FinderRight.dmg"]["digest"] == f"sha256:{expected_dmg_sha}"
-assert assets[f"FinderRight-{tag}.zip"]["digest"] == f"sha256:{expected_zip_sha}"
+    local = Path(name)
+    assert assets[name]["size"] == local.stat().st_size, f"资产 {name} 大小不符"
+    digest = hashlib.sha256(local.read_bytes()).hexdigest()
+    assert assets[name]["digest"] == f"sha256:{digest}", f"资产 {name} SHA-256 不符"
 print(f"远端 Release {tag} 四个资产全部上传完成，SHA-256 校验一致")
-PY
+if not keep_draft:
+    subprocess.run(["gh", "release", "edit", tag, "--draft=false", "--latest"], check=True)
+    published = json.loads(subprocess.check_output([
+        "gh", "release", "view", tag, "--json", "tagName,isDraft,isPrerelease",
+    ]))
+    assert published.get("tagName") == tag
+    assert published.get("isDraft") is False and published.get("isPrerelease") is False, "Release 未正式公开"
+    print(f"正式发布完成：{tag}")
+PYTHON
+}
+
+check_sync_version() {
+  python3 - "$1" <<'PYTHON'
+import json, subprocess, sys
+data = json.loads(subprocess.check_output([
+    "gh", "release", "view", "--repo", "funny-dog/FinderRight",
+    "--json", "tagName,isDraft,isPrerelease",
+]))
+assert data.get("isDraft") is False and data.get("isPrerelease") is False, "只同步正式发布"
+assert data.get("tagName") == f"v{sys.argv[1]}", f"请求版本不是最新正式版：{data.get('tagName')}；尚未执行渠道同步"
+PYTHON
 }
 
 deploy_website() {
@@ -412,6 +427,7 @@ publish_full_pipeline() {
     return 0
   fi
 
+  run_timed_step "确认渠道同步的目标版本" check_sync_version "$version"
   run_timed_step "同步官网下载镜像" bash scripts/sync-website-downloads.sh
   run_timed_step "同步 Gitee 发行版" bash scripts/sync-gitee-release.sh
   run_timed_step "部署官网到 Cloudflare Workers" deploy_website
@@ -420,8 +436,7 @@ publish_full_pipeline() {
   run_timed_step "安全复核（保留本机已安装版本）" check_installed_app_safety
 }
 
-# 仅在作为脚本直接运行时执行主逻辑
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+main() {
   # 参数解析
   MODE="release"
   VERSION_ARG=""
@@ -468,10 +483,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
   [ -n "$VERSION_ARG" ] || fail "缺少版本号。用法：scripts/release.sh x.y.z [--publish] [--draft] [--notes-file <file>]"
   VERSION="${VERSION_ARG#v}"
+  [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "版本号格式应为 x.y.z"
 
   # 仅同步模式
   if [ "$SYNC_ONLY" = "1" ]; then
     echo "=== 仅同步全渠道：v$VERSION ==="
+    run_timed_step "确认渠道同步的目标版本" check_sync_version "$VERSION"
     run_timed_step "同步官网下载镜像" bash scripts/sync-website-downloads.sh
     run_timed_step "同步 Gitee 发行版" bash scripts/sync-gitee-release.sh
     run_timed_step "部署官网到 Cloudflare Workers" deploy_website
@@ -484,19 +501,21 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   fi
 
   # 检查当前是否已经生成了该版本的 commit 与 tag
-  TAG_AT_HEAD="$(git tag --points-at HEAD 2>/dev/null || true)"
+  echo "=== 发版前校验 ==="
+  check_git_state
+  check_versions_consistent
+  check_ci_state
+  check_signing_identity
+
+  TAG_AT_HEAD="$(git tag --points-at HEAD --list "v$VERSION")"
   IS_PREPARED=0
   if [ "$TAG_AT_HEAD" = "v$VERSION" ] && [ "$(current_version)" = "$VERSION" ]; then
-    echo "检测到 HEAD 已打上标签 v${VERSION}，本地发版准备已就绪。"
+    echo "检测到 HEAD 已打上标签 v${VERSION}，重新校验发布资产。"
     IS_PREPARED=1
+    run_timed_step "恢复发布：深度校验发布资产与签名" verify_assets "$VERSION" "$(current_build)"
   fi
 
   if [ "$IS_PREPARED" = "0" ]; then
-    echo "=== 发版前校验 ==="
-    check_git_state
-    check_versions_consistent
-    check_ci_state
-    check_signing_identity
     echo ""
     echo "=== 执行本地发版准备 (Phase 1) ==="
     prepare_local_release "$VERSION"
@@ -505,7 +524,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   # 准备更新说明
   TMP_NOTES=""
   if [ -z "$NOTES_FILE" ]; then
-    TMP_NOTES="$(mktemp /tmp/finderright-release-notes-XXXXXX.md)"
+    TMP_NOTES="$(mktemp "${TMPDIR:-/tmp}/finderright-release-notes-XXXXXX")"
     generate_release_notes "$VERSION" "$TMP_NOTES"
     NOTES_FILE="$TMP_NOTES"
   fi
@@ -535,6 +554,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   cat "$NOTES_FILE"
   echo "-----------------------------------------"
   echo ""
-  echo "待用户确认后，运行以下命令即可单次推送并完成全自动发布与渠道同步："
+  echo "若仅要求本地准备，到此完成；用户已要求正式发布时，直接继续以下命令，无需二次确认："
   echo "  bash scripts/release.sh $VERSION --publish --notes-file \"$NOTES_FILE\""
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
 fi
