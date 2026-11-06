@@ -217,6 +217,11 @@ final class GitStatusModel: ObservableObject {
     }
 }
 
+enum GitStatusLayout {
+    static let contentSize = NSSize(width: 600, height: 480)
+    static let minimumContentSize = NSSize(width: 520, height: 380)
+}
+
 struct GitStatusView: View {
     @ObservedObject var model: GitStatusModel
     @FRState private var isTargeted = false
@@ -355,18 +360,21 @@ struct GitStatusView: View {
                 .buttonStyle(.frPrimary).disabled(!model.canCommit)
                 .help(model.hasConflicts ? "尚有未解决的冲突，请解决后暂存" : "提交整个仓库的暂存区")
             
-            // Pull/Push buttons (仅在有远程分支时显示)
+            // 拉取/推送：只有配置了远端才可用；没有上游时拉取需要用户自行指定，
+            // 这里禁用并给出提示，而不是让 git 报一句难以理解的英文错误。
             Button("拉取") {
-                model.perform(.pull(rebase: false), success: "已拉取")
+                model.perform(.pull(rebase: false), success: NSLocalizedString("已拉取", comment: ""))
             }
             .buttonStyle(.frSecondary)
-            .disabled(model.isLoading || model.isPerforming)
-            
+            .disabled(model.isLoading || model.isPerforming || model.snapshot?.upstream == nil)
+            .help(model.snapshot?.upstream == nil ? "当前分支没有上游分支，请先在终端设置跟踪分支" : "拉取远端并合并到当前分支")
+
             Button("推送") {
-                model.perform(.push(remoteBranch: nil), success: "已推送")
+                model.perform(.push(remoteBranch: nil), success: NSLocalizedString("已推送", comment: ""))
             }
             .buttonStyle(.frSecondary)
-            .disabled(model.isLoading || model.isPerforming)
+            .disabled(model.isLoading || model.isPerforming || model.snapshot?.hasRemote != true)
+            .help(model.snapshot?.hasRemote == true ? "推送当前分支到远端" : "仓库没有配置远端")
         }
         .font(.system(size: 12)).padding(12)
         .disabled(model.isLoading || model.isPerforming)
@@ -503,35 +511,48 @@ final class GitStatusController: NSObject, NSWindowDelegate {
     func show(at url: URL? = nil) {
         if window == nil {
             let model = GitStatusModel()
-            
-            // 尝试恢复上次的位置（如果存在）
-            var contentRect = NSRect(x: 0, y: 0, width: 600, height: 480)
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType) {
-                contentRect = saved
-            }
-            
-            let window = NSWindow(contentRect: contentRect,
-                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+            let contentRect = NSRect(origin: .zero, size: GitStatusLayout.contentSize)
+            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
             window.title = NSLocalizedString("Git 状态", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 520, height: 380), styleMask: window.styleMask).size
+            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: GitStatusLayout.minimumContentSize),
+                                                styleMask: styleMask).size
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: GitStatusView(model: model))
-            window.center()
+            // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
+               let adjusted = Self.fittedFrame(saved, window: window) {
+                window.setFrame(adjusted, display: false)
+            } else {
+                window.center()
+            }
             self.model = model
             self.window = window
         }
         if let url { model?.open(at: url) }
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
-    
-    func windowDidEndMoving(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
+
+    /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。
+    private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
+        var result = frame
+        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
+        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
+        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
+        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
+        return result
     }
-    
-    func windowDidMove(_ notification: Notification) {
+
+    /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。
+    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
+
+    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
+
+    private func saveFrame(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }

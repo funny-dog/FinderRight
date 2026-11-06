@@ -984,3 +984,9 @@
 
 "移除左侧文件" = "Remove Left File";
 "移除右侧文件" = "Remove Right File";
+
+/* Git 拉取与推送 */
+"拉取" = "Pull";
+"已拉取" = "Pulled";
+"推送" = "Push";
+"已推送" = "Pushed";
