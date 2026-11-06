@@ -24,6 +24,9 @@
 "压缩为 ZIP" = "Compress to ZIP";
 "解压到当前目录" = "Extract Here";
 "切换隐藏文件" = "Toggle Hidden Files";
+"占用：%@" = "Size: %@";
+"占用：正在计算…" = "Size: Calculating…";
+"目录较大，计算需要几秒；再次右键即可看到结果" = "This folder is large, so sizing takes a few seconds. Right-click again to see the result.";
 
 "文本文件 (.txt)" = "Text File (.txt)";
 "Markdown (.md)" = "Markdown (.md)";

@@ -168,6 +168,22 @@ swiftc -typecheck -parse-as-library \
   FinderRight/Views/*.swift \
   FinderRight/Views/Components/*.swift
 
+# 上面这步在有完整 Xcode 的机器上总能过，但仓库承诺「只需 Command Line Tools」。
+# libSwiftUIMacros.dylib 只在 Xcode 的 Platform 目录下，CLT 里没有，实测只有
+# @State 与 @Bindable 依赖它（@StateObject/@ObservedObject/@Published/@AppStorage/
+# @FocusState/@Binding 等都正常），报错形如
+# "external macro implementation type ... could not be found"。
+# 本机与 GitHub Actions 都带完整 Xcode，这类回归只会在别人的机器上炸，所以按源码拦一道。
+# 先去注释再匹配，避免把「注释里提到 @State」误判成真的使用了它。
+if grep -rnE '@(State|Bindable)\b' --include=*.swift \
+     FinderRight FinderRightSync FinderRightPreview FinderRightMarkdown FinderRightKit/Sources \
+     | sed -E 's@(^|[^:])//.*$@\1@' \
+     | grep -E '@(State|Bindable)\b'; then
+  echo "错误：上面这些属性包装器依赖 SwiftUIMacros，纯 Command Line Tools 下不可用。" >&2
+  echo "      @State 请改用 @FRState（见 FinderRight/FRState.swift）。" >&2
+  exit 1
+fi
+
 # 使用真实热键注册与事件派发，但仅写临时配置，不启动窗口或更改用户快捷键。
 APP_TEST_SOURCES=()
 for source in FinderRight/*.swift; do
@@ -292,8 +308,14 @@ PY
 
 echo "=== [CI] 7. 校验官网下载、页面与更新代理 ==="
 python3 website/check.py
-node --check website/worker/index.js
-node website/worker/test.mjs
+# node 不属于 macOS 自带，也不随 Command Line Tools 提供。只在改了官网 Worker 时才会用到，
+# 缺它不该让「编 App」这件事失败；装了就跑，没装就跳过并提示。
+if command -v node >/dev/null 2>&1; then
+  node --check website/worker/index.js
+  node website/worker/test.mjs
+else
+  echo "跳过：未安装 node，跳过官网 Worker 的 JS 校验（不影响 App 构建）"
+fi
 bash scripts/test-website-downloads.sh
 bash scripts/test-release.sh
 

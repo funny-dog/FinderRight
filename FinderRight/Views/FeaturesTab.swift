@@ -404,8 +404,10 @@ private struct PreviewExtensionToggle: View {
 
 /// 队列详情收在设置中，菜单栏保持简洁。
 private struct CutQueueSection: View {
-    @State private var paths: [String] = []
-    @State private var errorMessage: String?
+    // 一律用 FRState 而非 @State：@State 依赖 SwiftUIMacros 宏插件，
+    // 纯 Command Line Tools 环境下没有该插件，会让「无需 Xcode」的构建直接失败。
+    @FRState private var paths: [String] = []
+    @FRState private var errorMessage: String?
 
     var body: some View {
         FRSection("剪切 / 粘贴") {

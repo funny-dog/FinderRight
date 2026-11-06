@@ -86,6 +86,8 @@
 "显示或隐藏隐藏文件" = "Show or hide hidden files";
 "右键菜单功能" = "Right-Click Menu Features";
 "关闭的功能不会出现在 Finder 右键菜单中。" = "Disabled features won't appear in the Finder right-click menu.";
+"显示大小" = "Show Size";
+"单选文件或文件夹时，在右键菜单中显示磁盘占用" = "Show disk usage in the right-click menu for one selected file or folder.";
 "剪切角标" = "Cut Badge";
 "自动解决角标冲突" = "Resolve Badge Conflicts Automatically";
 "其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。" = "Other Finder extensions (such as Keka or Pearcleaner) may hold the badge slot, so the cut badge doesn't appear. When enabled, FinderRight briefly restarts those extensions to take the slot back, but only when the current folder contains cut items (at most once per Finder launch).";
