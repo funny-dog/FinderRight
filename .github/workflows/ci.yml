@@ -1,9 +1,11 @@
 name: CI
 
+# 平时功能在推送前跑本地 CI，远端 CI 仅在发版打 Tag (v*)、Pull Request 或手动分发时运行，
+# 避免日常 push 频繁占用自托管 runner 与本机性能。
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
 

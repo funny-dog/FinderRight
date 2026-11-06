@@ -142,12 +142,13 @@ check_ci_state() {
     conclusion="$(gh run list --workflow CI --commit "$origin_head" --json conclusion -q '.[0].conclusion' 2>/dev/null || true)"
   fi
   if [ -z "$conclusion" ]; then
-    conclusion="$(gh run list --branch main --workflow CI --limit 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || true)"
+    # 日常 push main 不跑远端 CI，fallback 查询最近一次运行（如上个版本的 tag 构建或手动运行）
+    conclusion="$(gh run list --workflow CI --limit 1 --json conclusion -q '.[0].conclusion' 2>/dev/null || true)"
   fi
   case "$conclusion" in
-    success) echo "CI 状态：远端 main 最近一次运行成功" ;;
+    success) echo "CI 状态：远端最近一次运行成功" ;;
     "") echo "提示：读不到远端 CI 运行记录，本地将执行完整 CI" ;;
-    *) fail "远端 main 最近一次 CI 结果是 ${conclusion}，必须修复后再发版" ;;
+    *) fail "远端最近一次 CI 结果是 ${conclusion}，必须修复后再发版" ;;
   esac
 }
 
