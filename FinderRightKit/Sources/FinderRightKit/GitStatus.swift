@@ -43,15 +43,34 @@ private enum LocalGit {
 
     struct Output { let status: Int32; let data: Data; let error: String }
 
+    /// 需要在网络上通信的操作（拉取/推送）才放开协议白名单。
+    ///
+    /// 只读查询保持 `protocol.allow=never`：仓库里的子模块、`.gitmodules` 或配置
+    /// 都不能诱使查看状态的代码去联网。远程操作由用户主动点击触发，
+    /// 因此只允许 Git 自身支持的常见传输，仍禁掉 ext/file 这类可执行任意命令的协议。
+    private static func transportArguments(writing: Bool) -> [String] {
+        writing ? ["-c", "protocol.allow=never",
+                   "-c", "protocol.https.allow=always",
+                   "-c", "protocol.ssh.allow=always",
+                   "-c", "protocol.git.allow=always"]
+                : ["-c", "protocol.allow=never"]
+    }
+
     static func run(at root: URL, _ arguments: [String], limit: Int = 8 * 1024 * 1024, writing: Bool = false) throws -> Output {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false",
-                             "-c", "core.untrackedCache=false", "-c", "protocol.allow=never", "-C", root.path] + arguments
+                             "-c", "core.untrackedCache=false"] + transportArguments(writing: writing) + ["-C", root.path] + arguments
         var environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
         environment["GIT_OPTIONAL_LOCKS"] = "0"
         environment["GIT_NO_LAZY_FETCH"] = "1"
-        environment["GIT_ALLOW_PROTOCOL"] = ""
+        // 生产环境只放行常见网络传输；集成测试用 file:// 本地裸仓库，经环境变量显式追加。
+        var allowed = writing ? "https:ssh:git" : ""
+        if writing, let extra = ProcessInfo.processInfo.environment["FINDERRIGHT_GIT_ALLOW_PROTOCOL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
+            allowed += ":" + extra
+        }
+        environment["GIT_ALLOW_PROTOCOL"] = allowed
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["LC_ALL"] = "C"
         if writing {
@@ -124,6 +143,25 @@ public struct GitStatusSnapshot {
     public let branch: String
     public let localBranches: [String]
     public let entries: [GitStatusEntry]
+    /// 当前分支的远端跟踪分支（如 origin/main）；没有上游时为 nil
+    public let upstream: String?
+    /// 相对上游的领先 / 落后提交数
+    public let ahead: Int
+    public let behind: Int
+    /// 是否存在任何远端（用于决定拉取/推送按钮是否可用）
+    public let hasRemote: Bool
+
+    public init(root: URL, branch: String, localBranches: [String], entries: [GitStatusEntry],
+                upstream: String? = nil, ahead: Int = 0, behind: Int = 0, hasRemote: Bool = false) {
+        self.root = root
+        self.branch = branch
+        self.localBranches = localBranches
+        self.entries = entries
+        self.upstream = upstream
+        self.ahead = ahead
+        self.behind = behind
+        self.hasRemote = hasRemote
+    }
 
     public static func read(at url: URL) throws -> Self {
         guard url.isFileURL else { throw GitStatusError.notRepository }
@@ -180,7 +218,29 @@ public struct GitStatusSnapshot {
         }
         let refs = try LocalGit.checked(at: root, ["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"])
         let branches = String(decoding: refs, as: UTF8.self).split(separator: "\n").map(String.init)
-        return Self(root: root, branch: branch, localBranches: branches, entries: entries)
+        let remotes = try LocalGit.run(at: root, ["remote"])
+        let hasRemote = remotes.status == 0 && !remotes.data.isEmpty
+        // 上游由用户在命令行里配置；这里只读，不替用户设置跟踪关系。
+        var upstream: String?
+        var ahead = 0, behind = 0
+        let tracking = try LocalGit.run(at: root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+        if tracking.status == 0, let raw = String(data: tracking.data, encoding: .utf8) {
+            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { upstream = name }
+        }
+        if upstream != nil {
+            let counts = try LocalGit.run(at: root, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
+            if counts.status == 0,
+               let text = String(data: counts.data, encoding: .utf8) {
+                let parts = text.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" })
+                if parts.count == 2 {
+                    ahead = Int(parts[0]) ?? 0
+                    behind = Int(parts[1]) ?? 0
+                }
+            }
+        }
+        return Self(root: root, branch: branch, localBranches: branches, entries: entries,
+                    upstream: upstream, ahead: ahead, behind: behind, hasRemote: hasRemote)
     }
 }
 
@@ -351,10 +411,11 @@ public enum GitLocalRepository {
             try message.write(to: file, atomically: true, encoding: .utf8)
             arguments = ["commit", "--file", file.path]
         case .pull(let rebase):
-            // 使用 fetch --prune 作为基础拉取
-            arguments = [rebase ? "pull" : "fetch", "--prune"]
+            // 真正的拉取：先取回远端，再合并（或变基）到当前分支。
+            // 只 fetch 不会更新工作区，却提示「已拉取」会误导用户。
+            arguments = rebase ? ["pull", "--rebase", "--no-edit"] : ["pull", "--no-edit"]
         case .push(let remoteBranch):
-            // 直接 push 到 origin
+            // 有上游就按 upstream 推；指定了分支才显式推送 origin/<branch>。
             if let branch = remoteBranch {
                 arguments = ["push", "origin", branch]
             } else {

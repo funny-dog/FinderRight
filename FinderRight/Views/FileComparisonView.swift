@@ -319,40 +319,53 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
     func show(files: [URL] = []) {
         if window == nil {
             let model = FileComparisonModel()
-            
-            // 尝试恢复上次的位置（如果存在）
-            var contentRect = NSRect(origin: .zero, size: FileComparisonLayout.contentSize)
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType) {
-                contentRect = saved
-            }
-            
-            let window = NSWindow(contentRect: contentRect,
-                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            let contentRect = NSRect(origin: .zero, size: FileComparisonLayout.contentSize)
+            // styleMask 与下面的窗口一致：窗口位置按 frame 存取，不能把带标题栏的 frame 当内容区
+            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
             window.title = NSLocalizedString("文件比较", comment: "")
             window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: FileComparisonLayout.minimumContentSize),
-                                                styleMask: window.styleMask).size
+                                                styleMask: styleMask).size
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: FileComparisonView(model: model))
-            window.center()
+            // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
+               let adjusted = Self.fittedFrame(saved, window: window) {
+                window.setFrame(adjusted, display: false)
+            } else {
+                window.center()
+            }
             self.model = model
             self.window = window
         }
         if !files.isEmpty { model?.setFiles(Array(files.prefix(2))) }
         window?.makeKeyAndOrderFront(nil)
+        window?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func windowDidEndMoving(_ notification: Notification) {
+    /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。
+    private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
+        var result = frame
+        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
+        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
+        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
+        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
+        return result
+    }
+
+    /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。
+    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
+
+    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
+
+    private func saveFrame(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
-    
-    func windowDidMove(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
-    }
-    
+
     func windowWillClose(_ notification: Notification) {
         model?.cancel()
         model = nil
