@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
+  <meta name="description" content="给 Mac 的 Finder 加上右键新建文件、查看磁盘占用、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
   <meta name="theme-color" content="#0e1522">
   <meta property="og:title" content="FinderRight — 让 Finder 更顺手">
-  <meta property="og:description" content="给 Mac 的 Finder 加上右键新建文件、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
+  <meta property="og:description" content="给 Mac 的 Finder 加上右键新建文件、查看磁盘占用、打开终端和剪切粘贴——免费开源，文件操作在本地完成。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://finderright.erhutech.com/assets/menu-new-file.png">
   <meta property="og:image:alt" content="FinderRight 的真实右键菜单，支持新建文件、打开终端和剪切粘贴">
@@ -54,14 +54,14 @@
         <div class="hero-copy">
           <p class="meta-line" data-en="macOS 13+ · Apple Silicon · Free &amp; open source">macOS 13+ · Apple Silicon · 免费开源</p>
           <h1 class="display" data-en="Finder. A little <span class='accent'>better</span>.">Finder，再<span class="accent">顺手</span>一点。</h1>
-          <p class="hero-lede" data-en="Create files, open a terminal, and cut &amp; paste from Finder’s right-click menu — the steps Finder leaves out.">右键新建文件、打开终端、剪切粘贴，补上访达缺的那几步。</p>
+          <p class="hero-lede" data-en="Create files, see file and folder disk usage, open a terminal, and cut &amp; paste from Finder’s right-click menu.">右键新建文件、查看文件和文件夹占用、打开终端、剪切粘贴。</p>
           <div class="hero-actions">
             <a class="button button-primary" href="/download/FinderRight.dmg"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg><span data-en="Download for Mac">下载 Mac 版</span></a>
             <a class="button button-ghost" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Go to GitHub to star">前往 GitHub 点 Star</a>
           </div>
         </div>
         <figure class="hero-visual is-mock">
-          <div class="mock mock-menu" role="img" aria-label="示意图：在访达里右键 README.md，FinderRight 的菜单依次列出新建文件、复制路径、复制文件名、复制文件内容、打开路径、打开终端、打开编辑器、剪切、粘贴、移动到、复制到和切换隐藏文件" data-en-label="Illustration: right-clicking README.md in Finder shows FinderRight’s menu with New File, Copy Path, Copy File Name, Copy File Content, Open Path, Open in Terminal, Open in Editor, Cut, Paste, Move To, Copy To and Toggle Hidden Files">
+          <div class="mock mock-menu" role="img" aria-label="示意图：在访达里右键 README.md，FinderRight 的菜单显示大小 12.4 MB，以及新建文件、复制路径、复制文件名、复制文件内容、打开路径、打开终端、打开编辑器、剪切、粘贴、移动到、复制到和切换隐藏文件" data-en-label="Illustration: right-clicking README.md in Finder shows Size: 12.4 MB, New File, Copy Path, Copy File Name, Copy File Content, Open Path, Open in Terminal, Open in Editor, Cut, Paste, Move To, Copy To and Toggle Hidden Files">
   <div class="mock-canvas" style="--ar: 36 / 24.8">
     <div class="m-window" style="left: 0; top: 0; width: 32em; height: 20em">
       <span class="m-traffic"><i></i><i></i><i></i></span>
@@ -92,6 +92,7 @@
 
     <!-- 一级菜单按应用默认顺序；撤销只在可撤销时出现，压缩/解压默认关闭，这里都不画 -->
     <div class="m-menu" style="left: 18.2em; top: 4.6em">
+      <span class="m-item t-blue"><svg><use href="assets/icons.svg#i-info"/></svg><span data-en="Size: 12.4 MB">大小：12.4 MB</span></span>
       <span class="m-item t-blue"><svg><use href="assets/icons.svg#i-doc-plus"/></svg><span data-en="New File">新建文件</span><svg class="m-chev"><use href="assets/icons.svg#i-chevron-right"/></svg></span>
       <span class="m-item is-active t-indigo"><svg><use href="assets/icons.svg#i-link"/></svg><span data-en="Copy Path">复制路径</span></span>
       <span class="m-item t-indigo"><svg><use href="assets/icons.svg#i-char-cursor"/></svg><span data-en="Copy File Name">复制文件名</span></span>

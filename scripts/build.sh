@@ -25,6 +25,12 @@ swift build -c release --disable-sandbox --package-path FinderRightKit
 # 资源是否存在由下方硬校验确认，不依赖历史产物。
 mkdir -p "$STAGE_DIR"
 
+# 清掉上一轮由 actool 生成的 Assets.car：本仓库支持无 Xcode 构建，那时只能把菜单栏图标
+# 按散文件（MenuBarIcon.png / @2x）放进 bundle。若这里残留了上次用完整 Xcode 构建留下的
+# Assets.car，asset catalog 会优先于散文件被 NSImage(named:) 取用，导致「无 Xcode 构建」
+# 实际仍在吃旧产物，验证结果不可信。
+rm -f "$APP_DIR/Contents/Resources/Assets.car"
+
 echo "=== 2. 编译主程序 FinderRight (Release) ==="
 mkdir -p "$APP_DIR/Contents/MacOS"
 swiftc -O -parse-as-library \
@@ -230,6 +236,14 @@ for bundle in "$APP_DIR" "$APPEX_DIR" "$PREVIEW_DIR" "$MARKDOWN_DIR"; do
   fi
 done
 echo "签名规则：$(codesign -d -r- "$APP_DIR" 2>&1 | sed -n 's/.*designated => //p')"
+
+# 解除 staging 产物在插件登记表里的注册。
+# build/ 下的 .app 与 /Applications 里的那份 bundle id 完全相同，一旦有人（例如按文档
+# `open build/dmg-stage/FinderRight.app` 试跑）打开过它，PluginKit 会登记出第二条同 id 的
+# FinderSync 扩展，右键菜单就会整段出现两套。这里在打包前主动清掉，避免残留。
+if command -v pluginkit >/dev/null 2>&1 && [ -d "$APPEX_DIR" ]; then
+  pluginkit -r "$APPEX_DIR" >/dev/null 2>&1 || true
+fi
 
 echo "=== 6. 创建 Applications 软链接 ==="
 ln -shf /Applications "$STAGE_DIR/Applications"
