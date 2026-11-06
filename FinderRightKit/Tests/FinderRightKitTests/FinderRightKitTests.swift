@@ -5883,6 +5883,172 @@ struct FinderRightKitTestsRunner {
             try assertTrue(rejected, "多帧动图应被明确拒绝并跳过")
         }
 
+        // MARK: - 磁盘占用
+
+        runTest("磁盘占用 统计文件与目录的分配大小") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            // 单个文件：应等于其分配大小，且大于 0
+            let file = dir.appendingPathComponent("a.bin")
+            try Data(repeating: 0x41, count: 64 * 1024).write(to: file)
+            let fileSize = DiskUsage.allocatedBytes(at: file)
+            try assertTrue(fileSize != nil, "普通文件应能算出大小")
+            try assertTrue((fileSize ?? 0) >= 64 * 1024, "至少不小于写入的数据量")
+
+            // 空目录：0
+            let empty = dir.appendingPathComponent("empty", isDirectory: true)
+            try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+            try assertEqual(DiskUsage.allocatedBytes(at: empty), 0, "空目录占用为 0")
+
+            // 嵌套目录：应把子目录里的文件算进去
+            let nested = dir.appendingPathComponent("nested/deep", isDirectory: true)
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try Data(repeating: 0x42, count: 128 * 1024).write(to: nested.appendingPathComponent("b.bin"))
+            let total = DiskUsage.allocatedBytes(at: dir) ?? 0
+            try assertTrue(total >= 192 * 1024, "根目录应包含嵌套文件，实际 \(total)")
+        }
+
+        runTest("磁盘占用 路径不存在返回 nil 而不是 0") {
+            let missing = URL(fileURLWithPath: "/tmp/finderright-不存在-\(UUID().uuidString)")
+            try assertNil(DiskUsage.allocatedBytes(at: missing), "不存在的路径必须返回 nil")
+        }
+
+        runTest("磁盘占用 符号链接不跟随、不计入目标大小") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            let big = dir.appendingPathComponent("big.bin")
+            try Data(repeating: 0, count: 256 * 1024).write(to: big)
+            let link = dir.appendingPathComponent("link.bin")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: big)
+
+            // 链接本身按自身计入（几十字节），绝不能把目标那份算进去
+            let linkSize = DiskUsage.allocatedBytes(at: link) ?? 0
+            try assertTrue(linkSize < 64 * 1024, "符号链接不应把目标文件算进来，实际 \(linkSize)")
+
+            // 目录扫描时也不跟随链接，合计只含一个文件
+            let dirSize = DiskUsage.allocatedBytes(at: dir) ?? 0
+            try assertTrue(dirSize < 400 * 1024, "目录统计不应因链接翻倍，实际 \(dirSize)")
+        }
+
+        runTest("磁盘占用 超时与取消都返回 nil") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            for i in 0..<200 {
+                try Data(repeating: 0, count: 4096)
+                    .write(to: dir.appendingPathComponent("f\(i).bin"))
+            }
+
+            // 已经过期的 deadline：必须立刻放弃
+            let past = Date().addingTimeInterval(-1)
+            try assertNil(DiskUsage.allocatedBytes(at: dir, deadline: past), "过期的 deadline 应返回 nil")
+            // 取消标志
+            try assertNil(DiskUsage.allocatedBytes(at: dir, isCancelled: { true }), "已取消应返回 nil")
+            // 正常条件仍应成功
+            try assertTrue(DiskUsage.allocatedBytes(at: dir) != nil, "无限制时应算出结果")
+        }
+
+        runTest("磁盘占用 DiskUsageCache 命中、过期与容量淘汰") {
+            let cache = DiskUsageCache(capacity: 2)
+            let now = Date()
+            try assertNil(cache.value(for: "/a", ttl: 60, now: now), "未写入时无值")
+
+            cache.store(100, for: "/a", now: now)
+            try assertEqual(cache.value(for: "/a", ttl: 60, now: now), 100)
+            // 超过 TTL 即失效
+            try assertNil(cache.value(for: "/a", ttl: 10, now: now.addingTimeInterval(11)), "过期应失效")
+
+            // 容量上限：写入第三项时淘汰最早的
+            cache.store(1, for: "/x", now: now)
+            cache.store(2, for: "/y", now: now)
+            cache.store(3, for: "/z", now: now.addingTimeInterval(1))
+            let remaining = ["/x", "/y", "/z"].compactMap { cache.value(for: $0, ttl: 60, now: now.addingTimeInterval(2)) }
+            try assertEqual(remaining.count, 2, "容量 2 应只保留 2 项")
+
+            cache.removeAll()
+            try assertNil(cache.value(for: "/x", ttl: 60, now: now), "清空后无值")
+        }
+
+        runTest("磁盘占用 超时后后台继续算完，下次命中缓存") {
+            // 这是「大目录永远不显示」的回归测试：调用方等不到结果，
+            // 但任务必须继续跑完并写缓存，否则每次右键都超时、永远没有数字。
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            for i in 0..<300 {
+                try Data(repeating: 0, count: 8192)
+                    .write(to: dir.appendingPathComponent("f\(i).bin"))
+            }
+            DiskUsageJob.resetForTesting()
+
+            let cache = DiskUsageCache()
+            let path = dir.standardizedFileURL.path
+
+            // 用「暂停的队列」让后台任务确定性地晚于等待方启动。
+            // 早先这里靠「300 个文件一定扫超过 1ms」来保证超时，但快速机器上扫描只要 1–2ms，
+            // 任务可能先算完写缓存，导致断言随机器快慢时过时不过。
+            let taskQueue = DispatchQueue(label: "test.diskusage.suspended")
+            taskQueue.suspend()
+            var taskStarted = false
+            defer { if !taskStarted { taskQueue.resume() } }
+
+            let timedOut = DiskUsageJob.run(url: dir, path: path, scanDeadline: nil,
+                                            waitTimeout: 0.001, cache: cache, cacheTTL: 60,
+                                            queue: taskQueue)
+            try assertNil(timedOut, "等待超时应返回 nil")
+            try assertNil(cache.value(for: path, ttl: 60), "任务尚未启动，不应已有结果")
+
+            // 放行后台任务，它必须继续跑完并写缓存
+            taskStarted = true
+            taskQueue.resume()
+
+            // 给后台任务时间跑完
+            let deadline = Date().addingTimeInterval(10)
+            var cached: Int64?
+            while Date() < deadline {
+                cached = cache.value(for: path, ttl: 60)
+                if cached != nil { break }
+                usleep(20_000)
+            }
+            try assertTrue(cached != nil, "超时返回后，任务仍应在后台算完并写入缓存")
+            try assertTrue((cached ?? 0) >= 300 * 8192, "缓存值应等于实际占用")
+        }
+
+        runTest("磁盘占用 同一路径并发请求只扫一次") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            for i in 0..<200 {
+                try Data(repeating: 0, count: 4096)
+                    .write(to: dir.appendingPathComponent("g\(i).bin"))
+            }
+            DiskUsageJob.resetForTesting()
+
+            let cache = DiskUsageCache()
+            let path = dir.standardizedFileURL.path
+            let group = DispatchGroup()
+            let lock = NSLock()
+            var hits = 0
+            for _ in 0..<8 {
+                group.enter()
+                DispatchQueue.global().async {
+                    let v = DiskUsageJob.run(url: dir, path: path, scanDeadline: nil,
+                                             waitTimeout: 5, cache: cache, cacheTTL: 60)
+                    if v != nil { lock.lock(); hits += 1; lock.unlock() }
+                    group.leave()
+                }
+            }
+            try assertEqual(group.wait(timeout: .now() + 20), .success, "并发请求应在超时内全部返回")
+            try assertEqual(hits, 8, "每个等待者都应拿到结果")
+            // 结果一致，说明复用同一份计算而不是各扫一遍
+            try assertTrue(cache.value(for: path, ttl: 60) != nil, "应写入缓存")
+        }
+
+        runTest("磁盘占用 大小文案带单位且稳定") {
+            try assertEqual(DiskUsage.formatted(0), "Zero KB")
+            try assertTrue(DiskUsage.formatted(1024).contains("KB"), "1 KB 应使用 KB 单位")
+            try assertTrue(DiskUsage.formatted(1024 * 1024).contains("MB"), "1 MB 应使用 MB 单位")
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

@@ -154,6 +154,7 @@ public enum MenuIconStyle: String, Codable, CaseIterable, Identifiable {
 
 /// 内置功能清单。`all` 的顺序即右键菜单的顺序。
 public enum MenuFeatureCatalog {
+    public static let diskUsage    = "feature.diskUsage"
     public static let undo         = "feature.undo"
     public static let newFile      = "feature.newFile"
     public static let copyPath     = "feature.copyPath"
@@ -172,6 +173,15 @@ public enum MenuFeatureCatalog {
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
+
+    /// 固定显示在 FinderRight 菜单顶部的状态行，不参与其他操作的菜单排序。
+    public static let diskUsageFeature = MenuFeature(
+        id: diskUsage,
+        nameKey: "显示大小",
+        descriptionKey: "单选文件或文件夹时，在右键菜单顶部显示磁盘占用",
+        systemImage: "internaldrive",
+        tint: .blue
+    )
 
     public static let all: [MenuFeature] = [
         // 只在有可撤销的操作时出现，放最前面便于发现
