@@ -2,6 +2,27 @@ import SwiftUI
 import FinderRightKit
 
 extension AppDelegate {
+    
+    /// 在 willFinishLaunching 注册全局快捷键
+    func registerGlobalHotkeys() {
+        // 注册 Ctrl+Space 触发快速搜索（与其他应用不冲突的常用组合）
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.modifierFlags.contains(.control),
+                  (event.charactersIgnoringModifiers?.lowercased()) == " " else { return }
+            
+            DispatchQueue.main.async {
+                // TODO: 快速搜索功能待实现
+                // self?.showFastSearch()
+            }
+            
+            // 阻止冒泡到其他应用
+        }
+    }
+    
+    // private func showFastSearch() {
+    //     FastSearchController.shared.show()
+    // }
+    
     /// 检查旧版 staging/ 目录是否存在遗留文件，仅记录日志，不自动移动或删除
     func checkLegacyStagingDirectory() {
         // 一次性提醒：发送成功后才置位，避免每次冷启动重复弹同一条通知

@@ -981,3 +981,6 @@
 "重新载入" = "Reload";
 "提交" = "Commit";
 "提交完成" = "Commit completed";
+
+"移除左侧文件" = "Remove Left File";
+"移除右侧文件" = "Remove Right File";

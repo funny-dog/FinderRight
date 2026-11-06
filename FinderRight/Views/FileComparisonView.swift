@@ -28,6 +28,15 @@ final class FileComparisonModel: ObservableObject {
         reload()
     }
 
+    func removeFile(onLeft: Bool) {
+        cancel()
+        if onLeft { leftURL = nil; left = nil; leftError = nil }
+        else { rightURL = nil; right = nil; rightError = nil }
+        result = nil
+        comparisonError = nil
+        isLoading = false
+    }
+
     func cancel() {
         revision += 1
         operation?.cancel()
@@ -170,6 +179,7 @@ struct FileComparisonView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .font(.system(size: 12, weight: .medium))
+                    .padding(.trailing, 24)
                     .padding(.horizontal, 10)
                     .frame(height: 34)
                 } else {
@@ -202,6 +212,21 @@ struct FileComparisonView: View {
         .buttonStyle(.plain)
         .help(Text(verbatim: error ?? url?.path ?? NSLocalizedString("拖入文件或点击选择", comment: "")))
         .accessibilityLabel(onLeft ? "选择左侧文件" : "选择右侧文件")
+        .overlay(alignment: .topTrailing) {
+            if url != nil {
+                Button { model.removeFile(onLeft: onLeft) } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(FRTheme.mute)
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(onLeft ? "移除左侧文件" : "移除右侧文件")
+                .accessibilityLabel(onLeft ? "移除左侧文件" : "移除右侧文件")
+                .padding(compact ? 4 : 8)
+            }
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }
             model.setFile(url, onLeft: onLeft)
@@ -288,11 +313,20 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
     static let shared = FileComparisonController()
     private var window: NSWindow?
     private var model: FileComparisonModel?
+    
+    private let windowType = "fileComparison"
 
     func show(files: [URL] = []) {
         if window == nil {
             let model = FileComparisonModel()
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: FileComparisonLayout.contentSize),
+            
+            // 尝试恢复上次的位置（如果存在）
+            var contentRect = NSRect(origin: .zero, size: FileComparisonLayout.contentSize)
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType) {
+                contentRect = saved
+            }
+            
+            let window = NSWindow(contentRect: contentRect,
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.title = NSLocalizedString("文件比较", comment: "")
             window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: FileComparisonLayout.minimumContentSize),
@@ -309,6 +343,16 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func windowDidEndMoving(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
+    }
+    
+    func windowDidMove(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
+    }
+    
     func windowWillClose(_ notification: Notification) {
         model?.cancel()
         model = nil

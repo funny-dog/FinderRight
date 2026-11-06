@@ -40,14 +40,30 @@ struct FileComparisonViewChecks {
         model.setFiles([original, updated])
         waitForResult(model)
         precondition(model.leftError == nil && model.result?.additions == 3 && model.result?.deletions == 2)
+        model.removeFile(onLeft: true)
+        precondition(!model.hasPair && model.leftURL == nil && model.left == nil && model.leftError == nil)
+        precondition(model.rightURL == updated && model.right != nil && model.result == nil && !model.isLoading)
+        model.removeFile(onLeft: false)
+        precondition(model.rightURL == nil && model.right == nil && model.rightError == nil)
+        model.setFiles([original, updated])
+        Thread.sleep(forTimeInterval: 0.1)
+        model.removeFile(onLeft: false)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        precondition(model.rightURL == nil && model.result == nil && !model.isLoading, "移除后旧回调不能恢复文件或 diff")
+        precondition(try! String(contentsOf: original, encoding: .utf8).contains("false"), "移除只清空选择，不删除或修改原文件")
+        model.setFiles([original, updated])
+        waitForResult(model)
         precondition(FinderRightService.jobs.waitUntilIdle(timeout: 1), "比较任务必须纳入退出等待并完成清理")
-        print("✓ 文件比较界面：左右载入、快速替换、错误清理与重新比较通过")
+        print("✓ 文件比较界面：左右载入、快速替换、移除文件与旧回调隔离、错误清理通过")
 
         if let outputDirectory = ProcessInfo.processInfo.environment["FINDERRIGHT_COMPARISON_PREVIEW_DIR"] {
             let directory = URL(fileURLWithPath: outputDirectory, isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             precondition(FileComparisonLayout.contentSize.width <= 600 && FileComparisonLayout.contentSize.height <= 450)
-            for (state, previewModel) in [("before", FileComparisonModel()), ("after", model)] {
+            let single = FileComparisonModel()
+            single.setFile(original, onLeft: true)
+            waitForResult(single)
+            for (state, previewModel) in [("before", FileComparisonModel()), ("single", single), ("after", model)] {
                 for (name, appearance) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
                     let window = NSWindow(contentRect: NSRect(origin: .zero, size: FileComparisonLayout.contentSize),
                                           styleMask: [.borderless], backing: .buffered, defer: false)
@@ -57,8 +73,8 @@ struct FileComparisonViewChecks {
                     window.contentView = view
                     view.layoutSubtreeIfNeeded()
                     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
-                    precondition(view.fittingSize.width <= FileComparisonLayout.contentSize.width &&
-                                 view.fittingSize.height <= FileComparisonLayout.contentSize.height, "内容不能撑大紧凑窗口")
+                    precondition(view.bounds.size == FileComparisonLayout.contentSize,
+                                 "内容不能撑大紧凑窗口：\(view.bounds.size)")
                     guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { fatalError("离屏渲染失败") }
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     guard let data = bitmap.representation(using: .png, properties: [:]) else { fatalError("PNG 编码失败") }
