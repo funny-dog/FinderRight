@@ -264,6 +264,7 @@ public struct GitCommitPreview {
 public enum GitLocalAction {
     case stage([String]), unstage([String]), switchBranch(String), createBranch(String)
     case commit(message: String, preview: GitCommitPreview)
+    case pull(rebase: Bool), push(remoteBranch: String?)
 }
 
 public enum GitOperationError: LocalizedError {
@@ -349,7 +350,18 @@ public enum GitLocalRepository {
             let file = directory.appendingPathComponent("message")
             try message.write(to: file, atomically: true, encoding: .utf8)
             arguments = ["commit", "--file", file.path]
+        case .pull(let rebase):
+            // 使用 fetch --prune 作为基础拉取
+            arguments = [rebase ? "pull" : "fetch", "--prune"]
+        case .push(let remoteBranch):
+            // 直接 push 到 origin
+            if let branch = remoteBranch {
+                arguments = ["push", "origin", branch]
+            } else {
+                arguments = ["push"]
+            }
         }
+        
         let result = try LocalGit.run(at: root, arguments, limit: 128 * 1024, writing: true)
         guard result.status == 0 else {
             let detail = [String(decoding: result.data, as: UTF8.self), result.error].filter { !$0.isEmpty }.joined(separator: "\n")

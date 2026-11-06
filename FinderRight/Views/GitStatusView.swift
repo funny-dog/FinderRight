@@ -354,6 +354,19 @@ struct GitStatusView: View {
             Button("提交…") { model.prepareCommit() }
                 .buttonStyle(.frPrimary).disabled(!model.canCommit)
                 .help(model.hasConflicts ? "尚有未解决的冲突，请解决后暂存" : "提交整个仓库的暂存区")
+            
+            // Pull/Push buttons (仅在有远程分支时显示)
+            Button("拉取") {
+                model.perform(.pull(rebase: false), success: "已拉取")
+            }
+            .buttonStyle(.frSecondary)
+            .disabled(model.isLoading || model.isPerforming)
+            
+            Button("推送") {
+                model.perform(.push(remoteBranch: nil), success: "已推送")
+            }
+            .buttonStyle(.frSecondary)
+            .disabled(model.isLoading || model.isPerforming)
         }
         .font(.system(size: 12)).padding(12)
         .disabled(model.isLoading || model.isPerforming)
@@ -484,11 +497,20 @@ final class GitStatusController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: GitStatusModel?
     var isPerforming: Bool { model?.isPerforming == true }
+    
+    private let windowType = "gitStatus"
 
     func show(at url: URL? = nil) {
         if window == nil {
             let model = GitStatusModel()
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 480),
+            
+            // 尝试恢复上次的位置（如果存在）
+            var contentRect = NSRect(x: 0, y: 0, width: 600, height: 480)
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType) {
+                contentRect = saved
+            }
+            
+            let window = NSWindow(contentRect: contentRect,
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.title = NSLocalizedString("Git 状态", comment: "")
             window.minSize = NSWindow.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 520, height: 380), styleMask: window.styleMask).size
@@ -502,6 +524,16 @@ final class GitStatusController: NSObject, NSWindowDelegate {
         if let url { model?.open(at: url) }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    func windowDidEndMoving(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
+    }
+    
+    func windowDidMove(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

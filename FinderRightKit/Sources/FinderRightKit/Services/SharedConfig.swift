@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // MARK: - 文件模板
 
@@ -140,7 +141,233 @@ public final class SharedConfig {
     }
 }
 
-// MARK: - 快捷键模型
+// MARK: - Window Position Memory
+
+extension SharedConfig {
+    
+    public struct WindowPositionInfo: Codable, Identifiable {
+        public var id: String // Window type identifier
+        public var screenIdentifier: String? // Screen identifier for multi-monitor support
+        public var originX: Double
+        public var originY: Double
+        public var sizeWidth: Double
+        public var sizeHeight: Double
+        
+        public init(id: String, screenIdentifier: String?, originX: Double, originY: Double, width: Double, height: Double) {
+            self.id = id
+            self.screenIdentifier = screenIdentifier
+            self.originX = originX
+            self.originY = originY
+            self.sizeWidth = width
+            self.sizeHeight = height
+        }
+    }
+    
+    private enum WindowKeys {
+        static let windowPositions = "windowPositions"
+    }
+    
+    public private(set) var windowPositions: [WindowPositionInfo] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let data = try? Data(contentsOf: configFileURL),
+                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                  let windows = dict[WindowKeys.windowPositions] as? [[String: Any]] else {
+                return []
+            }
+            
+            return windows.compactMap { dict -> WindowPositionInfo? in
+                guard let id = dict["id"] as? String,
+                      let screenIdentifier = dict["screenIdentifier"] as? String,
+                      let originX = dict["originX"] as? Double,
+                      let originY = dict["originY"] as? Double,
+                      let width = dict["width"] as? Double,
+                      let height = dict["height"] as? Double else {
+                    return nil
+                }
+                
+                return WindowPositionInfo(
+                    id: id,
+                    screenIdentifier: screenIdentifier.isEmpty ? nil : screenIdentifier,
+                    originX: originX,
+                    originY: originY,
+                    width: width,
+                    height: height
+                )
+            }
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[WindowKeys.windowPositions] = newValue.map { info -> [String: Any] in
+                [
+                    "id": info.id,
+                    "screenIdentifier": info.screenIdentifier ?? "",
+                    "originX": info.originX,
+                    "originY": info.originY,
+                    "width": info.sizeWidth,
+                    "height": info.sizeHeight
+                ]
+            }
+            save()
+        }
+    }
+    
+    /// 保存窗口位置（简化版）
+    public func saveWindowPosition(for windowType: String, frame: NSRect) {
+        var currentPositions = windowPositions
+        if let index = currentPositions.firstIndex(where: { $0.id == windowType }) {
+            currentPositions[index] = WindowPositionInfo(
+                id: windowType,
+                screenIdentifier: nil,
+                originX: frame.origin.x,
+                originY: frame.origin.y,
+                width: frame.size.width,
+                height: frame.size.height
+            )
+        } else {
+            currentPositions.append(WindowPositionInfo(
+                id: windowType,
+                screenIdentifier: nil,
+                originX: frame.origin.x,
+                originY: frame.origin.y,
+                width: frame.size.width,
+                height: frame.size.height
+            ))
+        }
+        
+        windowPositions = currentPositions
+    }
+    
+    /// 恢复窗口位置
+    public func restoreWindowPosition(for windowType: String) -> NSRect? {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        guard let info = windowPositions.first(where: { $0.id == windowType }) else {
+            return nil
+        }
+        
+        return NSRect(
+            origin: NSPoint(x: info.originX, y: info.originY),
+            size: CGSize(width: info.sizeWidth, height: info.sizeHeight)
+        )
+    }
+    
+    /// 清除特定窗口的记忆位置
+    public func clearWindowPosition(for windowType: String) {
+        var currentPositions = windowPositions
+        currentPositions.removeAll { $0.id == windowType }
+        windowPositions = currentPositions
+    }
+    
+    /// 清除所有窗口位置记忆
+    public func clearAllWindowPositions() {
+        windowPositions = []
+    }
+}
+
+// MARK: - Command Templates
+
+public enum CommandCategory: String, Codable, CaseIterable, Identifiable {
+    case build = "Build"
+    case test = "Test"
+    case deploy = "Deploy"
+    case format = "Format"
+    case search = "Search"
+    case custom = "Custom"
+    
+    public var id: String { rawValue }
+    
+    public var displayName: String {
+        switch self {
+        case .build: return "构建与编译"
+        case .test: return "测试与验证"
+        case .deploy: return "部署与发布"
+        case .format: return "格式化与 lint"
+        case .search: return "搜索与查找"
+        case .custom: return "自定义"
+        }
+    }
+}
+
+/// 保存的命令（基于预定义模板创建）
+public struct SavedCommandTemplate: Codable, Identifiable {
+    public var id: String
+    public let originalTemplateId: String
+    public var name: String
+    public var script: String
+    public var category: CommandCategory
+    public var lastUsed: Date?
+    
+    public init(id: String = UUID().uuidString, originalTemplateId: String, name: String, script: String, category: CommandCategory) {
+        self.id = id
+        self.originalTemplateId = originalTemplateId
+        self.name = name
+        self.script = script
+        self.category = category
+        self.lastUsed = nil
+    }
+}
+
+extension SharedConfig {
+    
+    private enum TemplateKeys {
+        static let savedCommandTemplates = "savedCommandTemplates"
+    }
+    
+    public private(set) var commandTemplates: [SavedCommandTemplate] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let data = try? Data(contentsOf: configFileURL),
+                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                  let templates = dict[TemplateKeys.savedCommandTemplates] as? [[String: Any]] else {
+                return []
+            }
+            
+            return templates.compactMap { dict -> SavedCommandTemplate? in
+                guard let id = dict["id"] as? String,
+                      let originalTemplateId = dict["originalTemplateId"] as? String,
+                      let name = dict["name"] as? String,
+                      let script = dict["script"] as? String,
+                      let categoryRaw = dict["category"] as? String else { return nil }
+                
+                return SavedCommandTemplate(
+                    id: id,
+                    originalTemplateId: originalTemplateId,
+                    name: name,
+                    script: script,
+                    category: CommandCategory(rawValue: categoryRaw) ?? .custom
+                )
+            }
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[TemplateKeys.savedCommandTemplates] = newValue.map { template -> [String: Any] in
+                [
+                    "id": template.id,
+                    "originalTemplateId": template.originalTemplateId,
+                    "name": template.name,
+                    "script": template.script,
+                    "category": template.category.rawValue,
+                    "lastUsed": template.lastUsed?.iso8601String
+                ]
+            }
+            save()
+        }
+    }
+}
+
+extension Date {
+    fileprivate var iso8601String: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+        return formatter.string(from: self)
+    }
+}
 
 /// 菜单项快捷键（key + 修饰键）
 public struct ActionShortcut: Codable, Equatable {

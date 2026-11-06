@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RecentOperations.shared.setCapacity(UserDefaults.standard.object(forKey: RecentOperations.capacityKey) as? Int ?? 100)
         setupStatusItem()
 
+        // 注册全局快捷键
+        registerGlobalHotkeys()
+
         // 注册 macOS Services：让右键操作在 iCloud / Google Drive 等 File Provider
         // 云盘文件夹中也可用（这些目录归云盘自己的扩展，FinderSync 扩展拿不到右键菜单）。
         // 先补上默认快捷键（每行只补一次、只填空位，不覆盖用户设置），
