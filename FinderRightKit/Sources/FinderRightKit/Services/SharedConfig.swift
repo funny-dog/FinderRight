@@ -122,6 +122,26 @@ public final class SharedConfig {
         }
     }
 
+    /// 只合并单个键写回磁盘，供窗口位置这类「跨进程频繁写入」使用。
+    ///
+    /// 不走 `store` + `save()`：主 App 的窗口回调持有的是启动时的缓存，
+    /// 整份写回会覆盖其他进程刚写入的快捷键、模板等配置。这里以磁盘为准做读-改-写。
+    func writeKeyMergingOnDisk(_ key: String, value: Any) {
+        lock.lock()
+        defer { lock.unlock() }
+        var dict = (try? Data(contentsOf: configFileURL))
+            .flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] } ?? [:]
+        dict[key] = value
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) else { return }
+        try? data.write(to: configFileURL, options: .atomic)
+        // 本地缓存同步成落盘结果，避免后续读取到过期值
+        store = dict
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: configFileURL.path),
+           let mtime = attrs[.modificationDate] as? Date {
+            lastLoadedMtime = mtime
+        }
+    }
+
     /// 重新从磁盘加载配置。
     ///
     /// 单例在各进程内独立缓存，扩展进程需要在读取前调用此方法，
@@ -167,29 +187,36 @@ extension SharedConfig {
         static let windowPositions = "windowPositions"
     }
     
+    /// 窗口位置在设置文件里的原始表示，只供本扩展做读-改-写。
+    ///
+    /// 不能像其他配置那样走 `store`：主 App 的窗口回调只持有启动时的缓存，
+    /// 若直接写 `store` 再整体 `save()` 会把别的进程刚写入的快捷键、模板等键回滚。
+    /// 因此这里每次都重新读盘，在同一把锁内合并后立即回写。
+    private var windowPositionsRaw: [[String: Any]] {
+        guard let data = try? Data(contentsOf: configFileURL),
+              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let windows = dict[WindowKeys.windowPositions] as? [[String: Any]] else {
+            return []
+        }
+        return windows
+    }
+
     public private(set) var windowPositions: [WindowPositionInfo] {
         get {
             lock.lock()
             defer { lock.unlock() }
-            guard let data = try? Data(contentsOf: configFileURL),
-                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                  let windows = dict[WindowKeys.windowPositions] as? [[String: Any]] else {
-                return []
-            }
-            
-            return windows.compactMap { dict -> WindowPositionInfo? in
+            return windowPositionsRaw.compactMap { dict -> WindowPositionInfo? in
                 guard let id = dict["id"] as? String,
-                      let screenIdentifier = dict["screenIdentifier"] as? String,
                       let originX = dict["originX"] as? Double,
                       let originY = dict["originY"] as? Double,
                       let width = dict["width"] as? Double,
                       let height = dict["height"] as? Double else {
                     return nil
                 }
-                
+                let screenIdentifier = dict["screenIdentifier"] as? String
                 return WindowPositionInfo(
                     id: id,
-                    screenIdentifier: screenIdentifier.isEmpty ? nil : screenIdentifier,
+                    screenIdentifier: screenIdentifier?.isEmpty == false ? screenIdentifier : nil,
                     originX: originX,
                     originY: originY,
                     width: width,
@@ -198,174 +225,85 @@ extension SharedConfig {
             }
         }
         set {
-            lock.lock()
-            defer { lock.unlock() }
-            store[WindowKeys.windowPositions] = newValue.map { info -> [String: Any] in
-                [
-                    "id": info.id,
-                    "screenIdentifier": info.screenIdentifier ?? "",
-                    "originX": info.originX,
-                    "originY": info.originY,
-                    "width": info.sizeWidth,
-                    "height": info.sizeHeight
-                ]
-            }
-            save()
+            writeKeyMergingOnDisk(WindowKeys.windowPositions, value: Self.encode(newValue))
+        }
+    }
+
+    private static func encode(_ positions: [WindowPositionInfo]) -> [[String: Any]] {
+        positions.map { info -> [String: Any] in
+            [
+                "id": info.id,
+                "screenIdentifier": info.screenIdentifier ?? "",
+                "originX": info.originX,
+                "originY": info.originY,
+                "width": info.sizeWidth,
+                "height": info.sizeHeight
+            ]
         }
     }
     
     /// 保存窗口位置（简化版）
+    ///
+    /// 只在锁内合并「窗口位置」这一个键：先读盘取最新列表，再写回磁盘。
+    /// 这样同时能保留其他进程刚写入的配置，也不会因为整份 `store` 陈旧而回滚设置。
     public func saveWindowPosition(for windowType: String, frame: NSRect) {
-        var currentPositions = windowPositions
-        if let index = currentPositions.firstIndex(where: { $0.id == windowType }) {
-            currentPositions[index] = WindowPositionInfo(
-                id: windowType,
-                screenIdentifier: nil,
-                originX: frame.origin.x,
-                originY: frame.origin.y,
-                width: frame.size.width,
-                height: frame.size.height
-            )
-        } else {
-            currentPositions.append(WindowPositionInfo(
-                id: windowType,
-                screenIdentifier: nil,
-                originX: frame.origin.x,
-                originY: frame.origin.y,
-                width: frame.size.width,
-                height: frame.size.height
-            ))
-        }
-        
-        windowPositions = currentPositions
-    }
-    
-    /// 恢复窗口位置
-    public func restoreWindowPosition(for windowType: String) -> NSRect? {
         lock.lock()
         defer { lock.unlock() }
-        
-        guard let info = windowPositions.first(where: { $0.id == windowType }) else {
-            return nil
+        var currentPositions = windowPositionsRaw
+        let record: [String: Any] = [
+            "id": windowType,
+            "screenIdentifier": NSScreen.screenIdentifier(containing: frame) ?? "",
+            "originX": frame.origin.x,
+            "originY": frame.origin.y,
+            "width": frame.size.width,
+            "height": frame.size.height
+        ]
+        if let index = currentPositions.firstIndex(where: { $0["id"] as? String == windowType }) {
+            currentPositions[index] = record
+        } else {
+            currentPositions.append(record)
         }
-        
-        return NSRect(
+        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: currentPositions)
+    }
+
+    /// 恢复窗口位置
+    ///
+    /// 保存位置所在的屏幕已不存在（外接屏拔掉等）时返回 nil，交给调用方居中显示，
+    /// 免得把窗口恢复到不可见的坐标。
+    public func restoreWindowPosition(for windowType: String) -> NSRect? {
+        lock.lock()
+        let info = windowPositions.first { $0.id == windowType }
+        lock.unlock()
+        guard let info else { return nil }
+        let frame = NSRect(
             origin: NSPoint(x: info.originX, y: info.originY),
             size: CGSize(width: info.sizeWidth, height: info.sizeHeight)
         )
+        guard NSScreen.screenIdentifier(containing: frame) != nil else { return nil }
+        return frame
     }
-    
+
     /// 清除特定窗口的记忆位置
     public func clearWindowPosition(for windowType: String) {
-        var currentPositions = windowPositions
-        currentPositions.removeAll { $0.id == windowType }
-        windowPositions = currentPositions
+        lock.lock()
+        defer { lock.unlock() }
+        var currentPositions = windowPositionsRaw
+        currentPositions.removeAll { $0["id"] as? String == windowType }
+        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: currentPositions)
     }
-    
+
     /// 清除所有窗口位置记忆
     public func clearAllWindowPositions() {
-        windowPositions = []
+        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: [[String: Any]]())
     }
 }
 
-// MARK: - Command Templates
-
-public enum CommandCategory: String, Codable, CaseIterable, Identifiable {
-    case build = "Build"
-    case test = "Test"
-    case deploy = "Deploy"
-    case format = "Format"
-    case search = "Search"
-    case custom = "Custom"
-    
-    public var id: String { rawValue }
-    
-    public var displayName: String {
-        switch self {
-        case .build: return "构建与编译"
-        case .test: return "测试与验证"
-        case .deploy: return "部署与发布"
-        case .format: return "格式化与 lint"
-        case .search: return "搜索与查找"
-        case .custom: return "自定义"
-        }
-    }
-}
-
-/// 保存的命令（基于预定义模板创建）
-public struct SavedCommandTemplate: Codable, Identifiable {
-    public var id: String
-    public let originalTemplateId: String
-    public var name: String
-    public var script: String
-    public var category: CommandCategory
-    public var lastUsed: Date?
-    
-    public init(id: String = UUID().uuidString, originalTemplateId: String, name: String, script: String, category: CommandCategory) {
-        self.id = id
-        self.originalTemplateId = originalTemplateId
-        self.name = name
-        self.script = script
-        self.category = category
-        self.lastUsed = nil
-    }
-}
-
-extension SharedConfig {
-    
-    private enum TemplateKeys {
-        static let savedCommandTemplates = "savedCommandTemplates"
-    }
-    
-    public private(set) var commandTemplates: [SavedCommandTemplate] {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            guard let data = try? Data(contentsOf: configFileURL),
-                  let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                  let templates = dict[TemplateKeys.savedCommandTemplates] as? [[String: Any]] else {
-                return []
-            }
-            
-            return templates.compactMap { dict -> SavedCommandTemplate? in
-                guard let id = dict["id"] as? String,
-                      let originalTemplateId = dict["originalTemplateId"] as? String,
-                      let name = dict["name"] as? String,
-                      let script = dict["script"] as? String,
-                      let categoryRaw = dict["category"] as? String else { return nil }
-                
-                return SavedCommandTemplate(
-                    id: id,
-                    originalTemplateId: originalTemplateId,
-                    name: name,
-                    script: script,
-                    category: CommandCategory(rawValue: categoryRaw) ?? .custom
-                )
-            }
-        }
-        set {
-            lock.lock()
-            defer { lock.unlock() }
-            store[TemplateKeys.savedCommandTemplates] = newValue.map { template -> [String: Any] in
-                [
-                    "id": template.id,
-                    "originalTemplateId": template.originalTemplateId,
-                    "name": template.name,
-                    "script": template.script,
-                    "category": template.category.rawValue,
-                    "lastUsed": template.lastUsed?.iso8601String
-                ]
-            }
-            save()
-        }
-    }
-}
-
-extension Date {
-    fileprivate var iso8601String: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-        return formatter.string(from: self)
+private extension NSScreen {
+    /// 用屏幕可见区域中心点判断所在屏幕。窗口跨屏时以中心点归属为准，
+    /// 与 AppKit 恢复窗口时的常规判断一致。
+    static func screenIdentifier(containing frame: NSRect) -> String? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return screens.first { $0.frame.contains(center) }?.localizedName
     }
 }
 

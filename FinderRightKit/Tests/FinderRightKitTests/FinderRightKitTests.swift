@@ -414,6 +414,47 @@ struct FinderRightKitTestsRunner {
         }
 
         // 5. SharedConfig 多线程并发压测
+        runTest("窗口位置：保存不覆盖其他进程已写入的配置") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-window-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+
+            // 模拟主 App 先启动并缓存旧配置
+            let windowWriter = SharedConfig(fileURL: tempURL)
+            windowWriter.preferredTerminal = "com.apple.Terminal"
+
+            // 另一进程（如 FinderSync 扩展）随后写入新配置
+            let otherProcess = SharedConfig(fileURL: tempURL)
+            otherProcess.menuIconStyle = .tile
+            otherProcess.preferredTerminal = "com.googlecode.iterm2"
+
+            // 主 App 的窗口回调只应新增 windowPositions，不能回滚上面的设置
+            let frame = NSRect(x: 120, y: 240, width: 600, height: 480)
+            windowWriter.saveWindowPosition(for: "gitStatus", frame: frame)
+
+            let reloaded = SharedConfig(fileURL: tempURL)
+            try assertEqual(reloaded.preferredTerminal, "com.googlecode.iterm2")
+            try assertEqual(reloaded.menuIconStyle, .tile)
+            let saved = reloaded.windowPositions.first { $0.id == "gitStatus" }
+            try assertEqual(saved?.originX, 120)
+            try assertEqual(saved?.originY, 240)
+            try assertEqual(saved?.sizeWidth, 600)
+            try assertEqual(saved?.sizeHeight, 480)
+
+            // 重复保存同一窗口只更新，不产生重复条目
+            windowWriter.saveWindowPosition(for: "gitStatus", frame: NSRect(x: 0, y: 0, width: 520, height: 380))
+            let updated = SharedConfig(fileURL: tempURL)
+            try assertEqual(updated.windowPositions.filter { $0.id == "gitStatus" }.count, 1)
+            try assertEqual(updated.windowPositions.first { $0.id == "gitStatus" }?.sizeWidth, 520)
+
+            // 清除单个窗口与全部窗口位置
+            windowWriter.clearWindowPosition(for: "gitStatus")
+            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
+            try assertEqual(SharedConfig(fileURL: tempURL).preferredTerminal, "com.googlecode.iterm2")
+            windowWriter.saveWindowPosition(for: "fileComparison", frame: frame)
+            windowWriter.clearAllWindowPositions()
+            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
+        }
+
         runTest("MenuIconStyle 旧存储值迁移") {
             try assertEqual(MenuIconStyle(storedValue: "classic"), .tile)
             try assertEqual(MenuIconStyle(storedValue: "modern"), .modern)
