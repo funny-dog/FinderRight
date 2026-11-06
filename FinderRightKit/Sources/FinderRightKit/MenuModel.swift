@@ -163,6 +163,8 @@ public struct MenuBuildInput: Equatable {
     public var imageMenuState: ImageMenuState?
     /// 选中项的磁盘占用文案（如「25.1 GB」）；nil 表示当前无法显示（多选、计算中、失败）
     public var diskUsageTitle: String?
+    /// 磁盘占用行悬浮提示（全路径或「正在计算」引导）
+    public var diskUsageToolTip: String?
 
     public init(
         location: MenuTargetLocation,
@@ -178,7 +180,8 @@ public struct MenuBuildInput: Equatable {
         favoriteDirectories: [MenuFavoriteData] = [],
         hashAlgorithms: [String] = FileHasher.Algorithm.allCases.map(\.title),
         imageMenuState: ImageMenuState? = nil,
-        diskUsageTitle: String? = nil
+        diskUsageTitle: String? = nil,
+        diskUsageToolTip: String? = nil
     ) {
         self.location = location
         self.selection = selection
@@ -194,6 +197,7 @@ public struct MenuBuildInput: Equatable {
         self.hashAlgorithms = hashAlgorithms
         self.imageMenuState = imageMenuState
         self.diskUsageTitle = diskUsageTitle
+        self.diskUsageToolTip = diskUsageToolTip
     }
 }
 
@@ -435,7 +439,8 @@ public enum MenuTreeBuilder {
                         systemImage: "internaldrive",
                         tint: .blue,
                         actionId: "",
-                        isEnabled: false
+                        isEnabled: false,
+                        toolTip: input.diskUsageToolTip
                     ))
                 }
             case MenuFeatureCatalog.undo:

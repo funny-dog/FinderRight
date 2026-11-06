@@ -84,7 +84,7 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage"]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage", "prefetchDiskUsage"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
         // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
@@ -270,10 +270,12 @@ final class FinderRightService {
 
         // 排队预热：单个任务串行跑，避免用户快速切换目录时同时开一堆扫描抢 IO
         for path in paths {
+            let itemURL = URL(fileURLWithPath: path)
+            let normalized = itemURL.standardizedFileURL.path
             Self.diskUsageQueueForPrefetch.async {
-                _ = Self.diskUsageCache.value(for: path, ttl: Self.diskUsageCacheTTL)
-                let bytes = DiskUsage.allocatedBytes(at: URL(fileURLWithPath: path))
-                if let bytes { Self.diskUsageCache.store(bytes, for: path) }
+                if Self.diskUsageCache.value(for: normalized, ttl: Self.diskUsageCacheTTL) != nil { return }
+                let bytes = DiskUsage.allocatedBytes(at: itemURL)
+                if let bytes { Self.diskUsageCache.store(bytes, for: normalized) }
             }
         }
         return IPCResponse(id: req.id, success: true, message: "\(paths.count)")

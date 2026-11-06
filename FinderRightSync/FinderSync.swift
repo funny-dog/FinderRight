@@ -465,7 +465,9 @@ class FinderSync: FIFinderSync {
 
         // 磁盘占用文案必须先算好再构建菜单：菜单由 Finder 进程复制后绘制，
         // 返回之后再改标题不会刷新。算不出来时显示「正在计算」，主 App 会继续算完并缓存。
-        let diskUsageTitle: String? = showsDiskUsage ? diskUsageTitle(for: selected) : nil
+        // 未开启该功能时直接跳过，绝不在右键菜单弹出路径上发起同步 IPC 阻塞。
+        let isDiskUsageEnabled = showsDiskUsage && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage)
+        let diskUsage = isDiskUsageEnabled ? diskUsageItem(for: selected) : nil
 
         let input = MenuBuildInput(
             location: location,
@@ -480,7 +482,8 @@ class FinderSync: FIFinderSync {
             editors: editorData,
             favoriteDirectories: favoriteData,
             imageMenuState: imageState,
-            diskUsageTitle: diskUsageTitle
+            diskUsageTitle: diskUsage?.title,
+            diskUsageToolTip: diskUsage?.toolTip
         )
 
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
@@ -498,11 +501,11 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 磁盘占用
 
-    /// 计算要显示在菜单里的磁盘占用文案。返回 nil 表示这次不显示该行。
+    /// 计算要显示在菜单里的磁盘占用文案与悬浮提示。返回 nil 表示这次不显示该行。
     ///
     /// 用短超时同步等主 App：菜单由 Finder 进程复制后绘制，返回后再改标题不会刷新，
     /// 所以必须在返回菜单前拿到结果。算不完就显示「正在计算」，主 App 会继续算完并缓存。
-    private func diskUsageTitle(for selected: [URL]) -> String? {
+    private func diskUsageItem(for selected: [URL]) -> (title: String, toolTip: String)? {
         guard let url = Self.diskUsageTarget(in: selected) else { return nil }
 
         let started = ProcessInfo.processInfo.systemUptime
@@ -516,10 +519,10 @@ class FinderSync: FIFinderSync {
 
         if let bytes {
             logToFile("diskUsage hit: \(DiskUsage.formatted(bytes)) in \(String(format: "%.0f", elapsedMs))ms")
-            return String(format: L("占用：%@"), DiskUsage.formatted(bytes))
+            return (String(format: L("占用：%@"), DiskUsage.formatted(bytes)), url.path)
         }
         logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
-        return L("占用：正在计算…")
+        return (L("占用：正在计算…"), L("目录较大，计算需要几秒；再次右键即可看到结果"))
     }
 
     /// 只有单个选中项才统计：多选时数字意义不大，且会让菜单等待时间成倍增加

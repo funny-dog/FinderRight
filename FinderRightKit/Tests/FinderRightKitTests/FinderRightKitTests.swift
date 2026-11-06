@@ -4746,6 +4746,43 @@ struct FinderRightKitTestsRunner {
             try assertEqual(MenuTreeBuilder.buildMenuTree(input: noFeatures), [])
         }
 
+        runTest("菜单单一数据源：磁盘占用节点展示与开关过滤") {
+            let inputWithUsage = MenuBuildInput(
+                location: .items,
+                selection: .singleFolder,
+                enabledFeatureIds: [MenuFeatureCatalog.diskUsage],
+                diskUsageTitle: "占用：1.2 GB",
+                diskUsageToolTip: "/path/to/folder"
+            )
+            let nodes = MenuTreeBuilder.buildMenuTree(input: inputWithUsage)
+            try assertEqual(nodes.count, 1)
+            guard let usageNode = nodes.first else {
+                throw TestFailure(message: "期望有 1 个节点")
+            }
+            try assertEqual(usageNode.id, MenuFeatureCatalog.diskUsage)
+            try assertEqual(usageNode.title, .dynamic("占用：1.2 GB"))
+            try assertEqual(usageNode.toolTip, "/path/to/folder")
+            try assertTrue(!usageNode.isEnabled, "状态行不可点击")
+
+            // 未开启功能时，即便传入了占用文案也不生成该节点
+            let disabledInput = MenuBuildInput(
+                location: .items,
+                selection: .singleFolder,
+                enabledFeatureIds: [],
+                diskUsageTitle: "占用：1.2 GB"
+            )
+            try assertTrue(MenuTreeBuilder.buildMenuTree(input: disabledInput).isEmpty)
+
+            // 无占用文案时不生成该节点
+            let nilUsageInput = MenuBuildInput(
+                location: .items,
+                selection: .singleFolder,
+                enabledFeatureIds: [MenuFeatureCatalog.diskUsage],
+                diskUsageTitle: nil
+            )
+            try assertTrue(MenuTreeBuilder.buildMenuTree(input: nilUsageInput).isEmpty)
+        }
+
         runTest("服务菜单防漂移：完整声明对齐时校验无 issue") {
             let testFeatures = [
                 MenuFeature(id: "test.copy", nameKey: "测试复制", descriptionKey: "", systemImage: "link",
