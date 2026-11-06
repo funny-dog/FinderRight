@@ -56,6 +56,27 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-cut-queue-removal.swift -o "$KIT_BUILD_DIR/test-cut-queue-removal"
 "$KIT_BUILD_DIR/test-cut-queue-removal"
 
+# 开发者工具：文件比较与 Git 状态的纯逻辑检查（只用临时目录，不触碰用户仓库）
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-git-status.swift -o "$KIT_BUILD_DIR/test-git-status"
+"$KIT_BUILD_DIR/test-git-status"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-git-operations.swift -o "$KIT_BUILD_DIR/test-git-operations"
+"$KIT_BUILD_DIR/test-git-operations"
+
+# 远程操作用本地 file:// 裸仓库验证；只在这个测试进程内放行 file 协议，
+# 产品代码默认仍只允许 https/ssh/git。
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+  -L "$KIT_BUILD_DIR" -lFinderRightKit \
+  scripts/test-git-pull-push.swift -o "$KIT_BUILD_DIR/test-git-pull-push"
+FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "$KIT_BUILD_DIR/test-git-pull-push"
+
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
