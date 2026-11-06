@@ -463,6 +463,10 @@ class FinderSync: FIFinderSync {
             && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.imageTools)
             ? ImageMenuState.evaluate(selection: selected) : nil
 
+        // 磁盘占用文案必须先算好再构建菜单：菜单由 Finder 进程复制后绘制，
+        // 返回之后再改标题不会刷新。算不出来时显示「正在计算」，主 App 会继续算完并缓存。
+        let diskUsageTitle: String? = showsDiskUsage ? diskUsageTitle(for: selected) : nil
+
         let input = MenuBuildInput(
             location: location,
             selection: selectionKind,
@@ -475,17 +479,12 @@ class FinderSync: FIFinderSync {
             terminals: terminalData,
             editors: editorData,
             favoriteDirectories: favoriteData,
-            imageMenuState: imageState
+            imageMenuState: imageState,
+            diskUsageTitle: diskUsageTitle
         )
 
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
         let menu = renderMenu(nodes: nodes, editors: editors, style: style)
-
-        // 磁盘占用行：必须在这里同步拿到数字——菜单由 Finder 进程绘制，返回后再改标题不会刷新。
-        // 所以给主 App 一个短超时，算得出来就显示大小，算不出来就不显示（等下次命中缓存）
-        if showsDiskUsage, SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage) {
-            insertDiskUsageItem(into: menu, for: selected)
-        }
 
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
         if !didDeferredSetup {
@@ -499,13 +498,12 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 磁盘占用
 
-    /// 在菜单顶部插入「占用：xx」状态行。
+    /// 计算要显示在菜单里的磁盘占用文案。返回 nil 表示这次不显示该行。
     ///
-    /// 必须在 `menu(for:)` 返回前完成：Finder 会复制菜单并在自己的进程里绘制，
-    /// 返回之后修改 NSMenuItem 不会生效（不是时序问题，是跨进程副本）。
-    /// 因此这里用一个短超时的 IPC —— 算得完就显示数字，算不完就不插入，绝不拖住菜单。
-    private func insertDiskUsageItem(into menu: NSMenu, for selected: [URL]) {
-        guard let url = Self.diskUsageTarget(in: selected) else { return }
+    /// 用短超时同步等主 App：菜单由 Finder 进程复制后绘制，返回后再改标题不会刷新，
+    /// 所以必须在返回菜单前拿到结果。算不完就显示「正在计算」，主 App 会继续算完并缓存。
+    private func diskUsageTitle(for selected: [URL]) -> String? {
+        guard let url = Self.diskUsageTarget(in: selected) else { return nil }
 
         let started = ProcessInfo.processInfo.systemUptime
         let result = IPCClient.shared.call(
@@ -514,35 +512,14 @@ class FinderSync: FIFinderSync {
             timeout: Self.diskUsageTimeout
         )
         let elapsedMs = (ProcessInfo.processInfo.systemUptime - started) * 1000
-
-        // 算不出来也照样占一行：显示「正在计算」并通过 tooltip 告诉用户稍后再看。
-        // 主 App 会在后台继续算完并缓存，下次右键就能直接看到数字。
         let bytes = result.success ? result.message.flatMap { Int64($0) } : nil
-        let title: String
-        if let bytes {
-            title = String(format: L("占用：%@"), DiskUsage.formatted(bytes))
-        } else {
-            title = L("占用：正在计算…")
-            logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
-        }
 
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        item.toolTip = bytes == nil ? L("目录较大，计算需要几秒；再次右键即可看到结果") : url.path
-
-        // 文字颜色由 Finder 决定（跨进程复制会丢弃 attributedTitle 的颜色），
-        // 所以主题色只能落在图标上：用当前主题的 accent 色渲染磁盘图标
-        let style = SharedConfig.shared.menuIconStyle
-        if style != .none {
-            let accent = FRThemeID.current.palette.accent.resolved(for: NSApp.effectiveAppearance)
-            item.image = MenuIconRenderer.image(symbol: "internaldrive", color: accent, style: style)
-        }
-
-        // 放在 FinderRight 自己那一段的最前面（Finder 系统项占着菜单最上方）
-        menu.insertItem(item, at: 0)
         if let bytes {
             logToFile("diskUsage hit: \(DiskUsage.formatted(bytes)) in \(String(format: "%.0f", elapsedMs))ms")
+            return String(format: L("占用：%@"), DiskUsage.formatted(bytes))
         }
+        logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
+        return L("占用：正在计算…")
     }
 
     /// 只有单个选中项才统计：多选时数字意义不大，且会让菜单等待时间成倍增加
@@ -617,6 +594,12 @@ class FinderSync: FIFinderSync {
                 if case .action(let actionId, let index) = node.kind,
                    actionId == "openEditor", editors.indices.contains(index), style != .none {
                     item.image = editorMenuIcon(for: editors[index].id)
+                }
+                // 磁盘占用行用主题色图标：菜单文字颜色由 Finder 决定（会丢弃 attributedTitle
+                // 的颜色），主题色只能落在图标上
+                if node.id == MenuFeatureCatalog.diskUsage, style != .none {
+                    let accent = FRThemeID.current.palette.accent.resolved(for: NSApp.effectiveAppearance)
+                    item.image = MenuIconRenderer.image(symbol: "internaldrive", color: accent, style: style)
                 }
                 menu.addItem(item)
             case .submenu(let children):

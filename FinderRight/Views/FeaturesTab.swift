@@ -150,17 +150,13 @@ struct FeaturesTab: View {
             }
         } content: {
             FRCard {
-                FeatureToggleRow(feature: MenuFeatureCatalog.diskUsageFeature)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                FRDivider()
                 ForEach(Array(featureOrder.enumerated()), id: \.element.id) { index, feature in
                     if index > 0 { FRDivider() }
                     featureRow(feature)
                 }
             }
 
-            FRFootnote(Text("大小固定显示在菜单顶部；关闭后不显示。其余功能可拖动左侧的 ≡ 调整顺序。"))
+            FRFootnote(Text("关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。"))
         }
     }
 

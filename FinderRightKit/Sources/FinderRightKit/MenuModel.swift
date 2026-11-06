@@ -161,6 +161,8 @@ public struct MenuBuildInput: Equatable {
     public var favoriteDirectories: [MenuFavoriteData]
     public var hashAlgorithms: [String]
     public var imageMenuState: ImageMenuState?
+    /// 选中项的磁盘占用文案（如「25.1 GB」）；nil 表示当前无法显示（多选、计算中、失败）
+    public var diskUsageTitle: String?
 
     public init(
         location: MenuTargetLocation,
@@ -175,7 +177,8 @@ public struct MenuBuildInput: Equatable {
         editors: [MenuEditorData] = [],
         favoriteDirectories: [MenuFavoriteData] = [],
         hashAlgorithms: [String] = FileHasher.Algorithm.allCases.map(\.title),
-        imageMenuState: ImageMenuState? = nil
+        imageMenuState: ImageMenuState? = nil,
+        diskUsageTitle: String? = nil
     ) {
         self.location = location
         self.selection = selection
@@ -190,6 +193,7 @@ public struct MenuBuildInput: Equatable {
         self.favoriteDirectories = favoriteDirectories
         self.hashAlgorithms = hashAlgorithms
         self.imageMenuState = imageMenuState
+        self.diskUsageTitle = diskUsageTitle
     }
 }
 
@@ -423,6 +427,17 @@ public enum MenuTreeBuilder {
 
         for feature in orderedFeatures where featureOn(feature.id) {
             switch feature.id {
+            case MenuFeatureCatalog.diskUsage:
+                if let title = input.diskUsageTitle {
+                    items.append(.dynamicAction(
+                        id: MenuFeatureCatalog.diskUsage,
+                        title: title,
+                        systemImage: "internaldrive",
+                        tint: .blue,
+                        actionId: "",
+                        isEnabled: false
+                    ))
+                }
             case MenuFeatureCatalog.undo:
                 if let undoTitle = input.undoTitle {
                     items.append(.dynamicAction(

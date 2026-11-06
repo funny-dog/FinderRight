@@ -2841,8 +2841,10 @@ struct FinderRightKitTestsRunner {
             let oldSaved = ["feature.toggleHidden", "feature.newFile", "feature.copyPath", "feature.openTerminal",
                             "feature.openEditor", "feature.cut", "feature.paste", "feature.compress", "feature.decompress"]
             let ids = MenuFeatureCatalog.ordered(by: oldSaved).map(\.id)
-            try assertEqual(ids.first, MenuFeatureCatalog.undo, "新增的撤销没有前一项，放最前")
-            try assertEqual(ids[1], "feature.toggleHidden", "用户的自定义顺序保持不变")
+            // 显示大小是状态行，默认固定在菜单最前；撤销紧随其后
+            try assertEqual(ids.first, MenuFeatureCatalog.diskUsage, "显示大小默认放最前")
+            try assertEqual(ids[1], MenuFeatureCatalog.undo, "新增的撤销没有前一项，排在显示大小之后")
+            try assertEqual(ids[2], "feature.toggleHidden", "用户的自定义顺序保持不变")
             let paste = ids.firstIndex(of: "feature.paste")!
             try assertEqual(Array(ids[paste...paste + 2]), ["feature.paste", "feature.moveTo", "feature.copyTo"])
         }
@@ -4000,11 +4002,17 @@ struct FinderRightKitTestsRunner {
             try assertEqual(T.command(keyCode: 6, modifierFlags: 1 << 20, chords: [T.undoActionId: chord], copy: nil), .undo)
         }
 
-        runTest("MenuFeatureCatalog 撤销排第一且默认开启") {
-            try assertEqual(MenuFeatureCatalog.all.first?.id, MenuFeatureCatalog.undo)
+        runTest("MenuFeatureCatalog 显示大小与撤销排在最前且默认开启") {
+            // 显示大小是一条状态行，排在所有操作之前；撤销是常用操作入口，紧随其后
+            try assertEqual(MenuFeatureCatalog.all.first?.id, MenuFeatureCatalog.diskUsage)
+            try assertEqual(MenuFeatureCatalog.all.dropFirst().first?.id, MenuFeatureCatalog.undo)
             try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.undo))
-            try assertEqual(MenuFeatureCatalog.ordered(by: [MenuFeatureCatalog.newFile]).first?.id, MenuFeatureCatalog.undo,
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.diskUsage),
+                           "显示大小默认开启")
+            let ordered = MenuFeatureCatalog.ordered(by: [MenuFeatureCatalog.newFile]).map(\.id)
+            try assertEqual(ordered.first, MenuFeatureCatalog.diskUsage,
                             "老用户保存的顺序里没有它时也放最前")
+            try assertEqual(ordered[1], MenuFeatureCatalog.undo, "撤销排在显示大小之后")
         }
 
         runTest("NewFileTemplateCatalog 内置项与默认顺序") {
