@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-15
+    # 优先用仓库自托管的 macOS runner（本机常驻），GitHub 托管机不可用时也能跑。
+    # 若自托管 runner 不可用，可在仓库 Settings → Actions 里改回 macos-15。
+    runs-on: [self-hosted, macOS]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
