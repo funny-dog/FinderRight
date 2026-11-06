@@ -13,6 +13,36 @@ enum MenuIconRenderer {
     private static let lock = NSLock()
     private static let side: CGFloat = 16
 
+    /// 加锁的通用缓存查询/写回
+    private static func cached(key: String, make: () -> NSImage?) -> NSImage? {
+        lock.lock()
+        if let hit = cache[key] { lock.unlock(); return hit }
+        lock.unlock()
+        guard let image = make() else { return nil }
+        lock.lock()
+        cache[key] = image
+        lock.unlock()
+        return image
+    }
+
+    /// 用任意主题色渲染图标。
+    ///
+    /// 菜单项的文字颜色由 Finder 决定（它复制菜单时丢弃 attributedTitle 的颜色），
+    /// 所以「用主题色显示」只能落在图标上：这里把主题 accent 色画进图标。
+    static func image(symbol: String, color: NSColor, style: MenuIconStyle) -> NSImage? {
+        // 颜色本身进缓存键：主题色与预设配色可能并存，不能互相覆盖
+        let key = "custom|" + color.accessibilityName + color.description
+        return cached(key: key) {
+            let appearance = NSApplication.shared.effectiveAppearance
+            let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            var rendered: NSImage?
+            appearance.performAsCurrentDrawingAppearance {
+                rendered = render(symbol: symbol, glyphColor: color, style: style, dark: dark)
+            }
+            return rendered
+        }
+    }
+
     static func image(symbol: String, tint: MenuTint, style: MenuIconStyle) -> NSImage? {
         let appearance = NSApplication.shared.effectiveAppearance
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -35,7 +65,17 @@ enum MenuIconRenderer {
         return image
     }
 
+    /// 按指定字形颜色渲染（主题色路径）
+    private static func render(symbol: String, glyphColor: NSColor, style: MenuIconStyle, dark: Bool) -> NSImage? {
+        render(symbol: symbol, style: style, dark: dark, explicitGlyph: glyphColor)
+    }
+
     private static func render(symbol: String, tint: MenuTint, style: MenuIconStyle, dark: Bool) -> NSImage? {
+        render(symbol: symbol, style: style, dark: dark, explicitGlyph: nil, tint: tint)
+    }
+
+    private static func render(symbol: String, style: MenuIconStyle, dark: Bool,
+                               explicitGlyph: NSColor?, tint: MenuTint? = nil) -> NSImage? {
         guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: nil),
               let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side * 2), pixelsHigh: Int(side * 2),
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
@@ -51,15 +91,17 @@ enum MenuIconRenderer {
         let glyphColor: NSColor
         let box: NSRect
         let config: NSImage.SymbolConfiguration
-        let asTile = style == .tile
-        if asTile {
+        let asTile = style == .tile && tint != nil
+        if asTile, let tint {
             srgb(dark ? tint.tile.dark : tint.tile.light).setFill()
             NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: side, height: side), xRadius: 4, yRadius: 4).fill()
             glyphColor = tint.darkGlyph ? srgb(0x2B2200) : .white
             box = NSRect(x: 2, y: 2, width: 12, height: 12)
             config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold)
         } else {
-            glyphColor = style == .modern ? .labelColor : srgb(dark ? tint.line.dark : tint.line.light)
+            // 主题色路径：直接用传入的颜色；预设配色路径沿用原有逻辑
+            // 主题色路径优先：显式给了颜色就用它，否则按原有风格取色
+            glyphColor = explicitGlyph ?? (style == .modern ? .labelColor : srgb(dark ? tint!.line.dark : tint!.line.light))
             box = NSRect(x: 0, y: 0, width: side, height: side)
             config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
         }

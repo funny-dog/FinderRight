@@ -150,13 +150,17 @@ struct FeaturesTab: View {
             }
         } content: {
             FRCard {
+                FeatureToggleRow(feature: MenuFeatureCatalog.diskUsageFeature)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                FRDivider()
                 ForEach(Array(featureOrder.enumerated()), id: \.element.id) { index, feature in
                     if index > 0 { FRDivider() }
                     featureRow(feature)
                 }
             }
 
-            FRFootnote(Text("关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。"))
+            FRFootnote(Text("大小固定显示在菜单顶部；关闭后不显示。其余功能可拖动左侧的 ≡ 调整顺序。"))
         }
     }
 
@@ -401,8 +405,10 @@ private struct PreviewExtensionToggle: View {
 
 /// 队列详情收在设置中，菜单栏保持简洁。
 private struct CutQueueSection: View {
-    @State private var paths: [String] = []
-    @State private var errorMessage: String?
+    // 一律用 FRState 而非 @State：@State 依赖 SwiftUIMacros 宏插件，
+    // 纯 Command Line Tools 环境下没有该插件，会让「无需 Xcode」的构建直接失败。
+    @FRState private var paths: [String] = []
+    @FRState private var errorMessage: String?
 
     var body: some View {
         FRSection("剪切 / 粘贴") {

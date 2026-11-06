@@ -216,6 +216,9 @@ class FinderSync: FIFinderSync {
     override func beginObservingDirectory(at url: URL) {
         logToFile("beginObserving: \(url.path)")
         let dir = url.path
+        // 用户刚进入目录，距离真正右键还有一段时间：顺手把这一层各项的大小预热进主 App 缓存。
+        // 扩展本身读不到 ~/Documents 等目录（沙箱只放行 Downloads），必须借主 App 的权限。
+        prefetchDiskUsage(in: url)
         // 只为确实含有剪切项的目录探测归属：没有剪切项就不需要角标，不应为此重启其他扩展
         guard BadgeOwnershipProbe.directory(dir, containsAnyOf: currentCutQueuePaths()) else { return }
         guard withBadgeProbe({ $0.beginProbe(directory: dir) }) else { return }
@@ -234,6 +237,40 @@ class FinderSync: FIFinderSync {
         for dir in parents {
             requestBadgeReclaimIfNeeded(directory: dir, reason: "cut")
         }
+    }
+
+    /// 进入目录时请求主 App 预热这一层各项的大小。
+    ///
+    /// 为什么由主 App 做：扩展受沙箱限制，除 `~/Downloads` 外读不到大多数目录的内容
+    /// （实测 `~/Documents`、`~/codes` 连目录列表都拿不到），因此只能把「目录路径」交给
+    /// 主 App（有完全磁盘访问），由它列出子项并逐个计算、写入缓存。
+    ///
+    /// 时机价值：用户进入目录到真正右键通常有几秒，这段时间足够把结果算好；
+    /// 右键时直接命中缓存，就是真正的「立即显示」，而不是「正在计算…」。
+    private func prefetchDiskUsage(in directory: URL) {
+        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage) else { return }
+        guard Self.shouldPrefetch(directory: directory.path) else { return }
+
+        IPCClient.shared.callAsync(
+            action: "prefetchDiskUsage",
+            payload: ["directory": .string(directory.path)],
+            timeout: 60
+        ) { result in
+            logToFile("prefetchDiskUsage \(directory.lastPathComponent): success=\(result.success) msg=\(result.message ?? "")")
+        }
+    }
+
+    /// 同一目录在本次进程生命周期内只预热一次；数量上限防止浏览大量目录时无限增长
+    private static var prefetchedDirectories: Set<String> = []
+    private static let prefetchedLock = NSLock()
+
+    private static func shouldPrefetch(directory: String) -> Bool {
+        prefetchedLock.lock()
+        defer { prefetchedLock.unlock() }
+        if prefetchedDirectories.contains(directory) { return false }
+        if prefetchedDirectories.count > 200 { prefetchedDirectories.removeAll() }
+        prefetchedDirectories.insert(directory)
+        return true
     }
 
     override func endObservingDirectory(at url: URL) {
@@ -333,17 +370,23 @@ class FinderSync: FIFinderSync {
 
         // 解析位置
         let location: MenuTargetLocation
+        let showsDiskUsage: Bool
         switch menuKind {
         case .contextualMenuForContainer:
             location = .container
+            showsDiskUsage = false
         case .contextualMenuForSidebar:
             location = .sidebar
+            showsDiskUsage = false
         case .contextualMenuForItems:
             location = .items
+            showsDiskUsage = true
         case .toolbarItemMenu:
             location = .items
+            showsDiskUsage = false
         @unknown default:
             location = .items
+            showsDiskUsage = false
         }
 
         // 解析选中项类型
@@ -438,6 +481,12 @@ class FinderSync: FIFinderSync {
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
         let menu = renderMenu(nodes: nodes, editors: editors, style: style)
 
+        // 磁盘占用行：必须在这里同步拿到数字——菜单由 Finder 进程绘制，返回后再改标题不会刷新。
+        // 所以给主 App 一个短超时，算得出来就显示大小，算不出来就不显示（等下次命中缓存）
+        if showsDiskUsage, SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage) {
+            insertDiskUsageItem(into: menu, for: selected)
+        }
+
         // 冷启动打点：仅首次菜单记录 init→首菜单间隔与菜单构建耗时，之后执行延后初始化
         if !didDeferredSetup {
             let sinceInitMs = (menuStart - Self.initStartUptime) * 1000
@@ -447,6 +496,67 @@ class FinderSync: FIFinderSync {
         deferredSetupIfNeeded()
         return menu
     }
+
+    // MARK: - 磁盘占用
+
+    /// 在菜单顶部插入「占用：xx」状态行。
+    ///
+    /// 必须在 `menu(for:)` 返回前完成：Finder 会复制菜单并在自己的进程里绘制，
+    /// 返回之后修改 NSMenuItem 不会生效（不是时序问题，是跨进程副本）。
+    /// 因此这里用一个短超时的 IPC —— 算得完就显示数字，算不完就不插入，绝不拖住菜单。
+    private func insertDiskUsageItem(into menu: NSMenu, for selected: [URL]) {
+        guard let url = Self.diskUsageTarget(in: selected) else { return }
+
+        let started = ProcessInfo.processInfo.systemUptime
+        let result = IPCClient.shared.call(
+            action: "diskUsage",
+            payload: ["path": .string(url.path)],
+            timeout: Self.diskUsageTimeout
+        )
+        let elapsedMs = (ProcessInfo.processInfo.systemUptime - started) * 1000
+
+        // 算不出来也照样占一行：显示「正在计算」并通过 tooltip 告诉用户稍后再看。
+        // 主 App 会在后台继续算完并缓存，下次右键就能直接看到数字。
+        let bytes = result.success ? result.message.flatMap { Int64($0) } : nil
+        let title: String
+        if let bytes {
+            title = String(format: L("占用：%@"), DiskUsage.formatted(bytes))
+        } else {
+            title = L("占用：正在计算…")
+            logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
+        }
+
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.toolTip = bytes == nil ? L("目录较大，计算需要几秒；再次右键即可看到结果") : url.path
+
+        // 文字颜色由 Finder 决定（跨进程复制会丢弃 attributedTitle 的颜色），
+        // 所以主题色只能落在图标上：用当前主题的 accent 色渲染磁盘图标
+        let style = SharedConfig.shared.menuIconStyle
+        if style != .none {
+            let accent = FRThemeID.current.palette.accent.resolved(for: NSApp.effectiveAppearance)
+            item.image = MenuIconRenderer.image(symbol: "internaldrive", color: accent, style: style)
+        }
+
+        // 放在 FinderRight 自己那一段的最前面（Finder 系统项占着菜单最上方）
+        menu.insertItem(item, at: 0)
+        if let bytes {
+            logToFile("diskUsage hit: \(DiskUsage.formatted(bytes)) in \(String(format: "%.0f", elapsedMs))ms")
+        }
+    }
+
+    /// 只有单个选中项才统计：多选时数字意义不大，且会让菜单等待时间成倍增加
+    private static func diskUsageTarget(in selected: [URL]) -> URL? {
+        guard selected.count == 1, let url = selected.first else { return nil }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
+        if isDir.boolValue { return url }
+        return FileHasher.isRegularFile(url) ? url : nil
+    }
+
+    /// 单次磁盘占用请求的等待上限。常规目录实测 0–70 ms，留到 250 ms 仍几乎无感；
+    /// 再大就会让右键菜单出现可感知的迟滞。
+    static let diskUsageTimeout: TimeInterval = 0.25
 
     // MARK: - 菜单构建与渲染
 

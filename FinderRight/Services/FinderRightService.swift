@@ -84,7 +84,7 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash"]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
         // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
@@ -143,6 +143,10 @@ final class FinderRightService {
         switch req.action {
         case "ping":
             return ping(req)
+        case "diskUsage":
+            return diskUsage(req)
+        case "prefetchDiskUsage":
+            return prefetchDiskUsage(req)
         case "createFile":
             let response = createFile(req)
             if !response.success {
@@ -199,6 +203,90 @@ final class FinderRightService {
         let canRead = (try? FileManager.default.contentsOfDirectory(atPath: expanded)) != nil
         return IPCResponse(id: req.id, success: true, message: canRead ? "fda=yes" : "fda=no")
     }
+
+    /// 后台任务自己的计算上限。它不决定菜单等多久（那是 diskUsageResponseWait），
+    /// 只决定「算到什么时候放弃」——必须给大目录留够时间，否则任务每次都被掐断，
+    /// 缓存永远建不起来，表现为「大目录永远不显示大小」。
+    /// 实测 ~/codes/practice（83 万文件）约 3.2 秒，这里留 30 秒上限，正常目录远用不到。
+    static let diskUsageScanTimeout: TimeInterval = 30
+
+    /// 单个请求在 IPC 上最多占用的时间（菜单侧只等 250 ms，这里与之对齐，多留一点写响应的时间）
+    static let diskUsageResponseWait: TimeInterval = 0.45
+
+    /// 结果缓存：入口是「进入目录时的预热」，右键时直接命中，才能做到立即显示数字。
+    ///
+    /// 有效期要覆盖「进入目录 → 停留一会儿 → 右键」这段真实使用间隔，太短会让预热白做；
+    /// 太长又可能显示明显过期的数字。10 分钟是折中，期间同一目录再次进入会重新预热。
+    private static let diskUsageCache = DiskUsageCache(capacity: 512)
+    static let diskUsageCacheTTL: TimeInterval = 600
+
+    private func diskUsage(_ req: IPCRequest) -> IPCResponse {
+        guard let path = req.payload["path"]?.stringValue else {
+            return IPCResponse(id: req.id, success: false, message: nil)
+        }
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        let normalized = url.standardizedFileURL.path
+
+        if let cached = Self.diskUsageCache.value(for: normalized, ttl: Self.diskUsageCacheTTL) {
+            ServicesProvider.trace("diskUsage 命中缓存 bytes=\(cached)")
+            return IPCResponse(id: req.id, success: true, message: String(cached))
+        }
+
+        // 菜单最多等 diskUsageResponseWait；等不到就返回失败，但**后台继续算到底**并写入缓存，
+        // 这样大目录下次右键就能立刻命中缓存（否则每次都在同一处超时，永远算不出来）。
+        let scanDeadline = Date().addingTimeInterval(Self.diskUsageScanTimeout)
+        let outcome = DiskUsageJob.run(
+            url: url,
+            path: normalized,
+            scanDeadline: scanDeadline,
+            waitTimeout: Self.diskUsageResponseWait,
+            cache: Self.diskUsageCache,
+            cacheTTL: Self.diskUsageCacheTTL
+        )
+        guard let outcome else {
+            ServicesProvider.trace("diskUsage 超时返回 path=\((normalized as NSString).lastPathComponent)")
+            return IPCResponse(id: req.id, success: false, message: nil)
+        }
+        return IPCResponse(id: req.id, success: true, message: String(outcome))
+    }
+
+    /// 预热一个目录下各项的占用：供扩展在用户「进入目录」时调用。
+    ///
+    /// 必须在后台做且立刻返回：用户浏览目录时会被频繁调用，不能占住 IPC 队列。
+    /// 只预热直接子项、数量有上限，避免浏览超大目录时把机器拖慢。
+    private func prefetchDiskUsage(_ req: IPCRequest) -> IPCResponse {
+        guard let raw = req.payload["directory"]?.stringValue else {
+            return IPCResponse(id: req.id, success: false, message: nil)
+        }
+        let directory = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
+            return IPCResponse(id: req.id, success: false, message: "无法读取目录")
+        }
+        let paths = names.prefix(Self.prefetchItemLimit).map { directory.appendingPathComponent($0).path }
+        guard !paths.isEmpty else {
+            return IPCResponse(id: req.id, success: true, message: "空目录")
+        }
+
+        // 排队预热：单个任务串行跑，避免用户快速切换目录时同时开一堆扫描抢 IO
+        for path in paths {
+            Self.diskUsageQueueForPrefetch.async {
+                _ = Self.diskUsageCache.value(for: path, ttl: Self.diskUsageCacheTTL)
+                let bytes = DiskUsage.allocatedBytes(at: URL(fileURLWithPath: path))
+                if let bytes { Self.diskUsageCache.store(bytes, for: path) }
+            }
+        }
+        return IPCResponse(id: req.id, success: true, message: "\(paths.count)")
+    }
+
+    /// 预热时每个目录最多处理多少个子项（目录里项目很多时没必要全部预热）
+    static let prefetchItemLimit = 80
+
+    /// 预热专用串行队列：与右键时的实时请求分开，避免互相排队
+    static let diskUsageQueueForPrefetch = DispatchQueue(
+        label: "com.finderright.app.diskusage.prefetch",
+        qos: .utility
+    )
 
     func serviceLog(_ message: String) {
         NSLog("[FinderRightService] \(message)")
