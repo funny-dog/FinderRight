@@ -878,3 +878,32 @@
 "重新统计 (⌘R)" = "Recalculate (⌘R)";
 "重试" = "Retry";
 "请选择目录" = "Select a folder";
+
+/* Changelog */
+"更新日志" = "What's New";
+"FinderRight 的功能演进与最新改进" = "Evolution and improvements in FinderRight";
+"当前版本" = "Current";
+"完成" = "Done";
+"在 GitHub Releases 查看完整历史" = "View Full History on GitHub Releases";
+"查看版本更新说明" = "View release notes";
+"新增" = "New";
+"优化" = "Improved";
+"修复" = "Fixed";
+"支持在访达空白处与单选文件夹查看磁盘占用与直属子项排行" = "Inspect disk usage and direct children breakdown from empty area or single folder";
+"应用版本更新后自动重启一次访达，确保新功能扩展立即生效" = "Restart Finder once after updating to ensure extensions take effect immediately";
+"修复应用内自动更新安装完成后的重启退出死锁问题" = "Fix exit deadlock when restarting after automatic in-app updates";
+"从剪贴板新建文件记住上次使用的模板格式" = "Remember last used template format when creating files from clipboard";
+"设置窗口新增简洁模式与平滑光轨切换动效" = "Add compact settings mode with smooth light-trail transition";
+"在桌面新建文件不再激活打开多余的访达窗口" = "Creating files on desktop no longer brings up redundant Finder windows";
+"支持直接从剪贴板中的纯文本或图片新建文件" = "Create files directly from plain text or images in clipboard";
+"增强自动更新下载校验和与代码签名验证" = "Enhance checksum and code signature verification for updates";
+"避免只读安装盘侧边栏图标被意外替换" = "Prevent read-only installer disk sidebar icon from being replaced";
+"支持配置全局快捷键快速打开指定路径" = "Configure global shortcut to quickly open custom paths";
+"新增系统服务菜单显示开关，降低多扩展冲突" = "Add toggle for system services menu to reduce extension conflicts";
+"优化 ZIP 归档解析性能并及时取消过期预览" = "Optimize ZIP archive parsing performance and cancel expired previews";
+"支持计算并展示单选文件与目录的实际磁盘占用大小" = "Calculate and display allocated disk usage for files and folders";
+"显示大小并入功能列表，支持拖动排序与开关联动" = "Integrate disk usage into feature list with drag-to-reorder support";
+"进入受监控目录时在后台自动异步预热子项大小缓存" = "Automatically prefetch disk usage cache in background when browsing directories";
+"新增 Markdown 只读快速预览扩展，支持独立启停" = "Add read-only Markdown Quick Look extension with independent control";
+"Quick Look 压缩包预览支持自包含解构与目录展开" = "Support self-contained archive extraction and folder expansion in Quick Look";
+"修复大型代码文件快速翻页时的内存占用" = "Fix memory footprint when quickly flipping through large code files";

@@ -9,6 +9,7 @@ struct AboutTab: View {
 
     @FRState private var updateStatus: UpdateCheckStatus = UpdateChecker.shared.currentStatus
     @FRState private var showingFeedback = false
+    @FRState private var showingChangelog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,10 +26,32 @@ struct AboutTab: View {
                 .foregroundColor(FRTheme.text)
                 .padding(.top, 14)
 
-            Text("版本 \(appVersion)")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(FRTheme.mute)
-                .padding(.top, 4)
+            HStack(spacing: 8) {
+                Text("版本 \(appVersion)")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(FRTheme.mute)
+
+                Button {
+                    showingChangelog = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10))
+                        Text("更新日志")
+                            .font(.system(size: 11.5))
+                    }
+                    .foregroundColor(FRTheme.accentText)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(
+                        Capsule()
+                            .fill(FRTheme.accent.opacity(0.12))
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("查看版本更新说明")
+            }
+            .padding(.top, 4)
 
             updateArea
                 .padding(.top, 14)
@@ -85,6 +108,9 @@ struct AboutTab: View {
         }
         .sheet(isPresented: $showingFeedback) {
             FeedbackSheet(isPresented: $showingFeedback)
+        }
+        .sheet(isPresented: $showingChangelog) {
+            ChangelogSheet(isPresented: $showingChangelog)
         }
         // 菜单栏「检查更新…」发起的检查与下载也同步到这里
         .onReceive(NotificationCenter.default.publisher(for: UpdateChecker.statusDidChangeNotification)) { _ in

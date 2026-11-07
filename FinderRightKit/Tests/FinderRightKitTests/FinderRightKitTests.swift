@@ -4950,6 +4950,25 @@ struct FinderRightKitTestsRunner {
             try assertTrue(buildUpgrade.isAppUpdated, "构建号变化视为更新")
         }
 
+        runTest("ChangelogCatalog：版本列表有序且包含当前主要版本更新条目") {
+            let list = ChangelogCatalog.entries
+            try assertTrue(!list.isEmpty, "更新日志条目不为空")
+            try assertEqual(list.first?.version, "1.12.4", "最新一条为 1.12.4")
+
+            // 检查版本号倒序
+            for i in 0..<(list.count - 1) {
+                let vCurrent = list[i].version
+                let vNext = list[i + 1].version
+                let order = VersionComparator.compareVersions(vCurrent, vNext)
+                try assertTrue(order == .orderedDescending, "版本必须严格倒序排列: \(vCurrent) > \(vNext)")
+            }
+
+            // 每个版本都有条目
+            for item in list {
+                try assertTrue(!item.items.isEmpty, "\(item.version) 必须包含更新详情")
+            }
+        }
+
         runTest("服务菜单防漂移：完整声明对齐时校验无 issue") {
             let testFeatures = [
                 MenuFeature(id: "test.copy", nameKey: "测试复制", descriptionKey: "", systemImage: "link",
