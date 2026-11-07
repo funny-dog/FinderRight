@@ -45,11 +45,17 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.12.5",
+            date: "2026-11-07",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "支持在访达空白处与单选文件夹查看磁盘占用与直属子项排行"),
+                ChangelogEntry(type: .improvement, textKey: "应用版本更新后自动重启一次访达，确保新功能扩展立即生效")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.12.4",
             date: "2026-11-04",
             items: [
-                ChangelogEntry(type: .feature, textKey: "支持在访达空白处与单选文件夹查看磁盘占用与直属子项排行"),
-                ChangelogEntry(type: .improvement, textKey: "应用版本更新后自动重启一次访达，确保新功能扩展立即生效"),
                 ChangelogEntry(type: .fix, textKey: "修复应用内自动更新安装完成后的重启退出死锁问题")
             ]
         ),

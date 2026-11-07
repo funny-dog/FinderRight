@@ -29,7 +29,7 @@ bash scripts/release.sh 1.12.4 --publish   # 推送、远端 CI、校验后正�
 
 日常 `bash scripts/build.sh` 只写 `build/`，不会碰仓库根目录已发布的 `FinderRight.dmg` 与 `FinderRight-v<版本>.zip`；`RELEASE=1` 或经 `release.sh` 才会生成发布件。Release 资产名必须保持 `FinderRight.dmg`、`FinderRight.dmg.sha256`、`FinderRight-v<版本>.zip`、`FinderRight-v<版本>.zip.sha256`，供自动更新下载与校验。
 
-用 `--notes-file <文件>` 指定「### 新增与优化」更新说明。`--publish` 内部先建 draft 并核验四个资产的大小、状态与 SHA-256，全部通过后自动正式公开并设为 Latest，再同步官网、Gitee、部署及 Homebrew。明确要求发布即授权全流程，无需再次确认；只有明确要求草稿时才加 `--draft`。任一步失败立即停止，保留已有提交、tag 或 draft。已有本地 tag 的恢复流程会重新校验工作区、四处版本与签名资产，不重复构建和本地 CI；`--sync-only` 在任何渠道写入前确认请求版本是最新正式版。每次执行会输出阶段耗时表。
+用 `--notes-file <文件>` 指定「### 新增与优化」更新说明。发版前先在 `FinderRightKit/Sources/FinderRightKit/ChangelogCatalog.swift` 的首条补齐待发版本的应用内更新日志并提交；脚本会在改写版本号前校验，避免用户更新后看到旧日志。`--publish` 内部先建 draft 并核验四个资产的大小、状态与 SHA-256，全部通过后自动正式公开并设为 Latest，再同步官网、Gitee、部署及 Homebrew。明确要求发布即授权全流程，无需再次确认；只有明确要求草稿时才加 `--draft`。任一步失败立即停止，保留已有提交、tag 或 draft。已有本地 tag 的恢复流程会重新校验工作区、四处版本与签名资产，不重复构建和本地 CI；`--sync-only` 在任何渠道写入前确认请求版本是最新正式版。每次执行会输出阶段耗时表。
 
 正式 Release 发布后，同步维护 [Homebrew Tap](https://github.com/funny-dog/homebrew-tap#维护-cask)：下载该版本 ZIP 和 `.sha256` 并校验，更新 `Casks/finderright.rb` 的 `version` 与 ZIP 的 `sha256`，复核签名、架构和系统要求，运行 Tap README 中的 style、audit、fetch 检查后提交推送。Tap 直接安装同一份正式 ZIP，保持发布证书不变；此步骤不需要重新打包 App。不要在正式 Release 公开前让 Tap 指向新版本。
 

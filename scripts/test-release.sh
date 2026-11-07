@@ -21,6 +21,16 @@ count = 0
 with tempfile.TemporaryDirectory(prefix="FinderRight release tests ") as folder:
     root = Path(folder)
     (root / "website").mkdir()
+    catalog = root / "FinderRightKit/Sources/FinderRightKit/ChangelogCatalog.swift"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text('''public enum ChangelogCatalog {
+    static let entries = [
+        ChangelogRelease(
+            version: "1.12.4"
+        )
+    ]
+}
+''')
     (root / "notes").write_text("### 新增与优化\n")
     for name in ("FinderRight.dmg", "FinderRight-v1.12.4.zip"):
         (root / name).write_bytes(b"offline release fixture")
@@ -121,6 +131,10 @@ else:
 
     run("中间失败不能被 echo 覆盖", 'step() { false; echo UNREACHABLE; }\nrun_timed_step test step\necho UNREACHABLE', 1)
     run("两步成功与计时数组", 'run_timed_step one true\nrun_timed_step two true\n[ "$' + '{#TIMING_NAMES[@]}" = 2 ]\nprint_timing_summary')
+    run("应用内更新日志覆盖待发版本", 'check_changelog_version 1.12.4')
+    catalog.write_text(catalog.read_text().replace('version: "1.12.4"', 'version: "1.12.3"'))
+    run("应用内更新日志落后时阻断发版", 'check_changelog_version 1.12.4\necho UNREACHABLE', 1)
+    catalog.write_text(catalog.read_text().replace('version: "1.12.3"', 'version: "1.12.4"'))
     run("CI 失败保留退出码", 'run_timed_step ci wait_for_remote_ci dummy\necho UNREACHABLE', 37)
     calls = run("dry-run 失败阻断正式部署", 'run_timed_step deploy deploy_website\necho UNREACHABLE', 38)
     assert len(calls) == 1 and "--dry-run" in calls[0]

@@ -183,6 +183,24 @@ check_new_version() {
   echo "版本升级：$current → $new (build $(( $(current_build) + 1 )))"
 }
 
+check_changelog_version() {
+  local expected="$1"
+  python3 - "$PROJECT_DIR/FinderRightKit/Sources/FinderRightKit/ChangelogCatalog.swift" "$expected" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+expected = sys.argv[2]
+versions = re.findall(r'ChangelogRelease\(\s*version:\s*"([^"]+)"', path.read_text(encoding="utf-8"))
+if not versions:
+    raise SystemExit(f"应用内更新日志为空：{path}")
+if versions[0] != expected:
+    raise SystemExit(f"应用内更新日志首条为 v{versions[0]}，待发布版本应为 v{expected}；请先补齐 ChangelogCatalog")
+PY
+  echo "应用内更新日志：首条为 v$expected"
+}
+
 bump_version() {
   local new="$1" next_build file
   next_build=$(( $(current_build) + 1 ))
@@ -402,6 +420,7 @@ prepare_local_release() {
   check_new_version "$new_version"
   local next_build=$(( $(current_build) + 1 ))
 
+  run_timed_step "校验应用内更新日志覆盖 v$new_version" check_changelog_version "$new_version"
   run_timed_step "更新版本号与构建号 ($new_version build $next_build)" bump_version "$new_version"
   run_timed_step "运行完整本地 CI (bash scripts/ci.sh)" bash scripts/ci.sh
   run_timed_step "提交 Info.plist 并打本地 tag" git_commit_and_tag "$new_version" "$next_build"
