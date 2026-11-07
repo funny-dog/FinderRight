@@ -8,29 +8,32 @@ struct DeveloperMenuChecks {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let config = SharedConfig(fileURL: directory.appendingPathComponent("settings.plist"))
+        let hash = MenuFeatureCatalog.copyFileHash
+        let symlink = MenuFeatureCatalog.createSymlink
         let relative = MenuFeatureCatalog.copyProjectRelativePath
         let tree = MenuFeatureCatalog.copyDirectoryTree
         let compare = MenuFeatureCatalog.compareFiles
         let git = MenuFeatureCatalog.gitStatus
-        assert(!config.developerToolsEnabled && !config.isActionEnabled(relative) && !config.isActionEnabled(tree) && !config.isActionEnabled(compare) && !config.isActionEnabled(git))
+        let allDev = [hash, symlink, relative, tree, compare, git]
+        assert(!config.developerToolsEnabled && allDev.allSatisfy { !config.isActionEnabled($0) })
         config.developerToolsEnabled = true
-        assert(config.isActionEnabled(relative) && config.isActionEnabled(tree))
+        assert(allDev.allSatisfy { config.isActionEnabled($0) })
         config.setActionEnabled(tree, enabled: false)
         config.developerToolsEnabled = false
-        assert(!config.isActionEnabled(relative))
+        assert(!config.isActionEnabled(relative) && !config.isActionEnabled(hash) && !config.isActionEnabled(symlink))
         let reloaded = SharedConfig(fileURL: directory.appendingPathComponent("settings.plist"))
         reloaded.developerToolsEnabled = true
-        assert(reloaded.isActionEnabled(relative) && !reloaded.isActionEnabled(tree))
+        assert(reloaded.isActionEnabled(relative) && reloaded.isActionEnabled(hash) && reloaded.isActionEnabled(symlink) && !reloaded.isActionEnabled(tree))
 
         let original = MenuFeatureCatalog.all.map(\.id).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0) }.reversed()
         let upgraded = MenuFeatureCatalog.ordered(by: Array(original)).map(\.id)
-        assert(Array(upgraded.suffix(4)) == [relative, tree, compare, git])
-        assert(Array(upgraded.dropLast(4)) == Array(original))
+        assert(Array(upgraded.suffix(6)) == allDev)
+        assert(Array(upgraded.dropLast(6)) == Array(original))
         let reordered = MenuFeatureCatalog.ordered(by: [tree] + Array(original) + [relative]).map(\.id)
-        assert(Array(reordered.suffix(4)) == [relative, tree, compare, git])
+        assert(Array(reordered.suffix(6)) == allDev)
         let independent = MenuFeatureCatalog.ordered(by: Array(original), developerOrder: [tree, relative]).map(\.id)
-        assert(Array(independent.dropLast(4)) == Array(original))
-        assert(Array(independent.suffix(4)) == [tree, compare, git, relative])
+        assert(Array(independent.dropLast(6)) == Array(original))
+        assert(Array(independent.suffix(6)) == MenuFeatureCatalog.normalizedOrder([tree, relative], defaults: allDev))
         reloaded.developerMenuOrder = [tree, relative]
         assert(SharedConfig(fileURL: directory.appendingPathComponent("settings.plist")).developerMenuOrder == [tree, relative])
 

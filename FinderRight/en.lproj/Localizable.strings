@@ -1049,3 +1049,17 @@
 "已拉取" = "Pulled";
 "推送" = "Push";
 "已推送" = "Pushed";
+
+/* Git 仓库列表 */
+"Git 仓库" = "Git Repositories";
+"仓库列表" = "Repositories";
+"返回所有 Git 仓库列表" = "Back to all Git repositories";
+"已发现 %d 个仓库" = "%d repositories found";
+"正在扫描设备上的仓库…" = "Scanning for repositories on device…";
+"正在扫描设备上的 Git 仓库…" = "Scanning for Git repositories on device…";
+"搜索仓库名称、分支或路径…" = "Search repository name, branch, or path…";
+"未在设备上检测到 Git 仓库" = "No Git repositories found on device";
+"未找到匹配的仓库" = "No matching repositories found";
+"检测中…" = "Checking…";
+"有改动" = "Modified";
+"%d 个改动" = "%d modified";
