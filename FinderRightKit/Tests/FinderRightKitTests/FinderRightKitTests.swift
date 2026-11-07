@@ -4666,7 +4666,10 @@ struct FinderRightKitTestsRunner {
             let cutNode = nodes.first { $0.id == MenuFeatureCatalog.cut }!
             try assertEqual(cutNode.titleKey, "剪切 (已在剪切队列)")
 
-            // 应跟随取消剪切项
+            // 应跟随已剪切详情与取消剪切项
+            let showCutNode = nodes.first { $0.id == "action.showCutQueue" }!
+            try assertEqual(showCutNode.title, .formatted(key: "已剪切 %d 项…", count: 3))
+            try assertEqual(showCutNode.kind, .action(actionId: "showCutQueueDetail", tag: 0))
             try assertTrue(nodes.contains(where: { $0.id == "action.cancelCut" }))
 
             // 粘贴项格式化文案与高亮启用

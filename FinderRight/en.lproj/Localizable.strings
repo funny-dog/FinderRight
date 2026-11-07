@@ -907,3 +907,11 @@
 "新增 Markdown 只读快速预览扩展，支持独立启停" = "Add read-only Markdown Quick Look extension with independent control";
 "Quick Look 压缩包预览支持自包含解构与目录展开" = "Support self-contained archive extraction and folder expansion in Quick Look";
 "修复大型代码文件快速翻页时的内存占用" = "Fix memory footprint when quickly flipping through large code files";
+
+// Cut queue detail window
+"全部清空" = "Clear All";
+"共 %d 项待移动" = "%d item(s) pending move";
+"剪切队列为空" = "Cut Queue is Empty";
+"在访达中选中文件右键选择「剪切」或按 ⌘X 后，待移动的项目会显示在这里" = "Select files in Finder and choose Cut or press ⌘X to see pending items here.";
+"已剪切项目" = "Cut Items";
+"提示：前往目标目录右键选择「粘贴」或按 ⌘V 即可完成移动" = "Tip: Right-click Paste in the destination or press ⌘V to move files.";

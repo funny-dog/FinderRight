@@ -2,6 +2,7 @@
 
 /* Top-level menu items */
 "剪切 (已在剪切队列)" = "Cut (In Queue)";
+"已剪切 %d 项…" = "%d Item(s) Cut…";
 "粘贴 (已剪切 %d 项)" = "Paste (%d Item(s) Cut)";
 "已剪切" = "Cut";
 
@@ -78,4 +79,5 @@
 "图片处理（%d 项）" = "Process Images (%d items)";
 
 "无法打开磁盘空间占用" = "Unable to open disk space usage";
+"无法打开已剪切项目" = "Unable to open cut items";
 "%@\n点击查看子项占用排行" = "%@\nClick to view largest items";

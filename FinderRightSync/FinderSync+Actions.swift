@@ -83,6 +83,14 @@ extension FinderSync {
         }
     }
 
+    @objc func showCutQueueDetail(_ sender: NSMenuItem) {
+        IPCClient.shared.callAsync(action: "showCutQueueDetail", payload: [:]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开已剪切项目", comment: ""), style: .failure)
+            }
+        }
+    }
+
     @objc func copyFileContent(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard urls.count == 1, let url = urls.first else {

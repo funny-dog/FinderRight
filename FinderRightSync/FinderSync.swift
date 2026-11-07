@@ -563,6 +563,7 @@ class FinderSync: FIFinderSync {
         case "newFileFromClipboard": return #selector(self.newFileFromClipboard(_:))
         case "copyPath": return #selector(self.copyPath(_:))
         case "showDiskUsageDetail": return #selector(self.showDiskUsageDetail(_:))
+        case "showCutQueueDetail": return #selector(self.showCutQueueDetail(_:))
         case "copyFileName": return #selector(self.copyFileName(_:))
         case "copyFileContent": return #selector(self.copyFileContent(_:))
         case "copyFileHash": return #selector(self.copyFileHash(_:))

@@ -15,6 +15,19 @@ SOURCE_APP="$PROJECT_DIR/build/dmg-stage/FinderRight.app"
 TARGET_APP="/Applications/FinderRight.app"
 BUNDLE_ID="com.finderright.app"
 EXTENSION_ID="com.finderright.app.sync"
+EXTENSION_EXECUTABLE="$TARGET_APP/Contents/PlugIns/FinderRightSync.appex/Contents/MacOS/FinderRightSync"
+
+stop_extension_hosts() {
+  pkill -f "$EXTENSION_EXECUTABLE" 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! pgrep -f "$EXTENSION_EXECUTABLE" >/dev/null; then
+      return
+    fi
+    sleep 0.1
+  done
+  echo "错误：未能结束旧 FinderRightSync 进程，已取消覆盖安装以避免重复菜单。" >&2
+  exit 1
+}
 
 if [ ! -d "$SOURCE_APP" ]; then
   echo "错误：找不到 $SOURCE_APP，请先运行 bash scripts/build.sh" >&2
@@ -33,6 +46,7 @@ fi
 
 echo "=== 2. 退出正在运行的 FinderRight ==="
 pkill -f "$TARGET_APP/Contents/MacOS/FinderRight" 2>/dev/null || true
+stop_extension_hosts
 sleep 1
 
 echo "=== 3. 覆盖安装到 $TARGET_APP ==="
@@ -43,6 +57,8 @@ codesign --verify --strict "$TARGET_APP"
 echo "=== 4. 清理 staging 产物的插件登记 ==="
 # staging 里的扩展若曾被打开过，会在插件登记表里留下同 id 的第二条记录，导致菜单出现两套
 pluginkit -r "$SOURCE_APP/Contents/PlugIns/FinderRightSync.appex" >/dev/null 2>&1 || true
+# Finder 可能在覆盖窗口内唤醒旧扩展；再次确认不遗留旧进程后才启动新 App。
+stop_extension_hosts
 
 echo "=== 5. 启动 ==="
 open "$TARGET_APP"
@@ -54,6 +70,13 @@ echo "扩展登记数量：$registered"
 if [ "$registered" -ne 1 ]; then
   echo "警告：$EXTENSION_ID 登记了 $registered 份，右键菜单可能重复显示。" >&2
   echo "      常见原因是从 build/ 或备份目录直接打开过 App。可执行：pluginkit -r <多余的那个.appex>" >&2
+  exit 1
+fi
+
+running_hosts="$( (pgrep -f "$EXTENSION_EXECUTABLE" 2>/dev/null || true) | wc -l | tr -d ' ' )"
+echo "FinderRightSync 运行进程数：$running_hosts"
+if [ "$running_hosts" -gt 1 ]; then
+  echo "错误：$EXTENSION_ID 同时运行了 $running_hosts 份，右键菜单会重复显示。" >&2
   exit 1
 fi
 

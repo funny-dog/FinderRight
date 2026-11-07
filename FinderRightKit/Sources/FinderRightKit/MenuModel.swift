@@ -598,6 +598,14 @@ public enum MenuTreeBuilder {
                     ))
                 }
                 if hasCut {
+                    items.append(.formattedAction(
+                        id: "action.showCutQueue",
+                        titleKey: "已剪切 %d 项…",
+                        count: input.cutState.count,
+                        systemImage: "scissors",
+                        tint: .orange,
+                        actionId: "showCutQueueDetail"
+                    ))
                     items.append(makeCancelCutItem())
                 }
             case MenuFeatureCatalog.paste:

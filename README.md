@@ -28,7 +28,7 @@
 ### ✨ 功能
 
 - 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板；支持从剪贴板新建文本或 PNG/JPEG/HEIC 图片（包括在 Finder 中复制的单张图片文件），在「设置 → 文件模板」中开关（默认开启）
-- ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动；设置「功能 → 剪切 / 粘贴」可查看待剪切项目并逐项移除
+- ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动；右键「已剪切 N 项…」可弹窗查看待剪切项目并逐项移除
 - 💻 **打开终端 / 编辑器** —— 可自定义终端 / 编辑器
 - 📋 **复制路径 / 文件名 / 文件内容** —— 支持设置各种格式的路径 / 文件名可选择是否带后缀
 - 💾 **查看磁盘占用** —— 在访达空白处或单选文件/文件夹时，在右键菜单顶部查看占用大小，点击文件夹或空白处可查看直属子项占用排行；设置「功能 → 显示大小」可关闭（默认开启）
@@ -203,7 +203,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 ### ✨ Features
 
 - 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates; create text files or PNG/JPEG/HEIC images from the clipboard, including a single image file copied in Finder; enabled by default in Settings → File Templates
-- ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste; view and remove individual queued items in Settings → Features → Cut / Paste
+- ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste; right-click “N Item(s) Cut…” to inspect queued items and remove them individually
 - 💻 **Open in Terminal / Editor** — customize your terminal and editor
 - 📋 **Copy Path / File Name / File Content** — choose from various path formats and whether file names include extensions
 - 💾 **Disk Usage** — see the size at the top of Finder’s right-click menu for empty areas or a selected file/folder, and click folders to view direct children breakdown; turn it off in Settings → Features → Show Size (on by default)
