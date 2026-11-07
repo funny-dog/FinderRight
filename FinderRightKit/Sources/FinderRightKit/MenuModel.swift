@@ -165,6 +165,8 @@ public struct MenuBuildInput: Equatable {
     public var diskUsageTitle: String?
     /// 磁盘占用行悬浮提示（全路径或「正在计算」引导）
     public var diskUsageToolTip: String?
+    /// 磁盘占用行是否可交互（单选目录且拿到数字时允许点击查看详情）
+    public var isDiskUsageInteractive: Bool
 
     public init(
         location: MenuTargetLocation,
@@ -181,7 +183,8 @@ public struct MenuBuildInput: Equatable {
         hashAlgorithms: [String] = FileHasher.Algorithm.allCases.map(\.title),
         imageMenuState: ImageMenuState? = nil,
         diskUsageTitle: String? = nil,
-        diskUsageToolTip: String? = nil
+        diskUsageToolTip: String? = nil,
+        isDiskUsageInteractive: Bool = false
     ) {
         self.location = location
         self.selection = selection
@@ -198,6 +201,7 @@ public struct MenuBuildInput: Equatable {
         self.imageMenuState = imageMenuState
         self.diskUsageTitle = diskUsageTitle
         self.diskUsageToolTip = diskUsageToolTip
+        self.isDiskUsageInteractive = isDiskUsageInteractive
     }
 }
 
@@ -438,8 +442,8 @@ public enum MenuTreeBuilder {
                         title: title,
                         systemImage: "internaldrive",
                         tint: .blue,
-                        actionId: "",
-                        isEnabled: false,
+                        actionId: input.isDiskUsageInteractive ? "showDiskUsageDetail" : "",
+                        isEnabled: input.isDiskUsageInteractive,
                         toolTip: input.diskUsageToolTip
                     ))
                 }

@@ -4762,7 +4762,24 @@ struct FinderRightKitTestsRunner {
             try assertEqual(usageNode.id, MenuFeatureCatalog.diskUsage)
             try assertEqual(usageNode.title, .dynamic("占用：1.2 GB"))
             try assertEqual(usageNode.toolTip, "/path/to/folder")
-            try assertTrue(!usageNode.isEnabled, "状态行不可点击")
+            try assertTrue(!usageNode.isEnabled, "状态行默认不可点击")
+
+            // 设为可交互时，生成可用节点与对应 action
+            let interactiveInput = MenuBuildInput(
+                location: .items,
+                selection: .singleFolder,
+                enabledFeatureIds: [MenuFeatureCatalog.diskUsage],
+                diskUsageTitle: "占用：1.2 GB",
+                diskUsageToolTip: "查看详情",
+                isDiskUsageInteractive: true
+            )
+            let interactiveNodes = MenuTreeBuilder.buildMenuTree(input: interactiveInput)
+            try assertTrue(interactiveNodes.first?.isEnabled == true, "文件夹且有大小时可点击")
+            if case .action(let actionId, _) = interactiveNodes.first?.kind {
+                try assertEqual(actionId, "showDiskUsageDetail")
+            } else {
+                throw TestFailure(message: "期望动作节点")
+            }
 
             // 未开启功能时，即便传入了占用文案也不生成该节点
             let disabledInput = MenuBuildInput(
@@ -6094,6 +6111,35 @@ struct FinderRightKitTestsRunner {
             try assertTrue(DiskUsage.formatted(1024 * 1024).contains("MB"), "1 MB 应使用 MB 单位")
         }
 
+        runTest("磁盘占用 扫描直接子项占用并降序排列") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            try Data(repeating: 0x61, count: 16 * 1024).write(to: root.appendingPathComponent("small.txt"))
+            try Data(repeating: 0x62, count: 128 * 1024).write(to: root.appendingPathComponent("big.bin"))
+            let folderA = root.appendingPathComponent("folderA")
+            try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
+            try Data(repeating: 0x63, count: 64 * 1024).write(to: folderA.appendingPathComponent("sub1.bin"))
+            try Data(repeating: 0x64, count: 64 * 1024).write(to: folderA.appendingPathComponent("sub2.bin"))
+
+            let breakdown = DiskUsage.inspectDirectChildren(at: root)
+            try assertTrue(breakdown != nil, "有效目录应成功返回分析结果")
+            guard let breakdown else { return }
+
+            try assertEqual(breakdown.directDirectoryCount, 1, "应有 1 个直属子目录")
+            try assertEqual(breakdown.directFileCount, 2, "应有 2 个直属文件")
+            try assertEqual(breakdown.items.count, 3, "应有 3 个直属子项")
+
+            for i in 0..<(breakdown.items.count - 1) {
+                try assertTrue(breakdown.items[i].bytes >= breakdown.items[i + 1].bytes, "必须按占用降序排序")
+            }
+
+            try assertEqual(breakdown.items.last?.name, "small.txt")
+            try assertTrue((breakdown.items.last?.percentage ?? 0) > 0.0, "比例应大于 0")
+
+            let fileURL = root.appendingPathComponent("small.txt")
+            try assertNil(DiskUsage.inspectDirectChildren(at: fileURL), "对非目录调用应返回 nil")
+        }
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

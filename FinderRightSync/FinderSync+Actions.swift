@@ -72,6 +72,16 @@ extension FinderSync {
         logToFile("copyFileName ok: count=\(urls.count) format=\(format.rawValue)")
     }
 
+    @objc func showDiskUsageDetail(_ sender: NSMenuItem) {
+        let ctx = currentContext()
+        guard let url = ctx.selectedItems.first ?? ctx.directory else { return }
+        IPCClient.shared.callAsync(action: "showDiskUsageDetail", payload: ["path": .string(url.path)]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开磁盘空间占用", comment: ""), style: .failure)
+            }
+        }
+    }
+
     @objc func copyFileContent(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard urls.count == 1, let url = urls.first else {

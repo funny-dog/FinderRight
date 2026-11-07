@@ -50,6 +50,62 @@ public enum DiskUsage {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
+    // MARK: - 目录直属项占用分析
+
+    /// 扫描目录的直接子项占用并降序排列
+    public static func inspectDirectChildren(
+        at directoryURL: URL,
+        isCancelled: @escaping () -> Bool = { false }
+    ) -> DiskUsageBreakdown? {
+        guard directoryURL.isFileURL else { return nil }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        guard let entries = try? BulkDirectoryAttributes.entries(atPath: directoryURL.path) else {
+            return nil
+        }
+
+        var dirCount = 0
+        var fileCount = 0
+        var rawItems: [(name: String, path: String, isDirectory: Bool, bytes: Int64)] = []
+
+        for entry in entries {
+            if isCancelled() { return nil }
+            let itemPath = (directoryURL.path as NSString).appendingPathComponent(entry.name)
+            if entry.isDirectory {
+                dirCount += 1
+                let subURL = URL(fileURLWithPath: itemPath)
+                let bytes = allocatedBytes(at: subURL, isCancelled: isCancelled) ?? 0
+                rawItems.append((name: entry.name, path: itemPath, isDirectory: true, bytes: bytes))
+            } else {
+                fileCount += 1
+                rawItems.append((name: entry.name, path: itemPath, isDirectory: false, bytes: entry.allocatedSize))
+            }
+        }
+
+        rawItems.sort { $0.bytes > $1.bytes }
+
+        let totalBytes = rawItems.reduce(0) { $0 + $1.bytes }
+        let items = rawItems.map { raw in
+            DiskUsageItem(
+                name: raw.name,
+                path: raw.path,
+                isDirectory: raw.isDirectory,
+                bytes: raw.bytes,
+                totalBytes: totalBytes
+            )
+        }
+
+        return DiskUsageBreakdown(
+            directoryURL: directoryURL,
+            totalBytes: totalBytes,
+            items: items,
+            directDirectoryCount: dirCount,
+            directFileCount: fileCount
+        )
+    }
+
     // MARK: - 单文件
 
     /// 普通文件的分配大小。符号链接、目录、读不到时返回 nil
@@ -407,5 +463,51 @@ public final class DiskUsageJob {
         lock.lock()
         inFlight.removeAll()
         lock.unlock()
+    }
+}
+
+// MARK: - 占用详情数据模型
+
+public struct DiskUsageItem: Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let path: String
+    public let isDirectory: Bool
+    public let bytes: Int64
+    public let formattedSize: String
+    public let percentage: Double
+
+    public init(name: String, path: String, isDirectory: Bool, bytes: Int64, totalBytes: Int64) {
+        self.id = path
+        self.name = name
+        self.path = path
+        self.isDirectory = isDirectory
+        self.bytes = bytes
+        self.formattedSize = DiskUsage.formatted(bytes)
+        self.percentage = totalBytes > 0 ? min(1.0, max(0.0, Double(bytes) / Double(totalBytes))) : 0.0
+    }
+}
+
+public struct DiskUsageBreakdown: Equatable {
+    public let directoryURL: URL
+    public let totalBytes: Int64
+    public let formattedTotalSize: String
+    public let items: [DiskUsageItem]
+    public let directDirectoryCount: Int
+    public let directFileCount: Int
+
+    public init(
+        directoryURL: URL,
+        totalBytes: Int64,
+        items: [DiskUsageItem],
+        directDirectoryCount: Int,
+        directFileCount: Int
+    ) {
+        self.directoryURL = directoryURL
+        self.totalBytes = totalBytes
+        self.formattedTotalSize = DiskUsage.formatted(totalBytes)
+        self.items = items
+        self.directDirectoryCount = directDirectoryCount
+        self.directFileCount = directFileCount
     }
 }

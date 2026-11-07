@@ -76,3 +76,6 @@
 "转换图片（%d 项）" = "Convert Images (%d items)";
 "图片处理“%@”" = "Process Image “%@”";
 "图片处理（%d 项）" = "Process Images (%d items)";
+
+"无法打开磁盘空间占用" = "Unable to open disk space usage";
+"%@\n点击查看子项占用排行" = "%@\nClick to view largest items";

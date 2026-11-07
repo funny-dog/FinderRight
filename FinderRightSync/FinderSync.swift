@@ -483,7 +483,8 @@ class FinderSync: FIFinderSync {
             favoriteDirectories: favoriteData,
             imageMenuState: imageState,
             diskUsageTitle: diskUsage?.title,
-            diskUsageToolTip: diskUsage?.toolTip
+            diskUsageToolTip: diskUsage?.toolTip,
+            isDiskUsageInteractive: diskUsage?.isInteractive ?? false
         )
 
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
@@ -501,11 +502,11 @@ class FinderSync: FIFinderSync {
 
     // MARK: - 磁盘占用
 
-    /// 计算要显示在菜单里的磁盘占用文案与悬浮提示。返回 nil 表示这次不显示该行。
+    /// 计算要显示在菜单里的磁盘占用文案、悬浮提示与是否可交互。返回 nil 表示这次不显示该行。
     ///
     /// 用短超时同步等主 App：菜单由 Finder 进程复制后绘制，返回后再改标题不会刷新，
     /// 所以必须在返回菜单前拿到结果。算不完就显示「正在计算」，主 App 会继续算完并缓存。
-    private func diskUsageItem(for selected: [URL]) -> (title: String, toolTip: String)? {
+    private func diskUsageItem(for selected: [URL]) -> (title: String, toolTip: String, isInteractive: Bool)? {
         guard let url = Self.diskUsageTarget(in: selected) else { return nil }
 
         let started = ProcessInfo.processInfo.systemUptime
@@ -517,12 +518,16 @@ class FinderSync: FIFinderSync {
         let elapsedMs = (ProcessInfo.processInfo.systemUptime - started) * 1000
         let bytes = result.success ? result.message.flatMap { Int64($0) } : nil
 
+        var isDir: ObjCBool = false
+        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+
         if let bytes {
             logToFile("diskUsage hit: \(DiskUsage.formatted(bytes)) in \(String(format: "%.0f", elapsedMs))ms")
-            return (String(format: L("占用：%@"), DiskUsage.formatted(bytes)), url.path)
+            let tip = isDir.boolValue ? String(format: L("%@\n点击查看子项占用排行"), url.path) : url.path
+            return (String(format: L("占用：%@"), DiskUsage.formatted(bytes)), tip, isDir.boolValue)
         }
         logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
-        return (L("占用：正在计算…"), L("目录较大，计算需要几秒；再次右键即可看到结果"))
+        return (L("占用：正在计算…"), L("目录较大，计算需要几秒；再次右键即可看到结果"), false)
     }
 
     /// 只有单个选中项才统计：多选时数字意义不大，且会让菜单等待时间成倍增加
@@ -562,6 +567,7 @@ class FinderSync: FIFinderSync {
         case "newFile": return #selector(self.newFile(_:))
         case "newFileFromClipboard": return #selector(self.newFileFromClipboard(_:))
         case "copyPath": return #selector(self.copyPath(_:))
+        case "showDiskUsageDetail": return #selector(self.showDiskUsageDetail(_:))
         case "copyFileName": return #selector(self.copyFileName(_:))
         case "copyFileContent": return #selector(self.copyFileContent(_:))
         case "copyFileHash": return #selector(self.copyFileHash(_:))

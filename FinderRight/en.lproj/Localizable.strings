@@ -858,3 +858,23 @@
 "自定义后缀，例如 yaml 或 log" = "Custom extension, e.g. yaml or log";
 "自定义文件后缀" = "Custom file extension";
 "文件类型" = "File type";
+
+/* Disk usage */
+"占比" = "Ratio";
+"%@ · 剩余 %@ / %@" = "%@ · Free %@ / %@";
+"共 %d 个子项（%d 个文件夹，%d 个文件）" = "%d items in total (%d folders, %d files)";
+"关闭" = "Close";
+"在访达中定位" = "Reveal in Finder";
+"复制完整路径" = "Copy Full Path";
+"大小" = "Size";
+"已复制路径" = "Path copied";
+"无法统计该目录的磁盘占用，请检查读取权限" = "Unable to calculate disk usage for this folder. Check read permissions";
+"正在统计…" = "Calculating…";
+"正在统计直接子项占用…" = "Calculating usage of direct children…";
+"此文件夹为空" = "This folder is empty";
+"磁盘" = "Disk";
+"磁盘占用" = "Disk Usage";
+"磁盘空间占用" = "Disk Space Usage";
+"重新统计 (⌘R)" = "Recalculate (⌘R)";
+"重试" = "Retry";
+"请选择目录" = "Select a folder";
