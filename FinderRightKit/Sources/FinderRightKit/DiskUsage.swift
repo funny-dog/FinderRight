@@ -50,6 +50,38 @@ public enum DiskUsage {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
+    // MARK: - 菜单目标解析
+
+    /// 解析右键菜单中应展示磁盘占用的目标 URL。
+    /// - 空白处（.container）：目标为当前所在目录。
+    /// - 选中项（.items）：单选文件夹或常规文件时作为目标；多选或非文件/目录返回 nil。
+    /// - 其他位置（.sidebar 等）：返回 nil。
+    public static func target(
+        location: MenuTargetLocation,
+        selected: [URL],
+        directory: URL?,
+        isRegularDirectory: (URL) -> Bool = { url in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+        },
+        isRegularFile: (URL) -> Bool = { url in
+            FileHasher.isRegularFile(url)
+        }
+    ) -> URL? {
+        switch location {
+        case .container:
+            guard let directory, isRegularDirectory(directory) else { return nil }
+            return directory
+        case .items:
+            guard selected.count == 1, let url = selected.first else { return nil }
+            if isRegularDirectory(url) { return url }
+            if isRegularFile(url) { return url }
+            return nil
+        case .sidebar:
+            return nil
+        }
+    }
+
     // MARK: - 目录直属项占用分析
 
     /// 扫描目录的直接子项占用并降序排列

@@ -73,8 +73,9 @@ extension FinderSync {
     }
 
     @objc func showDiskUsageDetail(_ sender: NSMenuItem) {
-        let ctx = currentContext()
-        guard let url = ctx.selectedItems.first ?? ctx.directory else { return }
+        let (directory, selected) = currentContext()
+        let location: MenuTargetLocation = selected.isEmpty ? .container : .items
+        guard let url = DiskUsage.target(location: location, selected: selected, directory: directory) else { return }
         IPCClient.shared.callAsync(action: "showDiskUsageDetail", payload: ["path": .string(url.path)]) { response in
             if !response.success {
                 ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开磁盘空间占用", comment: ""), style: .failure)

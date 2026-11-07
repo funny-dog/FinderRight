@@ -374,7 +374,7 @@ class FinderSync: FIFinderSync {
         switch menuKind {
         case .contextualMenuForContainer:
             location = .container
-            showsDiskUsage = false
+            showsDiskUsage = true
         case .contextualMenuForSidebar:
             location = .sidebar
             showsDiskUsage = false
@@ -467,7 +467,7 @@ class FinderSync: FIFinderSync {
         // 返回之后再改标题不会刷新。算不出来时显示「正在计算」，主 App 会继续算完并缓存。
         // 未开启该功能时直接跳过，绝不在右键菜单弹出路径上发起同步 IPC 阻塞。
         let isDiskUsageEnabled = showsDiskUsage && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage)
-        let diskUsage = isDiskUsageEnabled ? diskUsageItem(for: selected) : nil
+        let diskUsage = isDiskUsageEnabled ? diskUsageItem(for: selected, directory: directory, location: location) : nil
 
         let input = MenuBuildInput(
             location: location,
@@ -506,8 +506,12 @@ class FinderSync: FIFinderSync {
     ///
     /// 用短超时同步等主 App：菜单由 Finder 进程复制后绘制，返回后再改标题不会刷新，
     /// 所以必须在返回菜单前拿到结果。算不完就显示「正在计算」，主 App 会继续算完并缓存。
-    private func diskUsageItem(for selected: [URL]) -> (title: String, toolTip: String, isInteractive: Bool)? {
-        guard let url = Self.diskUsageTarget(in: selected) else { return nil }
+    private func diskUsageItem(
+        for selected: [URL],
+        directory: URL?,
+        location: MenuTargetLocation
+    ) -> (title: String, toolTip: String, isInteractive: Bool)? {
+        guard let url = DiskUsage.target(location: location, selected: selected, directory: directory) else { return nil }
 
         let started = ProcessInfo.processInfo.systemUptime
         let result = IPCClient.shared.call(
@@ -528,15 +532,6 @@ class FinderSync: FIFinderSync {
         }
         logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
         return (L("占用：正在计算…"), L("目录较大，计算需要几秒；再次右键即可看到结果"), false)
-    }
-
-    /// 只有单个选中项才统计：多选时数字意义不大，且会让菜单等待时间成倍增加
-    private static func diskUsageTarget(in selected: [URL]) -> URL? {
-        guard selected.count == 1, let url = selected.first else { return nil }
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
-        if isDir.boolValue { return url }
-        return FileHasher.isRegularFile(url) ? url : nil
     }
 
     /// 单次磁盘占用请求的等待上限。常规目录实测 0–70 ms，留到 250 ms 仍几乎无感；

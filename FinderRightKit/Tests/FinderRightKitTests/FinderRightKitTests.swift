@@ -4800,6 +4800,115 @@ struct FinderRightKitTestsRunner {
             try assertTrue(MenuTreeBuilder.buildMenuTree(input: nilUsageInput).isEmpty)
         }
 
+        runTest("DiskUsage 菜单目标解析：空白处、单选文件/目录与多选规则") {
+            let dirURL = URL(fileURLWithPath: "/test/current_dir")
+            let folderURL = URL(fileURLWithPath: "/test/current_dir/subfolder")
+            let fileURL = URL(fileURLWithPath: "/test/current_dir/document.txt")
+            let otherURL = URL(fileURLWithPath: "/test/current_dir/file2.txt")
+
+            let isDir: (URL) -> Bool = { $0 == dirURL || $0 == folderURL }
+            let isFile: (URL) -> Bool = { $0 == fileURL || $0 == otherURL }
+
+            // 1. 空白处（.container）：目标为当前目录（即使 selected 有残留也取 directory）
+            let containerTarget = DiskUsage.target(
+                location: .container,
+                selected: [],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(containerTarget, dirURL)
+
+            let containerWithResidualSelection = DiskUsage.target(
+                location: .container,
+                selected: [fileURL],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(containerWithResidualSelection, dirURL)
+
+            // directory 为 nil 或非目录时返回 nil
+            let containerNilDir = DiskUsage.target(
+                location: .container,
+                selected: [],
+                directory: nil,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(containerNilDir, nil)
+
+            // 2. 选中项（.items）：单选有效目录或文件返回该项，多选或空选返回 nil
+            let singleFolder = DiskUsage.target(
+                location: .items,
+                selected: [folderURL],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(singleFolder, folderURL)
+
+            let singleFile = DiskUsage.target(
+                location: .items,
+                selected: [fileURL],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(singleFile, fileURL)
+
+            let multiple = DiskUsage.target(
+                location: .items,
+                selected: [fileURL, otherURL],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(multiple, nil)
+
+            let emptySelection = DiskUsage.target(
+                location: .items,
+                selected: [],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(emptySelection, nil)
+
+            // 3. 侧边栏（.sidebar）：不展示
+            let sidebarTarget = DiskUsage.target(
+                location: .sidebar,
+                selected: [folderURL],
+                directory: dirURL,
+                isRegularDirectory: isDir,
+                isRegularFile: isFile
+            )
+            try assertEqual(sidebarTarget, nil)
+        }
+
+        runTest("菜单构建：访达空白处（.container）支持展示可交互磁盘占用") {
+            let containerInput = MenuBuildInput(
+                location: .container,
+                selection: .empty,
+                enabledFeatureIds: [MenuFeatureCatalog.diskUsage],
+                diskUsageTitle: "占用：256.4 MB",
+                diskUsageToolTip: "/test/current_dir\n点击查看子项占用排行",
+                isDiskUsageInteractive: true
+            )
+            let nodes = MenuTreeBuilder.buildMenuTree(input: containerInput)
+            guard let node = nodes.first(where: { $0.id == MenuFeatureCatalog.diskUsage }) else {
+                throw TestFailure(message: "空白处应包含 diskUsage 节点")
+            }
+            try assertEqual(node.title, .dynamic("占用：256.4 MB"))
+            try assertEqual(node.toolTip, "/test/current_dir\n点击查看子项占用排行")
+            try assertTrue(node.isEnabled, "空白处为目录，必须可交互")
+            if case .action(let actionId, _) = node.kind {
+                try assertEqual(actionId, "showDiskUsageDetail")
+            } else {
+                throw TestFailure(message: "期望 showDiskUsageDetail 动作")
+            }
+        }
+
         runTest("服务菜单防漂移：完整声明对齐时校验无 issue") {
             let testFeatures = [
                 MenuFeature(id: "test.copy", nameKey: "测试复制", descriptionKey: "", systemImage: "link",

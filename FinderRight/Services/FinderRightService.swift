@@ -275,6 +275,8 @@ final class FinderRightService {
         }
         let paths = names.prefix(Self.prefetchItemLimit).map { directory.appendingPathComponent($0).path }
         guard !paths.isEmpty else {
+            let normalizedDir = directory.standardizedFileURL.path
+            Self.diskUsageCache.store(0, for: normalizedDir)
             return IPCResponse(id: req.id, success: true, message: "空目录")
         }
 
@@ -287,6 +289,14 @@ final class FinderRightService {
                 let bytes = DiskUsage.allocatedBytes(at: itemURL)
                 if let bytes { Self.diskUsageCache.store(bytes, for: normalized) }
             }
+        }
+
+        // 预热目录本身：方便用户在空白处右键时直接命中缓存
+        let normalizedDir = directory.standardizedFileURL.path
+        Self.diskUsageQueueForPrefetch.async {
+            if Self.diskUsageCache.value(for: normalizedDir, ttl: Self.diskUsageCacheTTL) != nil { return }
+            let bytes = DiskUsage.allocatedBytes(at: directory)
+            if let bytes { Self.diskUsageCache.store(bytes, for: normalizedDir) }
         }
         return IPCResponse(id: req.id, success: true, message: "\(paths.count)")
     }
