@@ -91,6 +91,55 @@ extension FinderSync {
         }
     }
 
+    @objc func copyProjectRelativePath(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { return }
+        IPCClient.shared.callAsync(action: "copyProjectRelativePath", payload: ["items": .stringArray(urls.map(\.path))]) { r in
+            logToFile("copyProjectRelativePath result: success=\(r.success)")
+            if !r.success { ClipboardToast.show(message: r.message ?? NSLocalizedString("复制失败", comment: ""), style: .failure) }
+        }
+    }
+
+    @objc func copyDirectoryTree(_ sender: NSMenuItem) {
+        guard let directory = directoryTreeTarget else { return }
+        IPCClient.shared.callAsync(action: "copyDirectoryTree", payload: ["directory": .string(directory.path)]) { r in
+            logToFile("copyDirectoryTree result: success=\(r.success)")
+            if !r.success { ClipboardToast.show(message: r.message ?? NSLocalizedString("复制失败", comment: ""), style: .failure) }
+        }
+    }
+
+    @objc func runCustomCommand(_ sender: NSMenuItem) {
+        guard activeDeveloperCommands.indices.contains(sender.tag), let directory = commandDirectory else { return }
+        let command = activeDeveloperCommands[sender.tag]
+        IPCClient.shared.callAsync(action: "runCustomCommand", payload: [
+            "commandId": .string(command.id), "directory": .string(directory.path),
+            "items": .stringArray(commandSelection.map(\.path))
+        ]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("命令执行失败", comment: ""), style: .failure)
+            }
+        }
+    }
+
+    @objc func gitStatus(_ sender: NSMenuItem) {
+        guard let url = commandSelection.first ?? commandDirectory else { return }
+        IPCClient.shared.callAsync(action: "gitStatus", payload: ["path": .string(url.path)]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开 Git 状态", comment: ""), style: .failure)
+            }
+        }
+    }
+
+    @objc func compareFiles(_ sender: NSMenuItem) {
+        let items = commandSelection
+        let files = items.count <= 2 ? items.filter(FileHasher.isRegularFile) : []
+        IPCClient.shared.callAsync(action: "compareFiles", payload: ["items": .stringArray(files.map(\.path))]) { response in
+            if !response.success {
+                ClipboardToast.show(message: response.message ?? NSLocalizedString("无法打开文件比较", comment: ""), style: .failure)
+            }
+        }
+    }
+
     @objc func copyFileContent(_ sender: NSMenuItem) {
         let urls = currentContext().selectedItems
         guard urls.count == 1, let url = urls.first else {
@@ -371,6 +420,24 @@ extension FinderSync {
             "maxPixel": .int(maxPixel)
         ]) { r in
             logToFile("scaleImage ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
+
+    @objc func copyFilePermissions(_ sender: NSMenuItem) {
+        guard let url = permissionsTarget ?? currentContext().selectedItems.first ?? currentContext().directory else { return }
+        guard let perm = FilePermissions.permissions(at: url.path) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(perm.octal, forType: .string)
+        ClipboardToast.show(message: String(format: L("已复制权限：%@"), perm.octal), style: .success)
+        logToFile("copyFilePermissions: \(perm.octal) for \(url.lastPathComponent)")
+    }
+
+    @objc func lineCount(_ sender: NSMenuItem) {
+        let (directory, selected) = currentContext()
+        guard let target = selected.first ?? directory else { return }
+        logToFile("lineCount ipc (async) → target=\(target.path)")
+        IPCClient.shared.callAsync(action: "showLineCount", payload: ["path": .string(target.path)]) { r in
+            logToFile("lineCount ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
 }

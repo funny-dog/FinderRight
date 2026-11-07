@@ -173,6 +173,13 @@ public enum MenuFeatureCatalog {
     public static let compress     = "feature.compress"
     public static let decompress   = "feature.decompress"
     public static let toggleHidden = "feature.toggleHidden"
+    public static let copyProjectRelativePath = "feature.copyProjectRelativePath"
+    public static let copyDirectoryTree = "feature.copyDirectoryTree"
+    public static let compareFiles = "feature.compareFiles"
+    public static let gitStatus = "feature.gitStatus"
+    public static let filePermissions = "feature.filePermissions"
+    public static let lineCount = "feature.lineCount"
+    public static let developerFeatureIds = [copyFileHash, createSymlink, copyProjectRelativePath, copyDirectoryTree, compareFiles, gitStatus, filePermissions, lineCount]
 
     /// 显示选中项的磁盘占用。默认排在最前：它是一条状态信息，不是操作
     public static let diskUsageFeature = MenuFeature(
@@ -195,8 +202,6 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyFileName", menuItemTitle: "FinderRight: Copy File Name")),
         MenuFeature(id: copyFileContent, nameKey: "复制文件内容", descriptionKey: "复制单选文本文件的全部内容到剪贴板", systemImage: "doc.plaintext", tint: .teal,
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyFileContent", menuItemTitle: "FinderRight: Copy File Content")),
-        MenuFeature(id: copyFileHash, nameKey: "复制哈希",       descriptionKey: "计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致", systemImage: "number", tint: .teal,
-                    serviceDeclaration: ServiceMenuDeclaration(message: "copyFileHash", menuItemTitle: "FinderRight: Copy SHA-256")),
         MenuFeature(id: goToDirectory, nameKey: "打开路径…",     descriptionKey: "输入文件或文件夹路径，在访达中显示或直接打开", systemImage: "arrow.right.circle", tint: .cyan,
                     serviceDeclaration: ServiceMenuDeclaration(message: "goToDirectory", menuItemTitle: "FinderRight: Go to Folder…")),
         MenuFeature(id: openTerminal, nameKey: "打开终端",       descriptionKey: "使用默认终端打开当前目录",   systemImage: "terminal", tint: .graphite,
@@ -211,8 +216,6 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "moveToFavorite", menuItemTitle: "FinderRight: Move to Favorite Folder…")),
         MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square", tint: .green,
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyToFavorite", menuItemTitle: "FinderRight: Copy to Favorite Folder…")),
-        MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green,
-                    serviceDeclaration: ServiceMenuDeclaration(message: "createSymlink", menuItemTitle: "FinderRight: Create Symbolic Link")),
         MenuFeature(id: imageTools,   nameKey: "图片",           descriptionKey: "快速转换格式（PNG/JPEG/HEIC）或按长边等比缩放，仅在选中图片时显示", systemImage: "photo.on.rectangle.angled", tint: .teal,
                     serviceDeclarations: [
                         ServiceMenuDeclaration(message: "convertImageToPNG", menuItemTitle: "FinderRight: Convert to PNG"),
@@ -225,20 +228,41 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "decompress", menuItemTitle: "FinderRight: Extract Here")),
         MenuFeature(id: toggleHidden, nameKey: "切换隐藏文件",   descriptionKey: "显示或隐藏隐藏文件",       systemImage: "eye", tint: .pink,
                     serviceDeclaration: nil),
+        MenuFeature(id: copyFileHash, nameKey: "复制哈希",       descriptionKey: "计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致", systemImage: "number", tint: .teal,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyFileHash", menuItemTitle: "FinderRight: Copy SHA-256")),
+        MenuFeature(id: createSymlink, nameKey: "创建符号链接",  descriptionKey: "在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）", systemImage: "link.badge.plus", tint: .green,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "createSymlink", menuItemTitle: "FinderRight: Create Symbolic Link")),
+        MenuFeature(id: copyProjectRelativePath, nameKey: "复制项目相对路径", descriptionKey: "复制相对于最近 Git 仓库根目录的路径，多选时每行一项", systemImage: "point.topleft.down.curvedto.point.bottomright.up", tint: .purple,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyProjectRelativePath", menuItemTitle: "FinderRight: Copy Project Relative Path")),
+        MenuFeature(id: copyDirectoryTree, nameKey: "复制目录树", descriptionKey: "复制文件夹结构，跳过常见依赖与构建目录，不读取文件内容", systemImage: "list.bullet.indent", tint: .purple,
+                    serviceDeclaration: ServiceMenuDeclaration(message: "copyDirectoryTree", menuItemTitle: "FinderRight: Copy Directory Tree")),
+        MenuFeature(id: compareFiles, nameKey: "比较文件…", descriptionKey: "拖入两个文本文件，并排查看差异", systemImage: "doc.on.doc", tint: .purple,
+                    serviceDeclaration: nil),
+        MenuFeature(id: gitStatus, nameKey: "Git 状态…", descriptionKey: "查看改动，切换分支、暂存与提交", systemImage: "arrow.triangle.branch", tint: .purple,
+                    serviceDeclaration: nil),
+        MenuFeature(id: filePermissions, nameKey: "文件权限", descriptionKey: "单选文件或文件夹时，在右键菜单中直接显示权限（如 -rwxr-xr-x 755），点击可复制", systemImage: "lock.shield", tint: .graphite,
+                    serviceDeclaration: nil),
+        MenuFeature(id: lineCount, nameKey: "代码行数统计…", descriptionKey: "统计文件夹内各语言的代码行数、注释行与空行", systemImage: "number.square", tint: .purple,
+                    serviceDeclaration: nil),
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
-    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置；
-    /// 复制哈希、创建符号链接面向开发者，默认不占菜单位置
-    public static let disabledByDefault: Set<String> = [compress, decompress, copyFileHash, createSymlink]
+    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置。
+    public static let disabledByDefault: Set<String> = [compress, decompress]
 
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }
     }
 
-    /// 按用户保存的顺序排列全部功能（保存的顺序先经 normalizedOrder 归一化）
-    public static func ordered(by savedOrder: [String]) -> [MenuFeature] {
-        normalizedOrder(savedOrder, defaults: all.map(\.id)).compactMap { feature(forId: $0) }
+    public static var regular: [MenuFeature] {
+        all.filter { !developerFeatureIds.contains($0.id) }
+    }
+
+    /// 两组独立排序，开发者功能始终接在常规菜单之后。
+    public static func ordered(by savedOrder: [String], developerOrder: [String] = []) -> [MenuFeature] {
+        let order = normalizedOrder(savedOrder, defaults: regular.map(\.id))
+            + normalizedOrder(developerOrder, defaults: developerFeatureIds)
+        return order.compactMap { feature(forId: $0) }
     }
 
     /// 把用户保存的顺序归一化为 defaults 的一个排列：

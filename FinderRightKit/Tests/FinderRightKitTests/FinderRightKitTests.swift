@@ -414,6 +414,47 @@ struct FinderRightKitTestsRunner {
         }
 
         // 5. SharedConfig 多线程并发压测
+        runTest("窗口位置：保存不覆盖其他进程已写入的配置") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-window-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+
+            // 模拟主 App 先启动并缓存旧配置
+            let windowWriter = SharedConfig(fileURL: tempURL)
+            windowWriter.preferredTerminal = "com.apple.Terminal"
+
+            // 另一进程（如 FinderSync 扩展）随后写入新配置
+            let otherProcess = SharedConfig(fileURL: tempURL)
+            otherProcess.menuIconStyle = .tile
+            otherProcess.preferredTerminal = "com.googlecode.iterm2"
+
+            // 主 App 的窗口回调只应新增 windowPositions，不能回滚上面的设置
+            let frame = NSRect(x: 120, y: 240, width: 600, height: 480)
+            windowWriter.saveWindowPosition(for: "gitStatus", frame: frame)
+
+            let reloaded = SharedConfig(fileURL: tempURL)
+            try assertEqual(reloaded.preferredTerminal, "com.googlecode.iterm2")
+            try assertEqual(reloaded.menuIconStyle, .tile)
+            let saved = reloaded.windowPositions.first { $0.id == "gitStatus" }
+            try assertEqual(saved?.originX, 120)
+            try assertEqual(saved?.originY, 240)
+            try assertEqual(saved?.sizeWidth, 600)
+            try assertEqual(saved?.sizeHeight, 480)
+
+            // 重复保存同一窗口只更新，不产生重复条目
+            windowWriter.saveWindowPosition(for: "gitStatus", frame: NSRect(x: 0, y: 0, width: 520, height: 380))
+            let updated = SharedConfig(fileURL: tempURL)
+            try assertEqual(updated.windowPositions.filter { $0.id == "gitStatus" }.count, 1)
+            try assertEqual(updated.windowPositions.first { $0.id == "gitStatus" }?.sizeWidth, 520)
+
+            // 清除单个窗口与全部窗口位置
+            windowWriter.clearWindowPosition(for: "gitStatus")
+            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
+            try assertEqual(SharedConfig(fileURL: tempURL).preferredTerminal, "com.googlecode.iterm2")
+            windowWriter.saveWindowPosition(for: "fileComparison", frame: frame)
+            windowWriter.clearAllWindowPositions()
+            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
+        }
+
         runTest("MenuIconStyle 旧存储值迁移") {
             try assertEqual(MenuIconStyle(storedValue: "classic"), .tile)
             try assertEqual(MenuIconStyle(storedValue: "modern"), .modern)
@@ -2819,12 +2860,12 @@ struct FinderRightKitTestsRunner {
         }
 
         runTest("前往目录升级后默认显示并保留原菜单顺序") {
-            let oldSaved = MenuFeatureCatalog.all.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
+            let oldSaved = MenuFeatureCatalog.regular.map(\.id).filter { $0 != MenuFeatureCatalog.goToDirectory }.reversed()
             let ids = MenuFeatureCatalog.ordered(by: Array(oldSaved)).map(\.id)
             let predId = MenuFeatureCatalog.all[MenuFeatureCatalog.all.firstIndex(where: { $0.id == MenuFeatureCatalog.goToDirectory })! - 1].id
             let predIndex = ids.firstIndex(of: predId)!
             try assertEqual(ids[predIndex + 1], MenuFeatureCatalog.goToDirectory)
-            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory }, Array(oldSaved))
+            try assertEqual(ids.filter { $0 != MenuFeatureCatalog.goToDirectory && !MenuFeatureCatalog.developerFeatureIds.contains($0) }, Array(oldSaved))
 
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
@@ -4521,12 +4562,16 @@ struct FinderRightKitTestsRunner {
             try assertEqual(FileHasher.clipboardText([("a.txt", "aa"), ("b c.txt", "bb")]), "aa  a.txt\nbb  b c.txt")
         }
 
-        runTest("复制哈希与创建符号链接默认关闭，排在复制文件内容 / 复制到之后") {
-            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
-            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
-            let ids = MenuFeatureCatalog.all.map(\.id)
-            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyFileContent)! + 1], MenuFeatureCatalog.copyFileHash)
-            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyTo)! + 1], MenuFeatureCatalog.createSymlink)
+        runTest("复制哈希与创建符号链接归入开发者工具，常规功能中不包含它们") {
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
+            try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.createSymlink))
+            let regularIds = MenuFeatureCatalog.regular.map(\.id)
+            try assertTrue(!regularIds.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(!regularIds.contains(MenuFeatureCatalog.createSymlink))
+            let devIds = MenuFeatureCatalog.developerFeatureIds
+            try assertEqual(Array(devIds.prefix(2)), [MenuFeatureCatalog.copyFileHash, MenuFeatureCatalog.createSymlink])
         }
 
         runTest("符号链接命名：保留完整文件名，重名自动编号") {
@@ -6311,6 +6356,419 @@ struct FinderRightKitTestsRunner {
             let fileURL = root.appendingPathComponent("small.txt")
             try assertNil(DiskUsage.inspectDirectChildren(at: fileURL), "对非目录调用应返回 nil")
         }
+
+        // MARK: - 开发者工具与自定义命令
+
+        runTest("开发者工具：项目相对路径、多选、嵌套仓库与仓库根") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            let folder = root.appendingPathComponent("中文 空格's/src")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("main.swift")
+            try Data().write(to: file)
+            try assertEqual(try ProjectRelativePath.paths(for: [file, folder, root]), ["中文 空格's/src/main.swift", "中文 空格's/src", "."])
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try assertEqual(try ProjectRelativePath.paths(for: [file]), ["main.swift"])
+        }
+
+        runTest("开发者工具：worktree 标记与无效标记") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let marker = root.appendingPathComponent(".git")
+            let file = root.appendingPathComponent("readme.md")
+            try Data().write(to: file)
+            try Data("gitdir: ../repo/.git/worktrees/test\n".utf8).write(to: marker)
+            try assertEqual(try ProjectRelativePath.paths(for: [file]), ["readme.md"])
+            try Data("gitdir: \n".utf8).write(to: marker)
+            try assertThrows(DeveloperFileToolError.noRepository) { _ = try ProjectRelativePath.paths(for: [file]) }
+        }
+
+        runTest("开发者工具：保留符号链接名称且多选失败不返回部分路径") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let repo = root.appendingPathComponent("repo")
+            try FileManager.default.createDirectory(at: repo.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            let outside = root.appendingPathComponent("outside.txt")
+            try Data().write(to: outside)
+            let link = repo.appendingPathComponent("链接.txt")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+            try assertEqual(try ProjectRelativePath.paths(for: [link]), ["链接.txt"])
+            try assertThrows(DeveloperFileToolError.noRepository) { _ = try ProjectRelativePath.paths(for: [link, outside]) }
+            try FileManager.default.removeItem(at: outside)
+            try assertEqual(try ProjectRelativePath.paths(for: [link]), ["链接.txt"])
+        }
+
+        runTest("开发者工具：目录树排序、常见目录过滤和控制字符转义") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for name in ["src", "assets", ".git", "node_modules", ".venv", "venv", "__pycache__", ".build", "build", "dist", ".next"] {
+                try FileManager.default.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: true)
+            }
+            for name in ["z.txt", "a\n\t.txt", ".env", ".DS_Store"] { try Data().write(to: root.appendingPathComponent(name)) }
+            let tree = try DirectoryTree.render(at: root)
+            let expected = "\(root.lastPathComponent)/\n├── assets/\n├── src/\n├── .env\n├── a\\n\\t.txt\n└── z.txt"
+            try assertEqual(tree, expected)
+        }
+
+        runTest("开发者工具：目录树不展开符号链接环或文件包") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let package = root.appendingPathComponent("Example.app")
+            try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+            try Data().write(to: package.appendingPathComponent("inside.txt"))
+            let link = root.appendingPathComponent("loop")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("Example.app/") && tree.contains("loop"))
+            try assertTrue(!tree.contains("inside.txt"))
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: link) }
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: package) }
+        }
+
+        runTest("开发者工具：目录树深度限制明确标记") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let deep = root.appendingPathComponent("a/b/c/d/e")
+            try FileManager.default.createDirectory(at: deep, withIntermediateDirectories: true)
+            try Data().write(to: deep.appendingPathComponent("hidden.txt"))
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("d/ …"))
+            try assertTrue(!tree.contains("e/") && !tree.contains("hidden.txt"))
+        }
+
+        runTest("开发者工具：目录树项数上限") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for index in 0..<1_005 { try Data().write(to: root.appendingPathComponent("file-\(index)")) }
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("…"))
+            try assertEqual(tree.split(separator: "\n").filter { $0.contains("file-") }.count, 1_000)
+        }
+
+        runTest("开发者工具：目录树输出字节上限") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            for index in 0..<700 {
+                try Data().write(to: root.appendingPathComponent(String(repeating: "a", count: 230) + "-\(index)"))
+            }
+            let tree = try DirectoryTree.render(at: root)
+            try assertTrue(tree.contains("…"))
+            try assertTrue(tree.utf8.count <= 128 * 1024)
+        }
+
+        runTest("开发者工具：不可读目录与错误输入不返回空结果") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("plain.txt")
+            try Data().write(to: file)
+            try assertThrows(DeveloperFileToolError.notDirectory) { _ = try DirectoryTree.render(at: file) }
+            var missingFailed = false
+            do { _ = try ProjectRelativePath.paths(for: [root.appendingPathComponent("missing")]) } catch { missingFailed = true }
+            try assertTrue(missingFailed)
+            let locked = root.appendingPathComponent("locked")
+            try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: locked.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
+            if !FileManager.default.isReadableFile(atPath: locked.path) {
+                try assertThrows(DeveloperFileToolError.unreadableDirectory) { _ = try DirectoryTree.render(at: root) }
+            }
+        }
+
+        runTest("自定义命令：文件、目录、空白处和多选的工作目录") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("main.py")
+            try Data().write(to: file)
+            let folder = root.appendingPathComponent("src")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let second = folder.appendingPathComponent("sub.py")
+            try Data().write(to: second)
+            try assertEqual(try DeveloperCommand.context(selection: [file], directory: nil).directory.path, root.path)
+            try assertEqual(try DeveloperCommand.context(selection: [folder], directory: root).directory.path, folder.path)
+            try assertEqual(try DeveloperCommand.context(selection: [], directory: root).items, [root])
+            try assertEqual(try DeveloperCommand.context(selection: [file, second], directory: root).directory.path, root.path)
+            var rejected = false
+            do { _ = try DeveloperCommand.context(selection: [], directory: nil) } catch { rejected = true }
+            try assertTrue(rejected)
+        }
+
+        runTest("自定义命令：参数保留中文空格引号且不执行文件名中的命令") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let first = root.appendingPathComponent("中文 空格 ' $(touch injected).txt")
+            let second = root.appendingPathComponent("second.txt")
+            let result = try DeveloperCommandRunner().run(script: "printf '%s\\n' \"$@\"", items: [first, second], directory: root)
+            try assertEqual(result.status, 0)
+            try assertTrue(result.output.contains(first.path + "\n" + second.path))
+            try assertTrue(!FileManager.default.fileExists(atPath: root.appendingPathComponent("injected").path))
+        }
+
+        runTest("自定义命令：收集标准输出与错误并保留退出码") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let result = try DeveloperCommandRunner().run(script: "printf STDOUT; printf STDERR >&2; exit 7", items: [], directory: root)
+            try assertEqual(result.status, 7)
+            try assertTrue(result.output.contains("STDOUT") && result.output.contains("STDERR"))
+            try assertTrue(!result.cancelled)
+        }
+
+        runTest("自定义命令：输出超过管道容量时不死锁并限制内存") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let result = try DeveloperCommandRunner().run(
+                script: "for i in {1..10000}; do printf 0123456789abcdef >&2; done; printf END", items: [], directory: root)
+            try assertEqual(result.status, 0)
+            try assertTrue(result.truncated)
+            try assertTrue(result.output.utf8.count <= DeveloperCommandRunner.outputLimit)
+            try assertTrue(result.output.hasSuffix("END"))
+        }
+
+        runTest("自定义命令：停止命令同时终止普通子进程") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            let start = ProcessInfo.processInfo.systemUptime
+            let result = try runner.run(script: "/bin/sleep 20 & print READY; wait", items: [], directory: root) { output, _ in
+                if output.contains("READY") { runner.cancel() }
+            }
+            try assertTrue(result.cancelled)
+            try assertTrue(ProcessInfo.processInfo.systemUptime - start < 5)
+        }
+
+        runTest("自定义命令：忽略终止信号时升级停止且不会遗留等待") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            let start = ProcessInfo.processInfo.systemUptime
+            let result = try runner.run(script: "trap '' TERM; /bin/sleep 20 & print READY; wait", items: [], directory: root) { output, _ in
+                if output.contains("READY") { runner.cancel() }
+            }
+            try assertTrue(result.cancelled)
+            try assertTrue(ProcessInfo.processInfo.systemUptime - start < 5)
+        }
+
+        runTest("自定义命令：执行前停止与非法配置") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let runner = DeveloperCommandRunner()
+            runner.cancel()
+            let result = try runner.run(script: "touch unexpected", items: [], directory: root)
+            try assertTrue(result.cancelled)
+            try assertTrue(!FileManager.default.fileExists(atPath: root.appendingPathComponent("unexpected").path))
+            try assertTrue(!DeveloperCommand(name: "", script: "pwd").isValid)
+            try assertTrue(!DeveloperCommand(name: "title\nforged", script: "pwd").isValid)
+            try assertTrue(!DeveloperCommand(name: "title", script: " \n").isValid)
+            try assertTrue(!DeveloperCommand(id: "../../command", name: "title", script: "pwd").isValid)
+        }
+
+        func compareTextFixtures(_ left: String, _ right: String) throws -> FileComparisonResult {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let l = root.appendingPathComponent("left.txt"), r = root.appendingPathComponent("right.txt")
+            try left.write(to: l, atomically: true, encoding: .utf8)
+            try right.write(to: r, atomically: true, encoding: .utf8)
+            let ld = try ComparisonDocument.read(l), rd = try ComparisonDocument.read(r)
+            let result = try FileComparisonResult.compare(ld, rd)
+            try assertEqual(result.rows.compactMap(\.left), ld.lines)
+            try assertEqual(result.rows.compactMap(\.right), rd.lines)
+            try assertEqual(result.rows.compactMap(\.leftNumber), Array(1..<(ld.lines.count + 1)))
+            try assertEqual(result.rows.compactMap(\.rightNumber), Array(1..<(rd.lines.count + 1)))
+            try assertEqual(try String(contentsOf: l, encoding: .utf8), left, "比较不能修改左侧文件")
+            try assertEqual(try String(contentsOf: r, encoding: .utf8), right, "比较不能修改右侧文件")
+            return result
+        }
+
+        runTest("文件比较：相同文本和空文件") {
+            let identical = try compareTextFixtures("first\nsecond\n", "first\nsecond\n")
+            try assertEqual(identical.additions, 0)
+            try assertEqual(identical.deletions, 0)
+            try assertTrue(identical.rows.allSatisfy { $0.kind == .unchanged })
+            try assertTrue(try compareTextFixtures("", "").rows.isEmpty)
+        }
+
+        runTest("文件比较：开头中间末尾的插入删除替换与行号对齐") {
+            let cases = [("", "one\n"), ("one\n", ""), ("a\nc\n", "a\nb\nc\n"),
+                         ("a\nb\nc\n", "a\nc\n"), ("b\nc\n", "a\nb\nc\n"),
+                         ("a\nb\n", "a\nb\nc\n"), ("a\nold\nc\n", "a\nnew\nextra\nc\n"),
+                         ("a\nb\na\n", "b\na\nb\n")]
+            for (left, right) in cases {
+                let result = try compareTextFixtures(left, right)
+                try assertTrue(result.additions + result.deletions > 0)
+                try assertTrue(result.rows.filter { $0.kind == .unchanged }.allSatisfy { $0.left == $0.right })
+            }
+            let replaced = try compareTextFixtures("a\nold\nc\n", "a\nnew\nextra\nc\n")
+            try assertEqual(replaced.deletions, 1)
+            try assertEqual(replaced.additions, 2)
+            try assertEqual(replaced.rows[2].left, nil)
+            try assertEqual(replaced.rows[2].right, "extra")
+        }
+
+        runTest("文件比较：内容像 diff 标头时不会误解析") {
+            let result = try compareTextFixtures("1c1\n< old\n---\n", "2a3\n> new\n---\n")
+            try assertEqual(result.rows.last?.left, "---")
+            try assertEqual(result.rows.last?.kind, .unchanged)
+        }
+
+        runTest("文件比较：末尾换行和换行格式差异") {
+            let finalNewline = try compareTextFixtures("last", "last\n")
+            try assertEqual(finalNewline.additions, 1)
+            try assertEqual(finalNewline.deletions, 1)
+            let crlf = try compareTextFixtures("a\r\nb\r\n", "a\nb\n")
+            try assertEqual(crlf.additions + crlf.deletions, 0)
+            try assertTrue(crlf.differentLineEndings)
+            let cr = try compareTextFixtures("a\rb\r", "a\r\nb\r\n")
+            try assertTrue(cr.differentLineEndings)
+        }
+
+        runTest("文件比较：中文 UTF-8 BOM 与 UTF-16 BOM") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let l = root.appendingPathComponent("中文 空格's.txt"), r = root.appendingPathComponent("right.txt")
+            let text = "中文🙂\n第二行\n"
+            try (Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8)).write(to: l)
+            try (Data([0xFF, 0xFE]) + text.data(using: .utf16LittleEndian)!).write(to: r)
+            let result = try FileComparisonResult.compare(ComparisonDocument.read(l), ComparisonDocument.read(r))
+            try assertEqual(result.additions + result.deletions, 0)
+            try assertEqual(result.rows.first?.left, "中文🙂")
+        }
+
+        runTest("文件比较：拒绝二进制目录大文件及过多行") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let url = root.appendingPathComponent("input")
+            try Data([0x61, 0x00, 0x62]).write(to: url)
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(url) }
+            try Data([0xFF, 0xFD]).write(to: url)
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(url) }
+            try assertThrows(FileComparisonError.notText) { _ = try ComparisonDocument.read(root) }
+            try Data(repeating: 0x61, count: ComparisonDocument.maxBytes + 1).write(to: url)
+            try assertThrows(FileComparisonError.tooLarge) { _ = try ComparisonDocument.read(url) }
+            try String(repeating: "line\n", count: 20_001).write(to: url, atomically: true, encoding: .utf8)
+            try assertThrows(FileComparisonError.tooManyLines) { _ = try ComparisonDocument.read(url) }
+        }
+
+        // MARK: - Git 仓库扫描与快速切换
+
+        runTest("Git 仓库扫描：发现目录、解析分支与跳过依赖") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let fm = FileManager.default
+            let projA = root.appendingPathComponent("codes/projectA")
+            let gitDirA = projA.appendingPathComponent(".git")
+            try fm.createDirectory(at: gitDirA, withIntermediateDirectories: true)
+            try "ref: refs/heads/feature-alpha\n".write(to: gitDirA.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+
+            let projB = root.appendingPathComponent("codes/projectB")
+            let actualGitDirB = root.appendingPathComponent("actual_gitdir_b")
+            try fm.createDirectory(at: projB, withIntermediateDirectories: true)
+            try fm.createDirectory(at: actualGitDirB, withIntermediateDirectories: true)
+            try "gitdir: ../../actual_gitdir_b\n".write(to: projB.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+            try "a1b2c3d4e5f6\n".write(to: actualGitDirB.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+
+            // 位于 node_modules 中的假仓库应被忽略
+            let projC = root.appendingPathComponent("codes/projectC/node_modules/fake-lib")
+            try fm.createDirectory(at: projC.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try "ref: refs/heads/main\n".write(to: projC.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+
+            // 位于 Library 中的假仓库应被忽略
+            let projD = root.appendingPathComponent("Library/ignored-app")
+            try fm.createDirectory(at: projD.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try "ref: refs/heads/main\n".write(to: projD.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+
+            let results = GitRepositoryScanner.scan(roots: [root], maxDepth: 5)
+            try assertEqual(results.count, 2, "只应发现 projectA 和 projectB")
+
+            let foundA = results.first { $0.name == "projectA" }
+            try assertTrue(foundA != nil, "projectA 应该被发现")
+            try assertEqual(foundA?.branch, "feature-alpha", "分支名解析正确")
+
+            let foundB = results.first { $0.name == "projectB" }
+            try assertTrue(foundB != nil, "projectB 应该被发现")
+            try assertEqual(foundB?.branch, "a1b2c3d", "Detached HEAD 解析前 7 位")
+
+            let item = GitRepositoryItem(url: projA, branch: "main")
+            try assertEqual(item.name, "projectA")
+            try assertEqual(item.path, projA.standardizedFileURL.path)
+        }
+
+        runTest("Git 仓库历史：SharedConfig 记录与去重") {
+            let configFile = makeTempDirectory().appendingPathComponent("settings.plist")
+            defer { try? FileManager.default.removeItem(at: configFile.deletingLastPathComponent()) }
+            let config = SharedConfig(fileURL: configFile)
+
+            config.markGitRepositoryUsed("/path/to/repoA")
+            config.markGitRepositoryUsed("/path/to/repoB")
+            try assertEqual(config.recentGitRepositories, ["/path/to/repoB", "/path/to/repoA"])
+
+            config.markGitRepositoryUsed("/path/to/repoA")
+            try assertEqual(config.recentGitRepositories, ["/path/to/repoA", "/path/to/repoB"], "最近访问的项移至最前")
+        }
+
+        runTest("文件权限：POSIX 格式与八进制解析") {
+            let permDir = FilePermissions(mode: S_IFDIR | 0o755)
+            try assertEqual(permDir.octal, "755")
+            try assertEqual(permDir.symbolic, "drwxr-xr-x")
+            try assertEqual(permDir.menuTitle, "权限：drwxr-xr-x (755)")
+
+            let permFile = FilePermissions(mode: S_IFREG | 0o644)
+            try assertEqual(permFile.octal, "644")
+            try assertEqual(permFile.symbolic, "-rw-r--r--")
+            try assertEqual(permFile.menuTitle, "权限：-rw-r--r-- (644)")
+
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let testFile = tempDir.appendingPathComponent("test.sh")
+            try "#!/bin/sh\necho hi\n".write(to: testFile, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: testFile.path)
+
+            let readPerm = FilePermissions.permissions(at: testFile.path)
+            try assertTrue(readPerm != nil, "应该成功读取文件权限")
+            try assertEqual(readPerm?.octal, "755")
+            try assertEqual(readPerm?.symbolic, "-rwxr-xr-x")
+        }
+
+        runTest("代码行数统计：精确统计代码行、注释行与空行") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let swiftFile = tempDir.appendingPathComponent("Sample.swift")
+            let swiftContent = """
+            // 头部注释
+            import Foundation
+
+            /* 多行块注释
+               第二行
+            */
+            struct App {
+                let name = "test" // 行尾注释
+            }
+
+            """
+            try swiftContent.write(to: swiftFile, atomically: true, encoding: .utf8)
+
+            let singleResult = LineCounter.count(at: swiftFile)
+            try assertTrue(singleResult != nil, "单文件统计应成功")
+            try assertEqual(singleResult?.totalFiles, 1)
+            let swiftStats = singleResult?.languages.first { $0.language == "Swift" }
+            try assertTrue(swiftStats != nil, "应识别为 Swift")
+            try assertEqual(swiftStats?.blank, 1, "空行数")
+            try assertEqual(swiftStats?.comment, 4, "注释行数 (头部 1 + 块注释 3)")
+            try assertEqual(swiftStats?.code, 4, "代码行数 (import + struct + let + })")
+
+            // 测试忽略目录
+            let nodeModules = tempDir.appendingPathComponent("node_modules")
+            try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+            let ignoredJs = nodeModules.appendingPathComponent("lib.js")
+            try "console.log('ignored');\n".write(to: ignoredJs, atomically: true, encoding: .utf8)
+
+            let dirResult = LineCounter.count(at: tempDir)
+            try assertTrue(dirResult != nil, "目录统计应成功")
+            try assertEqual(dirResult?.totalFiles, 1, "应忽略 node_modules 下的文件")
+            try assertEqual(dirResult?.languages.count, 1)
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

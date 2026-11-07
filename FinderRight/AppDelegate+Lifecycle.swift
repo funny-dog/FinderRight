@@ -2,6 +2,7 @@ import SwiftUI
 import FinderRightKit
 
 extension AppDelegate {
+
     /// 检查旧版 staging/ 目录是否存在遗留文件，仅记录日志，不自动移动或删除
     func checkLegacyStagingDirectory() {
         // 一次性提醒：发送成功后才置位，避免每次冷启动重复弹同一条通知

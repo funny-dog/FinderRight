@@ -39,6 +39,22 @@ extension AppDelegate {
             return
         }
 
+        // 外部 URL 只打开空窗口，不接收待读取的文件路径。
+        if url.host == "compare-files" {
+            DispatchQueue.main.async { FileComparisonController.shared.show() }
+            return
+        }
+
+        if url.host == "git-status" {
+            DispatchQueue.main.async { GitStatusController.shared.show() }
+            return
+        }
+
+        if url.host == "line-count" {
+            DispatchQueue.main.async { LineCountController.shared.show() }
+            return
+        }
+
         // 执行类请求会以「完全磁盘访问」身份读写文件：只受理本 App 内嵌的 FinderSync 扩展发来的。
         // 比对的是磁盘上内嵌扩展自己的签名规则，ad-hoc 与证书签名都适用（见 CodeSignatureCheck）
         guard let token = event.attributeDescriptor(forKeyword: keySenderAuditTokenAttr)?.data,
