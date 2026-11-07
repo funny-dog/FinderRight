@@ -169,6 +169,10 @@ public struct MenuBuildInput: Equatable {
     public var diskUsageToolTip: String?
     /// 磁盘占用行是否可交互（单选目录且拿到数字时允许点击查看详情）
     public var isDiskUsageInteractive: Bool
+    /// 选中项的文件权限文案（如「权限：-rwxr-xr-x (755)」）；nil 表示当前无法显示（多选、失败）
+    public var filePermissionsTitle: String?
+    /// 文件权限行悬浮提示（所有者信息 + 点击复制引导）
+    public var filePermissionsToolTip: String?
 
     public init(
         location: MenuTargetLocation,
@@ -188,7 +192,9 @@ public struct MenuBuildInput: Equatable {
         imageMenuState: ImageMenuState? = nil,
         diskUsageTitle: String? = nil,
         diskUsageToolTip: String? = nil,
-        isDiskUsageInteractive: Bool = false
+        isDiskUsageInteractive: Bool = false,
+        filePermissionsTitle: String? = nil,
+        filePermissionsToolTip: String? = nil
     ) {
         self.location = location
         self.selection = selection
@@ -208,6 +214,8 @@ public struct MenuBuildInput: Equatable {
         self.diskUsageTitle = diskUsageTitle
         self.diskUsageToolTip = diskUsageToolTip
         self.isDiskUsageInteractive = isDiskUsageInteractive
+        self.filePermissionsTitle = filePermissionsTitle
+        self.filePermissionsToolTip = filePermissionsToolTip
     }
 }
 
@@ -521,6 +529,25 @@ public enum MenuTreeBuilder {
             case MenuFeatureCatalog.compareFiles:
                 items.append(.action(id: feature.id, titleKey: feature.nameKey,
                                      systemImage: feature.systemImage, tint: feature.tint, actionId: "compareFiles"))
+            case MenuFeatureCatalog.filePermissions:
+                if let title = input.filePermissionsTitle {
+                    items.append(.dynamicAction(
+                        id: MenuFeatureCatalog.filePermissions,
+                        title: title,
+                        systemImage: feature.systemImage,
+                        tint: feature.tint,
+                        actionId: "copyFilePermissions",
+                        isEnabled: true,
+                        toolTip: input.filePermissionsToolTip
+                    ))
+                }
+            case MenuFeatureCatalog.lineCount:
+                switch input.selection {
+                case .multiple where input.location != .container: break
+                default:
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint, actionId: "lineCount"))
+                }
             case MenuFeatureCatalog.copyFileName:
                 if hasSelection {
                     items.append(.action(

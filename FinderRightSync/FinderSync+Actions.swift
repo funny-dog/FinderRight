@@ -422,4 +422,22 @@ extension FinderSync {
             logToFile("scaleImage ipc result: success=\(r.success) msg=\(r.message ?? "")")
         }
     }
+
+    @objc func copyFilePermissions(_ sender: NSMenuItem) {
+        guard let url = permissionsTarget ?? currentContext().selectedItems.first ?? currentContext().directory else { return }
+        guard let perm = FilePermissions.permissions(at: url.path) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(perm.octal, forType: .string)
+        ClipboardToast.show(message: String(format: L("已复制权限：%@"), perm.octal), style: .success)
+        logToFile("copyFilePermissions: \(perm.octal) for \(url.lastPathComponent)")
+    }
+
+    @objc func lineCount(_ sender: NSMenuItem) {
+        let (directory, selected) = currentContext()
+        guard let target = selected.first ?? directory else { return }
+        logToFile("lineCount ipc (async) → target=\(target.path)")
+        IPCClient.shared.callAsync(action: "showLineCount", payload: ["path": .string(target.path)]) { r in
+            logToFile("lineCount ipc result: success=\(r.success) msg=\(r.message ?? "")")
+        }
+    }
 }

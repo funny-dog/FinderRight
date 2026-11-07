@@ -177,7 +177,9 @@ public enum MenuFeatureCatalog {
     public static let copyDirectoryTree = "feature.copyDirectoryTree"
     public static let compareFiles = "feature.compareFiles"
     public static let gitStatus = "feature.gitStatus"
-    public static let developerFeatureIds = [copyFileHash, createSymlink, copyProjectRelativePath, copyDirectoryTree, compareFiles, gitStatus]
+    public static let filePermissions = "feature.filePermissions"
+    public static let lineCount = "feature.lineCount"
+    public static let developerFeatureIds = [copyFileHash, createSymlink, copyProjectRelativePath, copyDirectoryTree, compareFiles, gitStatus, filePermissions, lineCount]
 
     /// 显示选中项的磁盘占用。默认排在最前：它是一条状态信息，不是操作
     public static let diskUsageFeature = MenuFeature(
@@ -237,6 +239,10 @@ public enum MenuFeatureCatalog {
         MenuFeature(id: compareFiles, nameKey: "比较文件…", descriptionKey: "拖入两个文本文件，并排查看差异", systemImage: "doc.on.doc", tint: .purple,
                     serviceDeclaration: nil),
         MenuFeature(id: gitStatus, nameKey: "Git 状态…", descriptionKey: "查看改动，切换分支、暂存与提交", systemImage: "arrow.triangle.branch", tint: .purple,
+                    serviceDeclaration: nil),
+        MenuFeature(id: filePermissions, nameKey: "文件权限", descriptionKey: "单选文件或文件夹时，在右键菜单中直接显示权限（如 -rwxr-xr-x 755），点击可复制", systemImage: "lock.shield", tint: .graphite,
+                    serviceDeclaration: nil),
+        MenuFeature(id: lineCount, nameKey: "代码行数统计…", descriptionKey: "统计文件夹内各语言的代码行数、注释行与空行", systemImage: "number.square", tint: .purple,
                     serviceDeclaration: nil),
     ]
 

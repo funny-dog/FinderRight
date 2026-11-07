@@ -84,7 +84,7 @@ final class FinderRightService {
         //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
         //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
         //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage", "prefetchDiskUsage", "showDiskUsageDetail", "showCutQueueDetail"]
+        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage", "prefetchDiskUsage", "showDiskUsageDetail", "showCutQueueDetail", "showLineCount"]
         let needsWhitelist = !readOnlyActions.contains(req.action)
 
         // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
@@ -216,6 +216,16 @@ final class FinderRightService {
             }
             let files = (req.payload["items"]?.stringArrayValue ?? []).prefix(2).map { URL(fileURLWithPath: $0) }
             DispatchQueue.main.async { FileComparisonController.shared.show(files: files) }
+            return IPCResponse(id: req.id, success: true, message: nil)
+        case "showLineCount":
+            SharedConfig.shared.reload()
+            guard SharedConfig.shared.developerToolsEnabled && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.lineCount) else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
+            }
+            guard let path = req.payload["path"]?.stringValue else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("请选择文件或目录", comment: ""))
+            }
+            DispatchQueue.main.async { LineCountController.shared.show(at: URL(fileURLWithPath: path)) }
             return IPCResponse(id: req.id, success: true, message: nil)
         case "copyFileHash":
             return copyFileHash(req)

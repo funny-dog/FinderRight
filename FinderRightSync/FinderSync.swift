@@ -31,6 +31,7 @@ class FinderSync: FIFinderSync {
     /// 当前构建的新建文件菜单项缓存，供 newFile(_ sender:) 按 tag 索引
     var activeNewFileTemplates: [NewFileTemplateItem] = []
     var directoryTreeTarget: URL?
+    var permissionsTarget: URL?
     var activeDeveloperCommands: [DeveloperCommand] = []
     var commandSelection: [URL] = []
     var commandDirectory: URL?
@@ -478,6 +479,10 @@ class FinderSync: FIFinderSync {
         let isDiskUsageEnabled = showsDiskUsage && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.diskUsage)
         let diskUsage = isDiskUsageEnabled ? diskUsageItem(for: selected, directory: directory, location: location) : nil
 
+        let isPermissionsEnabled = SharedConfig.shared.developerToolsEnabled && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.filePermissions)
+        let filePermissions = isPermissionsEnabled ? filePermissionsItem(for: selected, directory: directory, location: location) : nil
+        self.permissionsTarget = filePermissions?.target
+
         let input = MenuBuildInput(
             location: location,
             selection: selectionKind,
@@ -495,7 +500,9 @@ class FinderSync: FIFinderSync {
             imageMenuState: imageState,
             diskUsageTitle: diskUsage?.title,
             diskUsageToolTip: diskUsage?.toolTip,
-            isDiskUsageInteractive: diskUsage?.isInteractive ?? false
+            isDiskUsageInteractive: diskUsage?.isInteractive ?? false,
+            filePermissionsTitle: filePermissions?.title,
+            filePermissionsToolTip: filePermissions?.toolTip
         )
 
         let nodes = MenuTreeBuilder.buildMenuTree(input: input)
@@ -543,6 +550,24 @@ class FinderSync: FIFinderSync {
         }
         logToFile("diskUsage pending: \(String(format: "%.0f", elapsedMs))ms path=\(url.lastPathComponent)")
         return (L("占用：正在计算…"), L("目录较大，计算需要几秒；再次右键即可看到结果"), false)
+    }
+
+    /// 解析要显示在菜单中的文件权限
+    private func filePermissionsItem(
+        for selected: [URL],
+        directory: URL?,
+        location: MenuTargetLocation
+    ) -> (title: String, toolTip: String, target: URL)? {
+        let targetURL: URL?
+        if location == .container {
+            targetURL = directory
+        } else if selected.count == 1 {
+            targetURL = selected.first
+        } else {
+            targetURL = nil
+        }
+        guard let url = targetURL, let perm = FilePermissions.permissions(at: url.path) else { return nil }
+        return (perm.menuTitle, perm.toolTip, url)
     }
 
     /// 单次磁盘占用请求的等待上限。常规目录实测 0–70 ms，留到 250 ms 仍几乎无感；
@@ -598,6 +623,8 @@ class FinderSync: FIFinderSync {
         case "scaleImage": return #selector(self.scaleImage(_:))
         case "toggleHiddenFiles": return #selector(self.toggleHiddenFiles(_:))
         case "undoLast": return #selector(self.undoLast(_:))
+        case "copyFilePermissions": return #selector(self.copyFilePermissions(_:))
+        case "lineCount": return #selector(self.lineCount(_:))
         default: return nil
         }
     }

@@ -14,7 +14,12 @@ struct DeveloperMenuChecks {
         let tree = MenuFeatureCatalog.copyDirectoryTree
         let compare = MenuFeatureCatalog.compareFiles
         let git = MenuFeatureCatalog.gitStatus
-        let allDev = [hash, symlink, relative, tree, compare, git]
+        let perms = MenuFeatureCatalog.filePermissions
+        let lines = MenuFeatureCatalog.lineCount
+        let allDev = MenuFeatureCatalog.developerFeatureIds
+        let devCount = allDev.count
+        _ = perms
+        _ = lines
         assert(!config.developerToolsEnabled && allDev.allSatisfy { !config.isActionEnabled($0) })
         config.developerToolsEnabled = true
         assert(allDev.allSatisfy { config.isActionEnabled($0) })
@@ -27,13 +32,13 @@ struct DeveloperMenuChecks {
 
         let original = MenuFeatureCatalog.all.map(\.id).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0) }.reversed()
         let upgraded = MenuFeatureCatalog.ordered(by: Array(original)).map(\.id)
-        assert(Array(upgraded.suffix(6)) == allDev)
-        assert(Array(upgraded.dropLast(6)) == Array(original))
+        assert(Array(upgraded.suffix(devCount)) == allDev)
+        assert(Array(upgraded.dropLast(devCount)) == Array(original))
         let reordered = MenuFeatureCatalog.ordered(by: [tree] + Array(original) + [relative]).map(\.id)
-        assert(Array(reordered.suffix(6)) == allDev)
+        assert(Array(reordered.suffix(devCount)) == allDev)
         let independent = MenuFeatureCatalog.ordered(by: Array(original), developerOrder: [tree, relative]).map(\.id)
-        assert(Array(independent.dropLast(6)) == Array(original))
-        assert(Array(independent.suffix(6)) == MenuFeatureCatalog.normalizedOrder([tree, relative], defaults: allDev))
+        assert(Array(independent.dropLast(devCount)) == Array(original))
+        assert(Array(independent.suffix(devCount)) == MenuFeatureCatalog.normalizedOrder([tree, relative], defaults: allDev))
         reloaded.developerMenuOrder = [tree, relative]
         assert(SharedConfig(fileURL: directory.appendingPathComponent("settings.plist")).developerMenuOrder == [tree, relative])
 
@@ -111,6 +116,16 @@ struct DeveloperMenuChecks {
         let shown = ServiceShortcuts.mergedStatus(hidden, bundleId: "test.bundle", shortcuts: [:],
                                                  services: [service], serviceVisibility: ["copyDirectoryTree": true])
         assert((shown[key] as? [String: Any])?["enabled_services_menu"] as? Bool == true)
+
+        let permMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .items, selection: .singleFile(isTextEligible: true, isArchive: false),
+            enabledFeatureIds: [perms], filePermissionsTitle: "权限：-rwxr-xr-x (755)"))
+        assert(permMenu.map(\.id) == [perms])
+
+        let lineMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .items, selection: .singleFolder, enabledFeatureIds: [lines]))
+        assert(lineMenu.map(\.id) == [lines])
+
         print("✓ 开发者菜单：默认关闭、配置保留、底部排序、同级入口、选择条件和服务显隐通过")
     }
 }

@@ -6706,6 +6706,69 @@ struct FinderRightKitTestsRunner {
             try assertEqual(config.recentGitRepositories, ["/path/to/repoA", "/path/to/repoB"], "最近访问的项移至最前")
         }
 
+        runTest("文件权限：POSIX 格式与八进制解析") {
+            let permDir = FilePermissions(mode: S_IFDIR | 0o755)
+            try assertEqual(permDir.octal, "755")
+            try assertEqual(permDir.symbolic, "drwxr-xr-x")
+            try assertEqual(permDir.menuTitle, "权限：drwxr-xr-x (755)")
+
+            let permFile = FilePermissions(mode: S_IFREG | 0o644)
+            try assertEqual(permFile.octal, "644")
+            try assertEqual(permFile.symbolic, "-rw-r--r--")
+            try assertEqual(permFile.menuTitle, "权限：-rw-r--r-- (644)")
+
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let testFile = tempDir.appendingPathComponent("test.sh")
+            try "#!/bin/sh\necho hi\n".write(to: testFile, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: testFile.path)
+
+            let readPerm = FilePermissions.permissions(at: testFile.path)
+            try assertTrue(readPerm != nil, "应该成功读取文件权限")
+            try assertEqual(readPerm?.octal, "755")
+            try assertEqual(readPerm?.symbolic, "-rwxr-xr-x")
+        }
+
+        runTest("代码行数统计：精确统计代码行、注释行与空行") {
+            let tempDir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let swiftFile = tempDir.appendingPathComponent("Sample.swift")
+            let swiftContent = """
+            // 头部注释
+            import Foundation
+
+            /* 多行块注释
+               第二行
+            */
+            struct App {
+                let name = "test" // 行尾注释
+            }
+
+            """
+            try swiftContent.write(to: swiftFile, atomically: true, encoding: .utf8)
+
+            let singleResult = LineCounter.count(at: swiftFile)
+            try assertTrue(singleResult != nil, "单文件统计应成功")
+            try assertEqual(singleResult?.totalFiles, 1)
+            let swiftStats = singleResult?.languages.first { $0.language == "Swift" }
+            try assertTrue(swiftStats != nil, "应识别为 Swift")
+            try assertEqual(swiftStats?.blank, 1, "空行数")
+            try assertEqual(swiftStats?.comment, 4, "注释行数 (头部 1 + 块注释 3)")
+            try assertEqual(swiftStats?.code, 4, "代码行数 (import + struct + let + })")
+
+            // 测试忽略目录
+            let nodeModules = tempDir.appendingPathComponent("node_modules")
+            try FileManager.default.createDirectory(at: nodeModules, withIntermediateDirectories: true)
+            let ignoredJs = nodeModules.appendingPathComponent("lib.js")
+            try "console.log('ignored');\n".write(to: ignoredJs, atomically: true, encoding: .utf8)
+
+            let dirResult = LineCounter.count(at: tempDir)
+            try assertTrue(dirResult != nil, "目录统计应成功")
+            try assertEqual(dirResult?.totalFiles, 1, "应忽略 node_modules 下的文件")
+            try assertEqual(dirResult?.languages.count, 1)
+        }
+
         print("\n-----------------------------------------")
         print("测试结果: 总数 \(totalTests)，通过 \(passedTests)，失败 \(failedTests)")
         print("-----------------------------------------")

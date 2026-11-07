@@ -1063,3 +1063,34 @@
 "检测中…" = "Checking…";
 "有改动" = "Modified";
 "%d 个改动" = "%d modified";
+
+/* 开发者工具：文件权限与代码行数统计 */
+"文件权限" = "File Permissions";
+"单选文件或文件夹时，在右键菜单中直接显示权限（如 -rwxr-xr-x 755），点击可复制" = "Show permissions directly in the context menu for a single file or folder (e.g. -rwxr-xr-x 755); click to copy";
+"已复制权限：%@" = "Copied permissions: %@";
+"代码行数统计…" = "Count Lines of Code…";
+"代码行数统计" = "Count Lines of Code";
+"统计文件夹内各语言的代码行数、注释行与空行" = "Count code, comments, and blank lines across languages in a folder";
+"打开代码行数统计" = "Open Line Count";
+"在访达中显示" = "Show in Finder";
+"正在扫描并统计代码行数…" = "Scanning and counting lines of code…";
+"无法统计该目录，请检查读取权限" = "Unable to analyze this directory; check read permissions";
+"重试" = "Retry";
+"未找到可识别的代码文件" = "No recognized code files found";
+"请选择需要统计代码行数的目录" = "Select a directory to count lines of code";
+"选择目录…" = "Choose Directory…";
+"选择" = "Choose";
+"语言" = "Language";
+"文件" = "Files";
+"代码" = "Code";
+"注释" = "Comments";
+"空白" = "Blank";
+"总计" = "Total";
+"已复制" = "Copied";
+"复制表格" = "Copy Table";
+"重新统计" = "Recount";
+"语言：%d" = "Languages: %d";
+"文件：%d" = "Files: %d";
+"代码：%d 行" = "Code: %d lines";
+"总计：%d 行" = "Total: %d lines";
+

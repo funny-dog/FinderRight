@@ -50,6 +50,11 @@ extension AppDelegate {
             return
         }
 
+        if url.host == "line-count" {
+            DispatchQueue.main.async { LineCountController.shared.show() }
+            return
+        }
+
         // 执行类请求会以「完全磁盘访问」身份读写文件：只受理本 App 内嵌的 FinderSync 扩展发来的。
         // 比对的是磁盘上内嵌扩展自己的签名规则，ad-hoc 与证书签名都适用（见 CodeSignatureCheck）
         guard let token = event.attributeDescriptor(forKeyword: keySenderAuditTokenAttr)?.data,
