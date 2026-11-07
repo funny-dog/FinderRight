@@ -18,11 +18,25 @@ final class GitStatusModel: ObservableObject {
     @Published private(set) var actionMessage: String?
     @Published private(set) var commitPreview: GitCommitPreview?
     @Published var commitMessage = ""
+    @Published private(set) var repositories: [GitRepositoryItem] = []
+    @Published private(set) var isScanning = false
+    @Published var repositorySearchQuery = ""
     private let queue = DispatchQueue(label: "com.finderright.app.git-status", qos: .userInitiated)
     private var statusRevision = 0
     private var diffRevision = 0
     private var statusOperation: BlockOperation?
     private var diffOperation: BlockOperation?
+    private var scanOperation: BlockOperation?
+
+    var filteredRepositories: [GitRepositoryItem] {
+        let query = repositorySearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return repositories }
+        return repositories.filter {
+            $0.name.lowercased().contains(query) ||
+            $0.displayPath.lowercased().contains(query) ||
+            $0.branch.lowercased().contains(query)
+        }
+    }
 
     var visibleEntries: [GitStatusEntry] {
         guard let snapshot else { return [] }
@@ -43,10 +57,88 @@ final class GitStatusModel: ObservableObject {
         commitPreview = nil
         commitMessage = ""
         sourceURL = url
+        SharedConfig.shared.markGitRepositoryUsed(url.path)
         directoryFilter = nil
         selectedPath = nil
         snapshot = nil
         refresh(resetScope: true)
+    }
+
+    func closeRepository() {
+        guard !isPerforming else { return }
+        statusRevision += 1
+        statusOperation?.cancel()
+        clearComparison()
+        sourceURL = nil
+        snapshot = nil
+        directoryFilter = nil
+        selectedPath = nil
+        error = nil
+        isLoading = false
+        scanRepositories()
+    }
+
+    func scanRepositories() {
+        guard !isPerforming else { return }
+        scanOperation?.cancel()
+        isScanning = true
+
+        let recentPaths = SharedConfig.shared.recentGitRepositories
+        var initialList: [GitRepositoryItem] = []
+        let fm = FileManager.default
+        for path in recentPaths {
+            let url = URL(fileURLWithPath: path)
+            if fm.fileExists(atPath: url.appendingPathComponent(".git").path) {
+                let branch = GitRepositoryScanner.readBranch(at: url)
+                let attrs = try? fm.attributesOfItem(atPath: url.path)
+                let mtime = attrs?[.modificationDate] as? Date
+                initialList.append(GitRepositoryItem(url: url, branch: branch, lastModified: mtime))
+            }
+        }
+        if !initialList.isEmpty {
+            self.repositories = initialList
+        }
+
+        let operation = BlockOperation()
+        operation.addExecutionBlock { [weak self, weak operation] in
+            guard let operation, !operation.isCancelled else { return }
+            let scanned = GitRepositoryScanner.scan()
+            guard !operation.isCancelled else { return }
+
+            var merged = initialList
+            var seen = Set(initialList.map(\.path))
+            for item in scanned {
+                if seen.insert(item.path).inserted {
+                    merged.append(item)
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !operation.isCancelled else { return }
+                self.repositories = merged
+                self.isScanning = false
+                self.refreshRepositoriesStatus()
+            }
+        }
+        scanOperation = operation
+        queue.async { operation.start() }
+    }
+
+    private func refreshRepositoriesStatus() {
+        let items = repositories
+        guard !items.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            for item in items {
+                guard let self else { return }
+                let status = GitRepositoryScanner.readStatusSummary(at: item.url)
+                DispatchQueue.main.async {
+                    if let index = self.repositories.firstIndex(where: { $0.id == item.id }) {
+                        self.repositories[index].isClean = status?.isClean
+                        self.repositories[index].statusDescription = status?.description
+                    }
+                }
+            }
+        }
     }
 
     func refresh(resetScope: Bool = false) {
@@ -117,8 +209,10 @@ final class GitStatusModel: ObservableObject {
         guard !isPerforming else { return }
         statusRevision += 1
         statusOperation?.cancel()
+        scanOperation?.cancel()
         clearComparison()
         isLoading = false
+        isScanning = false
     }
 
     var hasConflicts: Bool { snapshot?.entries.contains(where: \.isConflict) == true }
@@ -266,12 +360,7 @@ struct GitStatusView: View {
             } else if let error = model.error {
                 message(error, icon: "exclamationmark.triangle", color: FRTheme.danger)
             } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "arrow.triangle.branch").font(.system(size: 32, weight: .light)).foregroundColor(FRTheme.accentText)
-                    Text("拖入项目文件夹或选择项目").font(.system(size: 13))
-                    Button("选择项目…", action: chooseProject).buttonStyle(.frSecondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                repositoryListView
             }
             if model.snapshot != nil {
                 FRDivider()
@@ -296,38 +385,71 @@ struct GitStatusView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: model.snapshot?.root.lastPathComponent ?? NSLocalizedString("Git 状态", comment: ""))
-                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                if let snapshot = model.snapshot {
-                    Menu {
-                        ForEach(snapshot.localBranches, id: \.self) { branch in
-                            Button { model.perform(.switchBranch(branch), success: "已切换分支") } label: {
-                                if branch == snapshot.branch { Label(branch, systemImage: "checkmark") }
-                                else { Text(verbatim: branch) }
-                            }
-                            .disabled(branch == snapshot.branch)
-                        }
-                        Divider()
-                        Button("新建分支…") { showingNewBranch = true }
-                    } label: {
-                        Label(snapshot.branch, systemImage: "arrow.triangle.branch")
-                            .font(.system(size: 11)).foregroundColor(FRTheme.accentText).lineLimit(1)
+            if model.sourceURL != nil {
+                Button {
+                    model.closeRepository()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("仓库列表")
                     }
-                    .menuStyle(.borderlessButton)
-                    .frame(maxWidth: 220, alignment: .leading)
-                    .disabled(model.isLoading || model.isPerforming)
-                    .help("切换本地分支")
+                    .font(.system(size: 11))
+                }
+                .buttonStyle(.frLink)
+                .help("返回所有 Git 仓库列表")
+                .disabled(model.isPerforming)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: model.snapshot?.root.lastPathComponent ?? NSLocalizedString("Git 状态", comment: ""))
+                        .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    if let snapshot = model.snapshot {
+                        Menu {
+                            ForEach(snapshot.localBranches, id: \.self) { branch in
+                                Button { model.perform(.switchBranch(branch), success: "已切换分支") } label: {
+                                    if branch == snapshot.branch { Label(branch, systemImage: "checkmark") }
+                                    else { Text(verbatim: branch) }
+                                }
+                                .disabled(branch == snapshot.branch)
+                            }
+                            Divider()
+                            Button("新建分支…") { showingNewBranch = true }
+                        } label: {
+                            Label(snapshot.branch, systemImage: "arrow.triangle.branch")
+                                .font(.system(size: 11)).foregroundColor(FRTheme.accentText).lineLimit(1)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .frame(maxWidth: 220, alignment: .leading)
+                        .disabled(model.isLoading || model.isPerforming)
+                        .help("切换本地分支")
+                    }
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .help(Text(verbatim: model.snapshot?.root.path ?? ""))
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Git 仓库")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(verbatim: model.isScanning
+                         ? NSLocalizedString("正在扫描设备上的仓库…", comment: "")
+                         : String(format: NSLocalizedString("已发现 %d 个仓库", comment: ""), model.repositories.count))
+                        .font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            }
+
+            Spacer()
+            if model.isLoading || model.isPerforming || model.isScanning { ProgressView().controlSize(.small) }
+            Button("选择项目…", action: chooseProject).buttonStyle(.frLink).disabled(model.isPerforming)
+            Button("刷新") {
+                if model.sourceURL != nil {
+                    model.refresh()
+                } else {
+                    model.scanRepositories()
                 }
             }
-            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            .help(Text(verbatim: model.snapshot?.root.path ?? ""))
-            Spacer()
-            if model.isLoading || model.isPerforming { ProgressView().controlSize(.small) }
-            Button("选择项目…", action: chooseProject).buttonStyle(.frLink).disabled(model.isPerforming)
-            Button("刷新") { model.refresh() }.buttonStyle(.frSecondary)
-                .disabled(model.sourceURL == nil || model.isLoading || model.isPerforming)
-                .keyboardShortcut("r", modifiers: .command)
+            .buttonStyle(.frSecondary)
+            .disabled(model.isLoading || model.isPerforming || (model.sourceURL == nil && model.isScanning))
+            .keyboardShortcut("r", modifiers: .command)
         }
         .padding(12)
     }
@@ -491,6 +613,116 @@ struct GitStatusView: View {
         .foregroundColor(color).padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var repositoryListView: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(FRTheme.mute)
+                TextField("搜索仓库名称、分支或路径…", text: $model.repositorySearchQuery)
+                    .textFieldStyle(.plain)
+                if !model.repositorySearchQuery.isEmpty {
+                    Button {
+                        model.repositorySearchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(FRTheme.mute)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(FRTheme.field)
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(FRTheme.fieldBorder, lineWidth: 1))
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
+
+            FRDivider()
+
+            if model.repositories.isEmpty && model.isScanning {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("正在扫描设备上的 Git 仓库…").font(.system(size: 12)).foregroundColor(FRTheme.mute)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.filteredRepositories.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 32, weight: .light)).foregroundColor(FRTheme.accentText)
+                    Text(model.repositories.isEmpty ? "未在设备上检测到 Git 仓库" : "未找到匹配的仓库")
+                        .font(.system(size: 13))
+                    Text("拖入项目文件夹或选择项目").font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                    Button("选择项目…", action: chooseProject).buttonStyle(.frSecondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(model.filteredRepositories) { repo in
+                            repositoryRow(repo)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                }
+            }
+        }
+    }
+
+    private func repositoryRow(_ repo: GitRepositoryItem) -> some View {
+        Button {
+            model.open(at: repo.url)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "folder")
+                    .font(.system(size: 15))
+                    .foregroundColor(FRTheme.accentText)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(verbatim: repo.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(FRTheme.text)
+                            .lineLimit(1)
+                        if !repo.branch.isEmpty {
+                            Label(repo.branch, systemImage: "arrow.triangle.branch")
+                                .font(.system(size: 10))
+                                .foregroundColor(FRTheme.mute)
+                                .lineLimit(1)
+                        }
+                    }
+                    Text(verbatim: repo.displayPath)
+                        .font(.system(size: 10))
+                        .foregroundColor(FRTheme.mute)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 8)
+
+                if let isClean = repo.isClean {
+                    HStack(spacing: 4) {
+                        Image(systemName: isClean ? "checkmark.circle" : "pencil.circle")
+                        Text(verbatim: repo.statusDescription ?? (isClean ? NSLocalizedString("工作区干净", comment: "") : NSLocalizedString("有改动", comment: "")))
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(isClean ? FRTheme.okText : FRTheme.warnText)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(isClean ? FRTheme.okBackground : FRTheme.warnBackground))
+                } else {
+                    Text("检测中…")
+                        .font(.system(size: 10))
+                        .foregroundColor(FRTheme.mute.opacity(0.8))
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(FRTheme.mute.opacity(0.5))
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(RoundedRectangle(cornerRadius: 6).fill(FRTheme.card.opacity(0.5)))
+    }
+
     private func chooseProject() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -530,7 +762,11 @@ final class GitStatusController: NSObject, NSWindowDelegate {
             self.model = model
             self.window = window
         }
-        if let url { model?.open(at: url) }
+        if let url {
+            model?.open(at: url)
+        } else if model?.sourceURL == nil {
+            model?.scanRepositories()
+        }
         window?.makeKeyAndOrderFront(nil)
         window?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)

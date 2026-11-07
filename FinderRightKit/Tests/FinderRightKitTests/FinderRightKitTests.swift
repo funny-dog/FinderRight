@@ -4562,12 +4562,16 @@ struct FinderRightKitTestsRunner {
             try assertEqual(FileHasher.clipboardText([("a.txt", "aa"), ("b c.txt", "bb")]), "aa  a.txt\nbb  b c.txt")
         }
 
-        runTest("复制哈希与创建符号链接默认关闭，排在复制文件内容 / 复制到之后") {
-            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
-            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
-            let ids = MenuFeatureCatalog.all.map(\.id)
-            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyFileContent)! + 1], MenuFeatureCatalog.copyFileHash)
-            try assertEqual(ids[ids.firstIndex(of: MenuFeatureCatalog.copyTo)! + 1], MenuFeatureCatalog.createSymlink)
+        runTest("复制哈希与创建符号链接归入开发者工具，常规功能中不包含它们") {
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
+            try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.createSymlink))
+            let regularIds = MenuFeatureCatalog.regular.map(\.id)
+            try assertTrue(!regularIds.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(!regularIds.contains(MenuFeatureCatalog.createSymlink))
+            let devIds = MenuFeatureCatalog.developerFeatureIds
+            try assertEqual(Array(devIds.prefix(2)), [MenuFeatureCatalog.copyFileHash, MenuFeatureCatalog.createSymlink])
         }
 
         runTest("符号链接命名：保留完整文件名，重名自动编号") {
@@ -6422,6 +6426,62 @@ struct FinderRightKitTestsRunner {
             try assertEqual(DiskUsage.formatted(0), "Zero KB")
             try assertTrue(DiskUsage.formatted(1024).contains("KB"), "1 KB 应使用 KB 单位")
             try assertTrue(DiskUsage.formatted(1024 * 1024).contains("MB"), "1 MB 应使用 MB 单位")
+        }
+
+        runTest("Git 仓库扫描：发现目录、解析分支与跳过依赖") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let fm = FileManager.default
+            let projA = root.appendingPathComponent("codes/projectA")
+            let gitDirA = projA.appendingPathComponent(".git")
+            try fm.createDirectory(at: gitDirA, withIntermediateDirectories: true)
+            try "ref: refs/heads/feature-alpha\n".write(to: gitDirA.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+
+            let projB = root.appendingPathComponent("codes/projectB")
+            let actualGitDirB = root.appendingPathComponent("actual_gitdir_b")
+            try fm.createDirectory(at: projB, withIntermediateDirectories: true)
+            try fm.createDirectory(at: actualGitDirB, withIntermediateDirectories: true)
+            try "gitdir: ../../actual_gitdir_b\n".write(to: projB.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+            try "a1b2c3d4e5f6\n".write(to: actualGitDirB.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+
+            // 位于 node_modules 中的假仓库应被忽略
+            let projC = root.appendingPathComponent("codes/projectC/node_modules/fake-lib")
+            try fm.createDirectory(at: projC.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try "ref: refs/heads/main\n".write(to: projC.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+
+            // 位于 Library 中的假仓库应被忽略
+            let projD = root.appendingPathComponent("Library/ignored-app")
+            try fm.createDirectory(at: projD.appendingPathComponent(".git"), withIntermediateDirectories: true)
+            try "ref: refs/heads/main\n".write(to: projD.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+
+            let results = GitRepositoryScanner.scan(roots: [root], maxDepth: 5)
+            try assertEqual(results.count, 2, "只应发现 projectA 和 projectB")
+
+            let foundA = results.first { $0.name == "projectA" }
+            try assertTrue(foundA != nil, "projectA 应该被发现")
+            try assertEqual(foundA?.branch, "feature-alpha", "分支名解析正确")
+
+            let foundB = results.first { $0.name == "projectB" }
+            try assertTrue(foundB != nil, "projectB 应该被发现")
+            try assertEqual(foundB?.branch, "a1b2c3d", "Detached HEAD 解析前 7 位")
+
+            let item = GitRepositoryItem(url: projA, branch: "main")
+            try assertEqual(item.name, "projectA")
+            try assertEqual(item.path, projA.standardizedFileURL.path)
+        }
+
+        runTest("Git 仓库历史：SharedConfig 记录与去重") {
+            let configFile = makeTempDirectory().appendingPathComponent("settings.plist")
+            defer { try? FileManager.default.removeItem(at: configFile.deletingLastPathComponent()) }
+            let config = SharedConfig(fileURL: configFile)
+
+            config.markGitRepositoryUsed("/path/to/repoA")
+            config.markGitRepositoryUsed("/path/to/repoB")
+            try assertEqual(config.recentGitRepositories, ["/path/to/repoB", "/path/to/repoA"])
+
+            config.markGitRepositoryUsed("/path/to/repoA")
+            try assertEqual(config.recentGitRepositories, ["/path/to/repoA", "/path/to/repoB"], "最近访问的项移至最前")
         }
 
         print("\n-----------------------------------------")

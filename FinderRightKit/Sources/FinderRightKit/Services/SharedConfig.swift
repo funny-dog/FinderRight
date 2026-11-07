@@ -76,6 +76,7 @@ public final class SharedConfig {
         static let favoriteLastUsed = "favoriteLastUsed"
         static let appTheme = "appTheme"
         static let copyFileContentMaxSizeKB = "copyFileContentMaxSizeKB"
+        static let recentGitRepositories = "recentGitRepositories"
         /// 一次性迁移标记：图标风格默认值已按「老用户保持单色线条」处理过
         static let iconStyleDefaultMigrated = "iconStyleDefaultMigrated"
     }

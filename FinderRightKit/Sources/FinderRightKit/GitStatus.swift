@@ -32,7 +32,7 @@ public enum GitStatusError: LocalizedError {
     }
 }
 
-private enum LocalGit {
+enum LocalGit {
     private final class ErrorOutput { var data = Data() }
     private final class TimeoutFlag {
         private let lock = NSLock()
