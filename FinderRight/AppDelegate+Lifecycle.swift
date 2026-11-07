@@ -43,6 +43,7 @@ extension AppDelegate {
                                           currentVersion: UpdateChecker.shared.currentAppVersion)
         else { return }
         UpdateInstallReceipt.complete()
+        FinderRestarter.restartFinderIfUpdated()
     }
 
     /// 自动检查并向系统注册自身的 FinderSync 扩展
@@ -93,6 +94,9 @@ extension AppDelegate {
             } else {
                 NSLog("[AppDelegate] FinderSync appex 已注册且版本一致 (\(appexVersion))，跳过 pluginkit -a（避免扰动角标回调）")
             }
+
+            // 检查应用是否刚刚更新，若更新则重启一次 Finder 确保新扩展立刻被 Finder 挂载
+            FinderRestarter.restartFinderIfUpdated()
 
             // 2. 读取插件当前选举状态（避免覆盖用户在系统设置里的显式禁用）
             let trimmed = output

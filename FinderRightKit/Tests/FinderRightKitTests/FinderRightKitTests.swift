@@ -4909,6 +4909,47 @@ struct FinderRightKitTestsRunner {
             }
         }
 
+        runTest("AppUpdateTracker：应用启动与更新判定") {
+            // 首次启动
+            let first = AppUpdateTracker.evaluate(
+                lastVersion: nil,
+                lastBuild: nil,
+                currentVersion: "1.12.4",
+                currentBuild: "48"
+            )
+            try assertTrue(first.isFirstLaunch, "未记录过版本时为首次启动")
+            try assertTrue(!first.isAppUpdated, "首次启动不视为更新")
+
+            // 正常日常启动（版本一致）
+            let normal = AppUpdateTracker.evaluate(
+                lastVersion: "1.12.4",
+                lastBuild: "48",
+                currentVersion: "1.12.4",
+                currentBuild: "48"
+            )
+            try assertTrue(!normal.isFirstLaunch)
+            try assertTrue(!normal.isAppUpdated, "版本一致不视为更新")
+
+            // 版本号升级
+            let versionUpgrade = AppUpdateTracker.evaluate(
+                lastVersion: "1.12.3",
+                lastBuild: "47",
+                currentVersion: "1.12.4",
+                currentBuild: "48"
+            )
+            try assertTrue(!versionUpgrade.isFirstLaunch)
+            try assertTrue(versionUpgrade.isAppUpdated, "版本变化视为更新")
+
+            // 仅构建号升级
+            let buildUpgrade = AppUpdateTracker.evaluate(
+                lastVersion: "1.12.4",
+                lastBuild: "48",
+                currentVersion: "1.12.4",
+                currentBuild: "49"
+            )
+            try assertTrue(buildUpgrade.isAppUpdated, "构建号变化视为更新")
+        }
+
         runTest("服务菜单防漂移：完整声明对齐时校验无 issue") {
             let testFeatures = [
                 MenuFeature(id: "test.copy", nameKey: "测试复制", descriptionKey: "", systemImage: "link",
