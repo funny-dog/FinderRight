@@ -133,7 +133,7 @@ public final class UndoCenter {
 
     private func writeState(_ state: UndoMenuState) {
         guard let data = try? JSONEncoder().encode(state) else { return }
-        try? FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? PrivateStorage.ensurePrivateDirectory(stateURL.deletingLastPathComponent())
         try? data.write(to: stateURL, options: .atomic)
     }
 

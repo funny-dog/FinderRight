@@ -164,6 +164,7 @@ extension FinderRightService {
         var pastedPaths: [URL] = []
         var pastedPairs: [(current: URL, original: URL?)] = []
         var failedPaths: [String] = []
+        var recoveryConflicts: [CutQueueStore.RecoveryConflict] = []
 
         for sourcePath in sourcePaths {
             // 防御性校验：cut-queue.json 是普通文件，可能被其他进程直接改写；
@@ -190,12 +191,33 @@ extension FinderRightService {
                                              in: destDir)
 
             do {
-                try fileManager.moveItem(at: sourceURL, to: destURL)
-                pastedPaths.append(destURL)
-                pastedPairs.append((destURL, sourceURL))
+                try Self.cutPasteQueue.sync {
+                    try cutQueue.recordDestination(batchID: batchID, source: sourcePath, destination: destURL.path)
+                }
             } catch {
                 if firstError == nil { firstError = error.localizedDescription }
                 failedPaths.append(sourcePath)
+                continue
+            }
+
+            do {
+                try fileManager.moveItem(at: sourceURL, to: destURL)
+                pastedPaths.append(destURL)
+                pastedPairs.append((destURL, sourceURL))
+                do {
+                    try Self.cutPasteQueue.sync {
+                        try cutQueue.recordCompletion(batchID: batchID, source: sourcePath)
+                    }
+                } catch {
+                    serviceLog("粘贴完成状态写入失败: \(error.localizedDescription)")
+                }
+            } catch {
+                if firstError == nil { firstError = error.localizedDescription }
+                if fileManager.fileExists(atPath: sourceURL.path), fileManager.fileExists(atPath: destURL.path) {
+                    recoveryConflicts.append(.init(source: sourcePath, destination: destURL.path))
+                } else {
+                    failedPaths.append(sourcePath)
+                }
             }
         }
 
@@ -211,9 +233,15 @@ extension FinderRightService {
         let subject = Self.subject(forPaths: sourcePaths)
         if let err = firstError {
             serviceLog("pasteFiles completed with error: \(err)")
+            let conflictDetails = recoveryConflicts.map { "\($0.source) → \($0.destination)" }.joined(separator: "\n")
+            if !recoveryConflicts.isEmpty {
+                serviceLog("粘贴冲突保留源和目标:\n\(conflictDetails)")
+            }
+            var failure = String(format: L("%d 项未能移动：%@"), failedPaths.count + recoveryConflicts.count, err)
+            if !conflictDetails.isEmpty { failure += "\n" + conflictDetails }
             RecentOperations.shared.record(OperationRecord(
                 kind: .paste, subject: subject,
-                failure: String(format: L("%d 项未能移动：%@"), failedPaths.count, err),
+                failure: failure,
                 results: pastedPaths, location: destDir))
         } else {
             serviceLog("pasteFiles succeeded: moved \(pastedPaths.count) items to \(destDir.path)")
@@ -231,10 +259,20 @@ extension FinderRightService {
     /// 只保留仍存在的源文件：已经移动成功的路径不再回到队列。
     static func recoverInflightCutQueue() {
         do {
-            let restored = try CutQueueStore().recover(existingOnly: true)
-            if !restored.isEmpty {
+            let recovery = try CutQueueStore().recoverWithConflicts(existingOnly: true)
+            if !recovery.restored.isEmpty {
                 CutQueueChangeNotifier.post()
-                NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(restored.count) 条")
+                NSLog("[FinderRightService] 已恢复中断粘贴的剪切队列: \(recovery.restored.count) 条")
+            }
+            if !recovery.conflicts.isEmpty {
+                let message = String(format: L("粘贴恢复发现 %d 项源和目标同时存在，请手动检查"), recovery.conflicts.count)
+                let details = recovery.conflicts.map { "\($0.source) → \($0.destination)" }.joined(separator: "\n")
+                NSLog("[FinderRightService] \(message)")
+                RecentOperations.shared.record(OperationRecord(
+                    kind: .paste, subject: L("恢复中断粘贴"), failure: message + "\n" + details))
+                DispatchQueue.main.async {
+                    ClipboardToast.show(message: message, style: .partial)
+                }
             }
         } catch {
             NSLog("[FinderRightService] 剪切队列恢复失败，保留恢复记录: \(error)")

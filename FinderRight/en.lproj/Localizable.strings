@@ -552,6 +552,8 @@
 "取消剪切失败：%@" = "Failed to cancel cut: %@";
 "剪切队列为空，请先剪切文件" = "Nothing has been cut. Cut files first.";
 "保存粘贴恢复记录失败：%@" = "Failed to save the paste recovery record: %@";
+"粘贴恢复发现 %d 项源和目标同时存在，请手动检查" = "Paste recovery found %d item(s) with both source and destination present. Please review them manually.";
+"恢复中断粘贴" = "Recover Interrupted Paste";
 "目标不是常用目录" = "The destination is not a favorite folder";
 "常用目录不存在" = "The favorite folder no longer exists";
 "云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。" = "The Services menu used in cloud folders is shown by macOS in the system language and is not affected by this setting.";

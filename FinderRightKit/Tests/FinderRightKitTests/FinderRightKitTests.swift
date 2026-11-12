@@ -455,6 +455,70 @@ struct FinderRightKitTestsRunner {
             try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
         }
 
+        runTest("SharedConfig 陈旧实例只合并自己修改的键") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-merge-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let stale = SharedConfig(fileURL: tempURL)
+            stale.preferredTerminal = "com.apple.Terminal"
+            let other = SharedConfig(fileURL: tempURL)
+
+            other.menuIconStyle = .tile
+            other.copyPathFormat = .tilde
+            stale.developerToolsEnabled = true
+
+            let reloaded = SharedConfig(fileURL: tempURL)
+            try assertTrue(reloaded.developerToolsEnabled)
+            try assertEqual(reloaded.menuIconStyle, .tile, "另一实例的图标风格不能被旧缓存覆盖")
+            try assertEqual(reloaded.copyPathFormat, .tilde, "另一实例的路径格式不能被旧缓存覆盖")
+            try assertEqual(reloaded.preferredTerminal, "com.apple.Terminal")
+        }
+
+        runTest("SharedConfig 两实例并发写不同键都保留") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-process-merge-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let first = SharedConfig(fileURL: tempURL)
+            let second = SharedConfig(fileURL: tempURL)
+            let queue = DispatchQueue(label: "com.finderright.test.config.processes", attributes: .concurrent)
+            let group = DispatchGroup()
+            for _ in 0..<30 {
+                group.enter()
+                queue.async {
+                    first.preferredTerminal = "com.apple.Terminal"
+                    first.developerToolsEnabled = true
+                    first.copyPathFormat = .tilde
+                    group.leave()
+                }
+                group.enter()
+                queue.async {
+                    second.menuIconStyle = .tile
+                    second.preferredEditor = "com.microsoft.VSCode"
+                    second.copyFileNameFormat = .withoutExtension
+                    group.leave()
+                }
+            }
+            try assertEqual(group.wait(timeout: .now() + 10), .success)
+
+            let reloaded = SharedConfig(fileURL: tempURL)
+            try assertEqual(reloaded.preferredTerminal, "com.apple.Terminal")
+            try assertTrue(reloaded.developerToolsEnabled)
+            try assertEqual(reloaded.copyPathFormat, .tilde)
+            try assertEqual(reloaded.menuIconStyle, .tile)
+            try assertEqual(reloaded.preferredEditor, "com.microsoft.VSCode")
+            try assertEqual(reloaded.copyFileNameFormat, .withoutExtension)
+        }
+
+        runTest("SharedConfig 损坏配置不会被后续写入清空") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-corrupt-\(UUID().uuidString).plist")
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let original = Data("not a property list".utf8)
+            try original.write(to: tempURL)
+            let config = SharedConfig(fileURL: tempURL)
+
+            config.preferredTerminal = "com.apple.Terminal"
+
+            try assertEqual(try Data(contentsOf: tempURL), original, "读不出原配置时必须中止写事务")
+        }
+
         runTest("MenuIconStyle 旧存储值迁移") {
             try assertEqual(MenuIconStyle(storedValue: "classic"), .tile)
             try assertEqual(MenuIconStyle(storedValue: "modern"), .modern)
@@ -781,6 +845,82 @@ struct FinderRightKitTestsRunner {
                 try assertTrue(FileManager.default.fileExists(atPath: broken.path), "坏记录保留供排查")
                 try assertEqual(try store.recover(existingOnly: false), ["/tmp/healthy"], "下次恢复仍不受坏记录阻塞")
             }
+        }
+
+        runTest("CutQueueStore 中断移动源和目标同时存在时报告冲突且不重复入队") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
+            let source = dir.appendingPathComponent("source.txt")
+            let destination = dir.appendingPathComponent("destination.txt")
+            try Data("source".utf8).write(to: source)
+            try Data("copied".utf8).write(to: destination)
+            try store.write([source.path])
+            let batch = try store.take()!
+            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
+
+            let result = try store.recoverWithConflicts()
+
+            try assertTrue(result.restored.isEmpty, "源不能再次入队后生成第二份副本")
+            try assertEqual(result.conflicts, [.init(source: source.path, destination: destination.path)])
+            try assertTrue(FileManager.default.fileExists(atPath: source.path))
+            try assertTrue(FileManager.default.fileExists(atPath: destination.path))
+        }
+
+        runTest("CutQueueStore 冲突源从已有待剪切队列剔除") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
+            let source = dir.appendingPathComponent("source.txt")
+            let destination = dir.appendingPathComponent("destination.txt")
+            let other = dir.appendingPathComponent("other.txt")
+            try Data("source".utf8).write(to: source)
+            try Data("copied".utf8).write(to: destination)
+            try Data("other".utf8).write(to: other)
+            try store.write([source.path])
+            let batch = try store.take()!
+            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
+            try store.write([source.path, other.path])
+
+            let result = try store.recoverWithConflicts()
+
+            try assertEqual(result.restored, [other.path], "冲突源不能因已在队列里而再次粘贴")
+            try assertEqual(store.read(), [other.path])
+            try assertEqual(result.conflicts, [.init(source: source.path, destination: destination.path)])
+        }
+
+        runTest("CutQueueStore 中断移动目标未产生时恢复源路径") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
+            let source = dir.appendingPathComponent("source.txt")
+            let destination = dir.appendingPathComponent("missing.txt")
+            try Data("source".utf8).write(to: source)
+            try store.write([source.path])
+            let batch = try store.take()!
+            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
+
+            let result = try store.recoverWithConflicts()
+            try assertEqual(result.restored, [source.path])
+            try assertTrue(result.conflicts.isEmpty)
+        }
+
+        runTest("CutQueueStore 已完成记录不恢复残留源路径") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
+            let source = dir.appendingPathComponent("source.txt")
+            let destination = dir.appendingPathComponent("destination.txt")
+            try Data("source".utf8).write(to: source)
+            try Data("copied".utf8).write(to: destination)
+            try store.write([source.path])
+            let batch = try store.take()!
+            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
+            try store.recordCompletion(batchID: batch.id, source: source.path)
+
+            let result = try store.recoverWithConflicts()
+            try assertTrue(result.restored.isEmpty)
+            try assertTrue(result.conflicts.isEmpty)
         }
 
         // 9. pluginkit 选举输出解析
@@ -1180,6 +1320,30 @@ struct FinderRightKitTestsRunner {
         }
 
         // 23. Services 调用方启发式校验
+        runTest("IPCPathPolicy 内容读取与统计 action 必须执行白名单") {
+            let restricted = ["copyFileContent", "copyFileHash", "diskUsage", "prefetchDiskUsage",
+                              "showDiskUsageDetail", "showLineCount", "copyProjectRelativePath", "copyDirectoryTree"]
+            for action in restricted {
+                try assertTrue(IPCPathPolicy.requiresWhitelist(action: action), action)
+            }
+            let exempt = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles",
+                          BadgeReclaimIPC.action, "showCutQueueDetail"]
+            for action in exempt {
+                try assertTrue(!IPCPathPolicy.requiresWhitelist(action: action), action)
+            }
+            try assertTrue(IPCPathPolicy.requiresWhitelist(action: "unknownFutureAction"), "新 action 默认不能获得豁免")
+        }
+
+        runTest("IPCPathPolicy directory 按读取源和写入目标区分") {
+            try assertEqual(IPCPathPolicy.role(action: "prefetchDiskUsage", key: "directory"), .source)
+            try assertEqual(IPCPathPolicy.role(action: "copyDirectoryTree", key: "directory"), .source)
+            try assertEqual(IPCPathPolicy.role(action: "runCustomCommand", key: "directory"), .source)
+            try assertEqual(IPCPathPolicy.role(action: "createFile", key: "directory"), .destination)
+            try assertEqual(IPCPathPolicy.role(action: "pasteFiles", key: "destination"), .destination)
+            try assertEqual(IPCPathPolicy.role(action: "copyFileHash", key: "items"), .source)
+            try assertNil(IPCPathPolicy.role(action: "copyFileHash", key: "algorithm"))
+        }
+
         runTest("ServiceInvocationPolicy 只信任访达在前台") {
             try assertTrue(ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: "com.apple.finder"))
             try assertTrue(!ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: nil), "无前台应用")
@@ -3873,6 +4037,69 @@ struct FinderRightKitTestsRunner {
             try assertEqual(outcome.undone, [file])
             try assertEqual(outcome.skipped, [UndoOutcome.Skip(name: "folder", reason: .modified)])
             try assertEqual(outcome.status, .partial)
+        }
+
+        runTest("UndoExecutor 编辑已有嵌套文件后拒绝撤销整个目录") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            defer { try? fm.removeItem(at: root) }
+            let folder = root.appendingPathComponent("folder")
+            let nested = folder.appendingPathComponent("nested")
+            try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+            let edited = nested.appendingPathComponent("existing.txt")
+            try Data("before".utf8).write(to: edited)
+            let record = UndoRecord(kind: .copy, name: "folder", items: [
+                .init(current: folder, original: nil, fingerprint: FileFingerprint.capture(folder)!)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+
+            try Data("after".utf8).write(to: edited)
+            var trashed = false
+            let outcome = UndoExecutor.run(record, trash: { _ in trashed = true })
+
+            try assertTrue(!trashed, "修改过的目录不能进入废纸篓")
+            try assertEqual(outcome.skipped.map(\.reason), [.modified])
+            try assertEqual(try String(contentsOf: edited, encoding: .utf8), "after")
+        }
+
+        runTest("UndoRecord 深层不可读时修订保留记录且只做浅检查") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let folder = root.appendingPathComponent("folder")
+            let nested = folder.appendingPathComponent("nested")
+            try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+            defer {
+                try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: nested.path)
+                try? fm.removeItem(at: root)
+            }
+            let record = UndoRecord(kind: .copy, name: "folder", items: [
+                .init(current: folder, original: nil, fingerprint: FileFingerprint.capture(folder)!)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+            try fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: nested.path)
+
+            try assertEqual(record.pruningRemovedItems(cutQueue: []), record,
+                            "修订只核对顶层身份，不能因子目录不可读而删除撤销记录")
+        }
+
+        runTest("UndoExecutor 深层不可读按已修改而非不存在处理") {
+            let fm = FileManager.default
+            let root = makeTempDirectory()
+            let folder = root.appendingPathComponent("folder")
+            let nested = folder.appendingPathComponent("nested")
+            try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+            defer {
+                try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: nested.path)
+                try? fm.removeItem(at: root)
+            }
+            let record = UndoRecord(kind: .copy, name: "folder", items: [
+                .init(current: folder, original: nil, fingerprint: FileFingerprint.capture(folder)!)],
+                cutQueueBefore: nil, finderSnapshot: nil)
+            try fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: nested.path)
+            var trashed = false
+
+            let outcome = UndoExecutor.run(record, trash: { _ in trashed = true })
+
+            try assertTrue(!trashed)
+            try assertEqual(outcome.skipped.map(\.reason), [.modified])
         }
 
         runTest("UndoExecutor 符号链接按链接本身移回") {
@@ -6767,6 +6994,58 @@ struct FinderRightKitTestsRunner {
             try assertTrue(dirResult != nil, "目录统计应成功")
             try assertEqual(dirResult?.totalFiles, 1, "应忽略 node_modules 下的文件")
             try assertEqual(dirResult?.languages.count, 1)
+        }
+
+        // MARK: - 日志脱敏与私有存储权限
+
+        runTest("日志脱敏：/Users/<名> 前缀压成 ~") {
+            let text = "moved 2 items to /Users/alice/Desktop/项目 from /Users/bob/x.txt"
+            try assertEqual(LogRedaction.redactPaths(text), "moved 2 items to ~/Desktop/项目 from ~/x.txt")
+        }
+
+        runTest("日志脱敏：外置卷路径含空格也整段隐藏") {
+            let text = "watching /Volumes/My Disk/私人 项目\nnext /Volumes/USB/x"
+            try assertEqual(LogRedaction.redactPaths(text), "watching <外部卷路径>\nnext <外部卷路径>")
+        }
+
+        runTest("日志脱敏：无路径文本原样返回") {
+            try assertEqual(LogRedaction.redactPaths("pasteFiles succeeded: moved 3 items"), "pasteFiles succeeded: moved 3 items")
+            try assertEqual(LogRedaction.redactPaths(""), "")
+            try assertEqual(LogRedaction.redactPaths("/Users/  alone"), "/Users/  alone")
+        }
+
+        runTest("私有目录：新建目录为 0700") {
+            let base = makeTempDirectory()
+            let target = base.appendingPathComponent("FinderRight/ipc", isDirectory: true)
+            try PrivateStorage.ensurePrivateDirectory(target)
+            let perms = try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? Int
+            try assertEqual(perms, 0o700)
+        }
+
+        runTest("私有目录：已存在的宽松目录被收紧，共享中间层不变") {
+            let base = makeTempDirectory()
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: base.path)
+            let target = base.appendingPathComponent("FinderRight", isDirectory: true)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target.path)
+            try PrivateStorage.ensurePrivateDirectory(target)
+            let targetPerms = try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? Int
+            let basePerms = try FileManager.default.attributesOfItem(atPath: base.path)[.posixPermissions] as? Int
+            try assertEqual(targetPerms, 0o700, "目标目录应收紧")
+            try assertEqual(basePerms, 0o755, "共享中间层不应被改动")
+        }
+
+        runTest("私有文件：0644 收紧为 0600，不存在的文件不创建") {
+            let base = makeTempDirectory()
+            let file = base.appendingPathComponent("settings.plist")
+            try Data("x".utf8).write(to: file)
+            try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+            PrivateStorage.restrictFile(file)
+            let perms = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+            try assertEqual(perms, 0o600)
+            let missing = base.appendingPathComponent("missing.plist")
+            PrivateStorage.restrictFile(missing)
+            try assertTrue(!FileManager.default.fileExists(atPath: missing.path), "不存在的文件不应被创建")
         }
 
         print("\n-----------------------------------------")

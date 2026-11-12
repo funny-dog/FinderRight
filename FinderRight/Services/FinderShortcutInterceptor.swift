@@ -281,8 +281,7 @@ final class FinderShortcutInterceptor {
 
     /// 取不到焦点时按「在文字输入里」处理：宁可放行，也不在重命名时误移文件
     private func focusIsTextInput(_ app: AXUIElement) -> Bool {
-        guard let focused = copyAttribute(app, kAXFocusedUIElementAttribute) else { return true }
-        let element = focused as! AXUIElement
+        guard let element = axElement(copyAttribute(app, kAXFocusedUIElementAttribute)) else { return true }
         return FinderKeyTakeover.isTextInput(
             role: copyAttribute(element, kAXRoleAttribute) as? String,
             subrole: copyAttribute(element, kAXSubroleAttribute) as? String)
@@ -471,9 +470,9 @@ final class FinderShortcutInterceptor {
     /// 无选中项时 FinderRight 的服务不出现，返回 nil。
     private func findFinderServiceItem(titles: Set<String>) -> AXUIElement? {
         guard let app = locked({ finderApp }),
-              let bar = copyAttribute(app, kAXMenuBarAttribute) else { return nil }
+              let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return nil }
         // 菜单栏第 2 项是「访达」菜单，其中只有「服务」带子菜单；标题本地化，按子菜单内容找
-        let tops = children(bar as! AXUIElement)
+        let tops = children(bar)
         guard tops.count > 1, let appMenu = children(tops[1]).first else { return nil }
         for item in children(appMenu) {
             guard let submenu = children(item).first else { continue }
@@ -487,9 +486,9 @@ final class FinderShortcutInterceptor {
     /// 点击访达「编辑」菜单里指定快捷键的项。不可用时返回 false（点不可用的项 AXPress 也报成功，但不生效）。
     private func pressFinderEditItem(_ item: (char: String, modifiers: Int)) -> Bool {
         guard let app = locked({ finderApp }),
-              let bar = copyAttribute(app, kAXMenuBarAttribute) else { return false }
+              let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return false }
         // 菜单栏顺序固定：苹果、访达、文件、编辑。标题本地化，不能按名字找
-        let tops = children(bar as! AXUIElement)
+        let tops = children(bar)
         guard tops.count > 3, let menu = children(tops[3]).first else { return false }
         let target = children(menu).first {
             copyAttribute($0, kAXMenuItemCmdCharAttribute) as? String == item.char
@@ -502,6 +501,13 @@ final class FinderShortcutInterceptor {
     private func copyAttribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
         var value: AnyObject?
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+    }
+
+    // CF 类型的 as? 不做运行时类型检查（编译器视为恒成功），必须按 TypeID 判定
+    private func axElement(_ value: AnyObject?) -> AXUIElement? {
+        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let element = value as! AXUIElement
+        return element
     }
 
     private func children(_ element: AXUIElement) -> [AXUIElement] {

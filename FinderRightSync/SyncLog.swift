@@ -24,7 +24,7 @@ func logToFile(_ message: String) {
         let fm = FileManager.default
         // 与 IPC 共用已授权目录，避免容器 Documents 日志被 TCC 阻止读取。
         let logDir = IPCBridge.rootDirectory
-        try? fm.createDirectory(at: logDir, withIntermediateDirectories: true)
+        try? PrivateStorage.ensurePrivateDirectory(logDir)
         let logFile = logDir.appendingPathComponent("extension-debug.log")
         let oldLogFile = logDir.appendingPathComponent("extension-debug.log.1")
         let maxBytes: UInt64 = 1024 * 1024 // 1MB
@@ -35,7 +35,8 @@ func logToFile(_ message: String) {
             try? fm.moveItem(at: logFile, to: oldLogFile)
         }
 
-        let line = "[\(timestamp)] \(message)\n"
+        // 文件日志不像统一日志那样自动脱敏，落盘前自行压掉用户路径
+        let line = "[\(timestamp)] \(LogRedaction.redactPaths(message))\n"
         guard let data = line.data(using: .utf8) else { return }
         if fm.fileExists(atPath: logFile.path) {
             if let h = try? FileHandle(forWritingTo: logFile) {
@@ -44,5 +45,6 @@ func logToFile(_ message: String) {
         } else {
             try? data.write(to: logFile)
         }
+        PrivateStorage.restrictFile(logFile)
     }
 }

@@ -21,9 +21,9 @@ enum FinderUndoMenu {
     }
 
     static func snapshot(app: AXUIElement) -> FinderUndoSnapshot? {
-        guard let bar = copyAttribute(app, kAXMenuBarAttribute) else { return nil }
+        guard let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return nil }
         // 菜单栏顺序固定：苹果、访达、文件、编辑。标题本地化，按快捷键找撤销项（⌘Z，修饰键 0 = 仅 ⌘）
-        let tops = children(bar as! AXUIElement)
+        let tops = children(bar)
         guard tops.count > 3, let menu = children(tops[3]).first else { return nil }
         let item = children(menu).first {
             copyAttribute($0, kAXMenuItemCmdCharAttribute) as? String == "Z"
@@ -37,6 +37,13 @@ enum FinderUndoMenu {
     private static func copyAttribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
         var value: AnyObject?
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+    }
+
+    // CF 类型的 as? 不做运行时类型检查（编译器视为恒成功），必须按 TypeID 判定
+    private static func axElement(_ value: AnyObject?) -> AXUIElement? {
+        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let element = value as! AXUIElement
+        return element
     }
 
     private static func children(_ element: AXUIElement) -> [AXUIElement] {

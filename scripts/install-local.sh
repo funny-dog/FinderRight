@@ -73,11 +73,21 @@ if [ "$registered" -ne 1 ]; then
   exit 1
 fi
 
+# 覆盖安装后的启动窗口内，PluginKit 可能竞态唤起新旧两份宿主进程（登记仍只有一份），
+# Finder 会向两份都发事件，右键菜单出现两套。检测到多份时重启 Finder，
+# 让其只按当前登记重新连接（与 App 更新后 FinderRestarter 的做法一致）。
 running_hosts="$( (pgrep -f "$EXTENSION_EXECUTABLE" 2>/dev/null || true) | wc -l | tr -d ' ' )"
 echo "FinderRightSync 运行进程数：$running_hosts"
 if [ "$running_hosts" -gt 1 ]; then
-  echo "错误：$EXTENSION_ID 同时运行了 $running_hosts 份，右键菜单会重复显示。" >&2
-  exit 1
+  echo "检测到多份扩展进程，重启 Finder 收敛为单份..."
+  killall Finder 2>/dev/null || true
+  sleep 3
+  running_hosts="$( (pgrep -f "$EXTENSION_EXECUTABLE" 2>/dev/null || true) | wc -l | tr -d ' ' )"
+  echo "FinderRightSync 运行进程数：$running_hosts"
+  if [ "$running_hosts" -gt 1 ]; then
+    echo "错误：重启 Finder 后仍有 $running_hosts 份扩展进程，右键菜单可能重复显示，请手动检查。" >&2
+    exit 1
+  fi
 fi
 
 echo ""

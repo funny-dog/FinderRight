@@ -11,32 +11,59 @@ public struct FileFingerprint: Equatable {
     public let modificationDate: Date?
     /// 只对普通文件有意义；文件夹为 nil
     public let size: UInt64?
+    /// 目录的直接子项，键为文件名；每项递归包含自己的子项。非目录或手工构造的浅指纹为 nil。
+    public let descendants: [String: FileFingerprint]?
 
-    public init(fileNumber: UInt64, device: Int, isDirectory: Bool, modificationDate: Date?, size: UInt64?) {
+    public init(fileNumber: UInt64, device: Int, isDirectory: Bool, modificationDate: Date?, size: UInt64?,
+                descendants: [String: FileFingerprint]? = nil) {
         self.fileNumber = fileNumber
         self.device = device
         self.isDirectory = isDirectory
         self.modificationDate = modificationDate
         self.size = size
+        self.descendants = descendants
     }
 
-    /// 不存在或读不到属性时返回 nil
+    /// 不存在、读不到属性或目录任一层无法完整读取时返回 nil
     public static func capture(_ url: URL) -> FileFingerprint? {
+        capture(url, recursive: true)
+    }
+
+    /// 只读取项目本身，供存在性修订使用；真正执行撤销仍使用完整递归指纹。
+    public static func captureIdentity(_ url: URL) -> FileFingerprint? {
+        capture(url, recursive: false)
+    }
+
+    private static func capture(_ url: URL, recursive: Bool) -> FileFingerprint? {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
               let number = (attrs[.systemFileNumber] as? NSNumber)?.uint64Value,
               let device = (attrs[.systemNumber] as? NSNumber)?.intValue else { return nil }
         let isDirectory = (attrs[.type] as? FileAttributeType) == .typeDirectory
+        let descendants = isDirectory && recursive ? captureDescendants(of: url) : nil
+        if isDirectory && recursive && descendants == nil { return nil }
         return FileFingerprint(
             fileNumber: number, device: device, isDirectory: isDirectory,
             modificationDate: attrs[.modificationDate] as? Date,
-            size: isDirectory ? nil : (attrs[.size] as? NSNumber)?.uint64Value)
+            size: isDirectory ? nil : (attrs[.size] as? NSNumber)?.uint64Value,
+            descendants: descendants)
+    }
+
+    private static func captureDescendants(of url: URL) -> [String: FileFingerprint]? {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return nil }
+        var result: [String: FileFingerprint] = [:]
+        for name in names {
+            guard let fingerprint = capture(url.appendingPathComponent(name)) else { return nil }
+            result[name] = fingerprint
+        }
+        return result
     }
 
     /// 编号、设备、类型、修改时间一致才算同一份未改动的项目；普通文件另比大小。
-    /// 文件夹只看顶层修改时间（增删直接子项会改变它），不深查内部：撤销只会把它移走或进废纸篓，可以恢复。
+    /// 目录递归比较所有子项；任一层读不到时 capture 返回 nil，撤销会跳过而不是移动整棵目录。
     public func matches(_ other: FileFingerprint) -> Bool {
         fileNumber == other.fileNumber && device == other.device && isDirectory == other.isDirectory
             && modificationDate == other.modificationDate && size == other.size
+            && descendants == other.descendants
     }
 
     /// 只比编号与设备：是不是同一个项目，不管内容改没改。
@@ -113,9 +140,9 @@ public struct UndoRecord: Equatable {
     ///
     /// - cutQueue: 当前剪切队列，须已剔除不存在的路径；只用于剪切记录。
     ///   剪切新增的项都已不在队列里时，撤销剪切不会再改变什么，记录作废
-    /// - locate: 读取路径上项目的指纹（主 App 传 `FileFingerprint.capture`）
+    /// - locate: 读取路径上项目的浅身份指纹（默认 `FileFingerprint.captureIdentity`）
     public func pruningRemovedItems(cutQueue: [String],
-                                    locate: (URL) -> FileFingerprint? = FileFingerprint.capture) -> UndoRecord? {
+                                    locate: (URL) -> FileFingerprint? = FileFingerprint.captureIdentity) -> UndoRecord? {
         if kind == .cut {
             let before = cutQueueBefore ?? []
             let added = cutQueue.filter { !before.contains($0) }

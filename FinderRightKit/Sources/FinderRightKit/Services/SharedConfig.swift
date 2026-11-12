@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Darwin
 
 // MARK: - 文件模板
 
@@ -31,7 +32,7 @@ public final class SharedConfig {
     /// 会被重定向到沙箱容器内的私有目录，从而读不到主 App（非沙箱）写入的配置。
     public static let sharedFileURL: URL = {
         let dir = IPCBridge.rootDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? PrivateStorage.ensurePrivateDirectory(dir)
         return dir.appendingPathComponent("settings.plist")
     }()
 
@@ -42,6 +43,8 @@ public final class SharedConfig {
     let configFileURL: URL
 
     var store: [String: Any] = [:]
+    /// 最近一次从磁盘读取或成功写入的完整快照，用于识别本实例真正改过的键。
+    private var baselineStore: [String: Any] = [:]
     private var lastLoadedMtime: Date?
 
     enum Keys {
@@ -100,46 +103,115 @@ public final class SharedConfig {
             guard let data = try? Data(contentsOf: fileURL),
                   let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
                 store = [:]
+                baselineStore = [:]
                 lastLoadedMtime = nil
                 return
             }
             store = dict
+            baselineStore = dict
             lastLoadedMtime = mtime
             return
         }
 
         store = [:]
+        baselineStore = [:]
         lastLoadedMtime = nil
     }
 
+    /// 在跨进程锁内重新读盘，只应用本实例相对基线修改或删除的键。
     func save() {
         lock.lock()
         defer { lock.unlock() }
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: store, format: .xml, options: 0) else { return }
-        try? data.write(to: configFileURL, options: .atomic)
+        withDiskLock {
+            var merged = try readDiskStore()
+            let keys = Set(baselineStore.keys).union(store.keys)
+            for key in keys where !Self.valuesEqual(baselineStore[key], store[key]) {
+                if let value = store[key] {
+                    merged[key] = value
+                } else {
+                    merged.removeValue(forKey: key)
+                }
+            }
+            try writeStore(merged)
+        }
+    }
+
+    /// 只合并单个键写回磁盘，供窗口位置这类「跨进程频繁写入」使用。
+    func writeKeyMergingOnDisk(_ key: String, value: Any) {
+        lock.lock()
+        defer { lock.unlock() }
+        withDiskLock {
+            var dict = try readDiskStore()
+            dict[key] = value
+            try writeStore(dict)
+        }
+    }
+
+    private func readDiskStore() throws -> [String: Any] {
+        do {
+            let data = try Data(contentsOf: configFileURL)
+            let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+            guard let dict = plist as? [String: Any] else { throw CocoaError(.fileReadCorruptFile) }
+            return dict
+        } catch {
+            if Self.isMissingFile(error) { return [:] }
+            throw error
+        }
+    }
+
+    private static func isMissingFile(_ error: Error) -> Bool {
+        let error = error as NSError
+        return (error.domain == NSCocoaErrorDomain
+                && (error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError))
+            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
+    }
+
+    /// 调用方必须已持有进程内锁与磁盘锁。
+    private func writeStore(_ dict: [String: Any]) throws {
+        let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
+        try data.write(to: configFileURL, options: .atomic)
+        PrivateStorage.restrictFile(configFileURL)
+        store = dict
+        baselineStore = dict
         if let attrs = try? FileManager.default.attributesOfItem(atPath: configFileURL.path),
            let mtime = attrs[.modificationDate] as? Date {
             lastLoadedMtime = mtime
         }
     }
 
-    /// 只合并单个键写回磁盘，供窗口位置这类「跨进程频繁写入」使用。
-    ///
-    /// 不走 `store` + `save()`：主 App 的窗口回调持有的是启动时的缓存，
-    /// 整份写回会覆盖其他进程刚写入的快捷键、模板等配置。这里以磁盘为准做读-改-写。
-    func writeKeyMergingOnDisk(_ key: String, value: Any) {
-        lock.lock()
-        defer { lock.unlock() }
-        var dict = (try? Data(contentsOf: configFileURL))
-            .flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] } ?? [:]
-        dict[key] = value
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) else { return }
-        try? data.write(to: configFileURL, options: .atomic)
-        // 本地缓存同步成落盘结果，避免后续读取到过期值
-        store = dict
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: configFileURL.path),
-           let mtime = attrs[.modificationDate] as? Date {
-            lastLoadedMtime = mtime
+    private static func valuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): return true
+        case (let lhs?, let rhs?):
+            let left = try? PropertyListSerialization.data(fromPropertyList: ["value": lhs], format: .binary, options: 0)
+            let right = try? PropertyListSerialization.data(fromPropertyList: ["value": rhs], format: .binary, options: 0)
+            return left != nil && left == right
+        default: return false
+        }
+    }
+
+    /// NSRecursiveLock 只保护单个实例；flock 保护不同 App / 扩展进程间的读-改-写事务。
+    private func withDiskLock(_ body: () throws -> Void) {
+        let directory = configFileURL.deletingLastPathComponent()
+        try? PrivateStorage.ensurePrivateDirectory(directory)
+        let lockURL = directory.appendingPathComponent("settings.lock")
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else {
+            NSLog("[SharedConfig] 无法打开配置锁，errno=%d；保留内存修改", errno)
+            return
+        }
+        defer { close(fd) }
+        PrivateStorage.restrictFile(lockURL)
+        guard flock(fd, LOCK_EX) == 0 else {
+            NSLog("[SharedConfig] 无法锁定配置，errno=%d；保留内存修改", errno)
+            return
+        }
+        defer { flock(fd, LOCK_UN) }
+        do {
+            try body()
+        } catch {
+            let error = error as NSError
+            NSLog("[SharedConfig] 配置写事务失败（%@:%ld）；保留内存修改", error.domain, error.code)
         }
     }
 
@@ -157,8 +229,9 @@ public final class SharedConfig {
     public func resetToDefaults() {
         lock.lock()
         defer { lock.unlock() }
-        store = [:]
-        save()
+        withDiskLock {
+            try writeStore([:])
+        }
     }
 }
 

@@ -97,7 +97,7 @@ public struct BadgeReclaimRestoreStore {
 
     public func save(_ bundleIds: [String]) throws {
         let data = try JSONEncoder().encode(Payload(bundleIds: bundleIds, createdAt: Date()))
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try PrivateStorage.ensurePrivateDirectory(directory)
         try data.write(to: fileURL, options: .atomic)
     }
 

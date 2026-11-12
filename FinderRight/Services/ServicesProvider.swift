@@ -102,9 +102,18 @@ final class ServicesProvider: NSObject {
     /// 服务调用诊断日志（统一日志里 NSLog 内容被系统脱敏，排查快捷键是否触发服务只能看文件）。
     /// 只记服务名、项数、前台 App 与结果，不记路径。
     static func trace(_ message: String) {
-        let line = "[\(Self.traceDateFormatter.string(from: Date()))] \(message)\n"
+        let line = "[\(Self.traceDateFormatter.string(from: Date()))] \(LogRedaction.redactPaths(message))\n"
         traceQueue.async {
-            let url = IPCBridge.rootDirectory.appendingPathComponent("service-debug.log")
+            let dir = IPCBridge.rootDirectory
+            try? PrivateStorage.ensurePrivateDirectory(dir)
+            let url = dir.appendingPathComponent("service-debug.log")
+            let oldURL = dir.appendingPathComponent("service-debug.log.1")
+            let maxBytes: UInt64 = 1024 * 1024 // 1MB，与扩展日志一致
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? UInt64, size >= maxBytes {
+                try? FileManager.default.removeItem(at: oldURL)
+                try? FileManager.default.moveItem(at: url, to: oldURL)
+            }
             if let handle = try? FileHandle(forWritingTo: url) {
                 defer { try? handle.close() }
                 _ = try? handle.seekToEnd()
@@ -112,6 +121,7 @@ final class ServicesProvider: NSObject {
             } else {
                 try? Data(line.utf8).write(to: url)
             }
+            PrivateStorage.restrictFile(url)
         }
     }
     private static let traceQueue = DispatchQueue(label: "com.finderright.app.services.trace")
@@ -190,12 +200,6 @@ final class ServicesProvider: NSObject {
     @objc func copyFileContent(_ pboard: NSPasteboard,
                                userData: String?,
                                error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        // 以「完全磁盘访问」身份读文件内容写入剪贴板：任何 App 都能 NSPerformService 传入任意路径，
-        // 必须只受理访达前台调用，否则可借本 App 读出受保护文件
-        guard isInvokedFromFinder("copyFileContent") else {
-            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
-            return
-        }
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileContent) else {
             showAlert(NSLocalizedString("复制文件内容功能已关闭，请在设置中启用", comment: "service"))
@@ -206,20 +210,19 @@ final class ServicesProvider: NSObject {
             showAlert(NSLocalizedString("仅支持复制单个文件的内容", comment: "service"))
             return
         }
-        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileContent", payload: [
-            "path": .string(url.path)
-        ]), feature: MenuFeatureCatalog.copyFileContent)
-        returnFocusToFinderIfNeeded()
+        DispatchQueue.main.async { [self] in
+            guard confirmContentRead(title: "复制文件内容", items: items) else { return }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileContent", payload: [
+                "path": .string(url.path)
+            ]), feature: MenuFeatureCatalog.copyFileContent)
+            returnFocusToFinderIfNeeded()
+        }
     }
 
     /// 服务菜单不支持子菜单，保留最常用的 SHA-256；其余算法仍从 FinderSync 菜单选择。
     @objc func copyFileHash(_ pboard: NSPasteboard,
                             userData: String?,
                             error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("copyFileHash") else {
-            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
-            return
-        }
         SharedConfig.shared.reload()
         guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileHash) else {
             showAlert(NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service"))
@@ -227,43 +230,44 @@ final class ServicesProvider: NSObject {
         }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileHash", payload: [
-            "items": .stringArray(items.map(\.path)), "algorithm": .string(FileHasher.Algorithm.sha256.rawValue)
-        ]), feature: MenuFeatureCatalog.copyFileHash)
-        returnFocusToFinderIfNeeded()
+        DispatchQueue.main.async { [self] in
+            guard confirmContentRead(title: "复制哈希", items: items) else { return }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileHash", payload: [
+                "items": .stringArray(items.map(\.path)), "algorithm": .string(FileHasher.Algorithm.sha256.rawValue)
+            ]), feature: MenuFeatureCatalog.copyFileHash)
+            returnFocusToFinderIfNeeded()
+        }
     }
 
     @objc func copyProjectRelativePath(_ pboard: NSPasteboard,
                                        userData: String?,
                                        error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("copyProjectRelativePath") else {
-            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
-            return
-        }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyProjectRelativePath", payload: [
-            "items": .stringArray(items.map(\.path))
-        ]), feature: MenuFeatureCatalog.copyProjectRelativePath)
-        returnFocusToFinderIfNeeded()
+        DispatchQueue.main.async { [self] in
+            guard confirmContentRead(title: "复制项目相对路径", items: items) else { return }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "copyProjectRelativePath", payload: [
+                "items": .stringArray(items.map(\.path))
+            ]), feature: MenuFeatureCatalog.copyProjectRelativePath)
+            returnFocusToFinderIfNeeded()
+        }
     }
 
     @objc func copyDirectoryTree(_ pboard: NSPasteboard,
                                 userData: String?,
                                 error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("copyDirectoryTree") else {
-            error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
-            return
-        }
         let items = fileURLs(from: pboard)
         guard items.count == 1, let directory = items.first else {
             showAlert(NSLocalizedString("请选择一个文件夹", comment: "service"))
             return
         }
-        performFileAction(IPCRequest(id: UUID().uuidString, action: "copyDirectoryTree", payload: [
-            "directory": .string(directory.path)
-        ]), feature: MenuFeatureCatalog.copyDirectoryTree)
-        returnFocusToFinderIfNeeded()
+        DispatchQueue.main.async { [self] in
+            guard confirmContentRead(title: "复制目录树", items: items) else { return }
+            performFileAction(IPCRequest(id: UUID().uuidString, action: "copyDirectoryTree", payload: [
+                "directory": .string(directory.path)
+            ]), feature: MenuFeatureCatalog.copyDirectoryTree)
+            returnFocusToFinderIfNeeded()
+        }
     }
 
     @objc func createSymlink(_ pboard: NSPasteboard,
@@ -388,6 +392,18 @@ final class ServicesProvider: NSObject {
             return false
         }
         return true
+    }
+
+    /// Services 无法鉴别真实调用方；读取内容或目录信息前必须让用户看到路径并明确确认。
+    private func confirmContentRead(title: String, items: [URL]) -> Bool {
+        guard !isShowingFileActionPrompt else { return false }
+        isShowingFileActionPrompt = true
+        defer { isShowingFileActionPrompt = false }
+        let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
+            + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
+        return FRDialog(title: NSLocalizedString(title, comment: "service"), message: details,
+                        symbol: "doc.plaintext", buttons: [NSLocalizedString("复制", comment: "service"),
+                                                          NSLocalizedString("取消", comment: "service")]).runModal() == 0
     }
 
     private func chooseFileAction(title: String, symbol: String, details: String, choices: [String], button: String) -> Int? {

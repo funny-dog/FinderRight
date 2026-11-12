@@ -78,20 +78,13 @@ final class FinderRightService {
 
     /// 路由 IPCRequest 到具体的 handler
     func handle(_ req: IPCRequest) -> IPCResponse {
-        // 1. 路径校验：
-        //    - 写入/移动类 action 必须过安全白名单（可写范围仅 真实 home、/Volumes、tmp）
-        //    - 只读类 action 不修改任何文件，只校验路径存在性即可。扩展的 FinderSync 只注册
-        //      home 与已挂载卷，本身到不了 /Applications 这类系统目录；但 macOS Services
-        //      路径（云盘场景，见 ServicesProvider）没有目录限制，可以在任意位置被调用，
-        //      因此只读豁免依然必要，否则系统目录里点「打开终端 / 打开编辑器」会被静默拦截。
-        let readOnlyActions: Set<String> = ["openTerminal", "openWithApp", "ping", "toggleHiddenFiles", BadgeReclaimIPC.action, "copyFileContent", "copyFileHash", "diskUsage", "prefetchDiskUsage", "showDiskUsageDetail", "showCutQueueDetail", "showLineCount"]
-        let needsWhitelist = !readOnlyActions.contains(req.action)
+        // 1. 路径校验：只有打开终端 / 编辑器等必须访问系统位置的 action 豁免白名单；
+        // 内容、哈希、目录树与统计信息仍按源路径限制，directory 的角色由具体 action 决定。
+        let needsWhitelist = IPCPathPolicy.requiresWhitelist(action: req.action)
 
-        // directory / destination 是写入目标；archive / items / paths / path 是会被读取或移动的源
-        let pathKeys: [(key: String, role: PathAccessPolicy.Role)] = [
-            ("directory", .destination), ("destination", .destination), ("archive", .source), ("testPath", .source), ("path", .source)
-        ]
-        for (key, role) in pathKeys {
+        let pathKeys = ["directory", "destination", "archive", "testPath", "path"]
+        for key in pathKeys {
+            guard let role = IPCPathPolicy.role(action: req.action, key: key) else { continue }
             if let path = req.payload[key]?.stringValue {
                 if needsWhitelist {
                     guard isPathAllowed(path, role: role) else {
@@ -111,8 +104,9 @@ final class FinderRightService {
         // 图片转换/缩放与哈希复制支持批量容错与逐项过滤，不因单项失效而拒绝整批
         let skipsBatchPrecheck = (req.action == "convertImage" || req.action == "scaleImage" || req.action == "copyFileHash")
         if !skipsBatchPrecheck {
-            let arrayKeys: [(key: String, role: PathAccessPolicy.Role)] = [("items", .source), ("paths", .source)]
-            for (key, role) in arrayKeys {
+            let arrayKeys = ["items", "paths"]
+            for key in arrayKeys {
+                guard let role = IPCPathPolicy.role(action: req.action, key: key) else { continue }
                 if let paths = req.payload[key]?.stringArrayValue {
                     for path in paths {
                         if needsWhitelist {
@@ -350,7 +344,7 @@ final class FinderRightService {
     )
 
     func serviceLog(_ message: String) {
-        NSLog("[FinderRightService] \(message)")
+        NSLog("[FinderRightService] %@", LogRedaction.redactPaths(message))
     }
 
     /// 剪切队列存储（扩展端读取同一份文件，见 CutQueueStore）

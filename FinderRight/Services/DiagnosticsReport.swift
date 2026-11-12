@@ -99,10 +99,7 @@ enum DiagnosticsReport {
 
     /// 失败原因可能带子进程 stderr 的多行输出，截断后再放进剪贴板
     private static func shorten(_ text: String, limit: Int = 240) -> String {
-        let pattern = try? NSRegularExpression(pattern: "/Users/[^/\\s]+", options: [])
-        let range = NSRange(text.startIndex..., in: text)
-        let stripped = pattern?.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "~")
-            ?? text
+        let stripped = LogRedaction.redactPaths(text)
         let flattened = stripped
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }

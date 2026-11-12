@@ -19,6 +19,35 @@ public struct CutQueueStore {
     public var queueURL: URL { directory.appendingPathComponent(Self.queueFileName) }
     public var inflightURL: URL { directory.appendingPathComponent(Self.inflightFileName) }
 
+    public struct RecoveryConflict: Equatable {
+        public let source: String
+        public let destination: String
+
+        public init(source: String, destination: String) {
+            self.source = source
+            self.destination = destination
+        }
+    }
+
+    public struct RecoveryResult {
+        public let restored: [String]
+        public let conflicts: [RecoveryConflict]
+    }
+
+    private enum InflightPhase: String, Codable {
+        case pending, moving, completed
+    }
+
+    private struct InflightItem: Codable {
+        let source: String
+        var destination: String?
+        var phase: InflightPhase
+    }
+
+    private struct InflightBatch: Codable {
+        var items: [InflightItem]
+    }
+
     private func inflightURL(for id: UUID) -> URL {
         directory.appendingPathComponent(Self.batchPrefix + id.uuidString + ".json")
     }
@@ -41,7 +70,7 @@ public struct CutQueueStore {
             return
         }
         let data = try JSONEncoder().encode(paths)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try PrivateStorage.ensurePrivateDirectory(directory)
         try data.write(to: queueURL, options: .atomic)
     }
 
@@ -104,6 +133,27 @@ public struct CutQueueStore {
         return (id, paths)
     }
 
+    /// 移动前记录预定目标。旧版记录仍是路径数组，第一次更新时升级为逐项批次。
+    /// 文件已因取消剪切而删除时不重建批次，保持「取消不能撤回已取走粘贴」的现有语义。
+    public func recordDestination(batchID: UUID, source: String, destination: String) throws {
+        let url = inflightURL(for: batchID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var batch = try readBatch(from: url)
+        guard let index = batch.items.firstIndex(where: { $0.source == source }) else { return }
+        batch.items[index].destination = destination
+        batch.items[index].phase = .moving
+        try writeBatch(batch, to: url)
+    }
+
+    public func recordCompletion(batchID: UUID, source: String) throws {
+        let url = inflightURL(for: batchID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var batch = try readBatch(from: url)
+        guard let index = batch.items.firstIndex(where: { $0.source == source }) else { return }
+        batch.items[index].phase = .completed
+        try writeBatch(batch, to: url)
+    }
+
     /// 先归还失败路径，再清理本批记录。已被取消的批次不能重新恢复剪切状态。
     public func finish(_ id: UUID, retrying paths: [String] = []) throws {
         let url = inflightURL(for: id)
@@ -115,32 +165,67 @@ public struct CutQueueStore {
     /// 合并新旧恢复记录；先成功写回队列，再删除记录。已经移动的源路径不再恢复。
     @discardableResult
     public func recover(existingOnly: Bool = true) throws -> [String] {
+        try recoverWithConflicts(existingOnly: existingOnly).restored
+    }
+
+    /// 源与预定目标同时存在时保留双方并报告冲突，不再把源入队后复制成新名字。
+    public func recoverWithConflicts(existingOnly: Bool = true) throws -> RecoveryResult {
         let files = try inflightFiles()
-        guard !files.isEmpty else { return read() }
+        guard !files.isEmpty else { return RecoveryResult(restored: read(), conflicts: []) }
+        let fileManager = FileManager.default
         var merged = read()
+        var conflicts: [RecoveryConflict] = []
         var recoveredFiles: [URL] = []
         for url in files {
-            let paths: [String]
+            let batch: InflightBatch
             do {
-                paths = try JSONDecoder().decode([String].self, from: Data(contentsOf: url))
+                batch = try readBatch(from: url)
             } catch {
                 NSLog("[CutQueueStore] 无法读取恢复记录，保留文件 %@: %@", url.lastPathComponent, error.localizedDescription)
                 continue
             }
             recoveredFiles.append(url)
-            for p in paths where !merged.contains(p) {
-                merged.append(p)
+            for item in batch.items where item.phase != .completed {
+                let sourceExists = fileManager.fileExists(atPath: item.source)
+                if existingOnly && !sourceExists { continue }
+                if sourceExists, let destination = item.destination,
+                   fileManager.fileExists(atPath: destination) {
+                    merged.removeAll { $0 == item.source }
+                    conflicts.append(RecoveryConflict(source: item.source, destination: destination))
+                    continue
+                }
+                if !merged.contains(item.source) {
+                    merged.append(item.source)
+                }
             }
         }
-        guard !recoveredFiles.isEmpty else { return read() }
+        guard !recoveredFiles.isEmpty else {
+            return RecoveryResult(restored: read(), conflicts: [])
+        }
         if existingOnly {
-            merged = merged.filter { FileManager.default.fileExists(atPath: $0) }
+            merged = merged.filter { fileManager.fileExists(atPath: $0) }
         }
         try write(merged)
         for url in recoveredFiles {
             try FileManager.default.removeItem(at: url)
         }
-        return merged
+        return RecoveryResult(restored: merged, conflicts: conflicts)
+    }
+
+    private func readBatch(from url: URL) throws -> InflightBatch {
+        let data = try Data(contentsOf: url)
+        if let batch = try? JSONDecoder().decode(InflightBatch.self, from: data) {
+            return batch
+        }
+        let paths = try JSONDecoder().decode([String].self, from: data)
+        return InflightBatch(items: paths.map { InflightItem(source: $0, destination: nil, phase: .pending) })
+    }
+
+    private func writeBatch(_ batch: InflightBatch, to url: URL) throws {
+        let data = try JSONEncoder().encode(batch)
+        try PrivateStorage.ensurePrivateDirectory(directory)
+        try data.write(to: url, options: .atomic)
+        PrivateStorage.restrictFile(url)
     }
 
     private func inflightFiles() throws -> [URL] {

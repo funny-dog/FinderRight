@@ -73,7 +73,7 @@ public struct ScratchDirectoryRegistry {
             try? FileManager.default.removeItem(at: registryURL)
             return
         }
-        try FileManager.default.createDirectory(at: registryDirectory, withIntermediateDirectories: true)
+        try PrivateStorage.ensurePrivateDirectory(registryDirectory)
         try JSONSerialization.data(withJSONObject: paths).write(to: registryURL, options: .atomic)
     }
 }

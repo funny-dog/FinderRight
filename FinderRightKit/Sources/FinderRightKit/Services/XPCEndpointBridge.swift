@@ -59,9 +59,10 @@ public enum IPCBridge {
         pendingDir.appendingPathComponent("\(id).resp.json")
     }
 
-    /// 确保 pendingDir 存在
+    /// 确保 pendingDir 存在（请求文件含用户路径，目录收紧为 0700）
     public static func ensureDirectory() throws {
-        try FileManager.default.createDirectory(at: pendingDir, withIntermediateDirectories: true)
+        try PrivateStorage.ensurePrivateDirectory(rootDirectory)
+        try PrivateStorage.ensurePrivateDirectory(pendingDir)
     }
 }
 

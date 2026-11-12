@@ -54,8 +54,12 @@ public enum UndoExecutor {
         var outcome = UndoOutcome()
         for item in record.items {
             let name = item.current.lastPathComponent
-            guard let now = FileFingerprint.capture(item.current) else {
+            guard FileFingerprint.captureIdentity(item.current) != nil else {
                 outcome.skipped.append(.init(name: name, reason: .missing))
+                continue
+            }
+            guard let now = FileFingerprint.capture(item.current) else {
+                outcome.skipped.append(.init(name: name, reason: .modified))
                 continue
             }
             guard now.matches(item.fingerprint) else {
