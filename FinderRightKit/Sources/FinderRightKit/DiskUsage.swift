@@ -15,9 +15,6 @@ public enum DiskUsage {
     /// 扫描并发度。实测 8 / 16 路反而更慢（APFS 元数据锁与 IO 争用），4 路最稳。
     public static let defaultConcurrency = 4
 
-    /// 直属子项扫描默认超时预算（2 秒），避免大目录或无响应目录卡住界面
-    public static let defaultDirectChildrenTimeout: TimeInterval = 2.0
-
     // MARK: - 对外入口
 
     /// 计算文件或目录的磁盘占用（字节）。读不到、不是常规文件/目录、或统计过程中
@@ -92,7 +89,8 @@ public enum DiskUsage {
 
     /// 扫描目录的直接子项占用并降序排列。
     /// - 符号链接不跟随、不进入；
-    /// - 子项计算失败、超时或取消时立即中止并返回 nil（避免将错误或未完成项误计为 0 字节）；
+    /// - 用户取消时立即中止并返回 nil；
+    /// - 个别子目录若无权限读取则安全跳过，不让单项权限阻断整体统计；
     /// - 仅统计真实目录与常规文件，过滤套接字、管道等特殊文件。
     public static func inspectDirectChildren(
         at directoryURL: URL,
@@ -108,10 +106,9 @@ public enum DiskUsage {
             return nil
         }
 
-        let effectiveDeadline = deadline ?? Date().addingTimeInterval(defaultDirectChildrenTimeout)
         func shouldStop() -> Bool {
             if isCancelled() { return true }
-            if Date() >= effectiveDeadline { return true }
+            if let deadline, Date() >= deadline { return true }
             return false
         }
 
@@ -126,15 +123,17 @@ public enum DiskUsage {
         var rawItems: [(name: String, path: String, isDirectory: Bool, bytes: Int64)] = []
 
         for entry in entries {
-            if shouldStop() { return nil }
+            if shouldStop() {
+                // 如果是用户主动取消或全局超时，整份退出
+                return nil
+            }
             let itemPath = (directoryURL.path as NSString).appendingPathComponent(entry.name)
             if entry.isDirectory {
                 dirCount += 1
                 let subURL = URL(fileURLWithPath: itemPath)
-                guard let bytes = allocatedBytes(at: subURL, deadline: effectiveDeadline, isCancelled: shouldStop) else {
-                    return nil
+                if let bytes = allocatedBytes(at: subURL, deadline: deadline, isCancelled: shouldStop) {
+                    rawItems.append((name: entry.name, path: itemPath, isDirectory: true, bytes: bytes))
                 }
-                rawItems.append((name: entry.name, path: itemPath, isDirectory: true, bytes: bytes))
             } else if entry.isRegularFile {
                 fileCount += 1
                 rawItems.append((name: entry.name, path: itemPath, isDirectory: false, bytes: entry.allocatedSize))
@@ -142,7 +141,7 @@ public enum DiskUsage {
             // 忽略符号链接、套接字、管道等非目录且非普通文件的子项
         }
 
-        if shouldStop() { return nil }
+        if isCancelled() { return nil }
 
         rawItems.sort { $0.bytes > $1.bytes }
 
