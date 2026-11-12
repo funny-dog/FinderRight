@@ -1098,7 +1098,13 @@
 
 /* 官方网站 */
 "官方网站" = "Official Website";
-"全球站" = "Global Mirror";
+"全球站" = "Global Site";
 "国内站" = "China Mirror";
+"点击卡片在浏览器中打开，或复制网址" = "Click a card to open it in your browser, or copy its URL";
+"主站 · 产品介绍与安装包下载" = "Main site · features and installer downloads";
+"展示镜像 · 不含安装包，主站访问不畅时使用" = "Showcase mirror · no installers; use when the main site is slow";
+"在浏览器中打开" = "Open in browser";
+"复制网址" = "Copy URL";
+"访问 FinderRight 官方网站" = "Visit the FinderRight website";
 
 

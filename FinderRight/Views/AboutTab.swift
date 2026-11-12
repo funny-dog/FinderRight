@@ -10,6 +10,7 @@ struct AboutTab: View {
     @FRState private var updateStatus: UpdateCheckStatus = UpdateChecker.shared.currentStatus
     @FRState private var showingFeedback = false
     @FRState private var showingChangelog = false
+    @FRState private var showingWebsite = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -94,24 +95,12 @@ struct AboutTab: View {
                 .buttonStyle(.frSecondary)
                 .help("反馈问题或提出功能建议")
 
-                Menu {
-                    Button {
-                        NSWorkspace.shared.open(URL(string: "https://finderright.erhutech.com")!)
-                    } label: {
-                        Label("全球站", systemImage: "globe")
-                    }
-
-                    Button {
-                        NSWorkspace.shared.open(URL(string: "https://finderright-bhnr38evqjb.qoder.zone")!)
-                    } label: {
-                        Label("国内站", systemImage: "network")
-                    }
+                Button {
+                    showingWebsite = true
                 } label: {
                     Label("官方网站", systemImage: "safari")
                 }
                 .buttonStyle(.frSecondary)
-                .menuIndicator(.visible)
-                .fixedSize()
                 .help("访问 FinderRight 官方网站")
             }
             .padding(.top, 12)
@@ -133,6 +122,9 @@ struct AboutTab: View {
         }
         .sheet(isPresented: $showingChangelog) {
             ChangelogSheet(isPresented: $showingChangelog)
+        }
+        .sheet(isPresented: $showingWebsite) {
+            WebsiteSheet(isPresented: $showingWebsite)
         }
         // 菜单栏「检查更新…」发起的检查与下载也同步到这里
         .onReceive(NotificationCenter.default.publisher(for: UpdateChecker.statusDidChangeNotification)) { _ in
