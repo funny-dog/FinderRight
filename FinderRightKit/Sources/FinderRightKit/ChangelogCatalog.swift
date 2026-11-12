@@ -45,6 +45,17 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.0",
+            date: "2026-11-12",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "新增开发者工具：支持哈希校验、符号链接、相对路径、目录树、文件比较与本地 Git 状态等"),
+                ChangelogEntry(type: .feature, textKey: "重构剪切队列管理与撤销功能，支持直接在右键菜单查看并管理剪切项"),
+                ChangelogEntry(type: .improvement, textKey: "简洁模式支持配置深色模式与右键菜单图标，适配紧凑窗口"),
+                ChangelogEntry(type: .fix, textKey: "优化磁盘占用分析中的符号链接过滤与超时预算机制"),
+                ChangelogEntry(type: .fix, textKey: "修复关闭程序坞图标后从状态栏打开设置的焦点与时序问题")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.12.5",
             date: "2026-11-07",
             items: [
