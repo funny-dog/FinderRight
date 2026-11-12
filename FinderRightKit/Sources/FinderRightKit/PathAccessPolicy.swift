@@ -9,10 +9,12 @@ import Foundation
 public enum PathAccessPolicy {
 
     public enum Role: Equatable {
-        /// 会被读取或移动的源（压缩项、剪切项、压缩包）
+        /// 会被读取、提取内容或移动的源（压缩项、剪切项、压缩包、复制内容等）
         case source
         /// 写入目标目录（新建文件、粘贴目标）
         case destination
+        /// 只读元数据与统计（如目录磁盘占用、直属子项分析、文件行数统计等）
+        case inspect
     }
 
     /// 相对 home 的 FDA 专属数据目录。比较时不区分大小写：APFS 默认大小写不敏感，
@@ -70,11 +72,13 @@ public enum PathAccessPolicy {
         let lowerHome = h.lowercased()
         for relative in protectedHomeRelativePaths {
             let protectedPath = lowerHome + "/" + relative.lowercased()
-            // 位于受保护目录内：读取、写入都拒绝
+            // 位于受保护目录内：读取、写入都拒绝（inspect 统计也拒绝直接探测受保护目录内部）
             if lower == protectedPath || lower.hasPrefix(protectedPath + "/") {
                 return false
             }
-            // 源路径是受保护目录的祖先（如 ~/Library、~）：压缩或移动它会把受保护数据一并带走
+            // 源路径是受保护目录的祖先（如 ~/Library、~）：
+            // 压缩、移动或读取其内容会把受保护数据一并带走，因此拒绝 source；
+            // 但 inspect 仅统计该祖先目录或其下常规文件/目录的元数据与字节，允许通过。
             if role == .source && protectedPath.hasPrefix(lower + "/") {
                 return false
             }

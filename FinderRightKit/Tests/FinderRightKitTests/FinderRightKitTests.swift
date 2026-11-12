@@ -1309,6 +1309,11 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library", role: .source, home: home, temporaryDirectory: tmp), "压缩 ~/Library 会带走 Messages")
             try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester", role: .source, home: home, temporaryDirectory: tmp), "压缩整个 home")
             try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Application Support", role: .source, home: home, temporaryDirectory: tmp))
+
+            // 但只读统计与 inspect 模式下，允许放行 home 和 ~/Library 统计自身与常规子项
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester", role: .inspect, home: home, temporaryDirectory: tmp), "统计 home 磁盘占用应放行")
+            try assertTrue(PathAccessPolicy.isAllowed("/Users/tester/Library", role: .inspect, home: home, temporaryDirectory: tmp), "统计 ~/Library 磁盘占用应放行")
+            try assertTrue(!PathAccessPolicy.isAllowed("/Users/tester/Library/Messages", role: .inspect, home: home, temporaryDirectory: tmp), "inspect 依然拒绝直接探测受保护目录内部")
         }
 
         runTest("PathAccessPolicy 保留原有白名单边界") {
@@ -1335,7 +1340,10 @@ struct FinderRightKitTestsRunner {
         }
 
         runTest("IPCPathPolicy directory 按读取源和写入目标区分") {
-            try assertEqual(IPCPathPolicy.role(action: "prefetchDiskUsage", key: "directory"), .source)
+            try assertEqual(IPCPathPolicy.role(action: "prefetchDiskUsage", key: "directory"), .inspect)
+            try assertEqual(IPCPathPolicy.role(action: "diskUsage", key: "path"), .inspect)
+            try assertEqual(IPCPathPolicy.role(action: "showDiskUsageDetail", key: "path"), .inspect)
+            try assertEqual(IPCPathPolicy.role(action: "showLineCount", key: "path"), .inspect)
             try assertEqual(IPCPathPolicy.role(action: "copyDirectoryTree", key: "directory"), .source)
             try assertEqual(IPCPathPolicy.role(action: "runCustomCommand", key: "directory"), .source)
             try assertEqual(IPCPathPolicy.role(action: "createFile", key: "directory"), .destination)

@@ -15,12 +15,20 @@ public enum IPCPathPolicy {
     public static func role(action: String, key: String) -> PathAccessPolicy.Role? {
         switch key {
         case "directory":
-            if action == "prefetchDiskUsage" || action == "copyDirectoryTree" || action == "runCustomCommand" {
+            if action == "prefetchDiskUsage" {
+                return .inspect
+            }
+            if action == "copyDirectoryTree" || action == "runCustomCommand" {
                 return .source
             }
             return .destination
         case "destination": return .destination
-        case "archive", "testPath", "path", "items", "paths": return .source
+        case "path":
+            if action == "diskUsage" || action == "showDiskUsageDetail" || action == "showLineCount" {
+                return .inspect
+            }
+            return .source
+        case "archive", "testPath", "items", "paths": return .source
         default: return nil
         }
     }
