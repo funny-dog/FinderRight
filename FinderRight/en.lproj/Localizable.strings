@@ -1096,3 +1096,9 @@
 "代码：%d 行" = "Code: %d lines";
 "总计：%d 行" = "Total: %d lines";
 
+/* 官方网站 */
+"官方网站" = "Official Website";
+"全球站" = "Global Mirror";
+"国内站" = "China Mirror";
+
+

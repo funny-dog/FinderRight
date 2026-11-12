@@ -69,13 +69,13 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-git-operations.swift -o "$KIT_BUILD_DIR/test-git-operations"
 "$KIT_BUILD_DIR/test-git-operations"
 
-# 远程操作用本地 file:// 裸仓库验证；只在这个测试进程内放行 file 协议，
+# 远程操作用本地 file:// 裸仓库验证；只在这个测试进程内放行 file 协议与裸仓库，
 # 产品代码默认仍只允许 https/ssh/git。
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   scripts/test-git-pull-push.swift -o "$KIT_BUILD_DIR/test-git-pull-push"
-FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "$KIT_BUILD_DIR/test-git-pull-push"
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=all FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "$KIT_BUILD_DIR/test-git-pull-push"
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \

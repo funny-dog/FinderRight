@@ -84,14 +84,36 @@ struct AboutTab: View {
             }
             .padding(.top, 24)
 
-            // 反馈入口：弹窗里选问题反馈或功能建议，提交时才跳转 GitHub；复制诊断信息也在弹窗里
-            Button {
-                showingFeedback = true
-            } label: {
-                Label("反馈与建议", systemImage: "exclamationmark.bubble")
+            // 反馈入口与官网链接
+            HStack(spacing: 12) {
+                Button {
+                    showingFeedback = true
+                } label: {
+                    Label("反馈与建议", systemImage: "exclamationmark.bubble")
+                }
+                .buttonStyle(.frSecondary)
+                .help("反馈问题或提出功能建议")
+
+                Menu {
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://finderright.erhutech.com")!)
+                    } label: {
+                        Label("全球站", systemImage: "globe")
+                    }
+
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://finderright-bhnr38evqjb.qoder.zone")!)
+                    } label: {
+                        Label("国内站", systemImage: "network")
+                    }
+                } label: {
+                    Label("官方网站", systemImage: "safari")
+                }
+                .buttonStyle(.frSecondary)
+                .menuIndicator(.visible)
+                .fixedSize()
+                .help("访问 FinderRight 官方网站")
             }
-            .buttonStyle(.frSecondary)
-            .help("反馈问题或提出功能建议")
             .padding(.top, 12)
 
             Spacer(minLength: 0)
