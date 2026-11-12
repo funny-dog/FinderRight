@@ -3,7 +3,7 @@ import SwiftUI
 import QuartzCore
 
 enum SettingsWindowLayout {
-    static let compactSize = NSSize(width: 340, height: 224)
+    static let compactSize = NSSize(width: 340, height: 280)
     static let minimumFullSize = NSSize(width: 680, height: 500)
     static let defaultFullSize = NSSize(width: 780, height: 620)
     static let duration = 0.72

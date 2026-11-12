@@ -6,11 +6,11 @@ enum SettingsPresentationTests {
         let screen = NSRect(x: 0, y: 0, width: 1440, height: 900)
         let full = NSRect(x: 400, y: 200, width: 780, height: 620)
         let compact = SettingsWindowLayout.frame(from: full, size: SettingsWindowLayout.compactSize, visibleFrame: screen)
-        precondition(compact.size == NSSize(width: 340, height: 224))
+        precondition(compact.size == NSSize(width: 340, height: 280))
         precondition(compact.maxX == full.maxX && compact.maxY == full.maxY)
         precondition(SettingsWindowLayout.frame(from: compact, size: full.size, visibleFrame: screen) == full)
 
-        let edge = NSRect(x: 0, y: 0, width: 340, height: 224)
+        let edge = NSRect(x: 0, y: 0, width: 340, height: 280)
         let expanded = SettingsWindowLayout.frame(from: edge, size: full.size, visibleFrame: screen)
         precondition(screen.contains(expanded))
         let leftScreen = NSRect(x: -1440, y: -120, width: 1440, height: 900)

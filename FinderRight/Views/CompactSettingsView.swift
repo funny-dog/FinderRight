@@ -7,6 +7,8 @@ struct CompactSettingsView: View {
     let onOpenPermissions: () -> Void
 
     @FRState private var isExtensionEnabled: Bool = FinderExtensionChecker.check()
+    @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
+    @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
 
     init(onOpenPermissions: @escaping () -> Void) {
         self.onOpenPermissions = onOpenPermissions
@@ -20,7 +22,7 @@ struct CompactSettingsView: View {
                     Button("权限与扩展", action: onOpenPermissions)
                         .buttonStyle(.frSecondary)
                 }
-                LaunchAtLoginControl()
+                settingsCard
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
@@ -31,9 +33,57 @@ struct CompactSettingsView: View {
         .background(FRTheme.window)
         .onAppear {
             isExtensionEnabled = FinderExtensionChecker.check()
+            menuIconStyle = SharedConfig.shared.menuIconStyle
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isExtensionEnabled = FinderExtensionChecker.check()
+            menuIconStyle = SharedConfig.shared.menuIconStyle
+        }
+    }
+
+    private var settingsCard: some View {
+        FRCard {
+            appearanceRow
+            FRDivider()
+            menuIconRow
+            FRDivider()
+            LaunchAtLoginControl(embedInCard: false)
+        }
+    }
+
+    private var appearanceRow: some View {
+        FRRow(title: Text("深色模式")) {
+            FRPicker(label: "深色模式", selection: Binding(
+                get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
+                set: { newValue in
+                    appearanceRaw = newValue.rawValue
+                    newValue.apply()
+                }
+            )) {
+                ForEach(FRAppearanceMode.allCases) { mode in
+                    Text(LocalizedStringKey(mode.titleKey)).tag(mode)
+                }
+            }
+        }
+    }
+
+    private var menuIconRow: some View {
+        FRRow(title: Text("右键菜单图标")) {
+            HStack(spacing: 8) {
+                MenuIconPreview(style: menuIconStyle, maxCount: 1)
+
+                FRPicker(label: "右键菜单图标", selection: Binding(
+                    get: { menuIconStyle },
+                    set: { newValue in
+                        menuIconStyle = newValue
+                        SharedConfig.shared.menuIconStyle = newValue
+                    }
+                )) {
+                    ForEach(MenuIconStyle.allCases) { style in
+                        Text(LocalizedStringKey(style.titleKey)).tag(style)
+                    }
+                }
+            }
         }
     }
 

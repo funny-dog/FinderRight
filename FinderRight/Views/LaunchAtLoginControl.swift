@@ -5,45 +5,19 @@ import FinderRightKit
 
 /// 两种设置窗口共用的开机启动开关，保留授权提示与失败回滚。
 struct LaunchAtLoginControl: View {
+    var embedInCard: Bool = true
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @FRState private var launchAtLoginError: String?
     @FRState private var currentLoginStatus: SMAppService.Status = .notRegistered
 
     var body: some View {
-        FRCard {
-            // 登录时自动运行 FinderRight
-            FRRow(title: Text("开机自动启动")) {
-                FRSwitch(label: "开机自动启动", isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { updateLaunchAtLogin(to: $0) }
-                ))
-            }
-
-            if let error = launchAtLoginError {
-                FRDivider()
-                Text(verbatim: error)
-                    .font(.system(size: 12))
-                    .foregroundColor(FRTheme.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-            }
-
-            if currentLoginStatus == .requiresApproval {
-                FRDivider()
-                HStack(spacing: 12) {
-                    Text("已注册，但需要在「系统设置」-「通用」-「登录项与扩展」（macOS 14 及更早为「登录项」）中允许启动")
-                        .font(.system(size: 12))
-                        .foregroundColor(FRTheme.warnText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                    Button("打开系统设置") {
-                        LaunchAtLoginManager.openLoginItemsSettings()
-                    }
-                    .buttonStyle(.frSecondary)
+        Group {
+            if embedInCard {
+                FRCard {
+                    content
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+            } else {
+                content
             }
         }
         .onAppear {
@@ -51,6 +25,44 @@ struct LaunchAtLoginControl: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             calibrateLaunchAtLoginStatus()
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        // 登录时自动运行 FinderRight
+        FRRow(title: Text("开机自动启动")) {
+            FRSwitch(label: "开机自动启动", isOn: Binding(
+                get: { launchAtLogin },
+                set: { updateLaunchAtLogin(to: $0) }
+            ))
+        }
+
+        if let error = launchAtLoginError {
+            FRDivider()
+            Text(verbatim: error)
+                .font(.system(size: 12))
+                .foregroundColor(FRTheme.danger)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+        }
+
+        if currentLoginStatus == .requiresApproval {
+            FRDivider()
+            HStack(spacing: 12) {
+                Text("已注册，但需要在「系统设置」-「通用」-「登录项与扩展」（macOS 14 及更早为「登录项」）中允许启动")
+                    .font(.system(size: 12))
+                    .foregroundColor(FRTheme.warnText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button("打开系统设置") {
+                    LaunchAtLoginManager.openLoginItemsSettings()
+                }
+                .buttonStyle(.frSecondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
     }
 

@@ -301,6 +301,7 @@ struct FRThemeSwatches: View {
 /// 右键菜单图标风格实时预览（展示具有代表性的功能图标样式）
 struct MenuIconPreview: View {
     let style: MenuIconStyle
+    var maxCount: Int? = nil
 
     private var sampleFeatures: [MenuFeature] {
         let sampleIds = [
@@ -310,16 +311,22 @@ struct MenuIconPreview: View {
             MenuFeatureCatalog.openEditor,
             MenuFeatureCatalog.cut,
         ]
-        return sampleIds.compactMap { MenuFeatureCatalog.feature(forId: $0) }
+        let list = sampleIds.compactMap { MenuFeatureCatalog.feature(forId: $0) }
+        if let maxCount {
+            return Array(list.prefix(maxCount))
+        }
+        return list
     }
 
     var body: some View {
         HStack(spacing: 6) {
             if style == .none {
-                Text(LocalizedStringKey("无图标"))
-                    .font(.system(size: 12))
-                    .foregroundColor(FRTheme.mute)
-                    .padding(.horizontal, 4)
+                if maxCount == nil {
+                    Text(LocalizedStringKey("无图标"))
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.mute)
+                        .padding(.horizontal, 4)
+                }
             } else {
                 ForEach(sampleFeatures) { feature in
                     sampleIcon(feature)
