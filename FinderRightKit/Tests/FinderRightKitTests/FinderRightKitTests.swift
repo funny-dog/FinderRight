@@ -6582,6 +6582,25 @@ struct FinderRightKitTestsRunner {
 
             let fileURL = root.appendingPathComponent("small.txt")
             try assertNil(DiskUsage.inspectDirectChildren(at: fileURL), "对非目录调用应返回 nil")
+
+            // 针对符号链接：指向目录的符号链接本身不作为直属目录展开或计入
+            let linkToFolder = root.appendingPathComponent("folderLink")
+            try FileManager.default.createSymbolicLink(at: linkToFolder, withDestinationURL: folderA)
+            let breakdownWithLink = DiskUsage.inspectDirectChildren(at: root)
+            try assertTrue(breakdownWithLink != nil)
+            if let breakdownWithLink {
+                try assertEqual(breakdownWithLink.directDirectoryCount, 1, "符号链接不应作为目录计入 directDirectoryCount")
+                try assertEqual(breakdownWithLink.directFileCount, 2, "符号链接不应作为普通文件计入 directFileCount")
+                try assertTrue(!breakdownWithLink.items.contains { $0.name == "folderLink" }, "排行中不应包含符号链接")
+            }
+            try assertNil(DiskUsage.inspectDirectChildren(at: linkToFolder), "对指向目录的符号链接调用 inspectDirectChildren 应返回 nil，不跟随展开")
+
+            // 针对取消与超时：一旦取消或超时应整体返回 nil
+            let cancelledBreakdown = DiskUsage.inspectDirectChildren(at: root, isCancelled: { true })
+            try assertNil(cancelledBreakdown, "取消时必须返回 nil，不得返回部分或 0 字节结果")
+
+            let timedOutBreakdown = DiskUsage.inspectDirectChildren(at: root, deadline: Date().addingTimeInterval(-1))
+            try assertNil(timedOutBreakdown, "已超时的 deadline 必须返回 nil")
         }
 
         // MARK: - 开发者工具与自定义命令

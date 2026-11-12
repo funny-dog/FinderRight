@@ -15,6 +15,9 @@ public enum DiskUsage {
     /// 扫描并发度。实测 8 / 16 路反而更慢（APFS 元数据锁与 IO 争用），4 路最稳。
     public static let defaultConcurrency = 4
 
+    /// 直属子项扫描默认超时预算（2 秒），避免大目录或无响应目录卡住界面
+    public static let defaultDirectChildrenTimeout: TimeInterval = 2.0
+
     // MARK: - 对外入口
 
     /// 计算文件或目录的磁盘占用（字节）。读不到、不是常规文件/目录、或统计过程中
@@ -54,18 +57,21 @@ public enum DiskUsage {
 
     /// 解析右键菜单中应展示磁盘占用的目标 URL。
     /// - 空白处（.container）：目标为当前所在目录。
-    /// - 选中项（.items）：单选文件夹或常规文件时作为目标；多选或非文件/目录返回 nil。
+    /// - 选中项（.items）：单选文件夹或常规文件时作为目标；多选或非文件/目录（包括符号链接）返回 nil。
     /// - 其他位置（.sidebar 等）：返回 nil。
     public static func target(
         location: MenuTargetLocation,
         selected: [URL],
         directory: URL?,
         isRegularDirectory: (URL) -> Bool = { url in
-            var isDir: ObjCBool = false
-            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+            var statInfo = stat()
+            guard lstat(url.path, &statInfo) == 0 else { return false }
+            return (statInfo.st_mode & S_IFMT) == S_IFDIR
         },
         isRegularFile: (URL) -> Bool = { url in
-            FileHasher.isRegularFile(url)
+            var statInfo = stat()
+            guard lstat(url.path, &statInfo) == 0 else { return false }
+            return (statInfo.st_mode & S_IFMT) == S_IFREG
         }
     ) -> URL? {
         switch location {
@@ -84,16 +90,33 @@ public enum DiskUsage {
 
     // MARK: - 目录直属项占用分析
 
-    /// 扫描目录的直接子项占用并降序排列
+    /// 扫描目录的直接子项占用并降序排列。
+    /// - 符号链接不跟随、不进入；
+    /// - 子项计算失败、超时或取消时立即中止并返回 nil（避免将错误或未完成项误计为 0 字节）；
+    /// - 仅统计真实目录与常规文件，过滤套接字、管道等特殊文件。
     public static func inspectDirectChildren(
         at directoryURL: URL,
+        deadline: Date? = nil,
         isCancelled: @escaping () -> Bool = { false }
     ) -> DiskUsageBreakdown? {
         guard directoryURL.isFileURL else { return nil }
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDir), isDir.boolValue else {
+
+        // 验证根路径是真实目录且不跟随符号链接
+        var statInfo = stat()
+        guard lstat(directoryURL.path, &statInfo) == 0,
+              (statInfo.st_mode & S_IFMT) == S_IFDIR else {
             return nil
         }
+
+        let effectiveDeadline = deadline ?? Date().addingTimeInterval(defaultDirectChildrenTimeout)
+        func shouldStop() -> Bool {
+            if isCancelled() { return true }
+            if Date() >= effectiveDeadline { return true }
+            return false
+        }
+
+        if shouldStop() { return nil }
+
         guard let entries = try? BulkDirectoryAttributes.entries(atPath: directoryURL.path) else {
             return nil
         }
@@ -103,18 +126,23 @@ public enum DiskUsage {
         var rawItems: [(name: String, path: String, isDirectory: Bool, bytes: Int64)] = []
 
         for entry in entries {
-            if isCancelled() { return nil }
+            if shouldStop() { return nil }
             let itemPath = (directoryURL.path as NSString).appendingPathComponent(entry.name)
             if entry.isDirectory {
                 dirCount += 1
                 let subURL = URL(fileURLWithPath: itemPath)
-                let bytes = allocatedBytes(at: subURL, isCancelled: isCancelled) ?? 0
+                guard let bytes = allocatedBytes(at: subURL, deadline: effectiveDeadline, isCancelled: shouldStop) else {
+                    return nil
+                }
                 rawItems.append((name: entry.name, path: itemPath, isDirectory: true, bytes: bytes))
-            } else {
+            } else if entry.isRegularFile {
                 fileCount += 1
                 rawItems.append((name: entry.name, path: itemPath, isDirectory: false, bytes: entry.allocatedSize))
             }
+            // 忽略符号链接、套接字、管道等非目录且非普通文件的子项
         }
+
+        if shouldStop() { return nil }
 
         rawItems.sort { $0.bytes > $1.bytes }
 
@@ -295,7 +323,7 @@ enum BulkDirectoryAttributes {
 
     /// 读取目录的直接子项（不含 . 与 ..）
     static func entries(atPath path: String) throws -> [Entry] {
-        let fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        let fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
         guard fd >= 0 else { throw BulkError.openFailed(errno: errno) }
         defer { close(fd) }
 
