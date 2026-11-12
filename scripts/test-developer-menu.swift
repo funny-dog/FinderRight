@@ -22,8 +22,11 @@ struct DeveloperMenuChecks {
         _ = lines
         assert(!config.developerToolsEnabled && allDev.allSatisfy { !config.isActionEnabled($0) })
         config.developerToolsEnabled = true
-        assert(allDev.allSatisfy { config.isActionEnabled($0) })
-        config.setActionEnabled(tree, enabled: false)
+        assert(allDev.allSatisfy { !config.isActionEnabled($0) }, "开启开发者工具总开关后，各项功能默认亦应关闭")
+        config.setActionEnabled(relative, enabled: true)
+        config.setActionEnabled(hash, enabled: true)
+        config.setActionEnabled(symlink, enabled: true)
+        assert(config.isActionEnabled(relative) && config.isActionEnabled(hash) && config.isActionEnabled(symlink) && !config.isActionEnabled(tree))
         config.developerToolsEnabled = false
         assert(!config.isActionEnabled(relative) && !config.isActionEnabled(hash) && !config.isActionEnabled(symlink))
         let reloaded = SharedConfig(fileURL: directory.appendingPathComponent("settings.plist"))

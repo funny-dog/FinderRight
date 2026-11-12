@@ -299,7 +299,7 @@ struct DiskUsageView: View {
             }
             Spacer()
             Button(NSLocalizedString("关闭", comment: "")) {
-                NSApp.keyWindow?.close()
+                DiskUsageController.shared.close()
             }
             .buttonStyle(.frSecondary)
             .keyboardShortcut(.cancelAction)
@@ -410,12 +410,10 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
     func show(at url: URL) {
         if window == nil {
             let model = DiskUsageModel()
-            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-            let contentRect = NSRect(origin: .zero, size: Self.defaultSize)
-            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+            let window = FRTransientPanel(
+                contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+                minSize: Self.minimumSize)
             window.title = NSLocalizedString("磁盘空间占用", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: Self.minimumSize), styleMask: styleMask).size
-            window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: DiskUsageView(model: model))
             window.setFrameAutosaveName("DiskUsageWindow")
@@ -427,9 +425,11 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
         }
 
         model?.open(at: url)
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        if let window { TransientWindowManager.shared.present(window) }
+    }
+
+    func close() {
+        window?.close()
     }
 
     func windowWillClose(_ notification: Notification) {

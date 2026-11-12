@@ -112,7 +112,7 @@ struct CutQueueView: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             Button(NSLocalizedString("关闭", comment: "")) {
-                NSApp.keyWindow?.close()
+                CutQueueController.shared.close()
             }
             .buttonStyle(.frSecondary)
             .keyboardShortcut(.cancelAction)
@@ -208,12 +208,10 @@ final class CutQueueController: NSObject, NSWindowDelegate {
 
     func show() {
         if window == nil {
-            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-            let contentRect = NSRect(origin: .zero, size: Self.defaultSize)
-            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+            let window = FRTransientPanel(
+                contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+                minSize: Self.minimumSize)
             window.title = NSLocalizedString("已剪切项目", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: Self.minimumSize), styleMask: styleMask).size
-            window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: CutQueueView())
             window.setFrameAutosaveName("CutQueueWindow")
@@ -223,9 +221,11 @@ final class CutQueueController: NSObject, NSWindowDelegate {
             self.window = window
         }
 
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        if let window { TransientWindowManager.shared.present(window) }
+    }
+
+    func close() {
+        window?.close()
     }
 
     func windowWillClose(_ notification: Notification) {

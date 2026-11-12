@@ -77,6 +77,7 @@ extension FinderRightService {
                 try cutQueue.clear()
                 Self.cutCancelGeneration += 1
                 CutQueueChangeNotifier.post()
+                FinderShortcutInterceptor.shared.refreshCutQueueMirror([])
                 return IPCResponse(id: req.id, success: true, message: "已取消剪切")
             }
             // 剪切已被取消或已被 ⌘V 交给访达移动，剪切记录作废

@@ -147,7 +147,10 @@ final class FinderShortcutInterceptor {
                 .joined(separator: " ")
             ServicesProvider.trace("takeover: 键码 \(described) copy=\(newCopy.map { "\($0.keyCode)/\($0.modifiers)" } ?? "无")")
         }
-        if let tap { CGEvent.tapEnable(tap: tap, enable: want) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: want)
+            ServicesProvider.trace("takeover: refresh want=\(want) front=\(front?.bundleIdentifier ?? "nil")")
+        }
     }
 
     /// 拦截能执行的动作：剪切、粘贴、切换隐藏文件，以及有对应系统服务的动作
@@ -279,9 +282,9 @@ final class FinderShortcutInterceptor {
         }
     }
 
-    /// 取不到焦点时按「在文字输入里」处理：宁可放行，也不在重命名时误移文件
+    /// 焦点在文字输入里（如重命名、搜索框）时放行按键；无焦点元素或非文本角色时不阻拦文件剪切
     private func focusIsTextInput(_ app: AXUIElement) -> Bool {
-        guard let element = axElement(copyAttribute(app, kAXFocusedUIElementAttribute)) else { return true }
+        guard let element = axElement(copyAttribute(app, kAXFocusedUIElementAttribute)) else { return false }
         return FinderKeyTakeover.isTextInput(
             role: copyAttribute(element, kAXRoleAttribute) as? String,
             subrole: copyAttribute(element, kAXSubroleAttribute) as? String)

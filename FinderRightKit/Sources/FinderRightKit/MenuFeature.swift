@@ -247,8 +247,9 @@ public enum MenuFeatureCatalog {
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
-    /// 压缩 / 解压与系统能力重叠（访达自带「压缩」，双击压缩包即由归档实用工具解压），默认不占菜单位置。
-    public static let disabledByDefault: Set<String> = [compress, decompress]
+    /// - 压缩 / 解压与系统能力重叠，默认不占菜单位置。
+    /// - 开发者工具各项功能默认亦关闭：开启开发者工具总开关后，各项功能仍需按需手动启用。
+    public static let disabledByDefault: Set<String> = Set([compress, decompress] + developerFeatureIds)
 
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }

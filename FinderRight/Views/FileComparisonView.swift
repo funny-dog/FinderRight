@@ -316,17 +316,14 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
     
     private let windowType = "fileComparison"
 
-    func show(files: [URL] = []) {
+    func show(files: [URL] = [], openedFromExternalApplication: Bool = true) {
         if window == nil {
             let model = FileComparisonModel()
             let contentRect = NSRect(origin: .zero, size: FileComparisonLayout.contentSize)
-            // styleMask 与下面的窗口一致：窗口位置按 frame 存取，不能把带标题栏的 frame 当内容区
-            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+            let window = FRTransientPanel(
+                contentRect: contentRect,
+                minSize: FileComparisonLayout.minimumContentSize)
             window.title = NSLocalizedString("文件比较", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: FileComparisonLayout.minimumContentSize),
-                                                styleMask: styleMask).size
-            window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: FileComparisonView(model: model))
             // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
@@ -340,9 +337,10 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
             self.window = window
         }
         if !files.isEmpty { model?.setFiles(Array(files.prefix(2))) }
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        if let window {
+            TransientWindowManager.shared.present(
+                window, openedFromExternalApplication: openedFromExternalApplication)
+        }
     }
 
     /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。

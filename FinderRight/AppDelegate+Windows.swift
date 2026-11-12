@@ -26,6 +26,9 @@ extension AppDelegate {
             }
             self.settingsWindow?.makeKeyAndOrderFront(nil)
             self.settingsWindow?.orderFrontRegardless()
+            if let window = self.settingsWindow {
+                TransientWindowManager.shared.recordPresentation(of: window, openedFromExternalApplication: false)
+            }
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -166,33 +169,25 @@ extension AppDelegate {
             }
             self.onboardingWindow?.makeKeyAndOrderFront(nil)
             self.onboardingWindow?.orderFrontRegardless()
+            if let window = self.onboardingWindow {
+                TransientWindowManager.shared.recordPresentation(of: window, openedFromExternalApplication: false)
+            }
             NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     // MARK: - 窗口与激活策略
 
-    /// 标准窗口关闭后，如果用户没要求常驻 Dock，且已无可见标准窗口，则切回 accessory
+    /// 标准窗口关闭后统一恢复来源应用与 Dock 状态；临时窗口 delegate 也会登记，管理器会去重。
     @objc func windowWillClose(_ note: Notification) {
-        if let closing = note.object as? NSWindow {
-            if closing === settingsWindow {
-                // 关闭后 AppKit 可能仍持有窗口，释放保存名称供下次创建恢复。
-                closing.setFrameAutosaveName("")
-                settingsWindow = nil
-            }
-            if closing === onboardingWindow { onboardingWindow = nil }
+        guard let closing = note.object as? NSWindow else { return }
+        if closing === settingsWindow {
+            // 关闭后 AppKit 可能仍持有窗口，释放保存名称供下次创建恢复。
+            closing.setFrameAutosaveName("")
+            settingsWindow = nil
         }
-        guard !alwaysShowDockIcon else { return }
-        let closing = note.object as? NSWindow
-        DispatchQueue.main.async { [weak self] in
-            let stillHasStandardWindow = NSApp.windows.contains { w in
-                w !== closing && w.isVisible && w.canBecomeMain
-            }
-            if !stillHasStandardWindow {
-                NSApp.setActivationPolicy(.accessory)
-            }
-            _ = self
-        }
+        if closing === onboardingWindow { onboardingWindow = nil }
+        TransientWindowManager.shared.windowWillClose(closing)
     }
 
 }

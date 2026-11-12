@@ -740,16 +740,14 @@ final class GitStatusController: NSObject, NSWindowDelegate {
     
     private let windowType = "gitStatus"
 
-    func show(at url: URL? = nil) {
+    func show(at url: URL? = nil, openedFromExternalApplication: Bool = true) {
         if window == nil {
             let model = GitStatusModel()
-            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
             let contentRect = NSRect(origin: .zero, size: GitStatusLayout.contentSize)
-            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+            let window = FRTransientPanel(
+                contentRect: contentRect,
+                minSize: GitStatusLayout.minimumContentSize)
             window.title = NSLocalizedString("Git 状态", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: GitStatusLayout.minimumContentSize),
-                                                styleMask: styleMask).size
-            window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: GitStatusView(model: model))
             // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
@@ -767,9 +765,10 @@ final class GitStatusController: NSObject, NSWindowDelegate {
         } else if model?.sourceURL == nil {
             model?.scanRepositories()
         }
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        if let window {
+            TransientWindowManager.shared.present(
+                window, openedFromExternalApplication: openedFromExternalApplication)
+        }
     }
 
     /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。

@@ -344,15 +344,13 @@ final class LineCountController: NSObject, NSWindowDelegate {
     private static let defaultSize = CGSize(width: 580, height: 440)
     private static let minimumSize = CGSize(width: 500, height: 360)
 
-    func show(at url: URL? = nil) {
+    func show(at url: URL? = nil, openedFromExternalApplication: Bool = true) {
         if window == nil {
             let model = LineCountModel()
-            let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-            let contentRect = NSRect(origin: .zero, size: Self.defaultSize)
-            let window = NSWindow(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+            let window = FRTransientPanel(
+                contentRect: NSRect(origin: .zero, size: Self.defaultSize),
+                minSize: Self.minimumSize)
             window.title = NSLocalizedString("代码行数统计", comment: "")
-            window.minSize = NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: Self.minimumSize), styleMask: styleMask).size
-            window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentView = NSHostingView(rootView: LineCountView(model: model))
 
@@ -371,9 +369,10 @@ final class LineCountController: NSObject, NSWindowDelegate {
             model?.open(at: url)
         }
 
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        if let window {
+            TransientWindowManager.shared.present(
+                window, openedFromExternalApplication: openedFromExternalApplication)
+        }
     }
 
     private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {

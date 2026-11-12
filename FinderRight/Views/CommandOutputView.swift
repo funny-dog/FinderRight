@@ -112,17 +112,15 @@ final class CustomCommandController: NSObject, NSWindowDelegate {
             }
         }) else { FinderRightService.reportExitInProgress(); return }
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 450),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let window = FRTransientPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 450),
+            minSize: CGSize(width: 540, height: 340))
         window.title = command.name
-        window.minSize = NSSize(width: 540, height: 340)
-        window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = NSHostingView(rootView: CommandOutputView(execution: execution, directory: directory))
         windows[UUID()] = (window, execution)
         window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        TransientWindowManager.shared.present(window)
     }
 
     func cancelAll() {

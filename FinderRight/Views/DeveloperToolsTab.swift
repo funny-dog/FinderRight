@@ -58,21 +58,21 @@ struct DeveloperToolsTab: View {
                                 if let feature = MenuFeatureCatalog.feature(forId: id) {
                                     FeatureToggleRow(feature: feature) {
                                         if id == MenuFeatureCatalog.compareFiles {
-                                            Button { FileComparisonController.shared.show() } label: {
+                                            Button { FileComparisonController.shared.show(openedFromExternalApplication: false) } label: {
                                                 Image(systemName: "arrow.up.right.square")
                                             }
                                             .buttonStyle(.frLink)
                                             .help("打开文件比较")
                                             .accessibilityLabel("打开文件比较")
                                         } else if id == MenuFeatureCatalog.gitStatus {
-                                            Button { GitStatusController.shared.show() } label: {
+                                            Button { GitStatusController.shared.show(openedFromExternalApplication: false) } label: {
                                                 Image(systemName: "arrow.up.right.square")
                                             }
                                             .buttonStyle(.frLink)
                                             .help("打开 Git 状态")
                                             .accessibilityLabel("打开 Git 状态")
                                         } else if id == MenuFeatureCatalog.lineCount {
-                                            Button { LineCountController.shared.show() } label: {
+                                            Button { LineCountController.shared.show(openedFromExternalApplication: false) } label: {
                                                 Image(systemName: "arrow.up.right.square")
                                             }
                                             .buttonStyle(.frLink)

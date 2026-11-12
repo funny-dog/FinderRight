@@ -79,6 +79,11 @@ FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "$KIT_BUILD_DIR/test-git-pull-push"
 
 echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
 swiftc -parse-as-library -target arm64-apple-macos13.0 \
+  FinderRight/Views/TransientWindowManager.swift scripts/test-transient-windows.swift \
+  -o "$KIT_BUILD_DIR/test-transient-windows"
+"$KIT_BUILD_DIR/test-transient-windows"
+
+swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/AppDelegate+Termination.swift FinderRight/Services/ApplicationTermination.swift \
@@ -95,6 +100,7 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/TransientWindowManager.swift \
   FinderRight/Views/FileComparisonView.swift scripts/test-file-comparison-view.swift \
   -o "$KIT_BUILD_DIR/test-file-comparison-view"
 "$KIT_BUILD_DIR/test-file-comparison-view"
@@ -103,6 +109,7 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
   -L "$KIT_BUILD_DIR" -lFinderRightKit \
   FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
+  FinderRight/Views/TransientWindowManager.swift \
   FinderRight/Views/FileComparisonView.swift FinderRight/Views/GitStatusView.swift scripts/test-git-status-view.swift \
   -o "$KIT_BUILD_DIR/test-git-status-view"
 "$KIT_BUILD_DIR/test-git-status-view"

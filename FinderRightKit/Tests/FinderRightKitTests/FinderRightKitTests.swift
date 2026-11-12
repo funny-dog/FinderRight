@@ -4790,8 +4790,8 @@ struct FinderRightKitTestsRunner {
         }
 
         runTest("复制哈希与创建符号链接归入开发者工具，常规功能中不包含它们") {
-            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
-            try assertTrue(!MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
+            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.copyFileHash))
+            try assertTrue(MenuFeatureCatalog.disabledByDefault.contains(MenuFeatureCatalog.createSymlink))
             try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.copyFileHash))
             try assertTrue(MenuFeatureCatalog.developerFeatureIds.contains(MenuFeatureCatalog.createSymlink))
             let regularIds = MenuFeatureCatalog.regular.map(\.id)

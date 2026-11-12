@@ -37,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.setActivationPolicy(.accessory)
         }
         NSLog("[AppDelegate] activation policy = \(alwaysShowDockIcon ? "regular" : "accessory")")
+        TransientWindowManager.shared.startTrackingFrontmostApplications()
+        TransientWindowManager.shared.onClosed = {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                FinderShortcutInterceptor.shared.refresh()
+            }
+        }
 
         // 在任何窗口创建前应用用户选择的浅色 / 深色外观并同步主题配置
         FRAppearanceMode.stored.apply()
