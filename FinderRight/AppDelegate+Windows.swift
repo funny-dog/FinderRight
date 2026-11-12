@@ -29,6 +29,9 @@ extension AppDelegate {
             if let window = self.settingsWindow {
                 TransientWindowManager.shared.recordPresentation(of: window, openedFromExternalApplication: false)
             }
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -171,6 +174,9 @@ extension AppDelegate {
             self.onboardingWindow?.orderFrontRegardless()
             if let window = self.onboardingWindow {
                 TransientWindowManager.shared.recordPresentation(of: window, openedFromExternalApplication: false)
+            }
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
             }
             NSApp.activate(ignoringOtherApps: true)
         }

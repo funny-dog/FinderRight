@@ -83,7 +83,10 @@ final class TransientWindowManager {
         var isWindowVisible: (NSWindow) -> Bool = { $0.isVisible }
         var hasVisibleStandardWindow: (Set<ObjectIdentifier>) -> Bool = { closing in
             NSApp.windows.contains { window in
-                !closing.contains(ObjectIdentifier(window)) && window.isVisible && window.canBecomeMain
+                guard !closing.contains(ObjectIdentifier(window)),
+                      window.isVisible,
+                      !(window is NSPanel) else { return false }
+                return window.canBecomeMain || window.canBecomeKey
             }
         }
         var alwaysShowDockIcon: () -> Bool = {
@@ -183,6 +186,9 @@ final class TransientWindowManager {
     /// 由窗口 delegate 和 AppDelegate 的全局关闭监听共同调用；同一窗口只登记一次。
     func windowWillClose(_ window: NSWindow) {
         let key = ObjectIdentifier(window)
+        // 仅处理由管理器登记过的受管窗口（临时窗口、设置窗口、引导窗口等），
+        // 忽略未受管的系统内部窗口（如 NSPopupMenuWindow 状态栏菜单关闭），避免误将应用切回 accessory。
+        guard transientWindows[key] != nil || presentations[key] != nil else { return }
         guard closedWindows[key] == nil else { return }
         transientWindows.removeValue(forKey: key)
         let presentation = presentations.removeValue(forKey: key)

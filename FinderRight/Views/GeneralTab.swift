@@ -198,13 +198,13 @@ struct GeneralTab: View {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         } else {
-            // setActivationPolicy(.accessory) 会在下一个 RunLoop 隐藏所有窗口；
-            // 先捕获当前窗口引用，async 延后重新显示，避免设置界面被关掉。
-            let win = NSApp.keyWindow
-            NSApp.setActivationPolicy(.accessory)
-            DispatchQueue.main.async {
-                win?.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
+            // 用户关闭「显示程序坞图标」表示无标准窗口时在 Dock 隐藏。
+            // 若当前设置窗口仍处于打开状态，保持 regular 直至窗口关闭，避免设置窗口在打开状态下图标突兀消失。
+            let hasVisibleStandardWindow = NSApp.windows.contains { window in
+                window.isVisible && !(window is NSPanel) && (window.canBecomeMain || window.canBecomeKey)
+            }
+            if !hasVisibleStandardWindow {
+                NSApp.setActivationPolicy(.accessory)
             }
         }
     }

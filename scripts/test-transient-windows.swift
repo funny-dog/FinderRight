@@ -226,6 +226,17 @@ struct TransientWindowChecks {
                      "显示前已被激活时，也应恢复最近一次外部前台应用")
         print("✓ 提前激活不会丢失外部前台来源")
 
+        reset()
+        let unmanagedMenuWindow = makeWindow()
+        alwaysShowDockIcon = false
+        // 未受管窗口（如状态栏菜单 NSPopupMenuWindow）从未调用过 present 或 recordPresentation
+        manager.windowWillClose(unmanagedMenuWindow)
+        precondition(scheduled.isEmpty, "未受管窗口关闭时不应调度 processClosedWindows")
+        drain()
+        precondition(accessoryReturns == 0 && activations.isEmpty,
+                     "未受管窗口（如状态栏菜单）关闭时不能误切回 accessory 或抢交焦点")
+        print("✓ 未受管系统内部窗口（如菜单弹窗）关闭被安全忽略")
+
         // 纯决策兜底：没有可靠的前台应用信息时，即便 App 自报 active 也不能随便激活来源。
         let decision = WindowActivationPolicy.decision(
             currentApplicationPID: current.processIdentifier,
