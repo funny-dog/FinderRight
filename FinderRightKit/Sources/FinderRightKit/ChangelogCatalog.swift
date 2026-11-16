@@ -45,6 +45,15 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.1",
+            date: "2026-11-16",
+            items: [
+                ChangelogEntry(type: .improvement, textKey: "减少 macOS「服务」菜单中只读复制与剪切操作的冗余确认弹窗，触发更流畅"),
+                ChangelogEntry(type: .improvement, textKey: "简化粘贴队列与配置读写流程，提升多文件粘贴与日常操作响应速度"),
+                ChangelogEntry(type: .fix, textKey: "清理多项冗余逻辑并收拢工具窗口位置记忆与弹窗交互，进一步降低内存与磁盘占用")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.13.0",
             date: "2026-11-13",
             items: [

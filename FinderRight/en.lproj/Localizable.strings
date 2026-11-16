@@ -1126,4 +1126,9 @@
 "正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
 "清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
 
+/* v1.13.1 更新日志 */
+"减少 macOS「服务」菜单中只读复制与剪切操作的冗余确认弹窗，触发更流畅" = "Removed redundant confirmation prompts for read-only copy and cut actions in macOS Services for a smoother workflow";
+"简化粘贴队列与配置读写流程，提升多文件粘贴与日常操作响应速度" = "Simplified cut-queue and configuration persistence to speed up multi-file pasting and everyday actions";
+"清理多项冗余逻辑并收拢工具窗口位置记忆与弹窗交互，进一步降低内存与磁盘占用" = "Cleaned up redundant code and unified tool window frame persistence and dialog presentation";
+
 
