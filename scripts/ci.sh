@@ -7,266 +7,120 @@ cd "$PROJECT_DIR"
 
 # 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
 KIT_BUILD_DIR="$(swift build -c release --disable-sandbox --package-path FinderRightKit --show-bin-path)"
+export KIT_BUILD_DIR PROJECT_DIR
 
 echo "=== [CI] 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --disable-sandbox --package-path FinderRightKit
 
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-service-drift.swift -o "$KIT_BUILD_DIR/test-service-drift"
-"$KIT_BUILD_DIR/test-service-drift"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-developer-menu.swift -o "$KIT_BUILD_DIR/test-developer-menu"
-"$KIT_BUILD_DIR/test-developer-menu"
-
-echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
-swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
-
-KIT_TEST_BINARY="$(swift build --disable-sandbox --package-path FinderRightKit --show-bin-path)/FinderRightKitTests" python3 - <<'PY'
+echo "=== [CI] 2. 并发运行单元测试、静态检查、扩展校验与回归脚本 ==="
+python3 - <<'PY'
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+from pathlib import Path
 import subprocess
+import sys
+import time
 
+kit = os.environ["KIT_BUILD_DIR"]
+root = Path(os.environ["PROJECT_DIR"])
+app_test_sources = " ".join(
+    str(p) for p in sorted(Path("FinderRight").glob("*.swift")) if p.name != "FinderRightApp.swift"
+)
+
+def build_and_run(name: str, cmd: str) -> tuple[str, str]:
+    return (name, cmd)
+
+TASKS = [
+    build_and_run("FinderRightKit 单元测试与过滤校验", f"""set -euo pipefail
+swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
+KIT_TEST_BINARY="$(swift build --disable-sandbox --package-path FinderRightKit --show-bin-path)/FinderRightKitTests" python3 - <<'INNER'
+import os, subprocess
 for word in ("__finderright_no_matching_test__", "   "):
-    result = subprocess.run(
-        [os.environ["KIT_TEST_BINARY"]],
-        env={**os.environ, "FINDERRIGHT_TEST_FILTER": word},
-        text=True, capture_output=True,
-    )
-    assert result.returncode == 1 and "总数 0" in result.stdout, (
-        f"过滤词 {word!r} 应因未匹配测试而失败：{result.returncode}\n{result.stdout}\n{result.stderr}"
-    )
+    result = subprocess.run([os.environ["KIT_TEST_BINARY"]], env={{**os.environ, "FINDERRIGHT_TEST_FILTER": word}}, text=True, capture_output=True)
+    assert result.returncode == 1 and "总数 0" in result.stdout, f"过滤词 {{word!r}} 应因未匹配测试而失败：{{result.returncode}}\\n{{result.stdout}}\\n{{result.stderr}}"
 print("PASS: 无匹配与空白过滤词均拒绝空跑")
+INNER"""),
+    build_and_run("服务菜单防漂移检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-service-drift.swift -o "{kit}/test-service-drift" && "{kit}/test-service-drift"'),
+    build_and_run("开发者菜单检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-developer-menu.swift -o "{kit}/test-developer-menu" && "{kit}/test-developer-menu"'),
+    build_and_run("剪切队列单项移除检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-cut-queue-removal.swift -o "{kit}/test-cut-queue-removal" && "{kit}/test-cut-queue-removal"'),
+    build_and_run("Git 状态检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-git-status.swift -o "{kit}/test-git-status" && "{kit}/test-git-status"'),
+    build_and_run("Git 本地操作检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-git-operations.swift -o "{kit}/test-git-operations" && "{kit}/test-git-operations"'),
+    build_and_run("Git 远程拉取推送检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-git-pull-push.swift -o "{kit}/test-git-pull-push" && GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=all FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "{kit}/test-git-pull-push"'),
+    build_and_run("临时窗口激活策略检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 FinderRight/Views/TransientWindowManager.swift scripts/test-transient-windows.swift -o "{kit}/test-transient-windows" && "{kit}/test-transient-windows"'),
+    build_and_run("应用退出与后台等待检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/AppDelegate+Termination.swift FinderRight/Services/ApplicationTermination.swift scripts/test-app-termination.swift -o "{kit}/test-app-termination" && "{kit}/test-app-termination"'),
+    build_and_run("设置窗口展示检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 FinderRight/Views/SettingsPresentation.swift scripts/test-settings-presentation.swift -o "{kit}/test-settings-presentation" && "{kit}/test-settings-presentation"'),
+    build_and_run("文件比较视图检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift FinderRight/Views/TransientWindowManager.swift FinderRight/Views/FileComparisonView.swift scripts/test-file-comparison-view.swift -o "{kit}/test-file-comparison-view" && "{kit}/test-file-comparison-view"'),
+    build_and_run("Git 状态视图检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift FinderRight/Views/TransientWindowManager.swift FinderRight/Views/FileComparisonView.swift FinderRight/Views/GitStatusView.swift scripts/test-git-status-view.swift -o "{kit}/test-git-status-view" && "{kit}/test-git-status-view"'),
+    build_and_run("剪贴板新建弹窗检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift FinderRight/Views/Components/FRDialog.swift scripts/test-clipboard-file-dialog.swift -o "{kit}/test-clipboard-file-dialog" && "{kit}/test-clipboard-file-dialog"'),
+    build_and_run("常用目录状态检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/Views/FavoriteDirectoryStatus.swift scripts/test-favorite-directory-status.swift -o "{kit}/test-favorite-directory-status" && "{kit}/test-favorite-directory-status"'),
+    build_and_run("启动展示策略检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 FinderRight/Services/LaunchPresentation.swift scripts/test-launch-presentation.swift -o "{kit}/test-launch-presentation" && "{kit}/test-launch-presentation"'),
+    build_and_run("自动更新策略检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/Services/LaunchPresentation.swift FinderRight/Services/ApplicationTermination.swift FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift scripts/test-automatic-updates.swift -o "{kit}/test-automatic-updates" && "{kit}/test-automatic-updates"'),
+    build_and_run("更新替换脚本检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/Services/LaunchPresentation.swift FinderRight/Services/ApplicationTermination.swift FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift scripts/test-update-relaunch.swift -o "{kit}/test-update-relaunch" && "{kit}/test-update-relaunch"'),
+    build_and_run("图片服务检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/Services/FinderRightService+Image.swift scripts/test-image-service.swift -o "{kit}/test-image-service" && "{kit}/test-image-service"'),
+    build_and_run("操作历史界面检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift FinderRight/Views/Components/FRDialog.swift FinderRight/Views/OperationHistoryView.swift FinderRight/Views/OperationHistoryRow.swift scripts/test-operation-history.swift -o "{kit}/test-operation-history" && "{kit}/test-operation-history"'),
+    build_and_run("主程序 FinderRight 类型检查", f'swiftc -typecheck -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" FinderRight/*.swift FinderRight/Services/*.swift FinderRight/Views/*.swift FinderRight/Views/Components/*.swift'),
+    build_and_run("无 Xcode 宏禁用检查 (@State/@Bindable)", """set -euo pipefail
+if grep -rnE '@(State|Bindable)\\b' --include=*.swift FinderRight FinderRightSync FinderRightPreview FinderRightMarkdown FinderRightKit/Sources | sed -E 's@(^|[^:])//.*$@\\1@' | grep -E '@(State|Bindable)\\b'; then
+  echo "错误：以上属性包装器依赖 SwiftUIMacros，纯 Command Line Tools 下不可用。@State 请改用 @FRState。" >&2
+  exit 1
+fi"""),
+    build_and_run("预编译全局快捷键集成测试", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit {app_test_sources} FinderRight/Services/*.swift FinderRight/Views/*.swift FinderRight/Views/Components/*.swift scripts/test-global-directory-shortcut.swift -o "{kit}/test-global-directory-shortcut"'),
+    build_and_run("预编译预览开关集成测试", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRight/Services/PreviewExtensionManager.swift scripts/test-preview-settings.swift -o "{kit}/test-preview-settings"'),
+    build_and_run("FinderSync 挂载卷与类型检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit -framework FinderSync -framework AppKit FinderRightSync/*.swift scripts/test-monitored-volumes.swift -o "{kit}/test-monitored-volumes" && "{kit}/test-monitored-volumes" && swiftc -typecheck -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -framework FinderSync -framework AppKit FinderRightSync/*.swift'),
+    build_and_run("单选菜单检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 FinderRightSync/SingleOptionMenu.swift scripts/test-single-option-menu.swift -o "{kit}/test-single-option-menu" && "{kit}/test-single-option-menu"'),
+    build_and_run("菜单图标渲染检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit FinderRightSync/MenuIconRenderer.swift scripts/test-menu-icons.swift -o "{kit}/test-menu-icons" && "{kit}/test-menu-icons"'),
+    build_and_run("代码高亮检查", f'swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit scripts/test-syntax-highlight.swift -o "{kit}/test-syntax-highlight" && "{kit}/test-syntax-highlight"'),
+    build_and_run("QuickLook 预览子项检查", f"""set -euo pipefail
+for check in documents archives zip request; do
+  swiftc -parse-as-library -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit "scripts/test-preview-$check.swift" -o "{kit}/test-preview-$check"
+  "{kit}/test-preview-$check"
+done"""),
+    build_and_run("QuickLook 扩展集成检查", f'swiftc -parse-as-library -module-name FinderRightPreview -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit -framework QuickLookUI -framework AppKit FinderRightPreview/*.swift scripts/test-preview.swift -o "{kit}/test-preview" && "{kit}/test-preview"'),
+    build_and_run("Markdown 扩展集成检查", f'swiftc -parse-as-library -module-name FinderRightMarkdown -target arm64-apple-macos13.0 -I "{kit}" -I "{kit}/Modules" -L "{kit}" -lFinderRightKit -framework QuickLookUI -framework AppKit FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift scripts/test-markdown-preview.swift -o "{kit}/test-markdown-preview" && "{kit}/test-markdown-preview"'),
+    build_and_run("官网资产、镜像同步与发布脚本回归", """set -euo pipefail
+python3 website/check.py
+if command -v node >/dev/null 2>&1; then
+  node --check website/worker/index.js
+  node website/worker/test.mjs
+else
+  echo "跳过：未安装 node，跳过官网 Worker 的 JS 校验（不影响 App 构建）"
+fi
+bash scripts/test-website-downloads.sh
+bash scripts/test-release.sh"""),
+]
+
+def run_task(item: tuple[str, str]):
+    name, cmd = item
+    start = time.monotonic()
+    res = subprocess.run(["/bin/bash", "-c", cmd], cwd=root, text=True, capture_output=True)
+    return name, res.returncode, res.stdout, res.stderr, time.monotonic() - start
+
+workers = min(6, os.cpu_count() or 4)
+failed = []
+with ThreadPoolExecutor(max_workers=workers) as pool:
+    futures = [pool.submit(run_task, t) for t in TASKS]
+    for fut in as_completed(futures):
+        name, rc, out, err, elapsed = fut.result()
+        status = "✓" if rc == 0 else "✗"
+        print(f"  {status} {name} ({elapsed:.1f}s)", flush=True)
+        if rc != 0:
+            failed.append((name, rc, out, err))
+
+if failed:
+    for name, rc, out, err in failed:
+        print(f"\n=== [失败] {name} (exit={rc}) ===", file=sys.stderr)
+        if out:
+            print(out, file=sys.stderr)
+        if err:
+            print(err, file=sys.stderr)
+    sys.exit(1)
 PY
 
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-cut-queue-removal.swift -o "$KIT_BUILD_DIR/test-cut-queue-removal"
-"$KIT_BUILD_DIR/test-cut-queue-removal"
-
-# 开发者工具：文件比较与 Git 状态的纯逻辑检查（只用临时目录，不触碰用户仓库）
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-git-status.swift -o "$KIT_BUILD_DIR/test-git-status"
-"$KIT_BUILD_DIR/test-git-status"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-git-operations.swift -o "$KIT_BUILD_DIR/test-git-operations"
-"$KIT_BUILD_DIR/test-git-operations"
-
-# 远程操作用本地 file:// 裸仓库验证；只在这个测试进程内放行 file 协议与裸仓库，
-# 产品代码默认仍只允许 https/ssh/git。
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-git-pull-push.swift -o "$KIT_BUILD_DIR/test-git-pull-push"
-GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=all FINDERRIGHT_GIT_ALLOW_PROTOCOL=file "$KIT_BUILD_DIR/test-git-pull-push"
-
-echo "=== [CI] 3. 静态类型检查主程序 FinderRight ==="
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  FinderRight/Views/TransientWindowManager.swift scripts/test-transient-windows.swift \
-  -o "$KIT_BUILD_DIR/test-transient-windows"
-"$KIT_BUILD_DIR/test-transient-windows"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/AppDelegate+Termination.swift FinderRight/Services/ApplicationTermination.swift \
-  scripts/test-app-termination.swift \
-  -o "$KIT_BUILD_DIR/test-app-termination"
-"$KIT_BUILD_DIR/test-app-termination"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  FinderRight/Views/SettingsPresentation.swift scripts/test-settings-presentation.swift \
-  -o "$KIT_BUILD_DIR/test-settings-presentation"
-"$KIT_BUILD_DIR/test-settings-presentation"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
-  FinderRight/Views/TransientWindowManager.swift \
-  FinderRight/Views/FileComparisonView.swift scripts/test-file-comparison-view.swift \
-  -o "$KIT_BUILD_DIR/test-file-comparison-view"
-"$KIT_BUILD_DIR/test-file-comparison-view"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
-  FinderRight/Views/TransientWindowManager.swift \
-  FinderRight/Views/FileComparisonView.swift FinderRight/Views/GitStatusView.swift scripts/test-git-status-view.swift \
-  -o "$KIT_BUILD_DIR/test-git-status-view"
-"$KIT_BUILD_DIR/test-git-status-view"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
-  FinderRight/Views/Components/FRDialog.swift scripts/test-clipboard-file-dialog.swift \
-  -o "$KIT_BUILD_DIR/test-clipboard-file-dialog"
-"$KIT_BUILD_DIR/test-clipboard-file-dialog"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Views/FavoriteDirectoryStatus.swift scripts/test-favorite-directory-status.swift \
-  -o "$KIT_BUILD_DIR/test-favorite-directory-status"
-"$KIT_BUILD_DIR/test-favorite-directory-status"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  FinderRight/Services/LaunchPresentation.swift scripts/test-launch-presentation.swift \
-  -o "$KIT_BUILD_DIR/test-launch-presentation"
-"$KIT_BUILD_DIR/test-launch-presentation"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Services/LaunchPresentation.swift \
-  FinderRight/Services/ApplicationTermination.swift \
-  FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
-  scripts/test-automatic-updates.swift -o "$KIT_BUILD_DIR/test-automatic-updates"
-"$KIT_BUILD_DIR/test-automatic-updates"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Services/LaunchPresentation.swift \
-  FinderRight/Services/ApplicationTermination.swift \
-  FinderRight/Services/UpdateChecker.swift FinderRight/Services/UpdateInstallReceipt.swift \
-  scripts/test-update-relaunch.swift -o "$KIT_BUILD_DIR/test-update-relaunch"
-"$KIT_BUILD_DIR/test-update-relaunch"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Services/FinderRightService+Image.swift scripts/test-image-service.swift \
-  -o "$KIT_BUILD_DIR/test-image-service"
-"$KIT_BUILD_DIR/test-image-service"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/FRState.swift FinderRight/Views/Components/Theme.swift \
-  FinderRight/Views/Components/FRDialog.swift FinderRight/Views/OperationHistoryView.swift FinderRight/Views/OperationHistoryRow.swift \
-  scripts/test-operation-history.swift -o "$KIT_BUILD_DIR/test-operation-history"
-"$KIT_BUILD_DIR/test-operation-history"
-
-swiftc -typecheck -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  FinderRight/*.swift \
-  FinderRight/Services/*.swift \
-  FinderRight/Views/*.swift \
-  FinderRight/Views/Components/*.swift
-
-# 上面这步在有完整 Xcode 的机器上总能过，但仓库承诺「只需 Command Line Tools」。
-# libSwiftUIMacros.dylib 只在 Xcode 的 Platform 目录下，CLT 里没有，实测只有
-# @State 与 @Bindable 依赖它（@StateObject/@ObservedObject/@Published/@AppStorage/
-# @FocusState/@Binding 等都正常），报错形如
-# "external macro implementation type ... could not be found"。
-# 本机与 GitHub Actions 都带完整 Xcode，这类回归只会在别人的机器上炸，所以按源码拦一道。
-# 先去注释再匹配，避免把「注释里提到 @State」误判成真的使用了它。
-if grep -rnE '@(State|Bindable)\b' --include=*.swift \
-     FinderRight FinderRightSync FinderRightPreview FinderRightMarkdown FinderRightKit/Sources \
-     | sed -E 's@(^|[^:])//.*$@\1@' \
-     | grep -E '@(State|Bindable)\b'; then
-  echo "错误：上面这些属性包装器依赖 SwiftUIMacros，纯 Command Line Tools 下不可用。" >&2
-  echo "      @State 请改用 @FRState（见 FinderRight/FRState.swift）。" >&2
-  exit 1
-fi
-
-# 使用真实热键注册与事件派发，但仅写临时配置，不启动窗口或更改用户快捷键。
-APP_TEST_SOURCES=()
-for source in FinderRight/*.swift; do
-  if [ "$source" != "FinderRight/FinderRightApp.swift" ]; then
-    APP_TEST_SOURCES+=("$source")
-  fi
-done
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  "${APP_TEST_SOURCES[@]}" FinderRight/Services/*.swift \
-  FinderRight/Views/*.swift FinderRight/Views/Components/*.swift \
-  scripts/test-global-directory-shortcut.swift -o "$KIT_BUILD_DIR/test-global-directory-shortcut"
+echo "=== [CI] 3. 运行系统环境相关检查（全局热键 / QuickLook 开关）==="
 "$KIT_BUILD_DIR/test-global-directory-shortcut"
-
-swiftc -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/Services/PreviewExtensionManager.swift scripts/test-preview-settings.swift \
-  -o "$KIT_BUILD_DIR/test-preview-settings"
 "$KIT_BUILD_DIR/test-preview-settings"
 
-echo "=== [CI] 4. 静态类型检查扩展 FinderRightSync ==="
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework FinderSync -framework AppKit \
-  FinderRightSync/*.swift scripts/test-monitored-volumes.swift \
-  -o "$KIT_BUILD_DIR/test-monitored-volumes"
-"$KIT_BUILD_DIR/test-monitored-volumes"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  FinderRightSync/SingleOptionMenu.swift scripts/test-single-option-menu.swift \
-  -o "$KIT_BUILD_DIR/test-single-option-menu"
-"$KIT_BUILD_DIR/test-single-option-menu"
-
-swiftc -typecheck -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -framework FinderSync -framework AppKit \
-  FinderRightSync/*.swift
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRightSync/MenuIconRenderer.swift scripts/test-menu-icons.swift \
-  -o "$KIT_BUILD_DIR/test-menu-icons"
-"$KIT_BUILD_DIR/test-menu-icons"
-
-swiftc -parse-as-library -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  scripts/test-syntax-highlight.swift -o "$KIT_BUILD_DIR/test-syntax-highlight"
-"$KIT_BUILD_DIR/test-syntax-highlight"
-
-echo "=== [CI] 5. 编译 Quick Look 扩展代码并运行预览集成检查 ==="
-for check in documents archives zip request; do
-  swiftc -parse-as-library -target arm64-apple-macos13.0 \
-    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-    -L "$KIT_BUILD_DIR" -lFinderRightKit \
-    "scripts/test-preview-$check.swift" -o "$KIT_BUILD_DIR/test-preview-$check"
-  "$KIT_BUILD_DIR/test-preview-$check"
-done
-swiftc -parse-as-library \
-  -module-name FinderRightPreview \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework QuickLookUI -framework AppKit \
-  FinderRightPreview/*.swift scripts/test-preview.swift \
-  -o "$KIT_BUILD_DIR/test-preview"
-"$KIT_BUILD_DIR/test-preview"
-swiftc -parse-as-library \
-  -module-name FinderRightMarkdown \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework QuickLookUI -framework AppKit \
-  FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift scripts/test-markdown-preview.swift \
-  -o "$KIT_BUILD_DIR/test-markdown-preview"
-"$KIT_BUILD_DIR/test-markdown-preview"
-
-echo "=== [CI] 6. 校验中英文案覆盖率 ==="
+echo "=== [CI] 4. 校验中英文案覆盖率 ==="
 # 面向用户的文案都写在 Swift 里、以中文原文作 key 查 en.lproj。漏翻译不会导致编译或运行失败，
 # 只会在英文系统上悄悄退回中文，所以单独兜一道。带插值的文案在表里是 %@ 占位，跳过比对。
 python3 - <<'PY'
@@ -353,19 +207,6 @@ for text in missing_sync:
     print(f"  - [FinderSync] 缺少英文翻译：{text}")
 sys.exit(1 if (missing_app or missing_sync) else 0)
 PY
-
-echo "=== [CI] 7. 校验官网下载、页面与更新代理 ==="
-python3 website/check.py
-# node 不属于 macOS 自带，也不随 Command Line Tools 提供。只在改了官网 Worker 时才会用到，
-# 缺它不该让「编 App」这件事失败；装了就跑，没装就跳过并提示。
-if command -v node >/dev/null 2>&1; then
-  node --check website/worker/index.js
-  node website/worker/test.mjs
-else
-  echo "跳过：未安装 node，跳过官网 Worker 的 JS 校验（不影响 App 构建）"
-fi
-bash scripts/test-website-downloads.sh
-bash scripts/test-release.sh
 
 echo ""
 echo "========================================="

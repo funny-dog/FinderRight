@@ -16,7 +16,7 @@ APPEX_DIR="$APP_DIR/Contents/PlugIns/FinderRightSync.appex"
 PREVIEW_DIR="$APP_DIR/Contents/PlugIns/FinderRightPreview.appex"
 MARKDOWN_DIR="$APP_DIR/Contents/PlugIns/FinderRightMarkdown.appex"
 # 由 SwiftPM 给出实际产物目录：不同版本的工具链布局不同（.build/out/Products/Release 或 .build/release）
-KIT_BUILD_DIR="$(swift build -c release --package-path FinderRightKit --show-bin-path)"
+KIT_BUILD_DIR="$(swift build -c release --disable-sandbox --package-path FinderRightKit --show-bin-path)"
 
 echo "=== 1. 编译 FinderRightKit (Release) ==="
 swift build -c release --disable-sandbox --package-path FinderRightKit
@@ -31,53 +31,63 @@ mkdir -p "$STAGE_DIR"
 # 实际仍在吃旧产物，验证结果不可信。
 rm -f "$APP_DIR/Contents/Resources/Assets.car"
 
-echo "=== 2. 编译主程序 FinderRight (Release) ==="
-mkdir -p "$APP_DIR/Contents/MacOS"
-swiftc -O -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  FinderRight/*.swift \
-  FinderRight/Services/*.swift \
-  FinderRight/Views/*.swift \
-  FinderRight/Views/Components/*.swift \
-  -o "$APP_DIR/Contents/MacOS/FinderRight"
+echo "=== 2-3. 并发编译主程序与三个扩展 (Release) ==="
+mkdir -p "$APP_DIR/Contents/MacOS" "$APPEX_DIR/Contents/MacOS" "$PREVIEW_DIR/Contents/MacOS" "$MARKDOWN_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
-echo "=== 3. 编译扩展 FinderRightSync (Release) ==="
-mkdir -p "$APPEX_DIR/Contents/MacOS"
-swiftc -O -parse-as-library \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework FinderSync -framework AppKit \
-  -Xlinker -e -Xlinker _NSExtensionMain \
-  FinderRightSync/*.swift \
-  -o "$APPEX_DIR/Contents/MacOS/FinderRightSync"
+(
+  swiftc -O -parse-as-library \
+    -target arm64-apple-macos13.0 \
+    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+    -L "$KIT_BUILD_DIR" -lFinderRightKit \
+    FinderRight/*.swift \
+    FinderRight/Services/*.swift \
+    FinderRight/Views/*.swift \
+    FinderRight/Views/Components/*.swift \
+    -o "$APP_DIR/Contents/MacOS/FinderRight"
+) &
+pid_app=$!
 
-echo "=== 编译 Quick Look 扩展 FinderRightPreview (Release) ==="
-mkdir -p "$PREVIEW_DIR/Contents/MacOS"
-swiftc -O -parse-as-library \
-  -module-name FinderRightPreview \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework QuickLookUI -framework AppKit \
-  -Xlinker -e -Xlinker _NSExtensionMain \
-  FinderRightPreview/*.swift \
-  -o "$PREVIEW_DIR/Contents/MacOS/FinderRightPreview"
+(
+  swiftc -O -parse-as-library \
+    -target arm64-apple-macos13.0 \
+    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+    -L "$KIT_BUILD_DIR" -lFinderRightKit \
+    -framework FinderSync -framework AppKit \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    FinderRightSync/*.swift \
+    -o "$APPEX_DIR/Contents/MacOS/FinderRightSync"
+) &
+pid_sync=$!
 
-echo "=== 编译 Quick Look 扩展 FinderRightMarkdown (Release) ==="
-# 渲染视图与文件预览扩展共用同一份源码
-mkdir -p "$MARKDOWN_DIR/Contents/MacOS"
-swiftc -O -parse-as-library \
-  -module-name FinderRightMarkdown \
-  -target arm64-apple-macos13.0 \
-  -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-  -L "$KIT_BUILD_DIR" -lFinderRightKit \
-  -framework QuickLookUI -framework AppKit \
-  -Xlinker -e -Xlinker _NSExtensionMain \
-  FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift \
-  -o "$MARKDOWN_DIR/Contents/MacOS/FinderRightMarkdown"
+(
+  swiftc -O -parse-as-library \
+    -module-name FinderRightPreview \
+    -target arm64-apple-macos13.0 \
+    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+    -L "$KIT_BUILD_DIR" -lFinderRightKit \
+    -framework QuickLookUI -framework AppKit \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    FinderRightPreview/*.swift \
+    -o "$PREVIEW_DIR/Contents/MacOS/FinderRightPreview"
+) &
+pid_preview=$!
+
+(
+  swiftc -O -parse-as-library \
+    -module-name FinderRightMarkdown \
+    -target arm64-apple-macos13.0 \
+    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
+    -L "$KIT_BUILD_DIR" -lFinderRightKit \
+    -framework QuickLookUI -framework AppKit \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    FinderRightMarkdown/*.swift FinderRightPreview/DocumentPreviewView.swift \
+    -o "$MARKDOWN_DIR/Contents/MacOS/FinderRightMarkdown"
+) &
+pid_markdown=$!
+
+for pid in "$pid_app" "$pid_sync" "$pid_preview" "$pid_markdown"; do
+  wait "$pid"
+done
 
 echo "=== 4. 组装与替换 Plist 变量 ==="
 # 主 App Info.plist
