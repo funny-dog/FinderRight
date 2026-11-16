@@ -96,15 +96,10 @@ struct FeaturesTab: View {
             message: NSLocalizedString("开启后，在其他应用中按下该组合也会打开 FinderRight，可能覆盖原有操作（包括打开、保存对话框中的按键）。无法检测所有应用的快捷键冲突；注册成功也不代表没有冲突。", comment: ""),
             symbol: "keyboard", tone: .warning,
             buttons: [NSLocalizedString("开启全局生效", comment: ""), NSLocalizedString("取消", comment: "")])
-        let completion: (Int?) -> Void = { response in
+        dialog.present { response in
             guard response == 0 else { return }
             globalShortcut.setEnabled(true)
             refreshGlobalShortcut()
-        }
-        if let window = NSApp.keyWindow {
-            dialog.beginSheet(for: window, completion: completion)
-        } else {
-            completion(dialog.runModal())
         }
     }
 

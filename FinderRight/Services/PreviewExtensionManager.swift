@@ -72,18 +72,31 @@ enum PreviewExtensionManager {
     }
 
     private static func run(_ arguments: [String]) throws -> String {
+        let result = try PluginKitRunner.execute(arguments)
+        guard result.status == 0 else { throw Failure.commandFailed }
+        return result.output
+    }
+}
+
+enum PluginKitRunner {
+    private static let executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+
+    static func execute(_ arguments: [String]) throws -> (status: Int32, output: String) {
         let process = Process()
         let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
+        process.executableURL = executableURL
         process.arguments = arguments
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         try process.run()
-        // 只查询固定的自身标识，输出很小；先读完再等待退出，避免管道互等。
+        // 先读完再等待退出，避免输出量超过管道缓冲时互等。
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw Failure.commandFailed }
-        return String(decoding: data, as: UTF8.self)
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    static func run(_ arguments: [String]) -> (status: Int32, output: String) {
+        (try? execute(arguments)) ?? (-1, "")
     }
 }

@@ -153,7 +153,7 @@ extension FinderRightService {
             // defaults 读写与 killall 都会同步等待子进程，放到后台，不阻塞主线程
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self else { return }
-                let resp = self.toggleHiddenFilesViaDefaults(req, newValue: "toggle")
+                let resp = self.toggleHiddenFilesViaDefaults(req)
                 self.serviceLog("toggleHiddenFiles 用户确认重启访达: \(resp.message ?? "")")
             }
         case 1:
@@ -165,7 +165,7 @@ extension FinderRightService {
         }
     }
 
-    private func toggleHiddenFilesViaDefaults(_ req: IPCRequest, newValue: String) -> IPCResponse {
+    private func toggleHiddenFilesViaDefaults(_ req: IPCRequest) -> IPCResponse {
         // 用 defaults CLI 读当前值：子进程每次冷启动读盘，绕开本进程 cfprefsd 客户端缓存
         // （UserDefaults(suiteName:) 读其他 App 的域可能命中过期缓存，导致取反后写回同值、看似没切换）
         var currentBool = false

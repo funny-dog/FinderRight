@@ -21,32 +21,33 @@ enum FinderUndoMenu {
     }
 
     static func snapshot(app: AXUIElement) -> FinderUndoSnapshot? {
-        guard let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return nil }
+        guard let bar = AXUIElement.from(app.copyAttribute(kAXMenuBarAttribute)) else { return nil }
         // 菜单栏顺序固定：苹果、访达、文件、编辑。标题本地化，按快捷键找撤销项（⌘Z，修饰键 0 = 仅 ⌘）
-        let tops = children(bar)
-        guard tops.count > 3, let menu = children(tops[3]).first else { return nil }
-        let item = children(menu).first {
-            copyAttribute($0, kAXMenuItemCmdCharAttribute) as? String == "Z"
-                && (copyAttribute($0, kAXMenuItemCmdModifiersAttribute) as? Int) == 0
+        let tops = bar.children
+        guard tops.count > 3, let menu = tops[3].children.first else { return nil }
+        let item = menu.children.first {
+            $0.copyAttribute(kAXMenuItemCmdCharAttribute) as? String == "Z"
+                && ($0.copyAttribute(kAXMenuItemCmdModifiersAttribute) as? Int) == 0
         }
-        guard let item, let title = copyAttribute(item, kAXTitleAttribute) as? String else { return nil }
-        let enabled = copyAttribute(item, kAXEnabledAttribute) as? Bool ?? false
+        guard let item, let title = item.copyAttribute(kAXTitleAttribute) as? String else { return nil }
+        let enabled = item.copyAttribute(kAXEnabledAttribute) as? Bool ?? false
         return FinderUndoSnapshot(title: title, enabled: enabled)
     }
+}
 
-    private static func copyAttribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
+extension AXUIElement {
+    func copyAttribute(_ name: String) -> AnyObject? {
         var value: AnyObject?
-        return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+        return AXUIElementCopyAttributeValue(self, name as CFString, &value) == .success ? value : nil
     }
 
     // CF 类型的 as? 不做运行时类型检查（编译器视为恒成功），必须按 TypeID 判定
-    private static func axElement(_ value: AnyObject?) -> AXUIElement? {
+    static func from(_ value: AnyObject?) -> AXUIElement? {
         guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-        let element = value as! AXUIElement
-        return element
+        return (value as! AXUIElement)
     }
 
-    private static func children(_ element: AXUIElement) -> [AXUIElement] {
-        (copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement]) ?? []
+    var children: [AXUIElement] {
+        (copyAttribute(kAXChildrenAttribute) as? [AXUIElement]) ?? []
     }
 }

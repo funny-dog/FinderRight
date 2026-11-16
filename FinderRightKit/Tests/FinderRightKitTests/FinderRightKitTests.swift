@@ -413,86 +413,26 @@ struct FinderRightKitTestsRunner {
             try assertTrue(reloadedConfig.customFileTemplates.isEmpty)
         }
 
-        // 5. SharedConfig 多线程并发压测
-        runTest("窗口位置：保存不覆盖其他进程已写入的配置") {
-            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-window-\(UUID().uuidString).plist")
+        // 5. SharedConfig 并发安全与损坏保护测试
+        runTest("SharedConfig 单实例多线程读写不丢失配置") {
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-thread-safety-\(UUID().uuidString).plist")
             defer { try? FileManager.default.removeItem(at: tempURL) }
-
-            // 模拟主 App 先启动并缓存旧配置
-            let windowWriter = SharedConfig(fileURL: tempURL)
-            windowWriter.preferredTerminal = "com.apple.Terminal"
-
-            // 另一进程（如 FinderSync 扩展）随后写入新配置
-            let otherProcess = SharedConfig(fileURL: tempURL)
-            otherProcess.menuIconStyle = .tile
-            otherProcess.preferredTerminal = "com.googlecode.iterm2"
-
-            // 主 App 的窗口回调只应新增 windowPositions，不能回滚上面的设置
-            let frame = NSRect(x: 120, y: 240, width: 600, height: 480)
-            windowWriter.saveWindowPosition(for: "gitStatus", frame: frame)
-
-            let reloaded = SharedConfig(fileURL: tempURL)
-            try assertEqual(reloaded.preferredTerminal, "com.googlecode.iterm2")
-            try assertEqual(reloaded.menuIconStyle, .tile)
-            let saved = reloaded.windowPositions.first { $0.id == "gitStatus" }
-            try assertEqual(saved?.originX, 120)
-            try assertEqual(saved?.originY, 240)
-            try assertEqual(saved?.sizeWidth, 600)
-            try assertEqual(saved?.sizeHeight, 480)
-
-            // 重复保存同一窗口只更新，不产生重复条目
-            windowWriter.saveWindowPosition(for: "gitStatus", frame: NSRect(x: 0, y: 0, width: 520, height: 380))
-            let updated = SharedConfig(fileURL: tempURL)
-            try assertEqual(updated.windowPositions.filter { $0.id == "gitStatus" }.count, 1)
-            try assertEqual(updated.windowPositions.first { $0.id == "gitStatus" }?.sizeWidth, 520)
-
-            // 清除单个窗口与全部窗口位置
-            windowWriter.clearWindowPosition(for: "gitStatus")
-            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
-            try assertEqual(SharedConfig(fileURL: tempURL).preferredTerminal, "com.googlecode.iterm2")
-            windowWriter.saveWindowPosition(for: "fileComparison", frame: frame)
-            windowWriter.clearAllWindowPositions()
-            try assertTrue(SharedConfig(fileURL: tempURL).windowPositions.isEmpty)
-        }
-
-        runTest("SharedConfig 陈旧实例只合并自己修改的键") {
-            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-merge-\(UUID().uuidString).plist")
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-            let stale = SharedConfig(fileURL: tempURL)
-            stale.preferredTerminal = "com.apple.Terminal"
-            let other = SharedConfig(fileURL: tempURL)
-
-            other.menuIconStyle = .tile
-            other.copyPathFormat = .tilde
-            stale.developerToolsEnabled = true
-
-            let reloaded = SharedConfig(fileURL: tempURL)
-            try assertTrue(reloaded.developerToolsEnabled)
-            try assertEqual(reloaded.menuIconStyle, .tile, "另一实例的图标风格不能被旧缓存覆盖")
-            try assertEqual(reloaded.copyPathFormat, .tilde, "另一实例的路径格式不能被旧缓存覆盖")
-            try assertEqual(reloaded.preferredTerminal, "com.apple.Terminal")
-        }
-
-        runTest("SharedConfig 两实例并发写不同键都保留") {
-            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test-process-merge-\(UUID().uuidString).plist")
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-            let first = SharedConfig(fileURL: tempURL)
-            let second = SharedConfig(fileURL: tempURL)
-            let queue = DispatchQueue(label: "com.finderright.test.config.processes", attributes: .concurrent)
+            let config = SharedConfig(fileURL: tempURL)
+            let queue = DispatchQueue(label: "com.finderright.test.config.threads", attributes: .concurrent)
             let group = DispatchGroup()
             for _ in 0..<30 {
                 group.enter()
                 queue.async {
-                    first.preferredTerminal = "com.apple.Terminal"
-                    first.developerToolsEnabled = true
-                    first.copyPathFormat = .tilde
+                    config.preferredTerminal = "com.apple.Terminal"
+                    config.developerToolsEnabled = true
+                    config.copyPathFormat = .tilde
                     group.leave()
                 }
                 group.enter()
                 queue.async {
-                    second.menuIconStyle = .tile
-                    second.preferredEditor = "com.microsoft.VSCode"
-                    second.copyFileNameFormat = .withoutExtension
+                    config.menuIconStyle = .tile
+                    config.preferredEditor = "com.microsoft.VSCode"
+                    config.copyFileNameFormat = .withoutExtension
                     group.leave()
                 }
             }
@@ -847,80 +787,21 @@ struct FinderRightKitTestsRunner {
             }
         }
 
-        runTest("CutQueueStore 中断移动源和目标同时存在时报告冲突且不重复入队") {
+        runTest("CutQueueStore 兼容恢复旧版批次格式并忽略已完成项") {
             let dir = makeTempDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
-            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
-            let source = dir.appendingPathComponent("source.txt")
-            let destination = dir.appendingPathComponent("destination.txt")
-            try Data("source".utf8).write(to: source)
-            try Data("copied".utf8).write(to: destination)
-            try store.write([source.path])
-            let batch = try store.take()!
-            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
+            let store = CutQueueStore(directory: dir)
+            let pending = dir.appendingPathComponent("pending.txt")
+            let done = dir.appendingPathComponent("done.txt")
+            try Data("a".utf8).write(to: pending)
+            try Data("b".utf8).write(to: done)
+            let legacyURL = dir.appendingPathComponent("cut-queue.inflight.00000000-0000-0000-0000-000000000001.json")
+            let legacyJSON = """
+            {"items":[{"source":"\(pending.path)","phase":"moving"},{"source":"\(done.path)","phase":"completed"}]}
+            """
+            try Data(legacyJSON.utf8).write(to: legacyURL)
 
-            let result = try store.recoverWithConflicts()
-
-            try assertTrue(result.restored.isEmpty, "源不能再次入队后生成第二份副本")
-            try assertEqual(result.conflicts, [.init(source: source.path, destination: destination.path)])
-            try assertTrue(FileManager.default.fileExists(atPath: source.path))
-            try assertTrue(FileManager.default.fileExists(atPath: destination.path))
-        }
-
-        runTest("CutQueueStore 冲突源从已有待剪切队列剔除") {
-            let dir = makeTempDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
-            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
-            let source = dir.appendingPathComponent("source.txt")
-            let destination = dir.appendingPathComponent("destination.txt")
-            let other = dir.appendingPathComponent("other.txt")
-            try Data("source".utf8).write(to: source)
-            try Data("copied".utf8).write(to: destination)
-            try Data("other".utf8).write(to: other)
-            try store.write([source.path])
-            let batch = try store.take()!
-            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
-            try store.write([source.path, other.path])
-
-            let result = try store.recoverWithConflicts()
-
-            try assertEqual(result.restored, [other.path], "冲突源不能因已在队列里而再次粘贴")
-            try assertEqual(store.read(), [other.path])
-            try assertEqual(result.conflicts, [.init(source: source.path, destination: destination.path)])
-        }
-
-        runTest("CutQueueStore 中断移动目标未产生时恢复源路径") {
-            let dir = makeTempDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
-            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
-            let source = dir.appendingPathComponent("source.txt")
-            let destination = dir.appendingPathComponent("missing.txt")
-            try Data("source".utf8).write(to: source)
-            try store.write([source.path])
-            let batch = try store.take()!
-            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
-
-            let result = try store.recoverWithConflicts()
-            try assertEqual(result.restored, [source.path])
-            try assertTrue(result.conflicts.isEmpty)
-        }
-
-        runTest("CutQueueStore 已完成记录不恢复残留源路径") {
-            let dir = makeTempDirectory()
-            defer { try? FileManager.default.removeItem(at: dir) }
-            let store = CutQueueStore(directory: dir.appendingPathComponent("state"))
-            let source = dir.appendingPathComponent("source.txt")
-            let destination = dir.appendingPathComponent("destination.txt")
-            try Data("source".utf8).write(to: source)
-            try Data("copied".utf8).write(to: destination)
-            try store.write([source.path])
-            let batch = try store.take()!
-            try store.recordDestination(batchID: batch.id, source: source.path, destination: destination.path)
-            try store.recordCompletion(batchID: batch.id, source: source.path)
-
-            let result = try store.recoverWithConflicts()
-            try assertTrue(result.restored.isEmpty)
-            try assertTrue(result.conflicts.isEmpty)
+            try assertEqual(try store.recover(), [pending.path])
         }
 
         // 9. pluginkit 选举输出解析
@@ -2669,10 +2550,9 @@ struct FinderRightKitTestsRunner {
             try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: roDir.path)
         }
 
-        runTest("RecentOperations 无法识别的记录逐条跳过并留底原文件") {
+        runTest("RecentOperations 无法识别的记录逐条跳过并正常继续保存") {
             let dir = makeTempDirectory()
             let fileURL = dir.appendingPathComponent("history.json")
-            let backupURL = dir.appendingPathComponent("history.unreadable.json")
             let known = OperationRecord(kind: .copy, subject: "known", date: Date())
             // 模拟降级：新版本写入了旧版本不认识的操作类型
             var entries = try JSONSerialization.jsonObject(with: JSONEncoder().encode([known])) as! [[String: Any]]
@@ -2687,50 +2567,10 @@ struct FinderRightKitTestsRunner {
             let ops = RecentOperations(capacity: 5, storageURL: fileURL)
             try assertEqual(ops.records.map(\.subject), ["known"], "可识别的记录照常加载")
             try assertNil(ops.persistenceError)
-            try assertEqual(try Data(contentsOf: backupURL), original, "覆盖前原文件必须留底")
 
             ops.record(OperationRecord(kind: .paste, subject: "new"))
             let reloaded = RecentOperations(capacity: 5, storageURL: fileURL)
             try assertEqual(reloaded.records.map(\.subject), ["new", "known"])
-            try assertEqual(try Data(contentsOf: backupURL), original, "后续写入不能动备份")
-        }
-
-        runTest("RecentOperations 损坏文件先留底再覆盖") {
-            let dir = makeTempDirectory()
-            let fileURL = dir.appendingPathComponent("history.json")
-            let backupURL = dir.appendingPathComponent("history.unreadable.json")
-            try "invalid json content".write(to: fileURL, atomically: true, encoding: .utf8)
-
-            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
-            try assertEqual(try String(contentsOf: backupURL), "invalid json content")
-            ops.record(OperationRecord(kind: .copy, subject: "after-corrupt"))
-            try assertNil(ops.persistenceError, "留底成功后可以正常保存")
-            try assertEqual(RecentOperations(capacity: 5, storageURL: fileURL).records.map(\.subject), ["after-corrupt"])
-            try assertEqual(try String(contentsOf: backupURL), "invalid json content")
-        }
-
-        runTest("RecentOperations 无法留底时不覆盖原文件") {
-            let dir = makeTempDirectory()
-            let fileURL = dir.appendingPathComponent("history.json")
-            try "invalid json content".write(to: fileURL, atomically: true, encoding: .utf8)
-            // 备份位置被一个删不掉的目录占住，留底必然失败
-            let locked = dir.appendingPathComponent("history.unreadable.json/locked", isDirectory: true)
-            try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
-            try "x".write(to: locked.appendingPathComponent("f"), atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: locked.path)
-            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: locked.path) }
-
-            let ops = RecentOperations(capacity: 5, storageURL: fileURL)
-            ops.record(OperationRecord(kind: .copy, subject: "kept-in-memory"))
-            try assertEqual(ops.records.map(\.subject), ["kept-in-memory"])
-            try assertTrue(ops.persistenceError != nil, "暂停保存需要提示")
-            try assertEqual(try String(contentsOf: fileURL), "invalid json content", "未留底的文件不能被覆盖")
-
-            ops.clear()
-            try assertTrue(!FileManager.default.fileExists(atPath: fileURL.path), "用户主动清空时可以删除")
-            ops.record(OperationRecord(kind: .copy, subject: "after-clear"))
-            try assertEqual(RecentOperations(capacity: 5, storageURL: fileURL).records.map(\.subject), ["after-clear"],
-                            "清空后恢复正常保存")
         }
 
         runTest("RecentOperations 容量0仍发完成事件") {

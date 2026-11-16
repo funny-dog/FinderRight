@@ -232,15 +232,6 @@ public struct MenuDataNode: Equatable {
         case dynamic(String)
         case formatted(key: String, count: Int)
         case unavailableDirectory(String)
-
-        public var rawString: String {
-            switch self {
-            case .key(let s): return s
-            case .dynamic(let s): return s
-            case .formatted(let key, let count): return "\(key) (\(count))"
-            case .unavailableDirectory(let name): return name
-            }
-        }
     }
 
     public let id: String

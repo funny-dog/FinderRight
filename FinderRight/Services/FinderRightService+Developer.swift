@@ -16,8 +16,8 @@ extension FinderRightService {
             let selection = (req.payload["items"]?.stringArrayValue ?? []).map { URL(fileURLWithPath: $0) }
             let directory = req.payload["directory"]?.stringValue.map { URL(fileURLWithPath: $0) }
             let context = try DeveloperCommand.context(selection: selection, directory: directory)
-            guard isPathAllowed(context.directory.path, role: .source),
-                  context.items.allSatisfy({ isPathAllowed($0.path, role: .source) }) else {
+            // selection 与 directory 已由 handle() 校验；仅当由子项推导工作目录时复核工作目录。
+            guard directory != nil || isPathAllowed(context.directory.path, role: .source) else {
                 return IPCResponse(id: req.id, success: false, message: NSLocalizedString("无法访问所选路径", comment: ""))
             }
             DispatchQueue.main.async {
@@ -37,8 +37,7 @@ extension FinderRightService {
             return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
         }
         let paths = isTree ? req.payload["directory"]?.stringValue.map { [$0] } : req.payload["items"]?.stringArrayValue
-        guard let paths, !paths.isEmpty,
-              paths.allSatisfy({ isPathAllowed($0, role: .source) }) else {
+        guard let paths, !paths.isEmpty else {
             return IPCResponse(id: req.id, success: false, message: NSLocalizedString("无法访问所选路径", comment: ""))
         }
         guard Self.runGuarded(on: Self.developerQueue, work: {

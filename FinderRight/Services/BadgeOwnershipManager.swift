@@ -18,7 +18,6 @@ final class BadgeOwnershipManager {
     private init() {}
 
     private static let ownExtensionId = "com.finderright.app.sync"
-    private static let pluginKitURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
     /// ignore 与 use 之间的停留时间（与真机验证一致；过短时 Finder 可能来不及转移归属）
     private static let ignoreDuration: TimeInterval = 2
 
@@ -155,25 +154,17 @@ final class BadgeOwnershipManager {
 
     /// 同步执行 pluginkit，返回 stdout；启动失败或退出码非 0 返回 nil
     private static func pluginKit(_ arguments: [String]) -> String? {
-        let proc = Process()
-        let out = Pipe()
-        proc.executableURL = pluginKitURL
-        proc.arguments = arguments
-        proc.standardOutput = out
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
+            let result = try PluginKitRunner.execute(arguments)
+            guard result.status == 0 else {
+                os_log("pluginkit %{public}@ 退出码 %d", log: osLog, type: .error, arguments.description, result.status)
+                return nil
+            }
+            return result.output
         } catch {
             os_log("pluginkit %{public}@ 启动失败: %{public}@", log: osLog, type: .error, arguments.description, error.localizedDescription)
             return nil
         }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            os_log("pluginkit %{public}@ 退出码 %d", log: osLog, type: .error, arguments.description, proc.terminationStatus)
-            return nil
-        }
-        return String(data: data, encoding: .utf8) ?? ""
     }
 
     /// 用 os_log 的 public 格式输出：NSLog 内容在统一日志里会被脱敏为 <private>，无法用

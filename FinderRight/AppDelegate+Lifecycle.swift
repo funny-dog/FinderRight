@@ -3,20 +3,6 @@ import FinderRightKit
 
 extension AppDelegate {
 
-    /// 检查旧版 staging/ 目录是否存在遗留文件，仅记录日志，不自动移动或删除
-    func checkLegacyStagingDirectory() {
-        // 一次性提醒：发送成功后才置位，避免每次冷启动重复弹同一条通知
-        let sentKey = "stagingLegacyWarningSent"
-        guard !UserDefaults.standard.bool(forKey: sentKey) else { return }
-
-        let stagingDir = IPCBridge.rootDirectory.appendingPathComponent("staging", isDirectory: true)
-        let fm = FileManager.default
-        if let items = try? fm.contentsOfDirectory(atPath: stagingDir.path), !items.isEmpty {
-            NSLog("[AppDelegate] 发现暂存区遗留文件: \(items.count) 个，位于 \(stagingDir.path)")
-            UserDefaults.standard.set(true, forKey: sentKey)
-        }
-    }
-
     /// 检查上次更新是否有失败日志并弹窗提醒。
     ///
     /// 失败文案由替换脚本写好后原样展示：可能是「已回滚旧版本」，也可能是「回滚也失败、备份留在哪」，
@@ -58,19 +44,8 @@ extension AppDelegate {
             /// `+    com.finderright.app.sync(1.1.10)<Tab><uuid><Tab><日期><Tab><路径>`；
             /// 不带 -v 时没有路径字段，路径比对永远失败（曾导致每次启动都重复 pluginkit -a）。
             func queryPluginState() -> (status: Int32, output: String) {
-                let proc = Process()
-                let pipe = Pipe()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-                proc.arguments = ["-m", "-v", "-i", "com.finderright.app.sync"]
-                proc.standardOutput = pipe
-                // 启动失败时管道写端仍在本进程手里，直接读会永远等不到 EOF
-                guard (try? proc.run()) != nil else { return (-1, "") }
-                // 先读到 EOF 再等待退出，避免输出超过管道缓冲时互相等待（同 ProcessRunner）
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                proc.waitUntilExit()
-                let text = (String(data: data, encoding: .utf8) ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                return (proc.terminationStatus, text)
+                let result = PluginKitRunner.run(["-m", "-v", "-i", "com.finderright.app.sync"])
+                return (result.status, result.output.trimmingCharacters(in: .whitespacesAndNewlines))
             }
 
             // 1. 仅在「未注册」「注册路径变化」或「注册版本与当前 bundle 不一致（刚升级）」时才注册。
@@ -85,11 +60,7 @@ extension AppDelegate {
             let isCurrent = FinderSyncElection.isRegistrationCurrent(
                 verboseOutput: output, appexPath: appexURL.path, version: appexVersion)
             if status != 0 || !isCurrent {
-                let regProc = Process()
-                regProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-                regProc.arguments = ["-a", appexURL.path]
-                try? regProc.run()
-                regProc.waitUntilExit()
+                _ = PluginKitRunner.run(["-a", appexURL.path])
                 NSLog("[AppDelegate] 重新注册 FinderSync appex（未注册/路径或版本变化，当前 \(appexVersion)）: \(appexURL.path)")
                 (status, output) = queryPluginState()
             } else {
@@ -119,11 +90,7 @@ extension AppDelegate {
             }
 
             // 既非 "+" 也非 "-"（未选举的默认初始状态），进行首次自动开启
-            let enableProc = Process()
-            enableProc.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-            enableProc.arguments = ["-e", "use", "-i", "com.finderright.app.sync"]
-            try? enableProc.run()
-            enableProc.waitUntilExit()
+            _ = PluginKitRunner.run(["-e", "use", "-i", "com.finderright.app.sync"])
 
             NSLog("[AppDelegate] FinderRightSync appex 首次注册并自动启用成功")
         }

@@ -283,7 +283,7 @@ struct OperationHistoryView: View {
                                   message: message,
                                   symbol: "clock.arrow.circlepath", tone: .warning,
                                   buttons: [NSLocalizedString("确认调整", comment: "history"), NSLocalizedString("取消", comment: "history")])
-            presentOperationHistoryDialog(dialog) { choice in
+            dialog.present { choice in
                 if choice == 0 { applyLimit(limit) } else { limitPickerToken += 1 }
             }
             return
@@ -303,7 +303,7 @@ struct OperationHistoryView: View {
                               message: NSLocalizedString("会清空所有操作历史，包括未显示的记录。不会删除文件，也不会影响当前可撤销的操作。清空后无法恢复这些记录。", comment: "history"),
                               symbol: "trash", tone: .warning,
                               buttons: [NSLocalizedString("清空历史", comment: "history"), NSLocalizedString("取消", comment: "history")])
-        presentOperationHistoryDialog(dialog) { if $0 == 0 { store.clear() } }
+        dialog.present { if $0 == 0 { store.clear() } }
     }
 }
 

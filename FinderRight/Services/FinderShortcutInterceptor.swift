@@ -284,10 +284,10 @@ final class FinderShortcutInterceptor {
 
     /// 焦点在文字输入里（如重命名、搜索框）时放行按键；无焦点元素或非文本角色时不阻拦文件剪切
     private func focusIsTextInput(_ app: AXUIElement) -> Bool {
-        guard let element = axElement(copyAttribute(app, kAXFocusedUIElementAttribute)) else { return false }
+        guard let element = AXUIElement.from(app.copyAttribute(kAXFocusedUIElementAttribute)) else { return false }
         return FinderKeyTakeover.isTextInput(
-            role: copyAttribute(element, kAXRoleAttribute) as? String,
-            subrole: copyAttribute(element, kAXSubroleAttribute) as? String)
+            role: element.copyAttribute(kAXRoleAttribute) as? String,
+            subrole: element.copyAttribute(kAXSubroleAttribute) as? String)
     }
 
     private func isPasteboardCutMirror() -> Bool {
@@ -473,15 +473,15 @@ final class FinderShortcutInterceptor {
     /// 无选中项时 FinderRight 的服务不出现，返回 nil。
     private func findFinderServiceItem(titles: Set<String>) -> AXUIElement? {
         guard let app = locked({ finderApp }),
-              let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return nil }
+              let bar = AXUIElement.from(app.copyAttribute(kAXMenuBarAttribute)) else { return nil }
         // 菜单栏第 2 项是「访达」菜单，其中只有「服务」带子菜单；标题本地化，按子菜单内容找
-        let tops = children(bar)
-        guard tops.count > 1, let appMenu = children(tops[1]).first else { return nil }
-        for item in children(appMenu) {
-            guard let submenu = children(item).first else { continue }
-            let target = children(submenu).first { (copyAttribute($0, kAXTitleAttribute) as? String).map(titles.contains) == true }
+        let tops = bar.children
+        guard tops.count > 1, let appMenu = tops[1].children.first else { return nil }
+        for item in appMenu.children {
+            guard let submenu = item.children.first else { continue }
+            let target = submenu.children.first { ($0.copyAttribute(kAXTitleAttribute) as? String).map(titles.contains) == true }
             guard let target else { continue }
-            return copyAttribute(target, kAXEnabledAttribute) as? Bool == true ? target : nil
+            return target.copyAttribute(kAXEnabledAttribute) as? Bool == true ? target : nil
         }
         return nil
     }
@@ -489,31 +489,15 @@ final class FinderShortcutInterceptor {
     /// 点击访达「编辑」菜单里指定快捷键的项。不可用时返回 false（点不可用的项 AXPress 也报成功，但不生效）。
     private func pressFinderEditItem(_ item: (char: String, modifiers: Int)) -> Bool {
         guard let app = locked({ finderApp }),
-              let bar = axElement(copyAttribute(app, kAXMenuBarAttribute)) else { return false }
+              let bar = AXUIElement.from(app.copyAttribute(kAXMenuBarAttribute)) else { return false }
         // 菜单栏顺序固定：苹果、访达、文件、编辑。标题本地化，不能按名字找
-        let tops = children(bar)
-        guard tops.count > 3, let menu = children(tops[3]).first else { return false }
-        let target = children(menu).first {
-            copyAttribute($0, kAXMenuItemCmdCharAttribute) as? String == item.char
-                && (copyAttribute($0, kAXMenuItemCmdModifiersAttribute) as? Int) == item.modifiers
+        let tops = bar.children
+        guard tops.count > 3, let menu = tops[3].children.first else { return false }
+        let target = menu.children.first {
+            $0.copyAttribute(kAXMenuItemCmdCharAttribute) as? String == item.char
+                && ($0.copyAttribute(kAXMenuItemCmdModifiersAttribute) as? Int) == item.modifiers
         }
-        guard let target, copyAttribute(target, kAXEnabledAttribute) as? Bool == true else { return false }
+        guard let target, target.copyAttribute(kAXEnabledAttribute) as? Bool == true else { return false }
         return AXUIElementPerformAction(target, kAXPressAction as CFString) == .success
-    }
-
-    private func copyAttribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
-        var value: AnyObject?
-        return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
-    }
-
-    // CF 类型的 as? 不做运行时类型检查（编译器视为恒成功），必须按 TypeID 判定
-    private func axElement(_ value: AnyObject?) -> AXUIElement? {
-        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-        let element = value as! AXUIElement
-        return element
-    }
-
-    private func children(_ element: AXUIElement) -> [AXUIElement] {
-        (copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement]) ?? []
     }
 }

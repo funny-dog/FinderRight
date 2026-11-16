@@ -357,7 +357,6 @@ final class LineCountController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: LineCountModel?
 
-    private let windowType = "lineCount"
     private static let defaultSize = CGSize(width: 580, height: 440)
     private static let minimumSize = CGSize(width: 500, height: 360)
 
@@ -366,18 +365,11 @@ final class LineCountController: NSObject, NSWindowDelegate {
             let model = LineCountModel()
             let window = FRTransientPanel(
                 contentRect: NSRect(origin: .zero, size: Self.defaultSize),
-                minSize: Self.minimumSize)
+                minSize: Self.minimumSize,
+                autosaveKey: "lineCount")
             window.title = NSLocalizedString("代码行数统计", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: LineCountView(model: model))
-
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
-                window.setFrame(adjusted, display: false)
-            } else {
-                window.center()
-            }
-
             self.model = model
             self.window = window
         }
@@ -390,14 +382,6 @@ final class LineCountController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
-    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
-
-    private func saveFrame(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func windowWillClose(_ notification: Notification) {

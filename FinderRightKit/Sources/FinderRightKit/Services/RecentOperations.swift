@@ -122,8 +122,6 @@ public final class RecentOperations {
     private var _capacity: Int
     private var storage: [OperationRecord] = []
     private var _persistenceError: String?
-    /// 磁盘上的历史文件没能完整读出、也没能留底：此时写入会抹掉读不出的记录，暂停保存，直到用户清空历史
-    private var writeBlocked = false
 
     public init(capacity: Int = 100, storageURL: URL? = nil) {
         let validCapacity = min(500, max(0, capacity))
@@ -150,9 +148,6 @@ public final class RecentOperations {
                 // 逐条解码：单条认不出（如降级后遇到新版本才有的操作类型）只跳过这一条
                 let entries = try JSONDecoder().decode([LossyRecord].self, from: data)
                 var loaded = entries.compactMap(\.record)
-                if loaded.count < entries.count {
-                    preserveUnreadableFile(at: storageURL)
-                }
                 loaded.sort { $0.date > $1.date }
                 if loaded.count > validCapacity {
                     loaded = Array(loaded.prefix(validCapacity))
@@ -160,34 +155,9 @@ public final class RecentOperations {
                 self.storage = loaded
             } catch {
                 self.storage = []
-                preserveUnreadableFile(at: storageURL)
-                if !writeBlocked {
-                    self._persistenceError = error.localizedDescription
-                }
+                self._persistenceError = error.localizedDescription
             }
         }
-    }
-
-    /// 读不出的历史文件在被新记录覆盖前，先复制一份到同目录的 `<名称>.unreadable.<扩展名>`（只保留最近一份）。
-    /// 留底失败则暂停保存，宁可这次运行的新记录只在内存里，也不抹掉原文件。
-    private func preserveUnreadableFile(at url: URL) {
-        let backup = Self.unreadableBackupURL(for: url)
-        do {
-            if FileManager.default.fileExists(atPath: backup.path) {
-                try FileManager.default.removeItem(at: backup)
-            }
-            try FileManager.default.copyItem(at: url, to: backup)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
-        } catch {
-            writeBlocked = true
-            _persistenceError = error.localizedDescription
-        }
-    }
-
-    static func unreadableBackupURL(for url: URL) -> URL {
-        let name = url.deletingPathExtension().lastPathComponent
-        let ext = url.pathExtension.isEmpty ? "" : "." + url.pathExtension
-        return url.deletingLastPathComponent().appendingPathComponent(name + ".unreadable" + ext, isDirectory: false)
     }
 
     public func setCapacity(_ newCapacity: Int) {
@@ -246,16 +216,13 @@ public final class RecentOperations {
         notifyChange()
     }
 
-    /// 用户主动清空或关闭历史：读不出的旧文件也一并删除，之后恢复正常保存
     private func removeStorageFileLocked() {
         guard let url = storageURL, FileManager.default.fileExists(atPath: url.path) else {
-            writeBlocked = false
             _persistenceError = nil
             return
         }
         do {
             try FileManager.default.removeItem(at: url)
-            writeBlocked = false
             _persistenceError = nil
         } catch {
             _persistenceError = error.localizedDescription
@@ -264,10 +231,6 @@ public final class RecentOperations {
 
     private func saveToDiskLocked() {
         guard let url = storageURL else { return }
-        guard !writeBlocked else {
-            _persistenceError = _persistenceError ?? "history file is unreadable and could not be backed up"
-            return
-        }
         do {
             let folder = url.deletingLastPathComponent()
             if !FileManager.default.fileExists(atPath: folder.path) {

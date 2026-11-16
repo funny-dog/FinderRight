@@ -5,7 +5,7 @@ import Foundation
 /// 继承自 NSPanel 并包含 `.nonactivatingPanel` 样式掩码，使得它浮现并接收键盘输入时，
 /// 绝对不会激活整个宿主应用（NSApp.activate），从而保证已在后台打开的设置窗口绝对不会被带到前台。
 class FRTransientPanel: NSPanel {
-    init(contentRect: NSRect, minSize: CGSize? = nil) {
+    init(contentRect: NSRect, minSize: CGSize? = nil, autosaveKey: String? = nil) {
         let styleMask: NSWindow.StyleMask = [
             .titled, .closable, .miniaturizable, .resizable, .nonactivatingPanel
         ]
@@ -17,6 +17,15 @@ class FRTransientPanel: NSPanel {
             self.minSize = NSWindow.frameRect(
                 forContentRect: NSRect(origin: .zero, size: minSize),
                 styleMask: styleMask).size
+        }
+        if let autosaveKey {
+            let name = "FRTransientPanel.\(autosaveKey)"
+            if setFrameUsingName(name), let adjusted = Self.fittedFrame(frame, window: self) {
+                setFrame(adjusted, display: false)
+            } else {
+                center()
+            }
+            setFrameAutosaveName(name)
         }
     }
 
@@ -46,7 +55,6 @@ enum WindowActivationPolicy {
         currentApplicationPID: pid_t,
         previousApplicationPID: pid_t?,
         frontmostApplicationPID: pid_t?,
-        isApplicationActive: Bool = true,
         hasVisibleStandardWindow: Bool,
         openedFromExternalApplication: Bool,
         previousApplicationIsRunning: Bool,
@@ -81,7 +89,6 @@ final class TransientWindowManager {
         var frontmostApplication: () -> NSRunningApplication? = {
             NSWorkspace.shared.frontmostApplication
         }
-        var applicationIsActive: () -> Bool = { NSApp.isActive }
         var show: (NSWindow) -> Void = { window in
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -230,7 +237,6 @@ final class TransientWindowManager {
             currentApplicationPID: NSRunningApplication.current.processIdentifier,
             previousApplicationPID: previous?.processIdentifier,
             frontmostApplicationPID: environment.frontmostApplication()?.processIdentifier,
-            isApplicationActive: environment.applicationIsActive(),
             hasVisibleStandardWindow: environment.hasVisibleStandardWindow(closing),
             openedFromExternalApplication: (previousRecord?.presentation?.openedFromExternalApplication ?? false)
                 && !hasVisibleTransientWindow,
@@ -244,9 +250,5 @@ final class TransientWindowManager {
             environment.returnToAccessory()
         }
         onClosed?()
-        let hook = self.onClosed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            hook?()
-        }
     }
 }

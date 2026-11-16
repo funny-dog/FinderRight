@@ -108,18 +108,9 @@ struct ShortcutsTab: View {
         }
         .onChange(of: conflictMessage) { message in
             guard let message else { return }
-            showSheet(FRDialog(title: NSLocalizedString("快捷键冲突", comment: ""), message: message,
-                               symbol: "exclamationmark.triangle", tone: .warning,
-                               buttons: [NSLocalizedString("好", comment: "")])) { _ in conflictMessage = nil }
-        }
-    }
-
-    /// 设置窗口内的弹窗以 sheet 显示；找不到窗口时退回模态
-    private func showSheet(_ dialog: FRDialog, completion: @escaping (Int?) -> Void) {
-        if let window = NSApp.keyWindow {
-            dialog.beginSheet(for: window, completion: completion)
-        } else {
-            completion(dialog.runModal())
+            FRDialog(title: NSLocalizedString("快捷键冲突", comment: ""), message: message,
+                     symbol: "exclamationmark.triangle", tone: .warning,
+                     buttons: [NSLocalizedString("好", comment: "")]).present { _ in conflictMessage = nil }
         }
     }
 
@@ -135,7 +126,7 @@ struct ShortcutsTab: View {
             message: NSLocalizedString("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。", comment: ""),
             symbol: "arrow.counterclockwise", tone: .warning,
             buttons: [NSLocalizedString("恢复默认", comment: ""), NSLocalizedString("取消", comment: "")])
-        showSheet(dialog) { if $0 == 0 { restoreDefaults() } }
+        dialog.present { if $0 == 0 { restoreDefaults() } }
     }
 
     /// 全部换成默认快捷键，并刷新各行、按键拦截与服务快捷键

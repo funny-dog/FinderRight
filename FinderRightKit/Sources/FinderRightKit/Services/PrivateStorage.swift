@@ -25,4 +25,25 @@ public enum PrivateStorage {
             NSLog("[PrivateStorage] 无法收紧文件权限（%@:%ld）", error.domain, error.code)
         }
     }
+
+    /// 以 0600 权限向日志文件追加一行（超出 maxBytes 时轮转为 `.1`）。调用方负责在后台串行队列调用。
+    public static func appendLogLine(_ line: String, to fileURL: URL, maxBytes: UInt64 = 1024 * 1024) {
+        let fm = FileManager.default
+        try? ensurePrivateDirectory(fileURL.deletingLastPathComponent())
+        if let attrs = try? fm.attributesOfItem(atPath: fileURL.path),
+           let size = attrs[.size] as? UInt64, size >= maxBytes {
+            let rotated = URL(fileURLWithPath: fileURL.path + ".1")
+            try? fm.removeItem(at: rotated)
+            try? fm.moveItem(at: fileURL, to: rotated)
+        }
+        let data = Data(line.utf8)
+        if let handle = try? FileHandle(forWritingTo: fileURL) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: fileURL)
+        }
+        restrictFile(fileURL)
+    }
 }

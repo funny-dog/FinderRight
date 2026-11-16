@@ -65,8 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 自动注册并启用自身包含的 FinderSync 扩展
         registerFinderSyncPlugin()
 
-        // 检查是否有历史暂存区遗留文件；新版完成基本初始化后回执，再报告上次更新遗留的错误
-        checkLegacyStagingDirectory()
+        // 新版完成基本初始化后回执，再报告上次更新遗留的错误
         confirmInstalledVersion()
         checkLastUpdateError()
 

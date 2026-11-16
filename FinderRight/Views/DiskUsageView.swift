@@ -403,7 +403,6 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: DiskUsageModel?
 
-    private let windowType = "diskUsage"
     private static let defaultSize = CGSize(width: 560, height: 420)
     private static let minimumSize = CGSize(width: 480, height: 340)
 
@@ -412,30 +411,17 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
             let model = DiskUsageModel()
             let window = FRTransientPanel(
                 contentRect: NSRect(origin: .zero, size: Self.defaultSize),
-                minSize: Self.minimumSize)
+                minSize: Self.minimumSize,
+                autosaveKey: "diskUsage")
             window.title = NSLocalizedString("磁盘空间占用", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: DiskUsageView(model: model))
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
-                window.setFrame(adjusted, display: false)
-            } else {
-                window.center()
-            }
             self.model = model
             self.window = window
         }
 
         model?.open(at: url)
         if let window { TransientWindowManager.shared.present(window) }
-    }
-
-    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
-    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
-
-    private func saveFrame(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func close() {

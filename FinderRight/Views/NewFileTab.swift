@@ -264,13 +264,8 @@ struct NewFileTab: View {
             message: NSLocalizedString("删除后它不再出现在右键「新建文件」中，已经新建的文件不受影响。", comment: ""),
             symbol: "trash", tone: .warning,
             buttons: [NSLocalizedString("删除", comment: ""), NSLocalizedString("取消", comment: "")])
-        let completion: (Int?) -> Void = { choice in
+        dialog.present { choice in
             if choice == 0 { deleteCustomTemplate(withId: item.id) }
-        }
-        if let window = NSApp.keyWindow {
-            dialog.beginSheet(for: window, completion: completion)
-        } else {
-            completion(dialog.runModal())
         }
     }
 

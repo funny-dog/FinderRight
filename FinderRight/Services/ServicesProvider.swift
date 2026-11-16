@@ -104,24 +104,8 @@ final class ServicesProvider: NSObject {
     static func trace(_ message: String) {
         let line = "[\(Self.traceDateFormatter.string(from: Date()))] \(LogRedaction.redactPaths(message))\n"
         traceQueue.async {
-            let dir = IPCBridge.rootDirectory
-            try? PrivateStorage.ensurePrivateDirectory(dir)
-            let url = dir.appendingPathComponent("service-debug.log")
-            let oldURL = dir.appendingPathComponent("service-debug.log.1")
-            let maxBytes: UInt64 = 1024 * 1024 // 1MB，与扩展日志一致
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-               let size = attrs[.size] as? UInt64, size >= maxBytes {
-                try? FileManager.default.removeItem(at: oldURL)
-                try? FileManager.default.moveItem(at: url, to: oldURL)
-            }
-            if let handle = try? FileHandle(forWritingTo: url) {
-                defer { try? handle.close() }
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: Data(line.utf8))
-            } else {
-                try? Data(line.utf8).write(to: url)
-            }
-            PrivateStorage.restrictFile(url)
+            let url = IPCBridge.rootDirectory.appendingPathComponent("service-debug.log")
+            PrivateStorage.appendLogLine(line, to: url)
         }
     }
     private static let traceQueue = DispatchQueue(label: "com.finderright.app.services.trace")
@@ -200,18 +184,13 @@ final class ServicesProvider: NSObject {
     @objc func copyFileContent(_ pboard: NSPasteboard,
                                userData: String?,
                                error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        SharedConfig.shared.reload()
-        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileContent) else {
-            showAlert(NSLocalizedString("复制文件内容功能已关闭，请在设置中启用", comment: "service"))
-            return
-        }
+        guard ensureFeatureEnabled(MenuFeatureCatalog.copyFileContent, alert: "复制文件内容功能已关闭，请在设置中启用") else { return }
         let items = fileURLs(from: pboard)
         guard let url = ServiceInvocationPolicy.validateSingleFile(from: items) else {
             showAlert(NSLocalizedString("仅支持复制单个文件的内容", comment: "service"))
             return
         }
         DispatchQueue.main.async { [self] in
-            guard confirmContentRead(title: "复制文件内容", items: items) else { return }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileContent", payload: [
                 "path": .string(url.path)
             ]), feature: MenuFeatureCatalog.copyFileContent)
@@ -223,15 +202,10 @@ final class ServicesProvider: NSObject {
     @objc func copyFileHash(_ pboard: NSPasteboard,
                             userData: String?,
                             error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        SharedConfig.shared.reload()
-        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.copyFileHash) else {
-            showAlert(NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service"))
-            return
-        }
+        guard ensureFeatureEnabled(MenuFeatureCatalog.copyFileHash) else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
         DispatchQueue.main.async { [self] in
-            guard confirmContentRead(title: "复制哈希", items: items) else { return }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "copyFileHash", payload: [
                 "items": .stringArray(items.map(\.path)), "algorithm": .string(FileHasher.Algorithm.sha256.rawValue)
             ]), feature: MenuFeatureCatalog.copyFileHash)
@@ -245,7 +219,6 @@ final class ServicesProvider: NSObject {
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
         DispatchQueue.main.async { [self] in
-            guard confirmContentRead(title: "复制项目相对路径", items: items) else { return }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "copyProjectRelativePath", payload: [
                 "items": .stringArray(items.map(\.path))
             ]), feature: MenuFeatureCatalog.copyProjectRelativePath)
@@ -262,7 +235,6 @@ final class ServicesProvider: NSObject {
             return
         }
         DispatchQueue.main.async { [self] in
-            guard confirmContentRead(title: "复制目录树", items: items) else { return }
             performFileAction(IPCRequest(id: UUID().uuidString, action: "copyDirectoryTree", payload: [
                 "directory": .string(directory.path)
             ]), feature: MenuFeatureCatalog.copyDirectoryTree)
@@ -379,6 +351,15 @@ final class ServicesProvider: NSObject {
         }
     }
 
+    private func ensureFeatureEnabled(_ feature: String, alert message: String = "此功能已关闭，请在设置中启用") -> Bool {
+        SharedConfig.shared.reload()
+        guard SharedConfig.shared.isActionEnabled(feature) else {
+            showAlert(NSLocalizedString(message, comment: "service"))
+            return false
+        }
+        return true
+    }
+
     private func canStartFileAction(_ feature: String, error: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Bool {
         guard ServiceInvocationPolicy.acceptsInteractiveService(
             frontmostBundleId: invokingBundleId(),
@@ -386,24 +367,7 @@ final class ServicesProvider: NSObject {
             error?.pointee = NSLocalizedString("请从访达调用文件服务", comment: "service") as NSString
             return false
         }
-        SharedConfig.shared.reload()
-        guard SharedConfig.shared.isActionEnabled(feature) else {
-            showAlert(NSLocalizedString("此功能已关闭，请在设置中启用", comment: "service"))
-            return false
-        }
-        return true
-    }
-
-    /// Services 无法鉴别真实调用方；读取内容或目录信息前必须让用户看到路径并明确确认。
-    private func confirmContentRead(title: String, items: [URL]) -> Bool {
-        guard !isShowingFileActionPrompt else { return false }
-        isShowingFileActionPrompt = true
-        defer { isShowingFileActionPrompt = false }
-        let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
-            + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
-        return FRDialog(title: NSLocalizedString(title, comment: "service"), message: details,
-                        symbol: "doc.plaintext", buttons: [NSLocalizedString("复制", comment: "service"),
-                                                          NSLocalizedString("取消", comment: "service")]).runModal() == 0
+        return ensureFeatureEnabled(feature)
     }
 
     private func chooseFileAction(title: String, symbol: String, details: String, choices: [String], button: String) -> Int? {
@@ -485,48 +449,21 @@ final class ServicesProvider: NSObject {
                         error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let frontmost = invokingBundleId()
         Self.trace("cutFiles called: items=\(fileURLs(from: pboard).count) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil") caller=\(frontmost ?? "nil")")
-        // 云盘目录里系统会先激活本 App 再派发服务，此时访达不在前台，需用户确认后才写入剪切队列
-        let needsConfirmation = ServiceInvocationPolicy.requiresServiceConfirmation(
-            frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier)
-        guard ServiceInvocationPolicy.acceptsDestructiveService(frontmostBundleId: frontmost)
-                || needsConfirmation else {
+        // Lazy Cut 仅将选中路径记入剪切队列，不直接改动磁盘文件，无需模态确认框。
+        guard ServiceInvocationPolicy.acceptsInteractiveService(
+            frontmostBundleId: frontmost, providerBundleId: Bundle.main.bundleIdentifier) else {
             error?.pointee = NSLocalizedString("请从访达调用剪切服务", comment: "service") as NSString
             return
         }
-        SharedConfig.shared.reload()
-        guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.cut) else {
-            showAlert(NSLocalizedString("剪切功能已关闭，请在设置中启用", comment: "service"))
-            return
-        }
+        guard ensureFeatureEnabled(MenuFeatureCatalog.cut, alert: "剪切功能已关闭，请在设置中启用") else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
         let request = IPCRequest(
             id: UUID().uuidString,
             action: "cutFiles",
             payload: ["paths": .stringArray(items.map(\.path))])
-        guard needsConfirmation else {
-            performFileAction(request, feature: MenuFeatureCatalog.cut)
-            returnFocusToFinderIfNeeded()
-            return
-        }
-        // 确认框放到服务返回之后，避免模态等待占用 Services 的同步超时
-        DispatchQueue.main.async { [self] in
-            if confirmCut(items) {
-                performFileAction(request, feature: MenuFeatureCatalog.cut)
-            }
-        }
-    }
-
-    /// 云盘目录没有剪切角标，确认框同时充当「剪切了哪些文件」的反馈
-    private func confirmCut(_ items: [URL]) -> Bool {
-        guard !isConfirmingCutPaste else { return false }
-        isConfirmingCutPaste = true
-        defer { isConfirmingCutPaste = false }
-        let details = String(format: NSLocalizedString("已选 %d 个项目：", comment: "service"), items.count)
-            + "\n" + items.prefix(5).map(\.path).joined(separator: "\n") + (items.count > 5 ? "\n…" : "")
-            + "\n\n" + NSLocalizedString("确认后在目标文件夹调用「粘贴」即可移动。", comment: "service")
-        return FRDialog(title: NSLocalizedString("剪切文件", comment: "service"), message: details, symbol: "scissors",
-                        buttons: [NSLocalizedString("剪切", comment: "service"), NSLocalizedString("取消", comment: "service")]).runModal() == 0
+        performFileAction(request, feature: MenuFeatureCatalog.cut)
+        returnFocusToFinderIfNeeded()
     }
 
     @objc func pasteFiles(_ pboard: NSPasteboard,
@@ -612,47 +549,30 @@ final class ServicesProvider: NSObject {
     @objc func convertImageToPNG(_ pboard: NSPasteboard,
                                  userData: String?,
                                  error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("convertImageToPNG") else { return }
-        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
-        let items = fileURLs(from: pboard)
-        guard !items.isEmpty else { return }
-        let paths = items.map(\.path)
-        performFileAction(IPCRequest(
-            id: UUID().uuidString,
-            action: "convertImage",
-            payload: ["items": .stringArray(paths), "format": .string("png")]
-        ), feature: MenuFeatureCatalog.imageTools)
-        returnFocusToFinderIfNeeded()
+        convertImages(pboard, format: "png", actionName: "convertImageToPNG")
     }
 
     @objc func convertImageToJPEG(_ pboard: NSPasteboard,
                                   userData: String?,
                                   error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("convertImageToJPEG") else { return }
-        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
-        let items = fileURLs(from: pboard)
-        guard !items.isEmpty else { return }
-        let paths = items.map(\.path)
-        performFileAction(IPCRequest(
-            id: UUID().uuidString,
-            action: "convertImage",
-            payload: ["items": .stringArray(paths), "format": .string("jpeg")]
-        ), feature: MenuFeatureCatalog.imageTools)
-        returnFocusToFinderIfNeeded()
+        convertImages(pboard, format: "jpeg", actionName: "convertImageToJPEG")
     }
 
     @objc func convertImageToHEIC(_ pboard: NSPasteboard,
                                   userData: String?,
                                   error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
-        guard isInvokedFromFinder("convertImageToHEIC") else { return }
-        guard canStartFileAction(MenuFeatureCatalog.imageTools, error: error) else { return }
+        convertImages(pboard, format: "heic", actionName: "convertImageToHEIC")
+    }
+
+    private func convertImages(_ pboard: NSPasteboard, format: String, actionName: String) {
+        guard isInvokedFromFinder(actionName),
+              ensureFeatureEnabled(MenuFeatureCatalog.imageTools) else { return }
         let items = fileURLs(from: pboard)
         guard !items.isEmpty else { return }
-        let paths = items.map(\.path)
         performFileAction(IPCRequest(
             id: UUID().uuidString,
             action: "convertImage",
-            payload: ["items": .stringArray(paths), "format": .string("heic")]
+            payload: ["items": .stringArray(items.map(\.path)), "format": .string(format)]
         ), feature: MenuFeatureCatalog.imageTools)
         returnFocusToFinderIfNeeded()
     }

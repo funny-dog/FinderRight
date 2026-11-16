@@ -751,8 +751,6 @@ final class GitStatusController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: GitStatusModel?
     var isPerforming: Bool { model?.isPerforming == true }
-    
-    private let windowType = "gitStatus"
 
     func show(at url: URL? = nil, openedFromExternalApplication: Bool = true) {
         if window == nil {
@@ -760,17 +758,11 @@ final class GitStatusController: NSObject, NSWindowDelegate {
             let contentRect = NSRect(origin: .zero, size: GitStatusLayout.contentSize)
             let window = FRTransientPanel(
                 contentRect: contentRect,
-                minSize: GitStatusLayout.minimumContentSize)
+                minSize: GitStatusLayout.minimumContentSize,
+                autosaveKey: "gitStatus")
             window.title = NSLocalizedString("Git 状态", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: GitStatusView(model: model))
-            // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
-                window.setFrame(adjusted, display: false)
-            } else {
-                window.center()
-            }
             self.model = model
             self.window = window
         }
@@ -783,16 +775,6 @@ final class GitStatusController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。
-    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
-
-    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
-
-    private func saveFrame(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

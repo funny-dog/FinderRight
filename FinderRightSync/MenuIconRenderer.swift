@@ -47,31 +47,18 @@ enum MenuIconRenderer {
         let appearance = NSApplication.shared.effectiveAppearance
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let key = "\(style.rawValue)|\(symbol)|\(tint.name)|\(dark ? "dark" : "light")"
-        lock.lock()
-        if let cached = cache[key] {
-            lock.unlock()
-            return cached
+        return cached(key: key) {
+            var rendered: NSImage?
+            appearance.performAsCurrentDrawingAppearance {
+                rendered = render(symbol: symbol, style: style, dark: dark, explicitGlyph: nil, tint: tint)
+            }
+            return rendered
         }
-        lock.unlock()
-
-        var rendered: NSImage?
-        appearance.performAsCurrentDrawingAppearance {
-            rendered = render(symbol: symbol, tint: tint, style: style, dark: dark)
-        }
-        guard let image = rendered else { return nil }
-        lock.lock()
-        cache[key] = image
-        lock.unlock()
-        return image
     }
 
     /// 按指定字形颜色渲染（主题色路径）
     private static func render(symbol: String, glyphColor: NSColor, style: MenuIconStyle, dark: Bool) -> NSImage? {
         render(symbol: symbol, style: style, dark: dark, explicitGlyph: glyphColor)
-    }
-
-    private static func render(symbol: String, tint: MenuTint, style: MenuIconStyle, dark: Bool) -> NSImage? {
-        render(symbol: symbol, style: style, dark: dark, explicitGlyph: nil, tint: tint)
     }
 
     private static func render(symbol: String, style: MenuIconStyle, dark: Bool,

@@ -132,6 +132,15 @@ final class FRDialog: NSObject, NSWindowDelegate {
         window.beginSheet(panel)
     }
 
+    /// 优先作为当前活动窗口的 sheet 显示；找不到 keyWindow 时退回模态
+    func present(completion: @escaping (Int?) -> Void = { _ in }) {
+        if let window = NSApp.keyWindow {
+            beginSheet(for: window, completion: completion)
+        } else {
+            completion(runModal())
+        }
+    }
+
     /// 非模态显示：调用方在后台线程等待结果时使用（如解压密码），不占用主线程的模态循环
     func show(completion: @escaping (Int?) -> Void) {
         self.completion = completion

@@ -95,11 +95,6 @@ public struct MenuFeature: Identifiable, Equatable {
     /// 若该功能进「服务」菜单，则提供对应的服务声明列表
     public let serviceDeclarations: [ServiceMenuDeclaration]
 
-    /// 兼容旧的单一服务声明属性
-    public var serviceDeclaration: ServiceMenuDeclaration? {
-        serviceDeclarations.first
-    }
-
     public init(
         id: String,
         nameKey: String,

@@ -84,12 +84,7 @@ extension FinderRightService {
         guard let path = req.payload["path"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: "参数缺失: path")
         }
-        let expanded = (path as NSString).expandingTildeInPath
-        guard isPathAllowed(expanded, role: .source) else {
-            serviceLog("copyFileContent 路径越界被拦截: \(expanded)")
-            return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), expanded))
-        }
-        let url = URL(fileURLWithPath: expanded)
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         let maxBytes = SharedConfig.shared.copyFileContentMaxBytes
         let result = FileContentReader.readText(from: url, maxBytes: maxBytes)
 

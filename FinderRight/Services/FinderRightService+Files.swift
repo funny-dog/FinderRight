@@ -21,12 +21,12 @@ extension FinderRightService {
         return writeNewFile(req, directory: directory, baseName: baseName, ext: ext, data: Data(content.utf8))
     }
 
-    private func writeNewFile(_ req: IPCRequest, directory: String, baseName: String, ext: String, data: Data) -> IPCResponse {
+    private func writeNewFile(_ req: IPCRequest, directory: String, baseName: String, ext: String, data: Data, revalidateDestination: Bool = false) -> IPCResponse {
         guard SafeFileName.isValid(baseName: baseName, ext: ext) else {
             return IPCResponse(id: req.id, success: false, message: L("非法的文件名"))
         }
-        // 剪贴板命名框可能停留很久，写入前重新校验目标（包括符号链接）。
-        guard isPathAllowed(directory, role: .destination) else {
+        // 同步路径已由 handle() 校验；仅剪贴板命名框等异步弹窗后的延迟写入需复核目录。
+        if revalidateDestination, !isPathAllowed(directory, role: .destination) {
             return IPCResponse(id: req.id, success: false, message: String(format: L("路径越界：安全策略拒绝访问 %@"), directory))
         }
         let dirURL = URL(fileURLWithPath: directory)
@@ -100,7 +100,7 @@ extension FinderRightService {
                             reportClipboardFileFailure(error.localizedDescription, directory: directory)
                             return
                         }
-                        let response = writeNewFile(req, directory: directory, baseName: name, ext: ext, data: data)
+                        let response = writeNewFile(req, directory: directory, baseName: name, ext: ext, data: data, revalidateDestination: true)
                         if response.success {
                             SharedConfig.shared.reload()
                             SharedConfig.shared.setClipboardFileExtension(ext, isImage: isImage)

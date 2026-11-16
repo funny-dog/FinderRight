@@ -1,6 +1,4 @@
 import Foundation
-import AppKit
-import Darwin
 
 // MARK: - 文件模板
 
@@ -43,8 +41,6 @@ public final class SharedConfig {
     let configFileURL: URL
 
     var store: [String: Any] = [:]
-    /// 最近一次从磁盘读取或成功写入的完整快照，用于识别本实例真正改过的键。
-    private var baselineStore: [String: Any] = [:]
     private var lastLoadedMtime: Date?
 
     enum Keys {
@@ -103,115 +99,45 @@ public final class SharedConfig {
             guard let data = try? Data(contentsOf: fileURL),
                   let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
                 store = [:]
-                baselineStore = [:]
                 lastLoadedMtime = nil
                 return
             }
             store = dict
-            baselineStore = dict
             lastLoadedMtime = mtime
             return
         }
 
         store = [:]
-        baselineStore = [:]
         lastLoadedMtime = nil
     }
 
-    /// 在跨进程锁内重新读盘，只应用本实例相对基线修改或删除的键。
+    /// 原子写回磁盘；若磁盘已有文件但损坏无法解析，中止覆盖以免丢失原配置。
     func save() {
         lock.lock()
         defer { lock.unlock() }
-        withDiskLock {
-            var merged = try readDiskStore()
-            let keys = Set(baselineStore.keys).union(store.keys)
-            for key in keys where !Self.valuesEqual(baselineStore[key], store[key]) {
-                if let value = store[key] {
-                    merged[key] = value
-                } else {
-                    merged.removeValue(forKey: key)
-                }
-            }
-            try writeStore(merged)
-        }
-    }
-
-    /// 只合并单个键写回磁盘，供窗口位置这类「跨进程频繁写入」使用。
-    func writeKeyMergingOnDisk(_ key: String, value: Any) {
-        lock.lock()
-        defer { lock.unlock() }
-        withDiskLock {
-            var dict = try readDiskStore()
-            dict[key] = value
-            try writeStore(dict)
-        }
-    }
-
-    private func readDiskStore() throws -> [String: Any] {
         do {
-            let data = try Data(contentsOf: configFileURL)
-            let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
-            guard let dict = plist as? [String: Any] else { throw CocoaError(.fileReadCorruptFile) }
-            return dict
+            try PrivateStorage.ensurePrivateDirectory(configFileURL.deletingLastPathComponent())
+            if FileManager.default.fileExists(atPath: configFileURL.path) {
+                let data = try Data(contentsOf: configFileURL)
+                let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+                guard plist is [String: Any] else { throw CocoaError(.fileReadCorruptFile) }
+            }
+            try writeStore(store)
         } catch {
-            if Self.isMissingFile(error) { return [:] }
-            throw error
+            let error = error as NSError
+            NSLog("[SharedConfig] 配置写事务失败（%@:%ld）；保留内存修改", error.domain, error.code)
         }
     }
 
-    private static func isMissingFile(_ error: Error) -> Bool {
-        let error = error as NSError
-        return (error.domain == NSCocoaErrorDomain
-                && (error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError))
-            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT))
-    }
-
-    /// 调用方必须已持有进程内锁与磁盘锁。
+    /// 调用方必须已持有进程内锁。
     private func writeStore(_ dict: [String: Any]) throws {
         let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
         try data.write(to: configFileURL, options: .atomic)
         PrivateStorage.restrictFile(configFileURL)
         store = dict
-        baselineStore = dict
         if let attrs = try? FileManager.default.attributesOfItem(atPath: configFileURL.path),
            let mtime = attrs[.modificationDate] as? Date {
             lastLoadedMtime = mtime
-        }
-    }
-
-    private static func valuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {
-        switch (lhs, rhs) {
-        case (nil, nil): return true
-        case (let lhs?, let rhs?):
-            let left = try? PropertyListSerialization.data(fromPropertyList: ["value": lhs], format: .binary, options: 0)
-            let right = try? PropertyListSerialization.data(fromPropertyList: ["value": rhs], format: .binary, options: 0)
-            return left != nil && left == right
-        default: return false
-        }
-    }
-
-    /// NSRecursiveLock 只保护单个实例；flock 保护不同 App / 扩展进程间的读-改-写事务。
-    private func withDiskLock(_ body: () throws -> Void) {
-        let directory = configFileURL.deletingLastPathComponent()
-        try? PrivateStorage.ensurePrivateDirectory(directory)
-        let lockURL = directory.appendingPathComponent("settings.lock")
-        let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
-        guard fd >= 0 else {
-            NSLog("[SharedConfig] 无法打开配置锁，errno=%d；保留内存修改", errno)
-            return
-        }
-        defer { close(fd) }
-        PrivateStorage.restrictFile(lockURL)
-        guard flock(fd, LOCK_EX) == 0 else {
-            NSLog("[SharedConfig] 无法锁定配置，errno=%d；保留内存修改", errno)
-            return
-        }
-        defer { flock(fd, LOCK_UN) }
-        do {
-            try body()
-        } catch {
-            let error = error as NSError
-            NSLog("[SharedConfig] 配置写事务失败（%@:%ld）；保留内存修改", error.domain, error.code)
         }
     }
 
@@ -229,155 +155,13 @@ public final class SharedConfig {
     public func resetToDefaults() {
         lock.lock()
         defer { lock.unlock() }
-        withDiskLock {
+        do {
+            try PrivateStorage.ensurePrivateDirectory(configFileURL.deletingLastPathComponent())
             try writeStore([:])
+        } catch {
+            let error = error as NSError
+            NSLog("[SharedConfig] 配置重置失败（%@:%ld）", error.domain, error.code)
         }
-    }
-}
-
-// MARK: - Window Position Memory
-
-extension SharedConfig {
-    
-    public struct WindowPositionInfo: Codable, Identifiable {
-        public var id: String // Window type identifier
-        public var screenIdentifier: String? // Screen identifier for multi-monitor support
-        public var originX: Double
-        public var originY: Double
-        public var sizeWidth: Double
-        public var sizeHeight: Double
-        
-        public init(id: String, screenIdentifier: String?, originX: Double, originY: Double, width: Double, height: Double) {
-            self.id = id
-            self.screenIdentifier = screenIdentifier
-            self.originX = originX
-            self.originY = originY
-            self.sizeWidth = width
-            self.sizeHeight = height
-        }
-    }
-    
-    private enum WindowKeys {
-        static let windowPositions = "windowPositions"
-    }
-    
-    /// 窗口位置在设置文件里的原始表示，只供本扩展做读-改-写。
-    ///
-    /// 不能像其他配置那样走 `store`：主 App 的窗口回调只持有启动时的缓存，
-    /// 若直接写 `store` 再整体 `save()` 会把别的进程刚写入的快捷键、模板等键回滚。
-    /// 因此这里每次都重新读盘，在同一把锁内合并后立即回写。
-    private var windowPositionsRaw: [[String: Any]] {
-        guard let data = try? Data(contentsOf: configFileURL),
-              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let windows = dict[WindowKeys.windowPositions] as? [[String: Any]] else {
-            return []
-        }
-        return windows
-    }
-
-    public private(set) var windowPositions: [WindowPositionInfo] {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return windowPositionsRaw.compactMap { dict -> WindowPositionInfo? in
-                guard let id = dict["id"] as? String,
-                      let originX = dict["originX"] as? Double,
-                      let originY = dict["originY"] as? Double,
-                      let width = dict["width"] as? Double,
-                      let height = dict["height"] as? Double else {
-                    return nil
-                }
-                let screenIdentifier = dict["screenIdentifier"] as? String
-                return WindowPositionInfo(
-                    id: id,
-                    screenIdentifier: screenIdentifier?.isEmpty == false ? screenIdentifier : nil,
-                    originX: originX,
-                    originY: originY,
-                    width: width,
-                    height: height
-                )
-            }
-        }
-        set {
-            writeKeyMergingOnDisk(WindowKeys.windowPositions, value: Self.encode(newValue))
-        }
-    }
-
-    private static func encode(_ positions: [WindowPositionInfo]) -> [[String: Any]] {
-        positions.map { info -> [String: Any] in
-            [
-                "id": info.id,
-                "screenIdentifier": info.screenIdentifier ?? "",
-                "originX": info.originX,
-                "originY": info.originY,
-                "width": info.sizeWidth,
-                "height": info.sizeHeight
-            ]
-        }
-    }
-    
-    /// 保存窗口位置（简化版）
-    ///
-    /// 只在锁内合并「窗口位置」这一个键：先读盘取最新列表，再写回磁盘。
-    /// 这样同时能保留其他进程刚写入的配置，也不会因为整份 `store` 陈旧而回滚设置。
-    public func saveWindowPosition(for windowType: String, frame: NSRect) {
-        lock.lock()
-        defer { lock.unlock() }
-        var currentPositions = windowPositionsRaw
-        let record: [String: Any] = [
-            "id": windowType,
-            "screenIdentifier": NSScreen.screenIdentifier(containing: frame) ?? "",
-            "originX": frame.origin.x,
-            "originY": frame.origin.y,
-            "width": frame.size.width,
-            "height": frame.size.height
-        ]
-        if let index = currentPositions.firstIndex(where: { $0["id"] as? String == windowType }) {
-            currentPositions[index] = record
-        } else {
-            currentPositions.append(record)
-        }
-        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: currentPositions)
-    }
-
-    /// 恢复窗口位置
-    ///
-    /// 保存位置所在的屏幕已不存在（外接屏拔掉等）时返回 nil，交给调用方居中显示，
-    /// 免得把窗口恢复到不可见的坐标。
-    public func restoreWindowPosition(for windowType: String) -> NSRect? {
-        lock.lock()
-        let info = windowPositions.first { $0.id == windowType }
-        lock.unlock()
-        guard let info else { return nil }
-        let frame = NSRect(
-            origin: NSPoint(x: info.originX, y: info.originY),
-            size: CGSize(width: info.sizeWidth, height: info.sizeHeight)
-        )
-        guard NSScreen.screenIdentifier(containing: frame) != nil else { return nil }
-        return frame
-    }
-
-    /// 清除特定窗口的记忆位置
-    public func clearWindowPosition(for windowType: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        var currentPositions = windowPositionsRaw
-        currentPositions.removeAll { $0["id"] as? String == windowType }
-        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: currentPositions)
-    }
-
-    /// 清除所有窗口位置记忆
-    public func clearAllWindowPositions() {
-        writeKeyMergingOnDisk(WindowKeys.windowPositions, value: [[String: Any]]())
-    }
-}
-
-private extension NSScreen {
-    /// 用屏幕可见区域中心点判断所在屏幕。窗口跨屏时以中心点归属为准，
-    /// 与 AppKit 恢复窗口时的常规判断一致。
-    static func screenIdentifier(containing frame: NSRect) -> String? {
-        let center = NSPoint(x: frame.midX, y: frame.midY)
-        return screens.first { $0.frame.contains(center) }?.localizedName
     }
 }
 

@@ -12,7 +12,6 @@ struct TransientWindowChecks {
         precondition(finder.processIdentifier != current.processIdentifier)
 
         var frontmost: NSRunningApplication? = finder
-        var applicationIsActive = true
         var previousApplicationIsRunning = true
         var alwaysShowDockIcon = true
         var visibleStandardWindows: Set<ObjectIdentifier> = []
@@ -22,7 +21,6 @@ struct TransientWindowChecks {
 
         var environment = TransientWindowManager.Environment()
         environment.frontmostApplication = { frontmost }
-        environment.applicationIsActive = { applicationIsActive }
         environment.show = { _ in }
         environment.isWindowVisible = { visibleStandardWindows.contains(ObjectIdentifier($0)) }
         environment.hasVisibleStandardWindow = { closing in
@@ -53,7 +51,6 @@ struct TransientWindowChecks {
             }
             visibleStandardWindows.insert(ObjectIdentifier(window))
             frontmost = current // 模拟产品的 NSApp.activate，测试本身不激活任何应用
-            applicationIsActive = true
         }
         func close(_ window: NSWindow) {
             manager.windowWillClose(window)
@@ -66,7 +63,6 @@ struct TransientWindowChecks {
             activations.removeAll()
             accessoryReturns = 0
             frontmost = current
-            applicationIsActive = true
             previousApplicationIsRunning = true
             alwaysShowDockIcon = true
         }
@@ -155,7 +151,6 @@ struct TransientWindowChecks {
         present(queue)
         // 模拟 FRTransientPanel：系统前台应用依然是访达，但 App 处于活跃交互状态
         frontmost = finder
-        applicationIsActive = true
         close(queue)
         drain()
         precondition(activations == [finder.processIdentifier], "FRTransientPanel 关闭后必须显式激活访达以恢复窗口焦点")
@@ -242,7 +237,6 @@ struct TransientWindowChecks {
             currentApplicationPID: current.processIdentifier,
             previousApplicationPID: finder.processIdentifier,
             frontmostApplicationPID: nil,
-            isApplicationActive: true,
             hasVisibleStandardWindow: false,
             openedFromExternalApplication: false,
             previousApplicationIsRunning: true,

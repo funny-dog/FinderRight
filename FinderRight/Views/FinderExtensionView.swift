@@ -66,23 +66,11 @@ enum FinderExtensionChecker {    static func check() -> Bool {
             return "com.finderright.app.sync"
         }()
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
-        process.arguments = ["-m", "-i", syncBundleId]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-        do {
-            try process.run()
-        } catch {
-            NSLog("[FinderExtensionChecker] pluginkit 启动失败: \(error.localizedDescription)")
+        let (status, text) = PluginKitRunner.run(["-m", "-i", syncBundleId])
+        guard status == 0 else {
+            NSLog("[FinderExtensionChecker] pluginkit 查询失败 (exit=\(status))")
             return false
         }
-        // 先读空管道再 waitUntilExit：输出量超过管道缓冲时反序会死锁
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let text = String(data: data, encoding: .utf8) else { return false }
         return FinderSyncElection.parse(text).contains { $0.bundleId == syncBundleId && $0.state == "+" }
     }
 }

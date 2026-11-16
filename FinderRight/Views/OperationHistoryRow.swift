@@ -2,16 +2,6 @@ import SwiftUI
 import AppKit
 import FinderRightKit
 
-/// 与其他设置页一致：弹窗以 sheet 挂在设置窗口上，找不到窗口时才退回模态。
-/// 不在 SwiftUI 的按钮动作里直接 runModal，否则弹窗显示出来后按钮点不动
-func presentOperationHistoryDialog(_ dialog: FRDialog, completion: @escaping (Int?) -> Void = { _ in }) {
-    if let window = NSApp.keyWindow {
-        dialog.beginSheet(for: window, completion: completion)
-    } else {
-        completion(dialog.runModal())
-    }
-}
-
 struct StatusFilterChip: View {
     let status: OperationHistoryFilter.Status
     let count: Int
@@ -306,9 +296,9 @@ struct OperationHistoryRow: View {
         guard canRevealResults else { return }
         let existing = record.results.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !existing.isEmpty else {
-            presentOperationHistoryDialog(FRDialog(title: NSLocalizedString("找不到结果文件", comment: "history"),
-                                   message: NSLocalizedString("这些文件可能已被移动、改名或删除。历史记录保留的是操作完成时的位置。", comment: "history"),
-                                   symbol: "folder.badge.questionmark", buttons: [NSLocalizedString("好", comment: "history")]))
+            FRDialog(title: NSLocalizedString("找不到结果文件", comment: "history"),
+                     message: NSLocalizedString("这些文件可能已被移动、改名或删除。历史记录保留的是操作完成时的位置。", comment: "history"),
+                     symbol: "folder.badge.questionmark", buttons: [NSLocalizedString("好", comment: "history")]).present()
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(existing)
@@ -318,9 +308,9 @@ struct OperationHistoryRow: View {
         guard let folder else { return }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            presentOperationHistoryDialog(FRDialog(title: NSLocalizedString("找不到这个文件夹", comment: "history"),
-                                   message: NSLocalizedString("它可能已被移动、改名或删除。历史记录保留的是操作发生时的位置。", comment: "history"),
-                                   symbol: "folder.badge.questionmark", buttons: [NSLocalizedString("好", comment: "history")]))
+            FRDialog(title: NSLocalizedString("找不到这个文件夹", comment: "history"),
+                     message: NSLocalizedString("它可能已被移动、改名或删除。历史记录保留的是操作发生时的位置。", comment: "history"),
+                     symbol: "folder.badge.questionmark", buttons: [NSLocalizedString("好", comment: "history")]).present()
             return
         }
         NSWorkspace.shared.open(folder)

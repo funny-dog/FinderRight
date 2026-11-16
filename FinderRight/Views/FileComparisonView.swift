@@ -313,8 +313,6 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
     static let shared = FileComparisonController()
     private var window: NSWindow?
     private var model: FileComparisonModel?
-    
-    private let windowType = "fileComparison"
 
     func show(files: [URL] = [], openedFromExternalApplication: Bool = true) {
         if window == nil {
@@ -322,17 +320,11 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
             let contentRect = NSRect(origin: .zero, size: FileComparisonLayout.contentSize)
             let window = FRTransientPanel(
                 contentRect: contentRect,
-                minSize: FileComparisonLayout.minimumContentSize)
+                minSize: FileComparisonLayout.minimumContentSize,
+                autosaveKey: "fileComparison")
             window.title = NSLocalizedString("文件比较", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: FileComparisonView(model: model))
-            // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
-            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
-                window.setFrame(adjusted, display: false)
-            } else {
-                window.center()
-            }
             self.model = model
             self.window = window
         }
@@ -341,16 +333,6 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。
-    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
-
-    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
-
-    private func saveFrame(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func windowWillClose(_ notification: Notification) {

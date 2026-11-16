@@ -14,12 +14,9 @@ public enum UniqueName {
     }
 
     /// 检查指定路径的目录项（文件、目录、套接字或符号链接，含悬空符号链接）是否存在。
-    public static func itemExists(atPath path: String, fileManager: FileManager = .default) -> Bool {
+    public static func itemExists(atPath path: String) -> Bool {
         var statBuf = stat()
-        if lstat(path, &statBuf) == 0 {
-            return true
-        }
-        return (try? fileManager.attributesOfItem(atPath: path)) != nil
+        return lstat(path, &statBuf) == 0
     }
 
     /// 拆分冲突重命名与归档命名所用的基名和扩展名：
@@ -39,7 +36,7 @@ public enum UniqueName {
         var counter = 0
         var name = candidateName(baseName: baseName, ext: ext, counter: counter)
         var url = directory.appendingPathComponent(name)
-        while itemExists(atPath: url.path, fileManager: fileManager) {
+        while itemExists(atPath: url.path) {
             counter += 1
             name = candidateName(baseName: baseName, ext: ext, counter: counter)
             url = directory.appendingPathComponent(name)
