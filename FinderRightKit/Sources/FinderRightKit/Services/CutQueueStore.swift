@@ -99,6 +99,12 @@ public struct CutQueueStore {
         return remaining
     }
 
+    /// 用户在菜单弹窗「全部清空」：仅清空待剪切队列；若存在正在移动中的恢复记录则拒绝，避免静默删掉失败恢复依据。
+    public func clearPending() throws {
+        guard try inflightFiles().isEmpty else { throw RemovalError.pasteInProgress }
+        try write([])
+    }
+
     /// 用户取消剪切：清空待剪切队列，并作废所有批次及旧版本的恢复记录。
     /// 仅把“文件已经不存在”视为成功，其余删除错误向上传递。
     public func clear() throws {

@@ -75,19 +75,24 @@ public enum GitRepositoryScanner {
         return head
     }
 
-    /// 快速检查仓库状态（工作区干净还是有改动）
+    /// 快速检查仓库状态（工作区干净还是有改动，与明细视图共用 -z 与 --untracked-files=all 口径）
     public static func readStatusSummary(at root: URL) -> (isClean: Bool, description: String)? {
-        guard let output = try? LocalGit.run(at: root, ["status", "--porcelain=v1", "--ignore-submodules=dirty"]),
+        guard let output = try? LocalGit.run(at: root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=dirty"]),
               output.status == 0 else {
             return nil
         }
         if output.data.isEmpty {
             return (true, NSLocalizedString("工作区干净", comment: ""))
         }
-        let text = String(decoding: output.data, as: UTF8.self)
-        let lines = text.split(whereSeparator: \.isNewline).filter { !$0.isEmpty }
-        let count = lines.count
-        let desc = String(format: NSLocalizedString("%d 个改动", comment: ""), count)
+        var tokens = output.data.split(separator: 0, omittingEmptySubsequences: false)
+        if tokens.last?.isEmpty == true { tokens.removeLast() }
+        guard let entries = try? GitStatusSnapshot.parseEntries(tokens: tokens[...]) else {
+            return nil
+        }
+        if entries.isEmpty {
+            return (true, NSLocalizedString("工作区干净", comment: ""))
+        }
+        let desc = String(format: NSLocalizedString("%d 个改动", comment: ""), entries.count)
         return (false, desc)
     }
 

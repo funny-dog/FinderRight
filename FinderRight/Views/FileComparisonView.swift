@@ -141,7 +141,7 @@ struct FileComparisonView: View {
                 Text("正在比较…")
             } else if let result = model.result {
                 if result.additions == 0 && result.deletions == 0 {
-                    Text(result.differentLineEndings ? "文本相同，换行格式不同" : "文件内容相同")
+                    Text(LocalizedStringKey(result.differentLineEndings ? "文本相同，换行格式不同" : "文件内容相同"))
                         .foregroundColor(FRTheme.okText)
                 } else {
                     Text(verbatim: "+\(result.additions)").foregroundColor(FRTheme.okText)
@@ -184,7 +184,7 @@ struct FileComparisonView: View {
                     .frame(height: 34)
                 } else {
                     VStack(spacing: 12) {
-                        Text(onLeft ? "左侧文件" : "右侧文件")
+                        Text(LocalizedStringKey(onLeft ? "左侧文件" : "右侧文件"))
                             .font(.system(size: 12, weight: .medium)).foregroundColor(FRTheme.mute)
                         Image(systemName: url == nil ? "doc.badge.plus" : "doc.text")
                             .font(.system(size: 32, weight: .light)).foregroundColor(FRTheme.accentText)
@@ -211,7 +211,7 @@ struct FileComparisonView: View {
         }
         .buttonStyle(.plain)
         .help(Text(verbatim: error ?? url?.path ?? NSLocalizedString("拖入文件或点击选择", comment: "")))
-        .accessibilityLabel(onLeft ? "选择左侧文件" : "选择右侧文件")
+        .accessibilityLabel(onLeft ? Text("选择左侧文件") : Text("选择右侧文件"))
         .overlay(alignment: .topTrailing) {
             if url != nil {
                 Button { model.removeFile(onLeft: onLeft) } label: {
@@ -222,8 +222,8 @@ struct FileComparisonView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(onLeft ? "移除左侧文件" : "移除右侧文件")
-                .accessibilityLabel(onLeft ? "移除左侧文件" : "移除右侧文件")
+                .help(onLeft ? Text("移除左侧文件") : Text("移除右侧文件"))
+                .accessibilityLabel(onLeft ? Text("移除左侧文件") : Text("移除右侧文件"))
                 .padding(compact ? 4 : 8)
             }
         }
@@ -328,7 +328,7 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
             window.contentView = NSHostingView(rootView: FileComparisonView(model: model))
             // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
             if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = Self.fittedFrame(saved, window: window) {
+               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
                 window.setFrame(adjusted, display: false)
             } else {
                 window.center()
@@ -341,17 +341,6 @@ final class FileComparisonController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。
-    private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
-        var result = frame
-        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
-        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
-        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
-        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
-        return result
     }
 
     /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。

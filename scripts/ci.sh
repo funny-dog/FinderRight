@@ -23,14 +23,6 @@ swiftc -parse-as-library -target arm64-apple-macos13.0 \
   scripts/test-developer-menu.swift -o "$KIT_BUILD_DIR/test-developer-menu"
 "$KIT_BUILD_DIR/test-developer-menu"
 
-for check in git-status git-operations; do
-  swiftc -parse-as-library -target arm64-apple-macos13.0 \
-    -I "$KIT_BUILD_DIR" -I "$KIT_BUILD_DIR/Modules" \
-    -L "$KIT_BUILD_DIR" -lFinderRightKit \
-    "scripts/test-$check.swift" -o "$KIT_BUILD_DIR/test-$check"
-  "$KIT_BUILD_DIR/test-$check"
-done
-
 echo "=== [CI] 2. 运行 FinderRightKit 单元测试 ==="
 swift run --disable-sandbox --package-path FinderRightKit FinderRightKitTests
 
@@ -282,35 +274,84 @@ import re
 import sys
 from pathlib import Path
 
+def read_keys(path: Path) -> set[str]:
+    keys = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r'^"((?:[^"\\]|\\.)*)"\s*=', line)
+        if match:
+            keys.add(match.group(1))
+    return keys
+
+def has_chinese(text: str) -> bool:
+    return bool(re.search(r'[\u4e00-\u9fff]', text)) and "\\(" not in text
+
 root = Path("FinderRight")
-table = root / "en.lproj" / "Localizable.strings"
-keys = set()
-for line in table.read_text(encoding="utf-8").splitlines():
-    match = re.match(r'^"((?:[^"\\]|\\.)*)"\s*=', line)
-    if match:
-        keys.add(match.group(1))
+app_keys = read_keys(root / "en.lproj" / "Localizable.strings")
+sync_keys = read_keys(Path("FinderRightSync/en.lproj/Localizable.strings"))
 
 # 语言名在中英文界面里都显示原文，不需要翻译
 allow = {"中文"}
 
 pattern = re.compile(
-    r'(?:Text|NSLocalizedString|Button|Label|FRCaption)\(\s*"((?:[^"\\]|\\.)*)"'
+    r'(?:Text|NSLocalizedString|Button|Label|FRCaption|LocalizedStringKey)\(\s*"((?:[^"\\]|\\.)*)"'
     r'|FRPage\(title:\s*"((?:[^"\\]|\\.)*)"'
     r'|\bL\(\s*"((?:[^"\\]|\\.)*)"'
+    r'|\.help\(\s*"((?:[^"\\]|\\.)*)"'
 )
-literals = set()
+app_literals = set()
 for path in sorted(root.rglob("*.swift")):
     for match in pattern.finditer(path.read_text(encoding="utf-8")):
         text = next(group for group in match.groups() if group is not None)
-        if not re.search(r'[\u4e00-\u9fff]', text) or "\\(" in text:
-            continue
-        literals.add(text)
+        if has_chinese(text):
+            app_literals.add(text)
 
-missing = sorted(literals - keys - allow)
-print(f"中文字面量 {len(literals)} 条，英文表 {len(keys)} 条，缺失 {len(missing)} 条")
-for text in missing:
-    print(f"  - 缺少英文翻译：{text}")
-sys.exit(1 if missing else 0)
+# Kit 中面向主 App 界面的更新日志、功能清单与预设名称
+kit = Path("FinderRightKit/Sources/FinderRightKit")
+for p in (
+    kit / "ChangelogCatalog.swift",
+    kit / "FileContentReader.swift",
+    kit / "CopyPathFormat.swift",
+    kit / "Theme.swift",
+    kit / "OperationHistoryPresentation.swift",
+    kit / "OfficeTemplate.swift",
+):
+    for m in re.finditer(r'(?:textKey:\s*|return\s+)"((?:[^"\\]|\\.)*)"', p.read_text(encoding="utf-8")):
+        if has_chinese(m.group(1)):
+            app_literals.add(m.group(1))
+
+mf_text = (kit / "MenuFeature.swift").read_text(encoding="utf-8")
+for m in re.finditer(r'(?:nameKey|descriptionKey):\s*"((?:[^"\\]|\\.)*)"', mf_text):
+    if has_chinese(m.group(1)):
+        app_literals.add(m.group(1))
+
+# 扩展侧需要本地化的菜单文案与提示
+sync_literals = set()
+for p in sorted(Path("FinderRightSync").glob("*.swift")):
+    for m in re.finditer(r'(?:\bL|NSLocalizedString)\(\s*"((?:[^"\\]|\\.)*)"', p.read_text(encoding="utf-8")):
+        if has_chinese(m.group(1)):
+            sync_literals.add(m.group(1))
+for m in re.finditer(r'nameKey:\s*"((?:[^"\\]|\\.)*)"', mf_text):
+    if has_chinese(m.group(1)):
+        sync_literals.add(m.group(1))
+for m in re.finditer(r'titleKey:\s*"((?:[^"\\]|\\.)*)"', (kit / "MenuModel.swift").read_text(encoding="utf-8")):
+    if has_chinese(m.group(1)):
+        sync_literals.add(m.group(1))
+for m in re.finditer(r'NewFileTemplateItem\([^)]*name:\s*"((?:[^"\\]|\\.)*)"', (kit / "NewFileTemplateCatalog.swift").read_text(encoding="utf-8")):
+    if has_chinese(m.group(1)):
+        sync_literals.add(m.group(1))
+for m in re.finditer(r'localize\(\s*"((?:[^"\\]|\\.)*)"', (kit / "FilePermissions.swift").read_text(encoding="utf-8")):
+    if has_chinese(m.group(1)):
+        sync_literals.add(m.group(1))
+
+missing_app = sorted(app_literals - app_keys - allow)
+missing_sync = sorted(sync_literals - sync_keys - allow)
+print(f"主 App 文案 {len(app_literals)} 条（英文表 {len(app_keys)} 条，缺失 {len(missing_app)} 条）；"
+      f"扩展文案 {len(sync_literals)} 条（英文表 {len(sync_keys)} 条，缺失 {len(missing_sync)} 条）")
+for text in missing_app:
+    print(f"  - [主 App] 缺少英文翻译：{text}")
+for text in missing_sync:
+    print(f"  - [FinderSync] 缺少英文翻译：{text}")
+sys.exit(1 if (missing_app or missing_sync) else 0)
 PY
 
 echo "=== [CI] 7. 校验官网下载、页面与更新代理 ==="

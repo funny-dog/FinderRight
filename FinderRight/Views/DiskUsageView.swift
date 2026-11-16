@@ -416,8 +416,10 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
             window.title = NSLocalizedString("磁盘空间占用", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: DiskUsageView(model: model))
-            window.setFrameAutosaveName("DiskUsageWindow")
-            if !window.setFrameUsingName("DiskUsageWindow") {
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
+               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
+                window.setFrame(adjusted, display: false)
+            } else {
                 window.center()
             }
             self.model = model
@@ -426,6 +428,14 @@ final class DiskUsageController: NSObject, NSWindowDelegate {
 
         model?.open(at: url)
         if let window { TransientWindowManager.shared.present(window) }
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
+    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
+
+    private func saveFrame(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func close() {

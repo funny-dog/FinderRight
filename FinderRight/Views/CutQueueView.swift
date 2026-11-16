@@ -138,8 +138,14 @@ struct CutQueueView: View {
     }
 
     private func clearAll() {
-        _ = FinderRightService().cancelCut(IPCRequest(id: UUID().uuidString, action: "cancelCut", payload: [:]))
-        errorMessage = nil
+        do {
+            try FinderRightService.clearPendingCutQueue()
+            errorMessage = nil
+        } catch CutQueueStore.RemovalError.pasteInProgress {
+            errorMessage = NSLocalizedString("正在粘贴，请完成后再清空剪切队列", comment: "")
+        } catch {
+            errorMessage = String(format: NSLocalizedString("清空剪切队列失败：%@", comment: ""), error.localizedDescription)
+        }
         refresh()
     }
 }
@@ -203,6 +209,7 @@ final class CutQueueController: NSObject, NSWindowDelegate {
     static let shared = CutQueueController()
     private var window: NSWindow?
 
+    private let windowType = "cutQueue"
     private static let defaultSize = CGSize(width: 520, height: 380)
     private static let minimumSize = CGSize(width: 440, height: 280)
 
@@ -214,14 +221,24 @@ final class CutQueueController: NSObject, NSWindowDelegate {
             window.title = NSLocalizedString("已剪切项目", comment: "")
             window.delegate = self
             window.contentView = NSHostingView(rootView: CutQueueView())
-            window.setFrameAutosaveName("CutQueueWindow")
-            if !window.setFrameUsingName("CutQueueWindow") {
+            if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
+               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
+                window.setFrame(adjusted, display: false)
+            } else {
                 window.center()
             }
             self.window = window
         }
 
         if let window { TransientWindowManager.shared.present(window) }
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }
+    func windowDidEndMoving(_ notification: Notification) { saveFrame(notification) }
+
+    private func saveFrame(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        SharedConfig.shared.saveWindowPosition(for: windowType, frame: window.frame)
     }
 
     func close() {

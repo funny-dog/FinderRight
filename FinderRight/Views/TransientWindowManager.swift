@@ -19,6 +19,17 @@ class FRTransientPanel: NSPanel {
                 styleMask: styleMask).size
         }
     }
+
+    /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。
+    static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
+        var result = frame
+        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
+        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
+        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
+        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
+        return result
+    }
 }
 
 /// 临时窗口关闭后的激活决策。

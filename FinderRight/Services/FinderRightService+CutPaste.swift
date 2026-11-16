@@ -95,8 +95,20 @@ extension FinderRightService {
 
     /// 菜单栏入口与 IPC 剪切/粘贴共用短事务，避免快照过期后移除在途项目。
     static func removePendingCutPath(_ path: String) throws {
+        try mutatePendingCutQueue { try $0.remove(path) }
+    }
+
+    /// 菜单弹窗「全部清空」：仅在无粘贴批次在途时清空待剪切队列，保留与单条移除一致的安全校验。
+    static func clearPendingCutQueue() throws {
+        try mutatePendingCutQueue {
+            try $0.clearPending()
+            return []
+        }
+    }
+
+    private static func mutatePendingCutQueue(_ operation: (CutQueueStore) throws -> [String]) throws {
         try cutPasteQueue.sync {
-            let remaining = try CutQueueStore().remove(path)
+            let remaining = try operation(CutQueueStore())
             UndoCenter.shared.revalidate { $0.pruningRemovedItems(cutQueue: remaining) }
             CutQueueChangeNotifier.post()
             FinderShortcutInterceptor.shared.refreshCutQueueMirror(remaining)
@@ -186,10 +198,12 @@ extension FinderRightService {
                 continue
             }
 
-            // 目标已存在则自动重命名避免冲突（与新建文件共用 UniqueName 规则：name 1.ext、name 2.ext…）
-            let destURL = UniqueName.fileURL(baseName: sourceURL.deletingPathExtension().lastPathComponent,
-                                             ext: sourceURL.pathExtension,
-                                             in: destDir)
+            // 目标已存在则自动重命名避免冲突（非包目录不按扩展名拆分；其余与 UniqueName 规则一致）
+            let (baseName, ext) = UniqueName.splitName(for: sourceURL, fileManager: fileManager)
+            let destURL = UniqueName.fileURL(baseName: baseName,
+                                             ext: ext,
+                                             in: destDir,
+                                             fileManager: fileManager)
 
             do {
                 try Self.cutPasteQueue.sync {

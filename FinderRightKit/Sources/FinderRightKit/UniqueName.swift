@@ -22,6 +22,18 @@ public enum UniqueName {
         return (try? fileManager.attributesOfItem(atPath: path)) != nil
     }
 
+    /// 拆分冲突重命名与归档命名所用的基名和扩展名：
+    /// 普通文件与包目录（如 `.app`）按扩展名拆分；非包普通目录保留完整目录名（避免 `v1.0` 被拆成 `v1 1.0`）。
+    public static func splitName(for url: URL, fileManager: FileManager = .default) -> (baseName: String, ext: String) {
+        let attrs = try? fileManager.attributesOfItem(atPath: url.path)
+        let isRealDirectory = (attrs?[.type] as? FileAttributeType) == .typeDirectory
+        let isPackage = (try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) ?? false
+        if isRealDirectory && !isPackage {
+            return (url.lastPathComponent, "")
+        }
+        return (url.deletingPathExtension().lastPathComponent, url.pathExtension)
+    }
+
     public static func fileURL(baseName: String, ext: String, in directory: URL,
                                fileManager: FileManager = .default) -> URL {
         var counter = 0

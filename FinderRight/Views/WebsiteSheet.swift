@@ -98,7 +98,7 @@ struct WebsiteSheet: View {
             Button {
                 copy(site)
             } label: {
-                Label(copiedSite == site.id ? "已复制" : "复制",
+                Label(LocalizedStringKey(copiedSite == site.id ? "已复制" : "复制"),
                       systemImage: copiedSite == site.id ? "checkmark" : "doc.on.doc")
             }
             .buttonStyle(.frLink)

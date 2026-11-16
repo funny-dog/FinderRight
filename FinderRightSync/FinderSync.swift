@@ -399,8 +399,11 @@ class FinderSync: FIFinderSync {
         if selected.isEmpty {
             selectionKind = .empty
         } else if selected.count == 1, let first = selected.first {
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir), isDir.boolValue {
+            // 仅把真实且非包（非 `.app`/`.rtfd`）目录视为文件夹；符号链接指向目录时不应误触发文件夹动作
+            let attrs = try? FileManager.default.attributesOfItem(atPath: first.path)
+            let isRealDirectory = (attrs?[.type] as? FileAttributeType) == .typeDirectory
+            let isPackage = isRealDirectory && ((try? first.resourceValues(forKeys: [.isPackageKey]).isPackage) ?? false)
+            if isRealDirectory && !isPackage {
                 selectionKind = .singleFolder
             } else {
                 let isText = FileContentReader.isEligible(url: first, maxBytes: SharedConfig.shared.copyFileContentMaxBytes)
@@ -567,7 +570,7 @@ class FinderSync: FIFinderSync {
             targetURL = nil
         }
         guard let url = targetURL, let perm = FilePermissions.permissions(at: url.path) else { return nil }
-        return (perm.menuTitle, perm.toolTip, url)
+        return (perm.menuTitle(localize: self.L), perm.toolTip(localize: self.L), url)
     }
 
     /// 单次磁盘占用请求的等待上限。常规目录实测 0–70 ms，留到 250 ms 仍几乎无感；

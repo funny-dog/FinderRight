@@ -51,6 +51,7 @@ final class LineCountModel: ObservableObject {
     }
 
     func cancel() {
+        scanRevision += 1
         scanOperation?.cancel()
         scanOperation = nil
         isLoading = false
@@ -71,6 +72,7 @@ final class LineCountModel: ObservableObject {
 
 struct LineCountView: View {
     @ObservedObject var model: LineCountModel
+    @FRState private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,6 +86,16 @@ struct LineCountView: View {
         }
         .frame(minWidth: 520, minHeight: 380)
         .background(FRTheme.window)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(FRTheme.accent, lineWidth: 2)
+                .opacity(isDropTargeted ? 1 : 0)
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first, url.isFileURL else { return false }
+            model.open(at: url)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
     }
 
     // MARK: - 顶部导航栏
@@ -111,6 +123,11 @@ struct LineCountView: View {
             }
 
             Spacer(minLength: 12)
+
+            Button(NSLocalizedString("选择…", comment: "")) {
+                chooseTarget()
+            }
+            .buttonStyle(.frSecondary)
 
             if let targetURL = model.targetURL {
                 Button {
@@ -197,11 +214,11 @@ struct LineCountView: View {
                 Image(systemName: "folder")
                     .font(.system(size: 32))
                     .foregroundColor(FRTheme.mute)
-                Text(NSLocalizedString("请选择需要统计代码行数的目录", comment: ""))
+                Text(NSLocalizedString("请选择或拖入需要统计代码的目录或文件", comment: ""))
                     .font(.system(size: 13))
                     .foregroundColor(FRTheme.mute)
-                Button(NSLocalizedString("选择目录…", comment: "")) {
-                    chooseDirectory()
+                Button(NSLocalizedString("选择…", comment: "")) {
+                    chooseTarget()
                 }
                 .buttonStyle(.frPrimary)
                 Spacer()
@@ -301,9 +318,9 @@ struct LineCountView: View {
         .background(FRTheme.card)
     }
 
-    private func chooseDirectory() {
+    private func chooseTarget() {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = false
+        panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = NSLocalizedString("选择", comment: "")
@@ -355,7 +372,7 @@ final class LineCountController: NSObject, NSWindowDelegate {
             window.contentView = NSHostingView(rootView: LineCountView(model: model))
 
             if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = Self.fittedFrame(saved, window: window) {
+               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
                 window.setFrame(adjusted, display: false)
             } else {
                 window.center()
@@ -373,16 +390,6 @@ final class LineCountController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
-        var result = frame
-        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
-        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
-        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
-        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
-        return result
     }
 
     func windowDidEndLiveResize(_ notification: Notification) { saveFrame(notification) }

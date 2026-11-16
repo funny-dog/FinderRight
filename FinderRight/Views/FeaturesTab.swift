@@ -285,7 +285,7 @@ struct FeaturesTab: View {
                         }
                     )) {
                         ForEach(CopyFileContentSizePreset.allCases) { preset in
-                            Text(preset.titleKey).tag(preset)
+                            Text(LocalizedStringKey(preset.titleKey)).tag(preset)
                         }
                     }
                 }

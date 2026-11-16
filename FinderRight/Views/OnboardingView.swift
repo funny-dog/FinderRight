@@ -259,14 +259,14 @@ struct CompletionStep: View {
                     .animation(.spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
             }
 
-            Text(extensionEnabled ? "一切就绪！" : "差一步就好")
+            Text(LocalizedStringKey(extensionEnabled ? "一切就绪！" : "差一步就好"))
                 .font(.system(size: 26, weight: .bold))
                 .foregroundColor(FRTheme.text)
                 .padding(.top, 16)
 
-            Text(extensionEnabled
+            Text(LocalizedStringKey(extensionEnabled
                  ? "FinderRight 已准备好为你服务"
-                 : "Finder 扩展尚未启用，右键菜单暂不会出现。可点「上一步」返回启用")
+                 : "Finder 扩展尚未启用，右键菜单暂不会出现。可点「上一步」返回启用"))
                 .font(.system(size: 14))
                 .foregroundColor(extensionEnabled ? FRTheme.mute : FRTheme.warnText)
                 .multilineTextAlignment(.center)

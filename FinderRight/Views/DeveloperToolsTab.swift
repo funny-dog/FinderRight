@@ -127,8 +127,10 @@ struct DeveloperToolsTab: View {
             Button {
                 commands.removeAll { $0.id == command.id }
                 SharedConfig.shared.developerCommands = commands
-                order = menuOrder
-                SharedConfig.shared.developerMenuOrder = order
+                if !order.isEmpty {
+                    order.removeAll { $0 == command.menuId }
+                    SharedConfig.shared.developerMenuOrder = order
+                }
             } label: { Image(systemName: "trash") }
                 .buttonStyle(.frLink)
                 .help("删除命令")

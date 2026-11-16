@@ -84,16 +84,31 @@ public enum LineCounter {
     struct CommentSpec {
         let linePrefixes: [String]
         let block: (start: String, end: String)?
+        let hasStringLiterals: Bool
+        let blockIsDocstring: Bool
+
+        init(
+            linePrefixes: [String],
+            block: (start: String, end: String)?,
+            hasStringLiterals: Bool = true,
+            blockIsDocstring: Bool = false
+        ) {
+            self.linePrefixes = linePrefixes
+            self.block = block
+            self.hasStringLiterals = hasStringLiterals
+            self.blockIsDocstring = blockIsDocstring
+        }
     }
 
     private static let slashStarSpec = CommentSpec(linePrefixes: ["//"], block: ("/*", "*/"))
     private static let hashSpec = CommentSpec(linePrefixes: ["#"], block: nil)
-    private static let pythonSpec = CommentSpec(linePrefixes: ["#"], block: ("\"\"\"", "\"\"\""))
+    private static let pythonSpec = CommentSpec(linePrefixes: ["#"], block: ("\"\"\"", "\"\"\""), blockIsDocstring: true)
+    private static let sqlSpec = CommentSpec(linePrefixes: ["--"], block: ("/*", "*/"))
     private static let dashDashSpec = CommentSpec(linePrefixes: ["--"], block: ("--[[", "]]"))
-    private static let xmlSpec = CommentSpec(linePrefixes: [], block: ("<!--", "-->"))
-    private static let percentSpec = CommentSpec(linePrefixes: ["%"], block: nil)
-    private static let semicolonSpec = CommentSpec(linePrefixes: [";"], block: nil)
-    private static let noneSpec = CommentSpec(linePrefixes: [], block: nil)
+    private static let xmlSpec = CommentSpec(linePrefixes: [], block: ("<!--", "-->"), hasStringLiterals: false)
+    private static let percentSpec = CommentSpec(linePrefixes: ["%"], block: nil, hasStringLiterals: false)
+    private static let semicolonSpec = CommentSpec(linePrefixes: [";"], block: nil, hasStringLiterals: false)
+    private static let noneSpec = CommentSpec(linePrefixes: [], block: nil, hasStringLiterals: false)
 
     private struct LanguageDef {
         let name: String
@@ -144,7 +159,7 @@ public enum LineCounter {
         "plist": LanguageDef(name: "XML", spec: xmlSpec),
         "md": LanguageDef(name: "Markdown", spec: xmlSpec),
         "markdown": LanguageDef(name: "Markdown", spec: xmlSpec),
-        "sql": LanguageDef(name: "SQL", spec: dashDashSpec),
+        "sql": LanguageDef(name: "SQL", spec: sqlSpec),
         "vue": LanguageDef(name: "Vue", spec: xmlSpec),
         "dart": LanguageDef(name: "Dart", spec: slashStarSpec),
         "lua": LanguageDef(name: "Lua", spec: dashDashSpec),
@@ -287,6 +302,7 @@ public enum LineCounter {
         var comment = 0
         var blank = 0
         var inBlock = false
+        var inMultilineString = false
 
         content.enumerateLines { line, _ in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -295,52 +311,86 @@ public enum LineCounter {
                 return
             }
 
-            if inBlock {
-                comment += 1
-                if let block = spec.block, let endRange = trimmed.range(of: block.end) {
-                    inBlock = false
-                    // 如果块注释结束之后还有非空字符，可算作代码行（或保持为注释行）
-                    let after = trimmed[endRange.upperBound...].trimmingCharacters(in: .whitespaces)
-                    if !after.isEmpty && !spec.linePrefixes.contains(where: { after.hasPrefix($0) }) {
-                        // 包含有效代码
-                        code += 1
-                        comment -= 1
-                    }
-                }
+            if spec.linePrefixes.isEmpty && spec.block == nil {
+                code += 1
                 return
             }
 
-            // 检查是否是行注释开头
-            for prefix in spec.linePrefixes where trimmed.hasPrefix(prefix) {
-                comment += 1
-                return
-            }
+            var hasCodeOnLine = false
+            var hasCommentOnLine = false
+            var stringQuote: Character?
+            var idx = trimmed.startIndex
 
-            // 检查是否有块注释开头
-            if let block = spec.block, let startRange = trimmed.range(of: block.start) {
-                let before = trimmed[..<startRange.lowerBound].trimmingCharacters(in: .whitespaces)
-                if let endRange = trimmed[startRange.upperBound...].range(of: block.end) {
-                    // 同一行中开启并关闭了块注释
-                    let after = trimmed[endRange.upperBound...].trimmingCharacters(in: .whitespaces)
-                    if before.isEmpty && after.isEmpty {
-                        comment += 1
+            while idx < trimmed.endIndex {
+                if inBlock, let block = spec.block {
+                    hasCommentOnLine = true
+                    if let endRange = trimmed[idx...].range(of: block.end) {
+                        inBlock = false
+                        idx = endRange.upperBound
                     } else {
-                        code += 1
+                        break
                     }
-                } else {
-                    // 块注释未在该行结束
-                    if before.isEmpty {
-                        comment += 1
-                    } else {
-                        code += 1
-                    }
-                    inBlock = true
+                    continue
                 }
-                return
+
+                if inMultilineString, let block = spec.block {
+                    hasCodeOnLine = true
+                    if let endRange = trimmed[idx...].range(of: block.end) {
+                        inMultilineString = false
+                        idx = endRange.upperBound
+                    } else {
+                        break
+                    }
+                    continue
+                }
+
+                let ch = trimmed[idx]
+                if let quote = stringQuote {
+                    hasCodeOnLine = true
+                    if ch == "\\" {
+                        let next = trimmed.index(after: idx)
+                        idx = next < trimmed.endIndex ? trimmed.index(after: next) : next
+                    } else {
+                        if ch == quote { stringQuote = nil }
+                        idx = trimmed.index(after: idx)
+                    }
+                    continue
+                }
+
+                if ch.isWhitespace {
+                    idx = trimmed.index(after: idx)
+                    continue
+                }
+
+                // 先匹配块注释起始符（避免 Lua `--[[` 被行注释 `--` 提前吞掉，或 Python `"""` 被拆成空字符串）
+                if let block = spec.block, trimmed[idx...].hasPrefix(block.start) {
+                    if spec.blockIsDocstring && hasCodeOnLine {
+                        inMultilineString = true
+                    } else {
+                        hasCommentOnLine = true
+                        inBlock = true
+                    }
+                    idx = trimmed.index(idx, offsetBy: block.start.count)
+                    continue
+                }
+
+                if spec.linePrefixes.contains(where: { trimmed[idx...].hasPrefix($0) }) {
+                    hasCommentOnLine = true
+                    break
+                }
+
+                hasCodeOnLine = true
+                if spec.hasStringLiterals && (ch == "\"" || ch == "'") {
+                    stringQuote = ch
+                }
+                idx = trimmed.index(after: idx)
             }
 
-            // 属于有效代码行
-            code += 1
+            if hasCodeOnLine {
+                code += 1
+            } else if hasCommentOnLine {
+                comment += 1
+            }
         }
 
         return (code, comment, blank)

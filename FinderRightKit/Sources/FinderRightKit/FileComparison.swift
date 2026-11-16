@@ -37,13 +37,25 @@ public struct ComparisonDocument: Equatable {
         guard data.count <= maxBytes else { throw FileComparisonError.tooLarge }
         guard case .success(var decoded) = FileContentReader.decodeText(data) else { throw FileComparisonError.notText }
         if decoded.first == "\u{FEFF}" { decoded.removeFirst() }
-        let text = decoded.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        var lineEndingBytes: [UInt8] = []
+        var hasCR = false
+        for byte in decoded.utf8 {
+            if byte == 0x0D {
+                hasCR = true
+                lineEndingBytes.append(byte)
+            } else if byte == 0x0A {
+                lineEndingBytes.append(byte)
+            }
+        }
+        let text = hasCR
+            ? decoded.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+            : decoded
         let finalNewline = text.hasSuffix("\n")
         var lines = text.isEmpty ? [] : text.components(separatedBy: "\n")
         if finalNewline { lines.removeLast() }
         guard lines.count <= 20_000 else { throw FileComparisonError.tooManyLines }
         return ComparisonDocument(url: url, text: text, lines: lines, hasFinalNewline: finalNewline,
-                                  lineEndings: decoded.unicodeScalars.filter { $0 == "\r" || $0 == "\n" }.map { String($0) }.joined())
+                                  lineEndings: String(decoding: lineEndingBytes, as: UTF8.self))
     }
 }
 

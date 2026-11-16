@@ -94,3 +94,16 @@
 // Local Git status
 "Git 状态…" = "Git Status…";
 "无法打开 Git 状态" = "Unable to open Git status";
+
+/* 补充与开发者工具右键菜单 */
+"显示大小" = "Show Size";
+"撤销" = "Undo";
+"从剪贴板新建…" = "New from Clipboard…";
+"目录不可用" = "Folder unavailable";
+"文件权限" = "File Permissions";
+"权限：%@ (%@)" = "Permissions: %1$@ (%2$@)";
+"所属：%@:%@" = "Owner: %1$@:%2$@";
+"所有者：%@" = "Owner: %@";
+"点击复制权限" = "Click to copy permissions";
+"已复制权限：%@" = "Copied permissions: %@";
+"代码行数统计…" = "Count Lines of Code…";

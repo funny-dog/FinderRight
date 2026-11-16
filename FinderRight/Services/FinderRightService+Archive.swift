@@ -14,7 +14,7 @@ extension FinderRightService {
         }
         let dir = URL(fileURLWithPath: first).deletingLastPathComponent()
         let name = items.count == 1
-            ? URL(fileURLWithPath: first).deletingPathExtension().lastPathComponent
+            ? UniqueName.splitName(for: URL(fileURLWithPath: first)).baseName
             : "Archive"
         let itemURLs = items.map { URL(fileURLWithPath: $0) }
 

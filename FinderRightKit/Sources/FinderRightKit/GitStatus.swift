@@ -186,36 +186,7 @@ public struct GitStatusSnapshot {
         var branch = rawBranch.components(separatedBy: "...")[0]
         for prefix in ["No commits yet on ", "Initial commit on "] where branch.hasPrefix(prefix) { branch.removeFirst(prefix.count) }
         if branch == "HEAD (no branch)" { branch = NSLocalizedString("分离的 HEAD", comment: "") }
-        var entries: [GitStatusEntry] = []
-        var positions: [String: Int] = [:]
-        var index = 1
-        while index < tokens.count {
-            let token = Array(tokens[index])
-            guard token.count >= 4, token[2] == 32, let name = String(bytes: token.dropFirst(3), encoding: .utf8) else {
-                throw GitStatusError.failed(NSLocalizedString("无法解析 Git 文件名", comment: ""))
-            }
-            let x = String(UnicodeScalar(token[0])), y = String(UnicodeScalar(token[1]))
-            var original: String?
-            if x == "R" || x == "C" || y == "R" || y == "C" {
-                index += 1
-                guard index < tokens.count, let old = String(data: tokens[index], encoding: .utf8) else {
-                    throw GitStatusError.failed(NSLocalizedString("无法解析 Git 文件名", comment: ""))
-                }
-                original = old
-            }
-            if let position = positions[name] {
-                // git rm --cached 会对同一路径分别报告暂存删除与未跟踪，合并后仍可切换两侧差异。
-                let previous = entries[position]
-                guard (previous.indexStatus == "D" && x == "?") || (previous.isUntracked && x == "D") else {
-                    throw GitStatusError.failed(NSLocalizedString("无法解析 Git 输出", comment: ""))
-                }
-                entries[position] = GitStatusEntry(path: name, originalPath: nil, indexStatus: "D", worktreeStatus: "?")
-            } else {
-                positions[name] = entries.count
-                entries.append(GitStatusEntry(path: name, originalPath: original, indexStatus: x, worktreeStatus: y))
-            }
-            index += 1
-        }
+        let entries = try Self.parseEntries(tokens: tokens[1...])
         let refs = try LocalGit.checked(at: root, ["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"])
         let branches = String(decoding: refs, as: UTF8.self).split(separator: "\n").map(String.init)
         let remotes = try LocalGit.run(at: root, ["remote"])
@@ -241,6 +212,40 @@ public struct GitStatusSnapshot {
         }
         return Self(root: root, branch: branch, localBranches: branches, entries: entries,
                     upstream: upstream, ahead: ahead, behind: behind, hasRemote: hasRemote)
+    }
+
+    static func parseEntries(tokens: ArraySlice<Data>) throws -> [GitStatusEntry] {
+        var entries: [GitStatusEntry] = []
+        var positions: [String: Int] = [:]
+        var index = tokens.startIndex
+        while index < tokens.endIndex {
+            let token = Array(tokens[index])
+            guard token.count >= 4, token[2] == 32, let name = String(bytes: token.dropFirst(3), encoding: .utf8) else {
+                throw GitStatusError.failed(NSLocalizedString("无法解析 Git 文件名", comment: ""))
+            }
+            let x = String(UnicodeScalar(token[0])), y = String(UnicodeScalar(token[1]))
+            var original: String?
+            if x == "R" || x == "C" || y == "R" || y == "C" {
+                index += 1
+                guard index < tokens.endIndex, let old = String(data: tokens[index], encoding: .utf8) else {
+                    throw GitStatusError.failed(NSLocalizedString("无法解析 Git 文件名", comment: ""))
+                }
+                original = old
+            }
+            if let position = positions[name] {
+                // git rm --cached 会对同一路径分别报告暂存删除与未跟踪，合并后仍可切换两侧差异。
+                let previous = entries[position]
+                guard (previous.indexStatus == "D" && x == "?") || (previous.isUntracked && x == "D") else {
+                    throw GitStatusError.failed(NSLocalizedString("无法解析 Git 输出", comment: ""))
+                }
+                entries[position] = GitStatusEntry(path: name, originalPath: nil, indexStatus: "D", worktreeStatus: "?")
+            } else {
+                positions[name] = entries.count
+                entries.append(GitStatusEntry(path: name, originalPath: original, indexStatus: x, worktreeStatus: y))
+            }
+            index += 1
+        }
+        return entries
     }
 }
 

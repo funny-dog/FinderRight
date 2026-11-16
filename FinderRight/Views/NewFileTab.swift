@@ -401,7 +401,7 @@ struct EditTemplateSheet: View {
             HStack(spacing: 12) {
                 FRIconChip(systemName: "doc.badge.plus", size: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isEditing ? "编辑文件模板" : "新建文件模板")
+                    Text(LocalizedStringKey(isEditing ? "编辑文件模板" : "新建文件模板"))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundColor(FRTheme.text)
                     Text("出现在访达右键「新建文件」子菜单中")
@@ -452,7 +452,7 @@ struct EditTemplateSheet: View {
                 .keyboardShortcut(.cancelAction)
                 .buttonStyle(.frSecondary)
 
-                Button(isEditing ? "保存" : "添加") {
+                Button(LocalizedStringKey(isEditing ? "保存" : "添加")) {
                     submit()
                 }
                 .keyboardShortcut(.defaultAction)

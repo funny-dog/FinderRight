@@ -6611,6 +6611,33 @@ struct FinderRightKitTestsRunner {
             try assertNil(timedOutBreakdown, "已超时的 deadline 必须返回 nil")
         }
 
+        runTest("磁盘占用 硬链接文件在目录内不重复计入占用") {
+            let root = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let sub1 = root.appendingPathComponent("sub1")
+            let sub2 = root.appendingPathComponent("sub2")
+            try FileManager.default.createDirectory(at: sub1, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: sub2, withIntermediateDirectories: true)
+
+            let original = sub1.appendingPathComponent("orig.bin")
+            try Data(repeating: 0x55, count: 64 * 1024).write(to: original)
+            guard let singleBytes = DiskUsage.allocatedBytes(at: original) else {
+                throw TestFailure(message: "无法读取单文件占用")
+            }
+
+            try FileManager.default.linkItem(at: original, to: sub1.appendingPathComponent("link1.bin"))
+            try FileManager.default.linkItem(at: original, to: sub2.appendingPathComponent("link2.bin"))
+
+            let totalBytes = DiskUsage.allocatedBytes(at: root)
+            try assertEqual(totalBytes, singleBytes, "同一目录树内硬链接应只计入一次磁盘占用")
+
+            let breakdown = DiskUsage.inspectDirectChildren(at: root)
+            try assertTrue(breakdown != nil)
+            try assertEqual(breakdown?.directDirectoryCount, 2)
+            try assertEqual(breakdown?.items.first(where: { $0.name == "sub1" })?.bytes, singleBytes, "同目录树下的硬链接子目录不应翻倍")
+        }
+
         // MARK: - 开发者工具与自定义命令
 
         runTest("开发者工具：项目相对路径、多选、嵌套仓库与仓库根") {
@@ -6981,6 +7008,18 @@ struct FinderRightKitTestsRunner {
             try assertTrue(readPerm != nil, "应该成功读取文件权限")
             try assertEqual(readPerm?.octal, "755")
             try assertEqual(readPerm?.symbolic, "-rwxr-xr-x")
+
+            let en: (String) -> String = { key in
+                switch key {
+                case "权限：%@ (%@)": return "Permissions: %1$@ (%2$@)"
+                case "所属：%@:%@": return "Owner: %1$@:%2$@"
+                case "所有者：%@": return "Owner: %@"
+                case "点击复制权限": return "Click to copy permissions"
+                default: return key
+                }
+            }
+            try assertEqual(permFile.menuTitle(localize: en), "Permissions: -rw-r--r-- (644)")
+            try assertTrue(permFile.toolTip(localize: en).contains("Click to copy permissions"))
         }
 
         runTest("代码行数统计：精确统计代码行、注释行与空行") {
@@ -7073,6 +7112,118 @@ struct FinderRightKitTestsRunner {
             let missing = base.appendingPathComponent("missing.plist")
             PrivateStorage.restrictFile(missing)
             try assertTrue(!FileManager.default.fileExists(atPath: missing.path), "不存在的文件不应被创建")
+        }
+
+        // MARK: - 回归测试（注释识别、目录重命名、安全清空与 Git 状态汇总）
+
+        runTest("LineCounter 支持 SQL 块注释、字符串假注释过滤与 Python 多行字符串区分") {
+            let dir = makeTempDirectory()
+            let sqlFile = dir.appendingPathComponent("query.sql")
+            try """
+            /* multi
+               comment */
+            -- line comment
+            SELECT '/* not comment */' FROM tbl; -- inline
+            """.write(to: sqlFile, atomically: true, encoding: .utf8)
+            let sql = LineCounter.count(at: sqlFile)
+            try assertEqual(sql?.totalCode, 1)
+            try assertEqual(sql?.totalComment, 3)
+
+            let swiftFile = dir.appendingPathComponent("sample.swift")
+            try """
+            let a = "/* not comment */"
+            let b = "// also code"
+            let c = "tail" // trailing
+            /* block */ let d = 1
+            """.write(to: swiftFile, atomically: true, encoding: .utf8)
+            let swift = LineCounter.count(at: swiftFile)
+            try assertEqual(swift?.totalCode, 4)
+            try assertEqual(swift?.totalComment, 0)
+
+            let pyFile = dir.appendingPathComponent("demo.py")
+            try """
+            \"\"\"
+            module docstring
+            \"\"\"
+            msg = \"\"\"
+            hello world
+            \"\"\"
+            """.write(to: pyFile, atomically: true, encoding: .utf8)
+            let py = LineCounter.count(at: pyFile)
+            try assertEqual(py?.totalComment, 3)
+            try assertEqual(py?.totalCode, 3)
+        }
+
+        runTest("UniqueName splitName 保留带点普通目录完整名称并正常拆分文件与包") {
+            let dir = makeTempDirectory()
+            let fm = FileManager.default
+            let dottedFolder = dir.appendingPathComponent("release-v1.0", isDirectory: true)
+            try fm.createDirectory(at: dottedFolder, withIntermediateDirectories: true)
+            let folderSplit = UniqueName.splitName(for: dottedFolder)
+            try assertEqual(folderSplit.baseName, "release-v1.0")
+            try assertEqual(folderSplit.ext, "")
+
+            let appPackage = dir.appendingPathComponent("Demo.app", isDirectory: true)
+            try fm.createDirectory(at: appPackage.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+            let appSplit = UniqueName.splitName(for: appPackage)
+            try assertEqual(appSplit.baseName, "Demo")
+            try assertEqual(appSplit.ext, "app")
+
+            let regular = dir.appendingPathComponent("notes.md")
+            try Data("x".utf8).write(to: regular)
+            let fileSplit = UniqueName.splitName(for: regular)
+            try assertEqual(fileSplit.baseName, "notes")
+            try assertEqual(fileSplit.ext, "md")
+        }
+
+        runTest("CutQueueStore clearPending 在粘贴在途时拒绝清空，无在途时正常清空") {
+            let dir = makeTempDirectory()
+            let store = CutQueueStore(directory: dir)
+            try store.write(["/tmp/a", "/tmp/b"])
+            let batch = try store.take()
+            try assertTrue(batch != nil)
+
+            var rejected = false
+            do {
+                try store.clearPending()
+            } catch CutQueueStore.RemovalError.pasteInProgress {
+                rejected = true
+            }
+            try assertTrue(rejected, "在途期间 clearPending 应抛出 pasteInProgress")
+            try store.finish(batch!.id)
+
+            try store.write(["/tmp/c", "/tmp/d"])
+            try store.clearPending()
+            try assertTrue(store.read().isEmpty)
+        }
+
+        runTest("GitRepositoryScanner readStatusSummary 与详细快照条目数一致") {
+            let dir = makeTempDirectory()
+            func runGit(_ args: [String]) throws {
+                let res = try ProcessRunner.run(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/git"),
+                    arguments: ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false",
+                                "-c", "user.name=Test", "-c", "user.email=test@example.invalid"] + args,
+                    currentDirectoryURL: dir)
+                try assertEqual(res.status, 0, res.stderr)
+            }
+            try runGit(["init", "-b", "main"])
+            try "1".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+            try runGit(["add", "a.txt"])
+            try runGit(["commit", "-m", "init"])
+            try assertEqual(GitRepositoryScanner.readStatusSummary(at: dir)?.isClean, true)
+
+            try runGit(["mv", "a.txt", "b.txt"])
+            let nested = dir.appendingPathComponent("sub/dir", isDirectory: true)
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try "u1".write(to: nested.appendingPathComponent("u1.txt"), atomically: true, encoding: .utf8)
+            try "u2".write(to: nested.appendingPathComponent("u2.txt"), atomically: true, encoding: .utf8)
+
+            let snapshot = try GitStatusSnapshot.read(at: dir)
+            let summary = GitRepositoryScanner.readStatusSummary(at: dir)
+            try assertEqual(summary?.isClean, false)
+            try assertEqual(snapshot.entries.count, 3)
+            try assertTrue(summary?.description.contains("3") == true, "应反映嵌套未跟踪文件与重命名总数 3：\(summary?.description ?? "nil")")
         }
 
         print("\n-----------------------------------------")

@@ -27,6 +27,7 @@ final class GitStatusModel: ObservableObject {
     private var statusOperation: BlockOperation?
     private var diffOperation: BlockOperation?
     private var scanOperation: BlockOperation?
+    private var statusScanOperation: BlockOperation?
 
     var filteredRepositories: [GitRepositoryItem] {
         let query = repositorySearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -52,6 +53,8 @@ final class GitStatusModel: ObservableObject {
 
     func open(at url: URL) {
         guard !isPerforming else { return }
+        statusScanOperation?.cancel()
+        statusScanOperation = nil
         actionError = nil
         actionMessage = nil
         commitPreview = nil
@@ -68,6 +71,8 @@ final class GitStatusModel: ObservableObject {
         guard !isPerforming else { return }
         statusRevision += 1
         statusOperation?.cancel()
+        statusScanOperation?.cancel()
+        statusScanOperation = nil
         clearComparison()
         sourceURL = nil
         snapshot = nil
@@ -81,6 +86,8 @@ final class GitStatusModel: ObservableObject {
     func scanRepositories() {
         guard !isPerforming else { return }
         scanOperation?.cancel()
+        statusScanOperation?.cancel()
+        statusScanOperation = nil
         isScanning = true
 
         let recentPaths = SharedConfig.shared.recentGitRepositories
@@ -125,13 +132,16 @@ final class GitStatusModel: ObservableObject {
     }
 
     private func refreshRepositoriesStatus() {
+        statusScanOperation?.cancel()
         let items = repositories
         guard !items.isEmpty else { return }
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        let operation = BlockOperation()
+        operation.addExecutionBlock { [weak self, weak operation] in
             for item in items {
-                guard let self else { return }
+                guard let self, let operation, !operation.isCancelled else { return }
                 let status = GitRepositoryScanner.readStatusSummary(at: item.url)
                 DispatchQueue.main.async {
+                    guard !operation.isCancelled, self.statusScanOperation === operation else { return }
                     if let index = self.repositories.firstIndex(where: { $0.id == item.id }) {
                         self.repositories[index].isClean = status?.isClean
                         self.repositories[index].statusDescription = status?.description
@@ -139,6 +149,8 @@ final class GitStatusModel: ObservableObject {
                 }
             }
         }
+        statusScanOperation = operation
+        DispatchQueue.global(qos: .utility).async { operation.start() }
     }
 
     func refresh(resetScope: Bool = false) {
@@ -210,6 +222,8 @@ final class GitStatusModel: ObservableObject {
         statusRevision += 1
         statusOperation?.cancel()
         scanOperation?.cancel()
+        statusScanOperation?.cancel()
+        statusScanOperation = nil
         clearComparison()
         isLoading = false
         isScanning = false
@@ -467,11 +481,11 @@ struct GitStatusView: View {
             .buttonStyle(.frSecondary)
             .disabled(model.selectedEntry?.hasStaged != true)
             Menu("批量…") {
-                Button(model.directoryFilter == nil ? "全部暂存" : "暂存当前目录") {
+                Button(LocalizedStringKey(model.directoryFilter == nil ? "全部暂存" : "暂存当前目录")) {
                     model.perform(.stage(model.paths(for: model.visibleEntries.filter(\.hasUnstaged))), success: "已暂存")
                 }
                 .disabled(!model.visibleEntries.contains(where: \.hasUnstaged))
-                Button(model.directoryFilter == nil ? "全部取消暂存" : "取消当前目录暂存") {
+                Button(LocalizedStringKey(model.directoryFilter == nil ? "全部取消暂存" : "取消当前目录暂存")) {
                     model.perform(.unstage(model.paths(for: model.visibleEntries.filter(\.hasStaged), unstaging: true)), success: "已取消暂存")
                 }
                 .disabled(!model.visibleEntries.contains(where: \.hasStaged))
@@ -480,7 +494,7 @@ struct GitStatusView: View {
             Spacer(minLength: 4)
             Button("提交…") { model.prepareCommit() }
                 .buttonStyle(.frPrimary).disabled(!model.canCommit)
-                .help(model.hasConflicts ? "尚有未解决的冲突，请解决后暂存" : "提交整个仓库的暂存区")
+                .help(model.hasConflicts ? Text("尚有未解决的冲突，请解决后暂存") : Text("提交整个仓库的暂存区"))
             
             // 拉取/推送：只有配置了远端才可用；没有上游时拉取需要用户自行指定，
             // 这里禁用并给出提示，而不是让 git 报一句难以理解的英文错误。
@@ -489,14 +503,14 @@ struct GitStatusView: View {
             }
             .buttonStyle(.frSecondary)
             .disabled(model.isLoading || model.isPerforming || model.snapshot?.upstream == nil)
-            .help(model.snapshot?.upstream == nil ? "当前分支没有上游分支，请先在终端设置跟踪分支" : "拉取远端并合并到当前分支")
+            .help(model.snapshot?.upstream == nil ? Text("当前分支没有上游分支，请先在终端设置跟踪分支") : Text("拉取远端并合并到当前分支"))
 
             Button("推送") {
                 model.perform(.push(remoteBranch: nil), success: NSLocalizedString("已推送", comment: ""))
             }
             .buttonStyle(.frSecondary)
             .disabled(model.isLoading || model.isPerforming || model.snapshot?.hasRemote != true)
-            .help(model.snapshot?.hasRemote == true ? "推送当前分支到远端" : "仓库没有配置远端")
+            .help(model.snapshot?.hasRemote == true ? Text("推送当前分支到远端") : Text("仓库没有配置远端"))
         }
         .font(.system(size: 12)).padding(12)
         .disabled(model.isLoading || model.isPerforming)
@@ -529,7 +543,7 @@ struct GitStatusView: View {
 
     private func entryRow(_ entry: GitStatusEntry) -> some View {
         HStack(spacing: 10) {
-            Text(verbatim: entry.isUntracked ? "??" : entry.indexStatus + entry.worktreeStatus)
+            Text(verbatim: entry.indexStatus + entry.worktreeStatus)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundColor(entry.isConflict ? FRTheme.danger : FRTheme.accentText)
                 .frame(width: 26, alignment: .leading)
@@ -569,7 +583,7 @@ struct GitStatusView: View {
                         .pickerStyle(.segmented).labelsHidden().frame(width: 160)
                         .accessibilityLabel("差异范围")
                     } else {
-                        Text(entry.isConflict ? "冲突：我方与工作区" : (model.scope == .staged ? "已暂存" : (entry.isUntracked ? "未跟踪" : "未暂存")))
+                        Text(LocalizedStringKey(entry.isConflict ? "冲突：我方与工作区" : (model.scope == .staged ? "已暂存" : (entry.isUntracked ? "未跟踪" : "未暂存"))))
                             .font(.system(size: 11, weight: .medium)).foregroundColor(FRTheme.mute)
                     }
                     Spacer()
@@ -581,9 +595,9 @@ struct GitStatusView: View {
                 .font(.system(size: 11)).padding(.horizontal, 12).frame(height: 34)
                 FRDivider()
                 HStack {
-                    Text(model.scope == .staged ? "HEAD" : (entry.isConflict ? "我方" : "暂存区"))
+                    Text(LocalizedStringKey(model.scope == .staged ? "HEAD" : (entry.isConflict ? "我方" : "暂存区")))
                         .frame(maxWidth: .infinity)
-                    Text(model.scope == .staged ? "暂存区" : "工作区").frame(maxWidth: .infinity)
+                    Text(LocalizedStringKey(model.scope == .staged ? "暂存区" : "工作区")).frame(maxWidth: .infinity)
                 }
                 .font(.system(size: 10)).foregroundColor(FRTheme.mute)
                 .padding(.vertical, 5).background(FRTheme.card)
@@ -646,7 +660,7 @@ struct GitStatusView: View {
             } else if model.filteredRepositories.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "arrow.triangle.branch").font(.system(size: 32, weight: .light)).foregroundColor(FRTheme.accentText)
-                    Text(model.repositories.isEmpty ? "未在设备上检测到 Git 仓库" : "未找到匹配的仓库")
+                    Text(LocalizedStringKey(model.repositories.isEmpty ? "未在设备上检测到 Git 仓库" : "未找到匹配的仓库"))
                         .font(.system(size: 13))
                     Text("拖入项目文件夹或选择项目").font(.system(size: 11)).foregroundColor(FRTheme.mute)
                     Button("选择项目…", action: chooseProject).buttonStyle(.frSecondary)
@@ -752,7 +766,7 @@ final class GitStatusController: NSObject, NSWindowDelegate {
             window.contentView = NSHostingView(rootView: GitStatusView(model: model))
             // 恢复了上次位置就不要再 center()，否则会把恢复结果覆盖掉
             if let saved = SharedConfig.shared.restoreWindowPosition(for: windowType),
-               let adjusted = Self.fittedFrame(saved, window: window) {
+               let adjusted = FRTransientPanel.fittedFrame(saved, window: window) {
                 window.setFrame(adjusted, display: false)
             } else {
                 window.center()
@@ -769,17 +783,6 @@ final class GitStatusController: NSObject, NSWindowDelegate {
             TransientWindowManager.shared.present(
                 window, openedFromExternalApplication: openedFromExternalApplication)
         }
-    }
-
-    /// 恢复的 frame 可能因屏幕变小或最小尺寸变化而越界，套回当前可见区域保证可操作。
-    private static func fittedFrame(_ frame: NSRect, window: NSWindow) -> NSRect? {
-        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) else { return nil }
-        var result = frame
-        result.size.width = max(window.minSize.width, min(result.width, screen.visibleFrame.width))
-        result.size.height = max(window.minSize.height, min(result.height, screen.visibleFrame.height))
-        result.origin.x = max(screen.visibleFrame.minX, min(result.minX, screen.visibleFrame.maxX - result.width))
-        result.origin.y = max(screen.visibleFrame.minY, min(result.minY, screen.visibleFrame.maxY - result.height))
-        return result
     }
 
     /// 拖动与缩放结束时保存一次；不要同时监听 windowDidMove，否则持续拖动会反复写盘。

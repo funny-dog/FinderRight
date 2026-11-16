@@ -10,19 +10,27 @@ public struct FilePermissions: Equatable {
     public let group: String?
 
     public var menuTitle: String {
-        "权限：\(symbolic) (\(octal))"
+        menuTitle()
+    }
+
+    public func menuTitle(localize: (String) -> String = { $0 }) -> String {
+        String(format: localize("权限：%@ (%@)"), symbolic, octal)
     }
 
     public var toolTip: String {
-        var lines = ["权限：\(symbolic) (\(octal))"]
+        toolTip()
+    }
+
+    public func toolTip(localize: (String) -> String = { $0 }) -> String {
+        var lines = [menuTitle(localize: localize)]
         if let owner {
             if let group {
-                lines.append("所属：\(owner):\(group)")
+                lines.append(String(format: localize("所属：%@:%@"), owner, group))
             } else {
-                lines.append("所有者：\(owner)")
+                lines.append(String(format: localize("所有者：%@"), owner))
             }
         }
-        lines.append("点击复制权限")
+        lines.append(localize("点击复制权限"))
         return lines.joined(separator: "\n")
     }
 

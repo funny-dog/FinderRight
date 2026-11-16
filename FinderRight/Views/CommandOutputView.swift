@@ -29,15 +29,9 @@ struct CommandOutputView: View {
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(FRTheme.mute)
                 .textSelection(.enabled)
-            ScrollView([.horizontal, .vertical]) {
-                Text(verbatim: execution.output.isEmpty ? " " : execution.output)
-                    .font(.system(size: 12, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(12)
-            }
-            .background(FRTheme.field)
-            .cornerRadius(8)
+            CommandOutputTextView(text: execution.output)
+                .background(FRTheme.field)
+                .cornerRadius(8)
             if execution.truncated {
                 Text("仅显示最后 128 KiB 输出")
                     .font(.system(size: 12))
@@ -46,7 +40,7 @@ struct CommandOutputView: View {
             HStack(spacing: 10) {
                 if execution.isRunning {
                     ProgressView().controlSize(.small)
-                    Text(execution.isStopping ? "正在停止…" : "正在运行…")
+                    Text(LocalizedStringKey(execution.isStopping ? "正在停止…" : "正在运行…"))
                 } else if let error = execution.error {
                     Text(verbatim: error).foregroundColor(FRTheme.danger)
                 } else if execution.cancelled {
@@ -74,6 +68,50 @@ struct CommandOutputView: View {
         .frame(minWidth: 520, minHeight: 300)
         .foregroundColor(FRTheme.text)
         .background(FRTheme.window)
+    }
+}
+
+/// 128 KiB 实时流式输出改用 NSTextView（开启非连续排版），避免 SwiftUI Text 重排卡顿主线程。
+private struct CommandOutputTextView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .labelColor
+        textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = true
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.layoutManager?.allowsNonContiguousLayout = true
+        textView.string = text
+
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView,
+              textView.string != text else { return }
+        let clipView = scrollView.contentView
+        let docHeight = textView.bounds.height
+        let wasAtBottom = docHeight <= clipView.bounds.height || (docHeight - clipView.bounds.maxY) <= 24
+        textView.string = text
+        if wasAtBottom {
+            textView.scrollToEndOfDocument(nil)
+        }
     }
 }
 

@@ -89,12 +89,14 @@ public enum DiskUsage {
 
     /// 扫描目录的直接子项占用并降序排列。
     /// - 符号链接不跟随、不进入；
+    /// - 并发扫描直接子目录，缩短多目录场景下的总耗时；
     /// - 用户取消时立即中止并返回 nil；
     /// - 个别子目录若无权限读取则安全跳过，不让单项权限阻断整体统计；
     /// - 仅统计真实目录与常规文件，过滤套接字、管道等特殊文件。
     public static func inspectDirectChildren(
         at directoryURL: URL,
         deadline: Date? = nil,
+        concurrency: Int = defaultConcurrency,
         isCancelled: @escaping () -> Bool = { false }
     ) -> DiskUsageBreakdown? {
         guard directoryURL.isFileURL else { return nil }
@@ -121,19 +123,14 @@ public enum DiskUsage {
         var dirCount = 0
         var fileCount = 0
         var rawItems: [(name: String, path: String, isDirectory: Bool, bytes: Int64)] = []
+        var dirEntries: [(name: String, path: String)] = []
 
         for entry in entries {
-            if shouldStop() {
-                // 如果是用户主动取消或全局超时，整份退出
-                return nil
-            }
+            if shouldStop() { return nil }
             let itemPath = (directoryURL.path as NSString).appendingPathComponent(entry.name)
             if entry.isDirectory {
                 dirCount += 1
-                let subURL = URL(fileURLWithPath: itemPath)
-                if let bytes = allocatedBytes(at: subURL, deadline: deadline, isCancelled: shouldStop) {
-                    rawItems.append((name: entry.name, path: itemPath, isDirectory: true, bytes: bytes))
-                }
+                dirEntries.append((name: entry.name, path: itemPath))
             } else if entry.isRegularFile {
                 fileCount += 1
                 rawItems.append((name: entry.name, path: itemPath, isDirectory: false, bytes: entry.allocatedSize))
@@ -141,9 +138,37 @@ public enum DiskUsage {
             // 忽略符号链接、套接字、管道等非目录且非普通文件的子项
         }
 
-        if isCancelled() { return nil }
+        if !dirEntries.isEmpty {
+            let workerLimit = max(1, concurrency)
+            let childConcurrency = dirEntries.count <= 2 ? workerLimit : max(1, workerLimit / 2)
+            let group = DispatchGroup()
+            let semaphore = DispatchSemaphore(value: workerLimit)
+            let lock = NSLock()
 
-        rawItems.sort { $0.bytes > $1.bytes }
+            for dir in dirEntries {
+                if shouldStop() { break }
+                group.enter()
+                semaphore.wait()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    defer { semaphore.signal(); group.leave() }
+                    guard !shouldStop() else { return }
+                    let subURL = URL(fileURLWithPath: dir.path)
+                    if let bytes = allocatedBytes(at: subURL, deadline: deadline, concurrency: childConcurrency, isCancelled: shouldStop) {
+                        lock.lock()
+                        rawItems.append((name: dir.name, path: dir.path, isDirectory: true, bytes: bytes))
+                        lock.unlock()
+                    }
+                }
+            }
+            group.wait()
+        }
+
+        if shouldStop() { return nil }
+
+        rawItems.sort {
+            if $0.bytes != $1.bytes { return $0.bytes > $1.bytes }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
 
         let totalBytes = rawItems.reduce(0) { $0 + $1.bytes }
         let items = rawItems.map { raw in
@@ -188,6 +213,7 @@ public enum DiskUsage {
         guard let subdirs = immediateSubdirectories(of: rootPath) else { return nil }
 
         let lock = NSLock()
+        let hardLinks = HardLinkTracker()
         var total: Int64 = 0
         var failed = false
         var cancelled = false
@@ -223,7 +249,7 @@ public enum DiskUsage {
             DispatchQueue.global(qos: .userInitiated).async {
                 defer { semaphore.signal(); group.leave() }
                 var acc: Int64 = 0
-                let outcome = accumulate(path: sub, into: &acc, shouldStop: shouldStop)
+                let outcome = accumulate(path: sub, into: &acc, hardLinks: hardLinks, shouldStop: shouldStop)
                 if outcome == .stopped { record(cancelledNow: true, failedNow: false, timedOutNow: false); return }
                 if outcome == .failed { record(cancelledNow: false, failedNow: true, timedOutNow: false); return }
                 lock.lock()
@@ -236,7 +262,7 @@ public enum DiskUsage {
         // 根目录这一层（含根下的普通文件）
         if !shouldStop() {
             var acc: Int64 = 0
-            let outcome = accumulate(path: rootPath, into: &acc, shouldStop: shouldStop, descend: false)
+            let outcome = accumulate(path: rootPath, into: &acc, hardLinks: hardLinks, shouldStop: shouldStop, descend: false)
             if outcome == .stopped { record(cancelledNow: true, failedNow: false, timedOutNow: false) }
             if outcome == .failed { record(cancelledNow: false, failedNow: true, timedOutNow: false) }
             lock.lock()
@@ -269,12 +295,31 @@ public enum DiskUsage {
 
     enum AccumulateOutcome { case ok, stopped, failed }
 
+    private struct HardLinkKey: Hashable {
+        let device: dev_t
+        let fileID: UInt64
+    }
+
+    /// 同一硬链接文件在目录树内只计一次磁盘占用（仅对 linkCount > 1 的文件加锁判重，常规文件零开销）。
+    final class HardLinkTracker {
+        private let lock = NSLock()
+        private var seen: Set<HardLinkKey> = []
+
+        func claim(device: dev_t, fileID: UInt64) -> Bool {
+            let key = HardLinkKey(device: device, fileID: fileID)
+            lock.lock()
+            defer { lock.unlock() }
+            return seen.insert(key).inserted
+        }
+    }
+
     /// 递归累加 `path` 下的普通文件分配大小。
     ///
     /// - Parameter descend: false 时只看该目录这一层的文件，子目录交给并发分片处理
     static func accumulate(
         path: String,
         into total: inout Int64,
+        hardLinks: HardLinkTracker? = nil,
         shouldStop: @escaping () -> Bool,
         descend: Bool = true
     ) -> AccumulateOutcome {
@@ -290,6 +335,10 @@ public enum DiskUsage {
                 if entry.isDirectory {
                     if descend { stack.append(dir + "/" + entry.name) }
                 } else if entry.isRegularFile {
+                    if entry.linkCount > 1, let hardLinks,
+                       !hardLinks.claim(device: entry.device, fileID: entry.fileID) {
+                        continue
+                    }
                     let (sum, overflow) = total.addingReportingOverflow(entry.allocatedSize)
                     if overflow { return .failed }
                     total = sum
@@ -309,6 +358,9 @@ enum BulkDirectoryAttributes {
 
     struct Entry {
         let name: String
+        let device: dev_t
+        let fileID: UInt64
+        let linkCount: UInt32
         /// 分配大小（磁盘实际占用）。目录项为 0
         let allocatedSize: Int64
         let isDirectory: Bool
@@ -330,8 +382,11 @@ enum BulkDirectoryAttributes {
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
             | attrgroup_t(ATTR_CMN_NAME)
+            | attrgroup_t(ATTR_CMN_DEVID)
             | attrgroup_t(ATTR_CMN_OBJTYPE)
-        attrList.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE)
+            | attrgroup_t(ATTR_CMN_FILEID)
+        attrList.fileattr = attrgroup_t(ATTR_FILE_LINKCOUNT)
+            | attrgroup_t(ATTR_FILE_ALLOCSIZE)
 
         // 256 KiB 一批：经验值，再大对小目录是浪费，再小会多几次调用
         let bufferSize = 256 * 1024
@@ -366,10 +421,28 @@ enum BulkDirectoryAttributes {
                     field = field.advanced(by: MemoryLayout<attrreference_t>.size)
                 }
 
+                var device: dev_t = 0
+                if returned.commonattr & attrgroup_t(ATTR_CMN_DEVID) != 0 {
+                    device = field.loadUnaligned(as: dev_t.self)
+                    field = field.advanced(by: MemoryLayout<dev_t>.size)
+                }
+
                 var objectType: UInt32 = 0
                 if returned.commonattr & attrgroup_t(ATTR_CMN_OBJTYPE) != 0 {
                     objectType = field.loadUnaligned(as: UInt32.self)
                     field = field.advanced(by: MemoryLayout<fsobj_type_t>.size)
+                }
+
+                var fileID: UInt64 = 0
+                if returned.commonattr & attrgroup_t(ATTR_CMN_FILEID) != 0 {
+                    fileID = field.loadUnaligned(as: UInt64.self)
+                    field = field.advanced(by: MemoryLayout<UInt64>.size)
+                }
+
+                var linkCount: UInt32 = 1
+                if returned.fileattr & attrgroup_t(ATTR_FILE_LINKCOUNT) != 0 {
+                    linkCount = field.loadUnaligned(as: UInt32.self)
+                    field = field.advanced(by: MemoryLayout<UInt32>.size)
                 }
 
                 var allocated: Int64 = 0
@@ -381,6 +454,9 @@ enum BulkDirectoryAttributes {
                 if !name.isEmpty, name != ".", name != ".." {
                     result.append(Entry(
                         name: name,
+                        device: device,
+                        fileID: fileID,
+                        linkCount: linkCount,
                         allocatedSize: allocated,
                         isDirectory: objectType == UInt32(VDIR.rawValue),
                         isRegularFile: objectType == UInt32(VREG.rawValue)

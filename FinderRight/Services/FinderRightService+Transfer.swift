@@ -68,9 +68,10 @@ extension FinderRightService {
             case .ok:
                 break
             }
-            // 重名时自动编号，与新建文件 / 粘贴共用 UniqueName 规则
-            let destURL = UniqueName.fileURL(baseName: sourceURL.deletingPathExtension().lastPathComponent,
-                                             ext: sourceURL.pathExtension, in: destDir)
+            // 重名时自动编号，非包目录保留完整目录名
+            let (baseName, ext) = UniqueName.splitName(for: sourceURL, fileManager: fileManager)
+            let destURL = UniqueName.fileURL(baseName: baseName,
+                                             ext: ext, in: destDir, fileManager: fileManager)
             do {
                 if mode == .move {
                     try fileManager.moveItem(at: sourceURL, to: destURL)

@@ -1107,4 +1107,23 @@
 "复制网址" = "Copy URL";
 "访问 FinderRight 官方网站" = "Visit the FinderRight website";
 
+/* 补充遗漏文案与 v1.13.0 更新日志 */
+"在浏览器中查看更新说明" = "View release notes in browser";
+"1 MB (默认)" = "1 MB (Default)";
+"当前分支没有上游分支，请先在终端设置跟踪分支" = "No upstream branch configured; set a tracking branch in Terminal first";
+"拉取远端并合并到当前分支" = "Pull remote changes and merge into the current branch";
+"推送当前分支到远端" = "Push the current branch to remote";
+"仓库没有配置远端" = "No remote configured for this repository";
+"新增开发者工具：支持哈希校验、符号链接、相对路径、目录树、文件比较与本地 Git 状态等" = "Added Developer Tools: file hashes, symbolic links, project-relative paths, directory tree, file comparison, and local Git status";
+"重构剪切队列管理与撤销功能，支持直接在右键菜单查看并管理剪切项" = "Redesigned cut queue management and undo, with direct inspection and management from the context menu";
+"关于页新增官方网站入口，弹窗内可一键跳转全球站与国内展示镜像并复制网址" = "Added Official Website entry in About with quick links and URL copy for the global site and China mirror";
+"简洁模式支持配置深色模式与右键菜单图标，适配紧凑窗口" = "Added appearance mode and context-menu icon settings to Compact Mode with adapted window sizing";
+"优化磁盘占用分析中的符号链接过滤与超时预算机制" = "Improved symbolic link filtering and timeout budgeting in disk usage analysis";
+"优化直属子项磁盘占用分析，避免大目录超时中断，并放行主目录只读统计" = "Improved direct-children disk usage inspection to avoid large-folder timeouts and allow read-only home folder statistics";
+"修复关闭程序坞图标后从状态栏打开设置的焦点与时序问题" = "Fixed focus and timing issues when opening Settings from the menu bar with the Dock icon hidden";
+"选择…" = "Choose…";
+"请选择或拖入需要统计代码的目录或文件" = "Select or drop a directory or file to count lines of code";
+"正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
+"清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
+
 
