@@ -267,6 +267,8 @@ hdiutil create -volname "FinderRight" -srcfolder "$STAGE_DIR" -ov -format UDZO "
 
 if [ "${RELEASE:-0}" = "1" ]; then
   echo "=== 8. 复制发布件到仓库根目录（RELEASE=1）==="
+  # 清理仓库根目录遗留的旧版本 zip 产物，避免积累多余构建文件
+  rm -f "$PROJECT_DIR"/FinderRight-v*.zip "$PROJECT_DIR"/FinderRight-v*.zip.sha256
   cp "$DMG_PATH" "$PROJECT_DIR/FinderRight.dmg"
   cp "$ZIP_PATH" "$PROJECT_DIR/FinderRight-v$VERSION.zip"
   cp "$ZIP_SHA_PATH" "$PROJECT_DIR/FinderRight-v$VERSION.zip.sha256"

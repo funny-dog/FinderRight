@@ -154,6 +154,9 @@ else:
             z.write(path, str(path.relative_to(stage.parent)))
     (root / (archive.name + ".sha256")).write_text(f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
     run("已准备资产的完整版本与签名检查", 'run_timed_step assets verify_assets 1.12.4 48', RELEASE_TEST_MODE="signed")
+    (root / "FinderRight-v1.12.3.zip").write_bytes(b"stale")
+    run("存在旧版 zip 时拒绝通过资产校验", 'run_timed_step assets verify_assets 1.12.4 48\necho UNREACHABLE', 1, RELEASE_TEST_MODE="signed")
+    (root / "FinderRight-v1.12.3.zip").unlink()
     run("恢复发布拒绝 ad-hoc 资产", 'run_timed_step assets verify_assets 1.12.4 48\necho UNREACHABLE', 1, RELEASE_TEST_MODE="adhoc")
     run("官网 JSON 错误不能被 checksum 成功覆盖", '''
 curl() {

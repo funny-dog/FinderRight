@@ -180,6 +180,9 @@ check_new_version() {
   if [ "$(printf '%s\n%s\n' "$current" "$new" | sort -V | tail -1)" != "$new" ]; then
     fail "新版本号 $new 必须大于当前版本 $current"
   fi
+  if git rev-parse -q --verify "refs/tags/v$new" >/dev/null 2>&1; then
+    fail "标签 v$new 已存在，请确认目标版本号或先处理本地标签"
+  fi
   echo "版本升级：$current → $new (build $(( $(current_build) + 1 )))"
 }
 
@@ -219,6 +222,14 @@ verify_assets() {
   [ -f "FinderRight.dmg.sha256" ] || fail "缺少校验文件 FinderRight.dmg.sha256"
   [ -f "FinderRight-v${version}.zip" ] || fail "缺少 FinderRight-v${version}.zip"
   [ -f "FinderRight-v${version}.zip.sha256" ] || fail "缺少校验文件 FinderRight-v${version}.zip.sha256"
+
+  local stale_zip
+  for stale_zip in FinderRight-v*.zip FinderRight-v*.zip.sha256; do
+    [ -e "$stale_zip" ] || continue
+    if [ "$stale_zip" != "FinderRight-v${version}.zip" ] && [ "$stale_zip" != "FinderRight-v${version}.zip.sha256" ]; then
+      fail "仓库根目录存在旧版本发布件：${stale_zip}，请先清理"
+    fi
+  done
 
   (shasum -a 256 -c "FinderRight-v${version}.zip.sha256" >/dev/null) || fail "zip sha256 校验不通过"
   (shasum -a 256 -c "FinderRight.dmg.sha256" >/dev/null) || fail "dmg sha256 校验不通过"
