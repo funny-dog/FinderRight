@@ -1131,4 +1131,48 @@
 "简化粘贴队列与配置读写流程，提升多文件粘贴与日常操作响应速度" = "Simplified cut-queue and configuration persistence to speed up multi-file pasting and everyday actions";
 "清理多项冗余逻辑并收拢工具窗口位置记忆与弹窗交互，进一步降低内存与磁盘占用" = "Cleaned up redundant code and unified tool window frame persistence and dialog presentation";
 
+/* 剪贴板历史 */
+"5 条" = "5 items";
+"10 条" = "10 items";
+"15 条" = "15 items";
+"20 条" = "20 items";
+"剪贴板…" = "Clipboard…";
+"已固定：复制或拖动后保持打开" = "Pinned: stays open after copying or dragging";
+"未固定：复制或拖动后自动关闭" = "Unpinned: closes automatically after copying or dragging";
+"固定剪贴板窗口" = "Pin Clipboard Window";
+"%@ 等 %d 个项目" = "%@ and %d items";
+"启用剪贴板" = "Enable Clipboard";
+"默认关闭。开启后在内存中记录最近复制的文本、图片与文件，可从菜单栏或全局快捷键唤起；退出应用后自动清空。" = "Off by default. Keeps recent copied text, images, and files in memory, accessible from the menu bar or a global shortcut; cleared when the app quits.";
+"记录条数" = "History Limit";
+"可在「设置 → 快捷键」中设置全局快捷键。" = "Set a global shortcut in Settings → Shortcuts.";
+"全局快捷键" = "Global Shortcuts";
+"全局快捷键在任意应用中均可使用，无需辅助功能权限，也无需重启访达。" = "Global shortcuts work in any app without Accessibility permission or restarting Finder.";
+"需先在「功能 → 剪贴板」中开启" = "Enable it first in Features → Clipboard";
+"全局生效，可在任意应用中唤起剪贴板" = "Works globally to open the clipboard from any app";
+"剪贴板记录为空" = "Clipboard History Is Empty";
+"图片 (%d×%d)" = "Image (%d×%d)";
+"显示详情" = "Show Details";
+"隐藏详情" = "Hide Details";
+"详情" = "Details";
+"未选择条目" = "No Item Selected";
+"另有 %d 项…" = "%d more…";
+"信息" = "Information";
+"类型" = "Type";
+"文本" = "Text";
+"文件夹" = "Folder";
+"字符数" = "Characters";
+"尺寸" = "Dimensions";
+"路径" = "Path";
+"项目数" = "Items";
+"复制时间" = "Copied At";
+
+/* 轻量截图 */
+"无法打开系统截图" = "Unable to open Screenshot";
+"截图…" = "Screenshot…";
+"截图" = "Screenshot";
+"启用截图" = "Enable Screenshot";
+"默认关闭。开启后可从菜单栏或自定义全局快捷键直接唤起系统截图面板（⌘⇧5），无需额外录制权限。" = "Off by default. When enabled, open the system Screenshot panel (⌘⇧5) from the menu bar or a custom global shortcut with no extra screen recording permission.";
+"需先在「功能 → 截图」中开启" = "Enable it first in Features → Screenshot";
+"全局生效，可在任意应用中唤起系统截图" = "Works globally to open system Screenshot from any app";
+
 

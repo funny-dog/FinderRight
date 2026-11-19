@@ -3718,28 +3718,31 @@ struct FinderRightKitTestsRunner {
             let optCmdC = ActionShortcut(key: "c", modifiers: cmd | opt)
             let sftCmdDot = ActionShortcut(key: ".", modifiers: cmd | shift)
             let sftCmdG = ActionShortcut(key: "g", modifiers: cmd | shift)
+            let sftCmd5 = ActionShortcut(key: "5", modifiers: cmd | shift)
             let cmdZ = ActionShortcut(key: "z", modifiers: cmd)
             let all = ["shortcut.cut": cmdX, "shortcut.paste": cmdV, "shortcut.copyPath": optCmdC,
-                       "shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG]
+                       "shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG,
+                       T.screenshotActionId: sftCmd5]
             try assertEqual(T.defaultShortcuts, all, "默认值与访达原生一致")
             try assertEqual(T.defaultShortcuts[T.goToDirectoryActionId], sftCmdG, "打开路径默认 ⇧⌘G")
+            try assertEqual(T.defaultShortcuts[T.screenshotActionId], sftCmd5, "截图默认 ⇧⌘5")
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: []), all, "全新安装")
             try assertEqual(T.defaultsToApply(current: [
                 "shortcut.cut": ActionShortcut(key: "c", modifiers: ctl),
                 "shortcut.paste": ActionShortcut(key: "v", modifiers: ctl),
                 "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl),
-            ], alreadyApplied: []).keys.sorted(), ["shortcut.goToDirectory", "shortcut.toggleHidden", "shortcut.undo"], "用户设置过的行一律保留")
+            ], alreadyApplied: []).keys.sorted(), ["shortcut.goToDirectory", "shortcut.screenshot", "shortcut.toggleHidden", "shortcut.undo"], "用户设置过的行一律保留")
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": ActionShortcut(key: "v", modifiers: cmd | ctl)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory", "shortcut.screenshot"]),
                             ["shortcut.cut": cmdX], "只补没设置的那一行")
             try assertEqual(T.defaultsToApply(current: ["shortcut.openTerminal": ActionShortcut(key: "V", modifiers: cmd)],
-                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory"]),
+                                              alreadyApplied: ["shortcut.copyPath", "shortcut.toggleHidden", "shortcut.undo", "shortcut.goToDirectory", "shortcut.screenshot"]),
                             ["shortcut.cut": cmdX], "⌘V 已被其他动作占用则不填")
             // 1.6.4 升级：剪切 / 粘贴补过（用户之后清空了剪切），新增默认只补空位
             let legacy = T.legacyAppliedActionIds(cutPasteApplied: true)
             try assertEqual(T.defaultsToApply(current: ["shortcut.paste": cmdV, "shortcut.copyPath": ActionShortcut(key: "p", modifiers: cmd | ctl)],
                                               alreadyApplied: legacy),
-                            ["shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG], "清空的剪切不补回，用户的复制路径不覆盖；升级时补上新增默认")
+                            ["shortcut.toggleHidden": sftCmdDot, "shortcut.undo": cmdZ, "shortcut.goToDirectory": sftCmdG, "shortcut.screenshot": sftCmd5], "清空的剪切不补回，用户的复制路径不覆盖；升级时补上新增默认")
             let oldDefaults = Set(all.keys).subtracting([T.goToDirectoryActionId])
             try assertEqual(T.defaultsToApply(current: [:], alreadyApplied: oldDefaults),
                             [T.goToDirectoryActionId: sftCmdG], "升级时给打开路径补上 ⇧⌘G")
@@ -3764,6 +3767,8 @@ struct FinderRightKitTestsRunner {
                 try assertNil(T.recordingConflict(for: cmdV, actionId: "shortcut.paste", interceptorAvailable: available, textBindings: bindings), "粘贴行可用 ⌘V")
                 try assertEqual(T.recordingConflict(for: screenshot, actionId: "shortcut.cut", interceptorAvailable: available, textBindings: bindings)?.kind, .system, "系统全局快捷键轮不到拦截")
                 try assertEqual(T.recordingConflict(for: screenshot, actionId: "shortcut.copyPath", interceptorAvailable: available, textBindings: bindings)?.kind, .system)
+                try assertEqual(T.recordingConflict(for: sftCmd5, actionId: "shortcut.cut", interceptorAvailable: available, textBindings: bindings)?.kind, .system)
+                try assertNil(T.recordingConflict(for: sftCmd5, actionId: T.screenshotActionId, interceptorAvailable: available, textBindings: bindings), "截图行允许设为系统默认 ⇧⌘5")
             }
             // 已授权：其他行也由拦截处理，访达菜单 / 文本编辑组合都能用
             try assertNil(T.recordingConflict(for: ctlV, actionId: "shortcut.copyPath", interceptorAvailable: true, textBindings: bindings))
@@ -7064,6 +7069,82 @@ struct FinderRightKitTestsRunner {
             try assertEqual(summary?.isClean, false)
             try assertEqual(snapshot.entries.count, 3)
             try assertTrue(summary?.description.contains("3") == true, "应反映嵌套未跟踪文件与重命名总数 3：\(summary?.description ?? "nil")")
+        }
+
+        runTest("剪贴板历史：容量上限、去重置顶、单项移除与配置持久化") {
+            try assertEqual(ClipboardHistoryLimitPreset.defaultLimit, 5)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(5), 5)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(10), 10)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(15), 15)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(20), 20)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(0), 5)
+            try assertEqual(ClipboardHistoryLimitPreset.normalize(12), 5)
+
+            var store = ClipboardHistoryStore()
+            try assertEqual(store.limit, 5)
+
+            store.record(.text(""))
+            store.record(.files([]))
+            store.record(.image(Data(), pixelWidth: 10, pixelHeight: 10))
+            try assertTrue(store.items.isEmpty, "空内容不应被记录")
+
+            for idx in 1...6 {
+                store.record(.text("item-\(idx)"))
+            }
+            try assertEqual(store.items.count, 5)
+            try assertEqual(store.items.map(\.previewText), ["item-6", "item-5", "item-4", "item-3", "item-2"])
+
+            store.record(.text("item-3"))
+            try assertEqual(store.items.count, 5)
+            try assertEqual(store.items.map(\.previewText), ["item-3", "item-6", "item-5", "item-4", "item-2"])
+
+            let fileA = URL(fileURLWithPath: "/tmp/a.txt")
+            let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+            store.setLimit(10)
+            store.record(.files([fileA]))
+            store.record(.image(imageData, pixelWidth: 120, pixelHeight: 80))
+            try assertEqual(store.items.count, 7)
+            try assertEqual(store.items[0].previewText, "120 × 80")
+            try assertEqual(store.items[1].previewText, "a.txt")
+
+            store.record(.files([fileA]))
+            try assertEqual(store.items.count, 7)
+            try assertEqual(store.items[0].previewText, "a.txt")
+
+            let removedId = store.items[1].id
+            store.remove(id: removedId)
+            try assertEqual(store.items.count, 6)
+            try assertTrue(!store.items.contains { $0.id == removedId })
+
+            store.setLimit(5)
+            try assertEqual(store.items.count, 5)
+            store.clear()
+            try assertTrue(store.items.isEmpty)
+
+            let dir = makeTempDirectory()
+            let configURL = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: configURL)
+            try assertEqual(config.clipboardEnabled, false)
+            try assertEqual(config.clipboardHistoryLimit, 5)
+            try assertEqual(config.clipboardWindowPinned, false)
+            try assertEqual(config.clipboardShowDetails, false)
+            try assertEqual(config.screenshotEnabled, false)
+
+            config.clipboardEnabled = true
+            config.clipboardHistoryLimit = 15
+            config.clipboardWindowPinned = true
+            config.clipboardShowDetails = true
+            config.screenshotEnabled = true
+
+            let reloaded = SharedConfig(fileURL: configURL)
+            try assertEqual(reloaded.clipboardEnabled, true)
+            try assertEqual(reloaded.clipboardHistoryLimit, 15)
+            try assertEqual(reloaded.clipboardWindowPinned, true)
+            try assertEqual(reloaded.clipboardShowDetails, true)
+            try assertEqual(reloaded.screenshotEnabled, true)
+
+            reloaded.clipboardHistoryLimit = 99
+            try assertEqual(SharedConfig(fileURL: configURL).clipboardHistoryLimit, 5)
         }
 
         print("\n-----------------------------------------")

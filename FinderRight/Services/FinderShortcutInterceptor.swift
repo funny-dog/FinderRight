@@ -98,6 +98,8 @@ final class FinderShortcutInterceptor {
         GlobalDirectoryShortcut.shared.setEnabled(false)
         SharedConfig.shared.shortcuts = FinderKeyTakeover.defaultShortcuts
         markDefaultsApplied([])
+        GlobalClipboardShortcut.shared.refresh()
+        ScreenshotService.shared.refresh()
     }
 
     private static func markDefaultsApplied(_ applied: Set<String>) {
@@ -116,6 +118,8 @@ final class FinderShortcutInterceptor {
     /// 按快捷键设置、授权与访达是否在前台决定是否拦截。设置页改了快捷键也调用它。
     func refresh() {
         GlobalDirectoryShortcut.shared.refresh()
+        GlobalClipboardShortcut.shared.refresh()
+        ScreenshotService.shared.refresh()
         let front = NSWorkspace.shared.frontmostApplication
         let finderFront = front?.bundleIdentifier == Self.finderBundleId
         var newChords: [String: FinderKeyTakeover.KeyChord] = [:]

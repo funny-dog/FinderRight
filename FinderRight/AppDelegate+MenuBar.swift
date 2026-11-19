@@ -43,6 +43,23 @@ extension AppDelegate {
         }
         menu.addItem(.separator())
 
+        var addedToolItem = false
+        if ClipboardHistoryService.shared.isEnabled {
+            let clipboard = NSMenuItem(title: L("剪贴板…"), action: #selector(openClipboardHistory), keyEquivalent: "")
+            clipboard.target = self
+            menu.addItem(clipboard)
+            addedToolItem = true
+        }
+        if ScreenshotService.shared.isEnabled {
+            let screenshot = NSMenuItem(title: L("截图…"), action: #selector(triggerScreenshot), keyEquivalent: "")
+            screenshot.target = self
+            menu.addItem(screenshot)
+            addedToolItem = true
+        }
+        if addedToolItem {
+            menu.addItem(.separator())
+        }
+
         let settings = NSMenuItem(title: L("设置..."), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -159,6 +176,14 @@ extension AppDelegate {
                              OperationRecord.truncatedSubject(record.subject),
                              OperationHistoryPresentation.failureSummary(record))
         ClipboardToast.show(message: message, style: record.results.isEmpty ? .failure : .partial)
+    }
+
+    @objc func openClipboardHistory() {
+        ClipboardHistoryController.shared.show()
+    }
+
+    @objc func triggerScreenshot() {
+        ScreenshotService.shared.trigger()
     }
 
     @objc func quitApp() {

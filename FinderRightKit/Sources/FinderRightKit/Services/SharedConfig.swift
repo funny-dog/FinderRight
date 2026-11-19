@@ -76,6 +76,11 @@ public final class SharedConfig {
         static let appTheme = "appTheme"
         static let copyFileContentMaxSizeKB = "copyFileContentMaxSizeKB"
         static let recentGitRepositories = "recentGitRepositories"
+        static let clipboardEnabled = "clipboardEnabled"
+        static let clipboardHistoryLimit = "clipboardHistoryLimit"
+        static let clipboardWindowPinned = "clipboardWindowPinned"
+        static let clipboardShowDetails = "clipboardShowDetails"
+        static let screenshotEnabled = "screenshotEnabled"
         /// 一次性迁移标记：图标风格默认值已按「老用户保持单色线条」处理过
         static let iconStyleDefaultMigrated = "iconStyleDefaultMigrated"
     }
@@ -147,6 +152,86 @@ public final class SharedConfig {
     /// 才能拿到主 App 设置界面刚写入磁盘的最新值（开关 / 终端 / 编辑器 / 快捷键）。
     public func reload() {
         load()
+    }
+
+    // MARK: - Clipboard
+
+    /// 是否开启轻量剪贴板历史（默认关闭）
+    public var clipboardEnabled: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.clipboardEnabled] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.clipboardEnabled] = newValue
+            save()
+        }
+    }
+
+    /// 剪贴板历史最大记录条数（默认 5 条，支持 5 / 10 / 15 / 20）
+    public var clipboardHistoryLimit: Int {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            let raw = store[Keys.clipboardHistoryLimit] as? Int ?? ClipboardHistoryLimitPreset.defaultLimit
+            return ClipboardHistoryLimitPreset.normalize(raw)
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.clipboardHistoryLimit] = ClipboardHistoryLimitPreset.normalize(newValue)
+            save()
+        }
+    }
+
+    /// 剪贴板面板是否固定（默认不固定：复制或拖动成功后自动关闭）
+    public var clipboardWindowPinned: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.clipboardWindowPinned] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.clipboardWindowPinned] = newValue
+            save()
+        }
+    }
+
+    /// 剪贴板面板是否展开右侧详情（默认关闭）
+    public var clipboardShowDetails: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.clipboardShowDetails] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.clipboardShowDetails] = newValue
+            save()
+        }
+    }
+
+    // MARK: - Screenshot
+
+    /// 是否开启轻量截图入口（默认关闭）
+    public var screenshotEnabled: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.screenshotEnabled] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.screenshotEnabled] = newValue
+            save()
+        }
     }
 
     // MARK: - Reset

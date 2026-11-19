@@ -57,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 再把设置里的快捷键同步成系统服务快捷键（覆盖升级前的旧状态），register 内会刷新服务缓存
         FinderShortcutInterceptor.applyDefaultShortcutsIfNeeded()
         GlobalDirectoryShortcut.shared.start { [weak self] in self?.openGoToDirectory() }
+        ClipboardHistoryService.shared.start()
+        GlobalClipboardShortcut.shared.start { ClipboardHistoryController.shared.toggleFromShortcut() }
+        ScreenshotService.shared.start()
         ServiceShortcutSync.run()
         ServicesProvider.register { [weak self] in self?.openGoToDirectory() }
         // 授权「辅助功能」后快捷键由按键拦截处理，访达在前台时生效
@@ -117,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         UndoCenter.shared.clear()
+        ClipboardHistoryService.shared.clear()
     }
 
     // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复打开）

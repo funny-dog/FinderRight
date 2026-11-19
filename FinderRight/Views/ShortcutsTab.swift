@@ -28,6 +28,13 @@ struct ShortcutsTab: View {
         ] : [])
     }
 
+    private let clipboardAction = (id: FinderKeyTakeover.clipboardActionId, name: "剪贴板", icon: "doc.on.clipboard")
+    private let screenshotAction = (id: FinderKeyTakeover.screenshotActionId, name: "截图", icon: "camera.viewfinder")
+
+    private var allShortcutActions: [(id: String, name: String, icon: String)] {
+        actions + [clipboardAction, screenshotAction]
+    }
+
     @FRState private var conflictMessage: String?
     /// 服务快捷键已写入系统，但运行中的访达要重启才会读取
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
@@ -36,6 +43,29 @@ struct ShortcutsTab: View {
     /// 恢复默认后递增，让各行重新读取快捷键
     @FRState private var reloadToken = 0
     @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
+    @ObservedObject private var clipboardService = ClipboardHistoryService.shared
+    @ObservedObject private var clipboardShortcut = GlobalClipboardShortcut.shared
+    @ObservedObject private var screenshotService = ScreenshotService.shared
+
+    private var clipboardShortcutSubtitle: String {
+        if !clipboardService.isEnabled {
+            return NSLocalizedString("需先在「功能 → 剪贴板」中开启", comment: "")
+        }
+        if let error = clipboardShortcut.errorMessage {
+            return error
+        }
+        return NSLocalizedString("全局生效，可在任意应用中唤起剪贴板", comment: "")
+    }
+
+    private var screenshotShortcutSubtitle: String {
+        if !screenshotService.isEnabled {
+            return NSLocalizedString("需先在「功能 → 截图」中开启", comment: "")
+        }
+        if let error = screenshotService.errorMessage {
+            return error
+        }
+        return NSLocalizedString("全局生效，可在任意应用中唤起系统截图", comment: "")
+    }
 
     var body: some View {
         FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
@@ -76,7 +106,7 @@ struct ShortcutsTab: View {
                         ShortcutCell(actionId: action.id,
                                      actionName: action.name,
                                      actionIcon: action.icon,
-                                     allActions: actions,
+                                     allActions: allShortcutActions,
                                      interceptorAvailable: hasAccessibility ||
                                          (action.id == FinderKeyTakeover.goToDirectoryActionId && globalShortcut.isEnabled),
                                      onConflict: { msg in
@@ -96,6 +126,40 @@ struct ShortcutsTab: View {
                 }
 
                 FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。默认与访达一致，升级不会改动你的设置。\n除剪切、粘贴、切换隐藏文件、打开路径外，其余快捷键需先选中文件。"))
+            }
+
+            FRSection("全局快捷键") {
+                FRCard {
+                    ShortcutCell(actionId: clipboardAction.id,
+                                 actionName: clipboardAction.name,
+                                 actionIcon: clipboardAction.icon,
+                                 allActions: allShortcutActions,
+                                 interceptorAvailable: true,
+                                 subtitleOverride: clipboardShortcutSubtitle,
+                                 subtitleIsWarning: clipboardService.isEnabled && clipboardShortcut.errorMessage != nil,
+                                 onConflict: { msg in
+                                     conflictMessage = msg
+                                 },
+                                 onChange: { shortcutChanged(actionId: clipboardAction.id) })
+                    .id("\(clipboardAction.id)-\(reloadToken)")
+
+                    FRDivider()
+
+                    ShortcutCell(actionId: screenshotAction.id,
+                                 actionName: screenshotAction.name,
+                                 actionIcon: screenshotAction.icon,
+                                 allActions: allShortcutActions,
+                                 interceptorAvailable: true,
+                                 subtitleOverride: screenshotShortcutSubtitle,
+                                 subtitleIsWarning: screenshotService.isEnabled && screenshotService.errorMessage != nil,
+                                 onConflict: { msg in
+                                     conflictMessage = msg
+                                 },
+                                 onChange: { shortcutChanged(actionId: screenshotAction.id) })
+                    .id("\(screenshotAction.id)-\(reloadToken)")
+                }
+
+                FRFootnote(Text("全局快捷键在任意应用中均可使用，无需辅助功能权限，也无需重启访达。"))
             }
         }
         .onAppear {
@@ -157,6 +221,8 @@ struct ShortcutCell: View {
     let allActions: [(id: String, name: String, icon: String)]
     /// 已授权「辅助功能」：所有行由按键拦截处理
     let interceptorAvailable: Bool
+    var subtitleOverride: String? = nil
+    var subtitleIsWarning: Bool = false
     let onConflict: (String) -> Void
     let onChange: () -> Void
 
@@ -199,6 +265,10 @@ struct ShortcutCell: View {
                     Text("需要「辅助功能」权限，否则仅在右键菜单展开时生效")
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
+                } else if let subtitleOverride {
+                    Text(verbatim: subtitleOverride)
+                        .font(.system(size: 11))
+                        .foregroundColor(subtitleIsWarning ? FRTheme.warnText : FRTheme.mute)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -253,6 +323,8 @@ struct ShortcutCell: View {
     private func startRecording() {
         isRecording = true
         GlobalDirectoryShortcut.shared.setRecording(true)
+        GlobalClipboardShortcut.shared.setRecording(true)
+        ScreenshotService.shared.setRecording(true)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
                 self.cancelRecording()
@@ -319,6 +391,8 @@ struct ShortcutCell: View {
             NSEvent.removeMonitor(m)
             monitor = nil
             GlobalDirectoryShortcut.shared.setRecording(false)
+            GlobalClipboardShortcut.shared.setRecording(false)
+            ScreenshotService.shared.setRecording(false)
         }
     }
 

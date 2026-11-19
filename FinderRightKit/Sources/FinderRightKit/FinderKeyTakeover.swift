@@ -17,6 +17,8 @@ public enum FinderKeyTakeover {
     public static let copyPathActionId = "shortcut.copyPath"
     public static let goToDirectoryActionId = "shortcut.goToDirectory"
     public static let undoActionId = "shortcut.undo"
+    public static let clipboardActionId = "shortcut.clipboard"
+    public static let screenshotActionId = "shortcut.screenshot"
 
     public enum Command: Equatable {
         case cut, copy, paste
@@ -46,6 +48,12 @@ public enum FinderKeyTakeover {
     /// 默认快捷键与访达原生一致；用户可改成别的组合，清空即停用。
     /// 未授权「辅助功能」时这些组合照旧由访达自己响应。
     /// 打开路径默认 ⇧⌘G：在访达中用 FinderRight 的输入框替代「前往文件夹」。
+    /// 截图默认 ⇧⌘5：与系统原生截屏快捷键一致。
+    public static let defaultScreenshotShortcut = ActionShortcut(
+        key: "5",
+        modifiers: ModifierBits.commandBit | ModifierBits.shiftBit
+    )
+
     public static let defaultShortcuts: [String: ActionShortcut] = {
         let cmd = ModifierBits.commandBit, opt = ModifierBits.optionBit, sft = ModifierBits.shiftBit
         return [
@@ -55,8 +63,16 @@ public enum FinderKeyTakeover {
             toggleHiddenActionId: ActionShortcut(key: ".", modifiers: cmd | sft),    // 访达「显示隐藏文件」
             goToDirectoryActionId: ActionShortcut(key: "g", modifiers: cmd | sft),  // 访达「前往文件夹」
             undoActionId: ActionShortcut(key: "z", modifiers: cmd),                  // 与访达撤销共存，见 UndoCenter
+            screenshotActionId: defaultScreenshotShortcut,                           // 系统原生「截屏与录屏」
         ]
     }()
+
+    public static func isDefaultScreenshotShortcut(_ shortcut: ActionShortcut) -> Bool {
+        let key = shortcut.key.lowercased()
+        let mods = ModifierBits.normalized(shortcut.modifiers)
+        let expectedMods = ModifierBits.commandBit | ModifierBits.shiftBit
+        return mods == expectedMods && (key == "5" || key == "%")
+    }
 
     /// 只能由按键拦截处理的动作（没有可用的服务快捷键回退）。剪切 / 粘贴的服务版本需要选中项、
     /// 粘贴还进选中文件夹，与访达原生行为不一致，所以这两行不同步为服务快捷键。
@@ -96,6 +112,9 @@ public enum FinderKeyTakeover {
     public static func recordingConflict(for shortcut: ActionShortcut, actionId: String,
                                          interceptorAvailable: Bool,
                                          textBindings: [FinderReservedShortcuts.BindingKey: String]? = nil) -> FinderReservedShortcuts.Reserved? {
+        if actionId == screenshotActionId, isDefaultScreenshotShortcut(shortcut) {
+            return nil
+        }
         let conflict = textBindings.map { FinderReservedShortcuts.conflict(for: shortcut, textBindings: $0) }
             ?? FinderReservedShortcuts.conflict(for: shortcut)
         guard let conflict else { return nil }

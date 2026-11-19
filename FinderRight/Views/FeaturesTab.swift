@@ -12,6 +12,9 @@ struct FeaturesTab: View {
     @FRState private var featureOrder: [MenuFeature] = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0.id) }
     @FRState private var dropTargetId: String?
     @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
+    @ObservedObject private var clipboardService = ClipboardHistoryService.shared
+    @ObservedObject private var clipboardShortcut = GlobalClipboardShortcut.shared
+    @ObservedObject private var screenshotService = ScreenshotService.shared
 
     /// 把拖动的功能放到目标行的位置：下移时落在目标之后，上移时落在目标之前
     private func moveFeature(_ id: String, to targetId: String) -> Bool {
@@ -51,6 +54,8 @@ struct FeaturesTab: View {
             copyFileNameSection
             copyContentSection
             openPathSection
+            clipboardSection
+            screenshotSection
             badgeSection
             quickLookSection
         }
@@ -106,6 +111,58 @@ struct FeaturesTab: View {
     private func refreshGlobalShortcut() {
         FinderShortcutInterceptor.shared.refresh()
         if ServiceShortcutSync.run() { NSUpdateDynamicServices() }
+    }
+
+    // MARK: 剪贴板
+
+    private var clipboardSection: some View {
+        FRSection("剪贴板") {
+            FRCard {
+                FRRow(title: Text("启用剪贴板"),
+                      subtitle: Text("默认关闭。开启后在内存中记录最近复制的文本、图片与文件，可从菜单栏或全局快捷键唤起；退出应用后自动清空。")) {
+                    FRSwitch(label: "启用剪贴板", isOn: Binding(
+                        get: { clipboardService.isEnabled },
+                        set: { clipboardService.setEnabled($0) }))
+                }
+
+                if let message = clipboardShortcut.errorMessage {
+                    FRDivider()
+                    Text(verbatim: message)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.warnText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                }
+            }
+
+            FRFootnote(Text("可在「设置 → 快捷键」中设置全局快捷键。"))
+        }
+    }
+
+    // MARK: 截图
+
+    private var screenshotSection: some View {
+        FRSection("截图") {
+            FRCard {
+                FRRow(title: Text("启用截图"),
+                      subtitle: Text("默认关闭。开启后可从菜单栏或自定义全局快捷键直接唤起系统截图面板（⌘⇧5），无需额外录制权限。")) {
+                    FRSwitch(label: "启用截图", isOn: Binding(
+                        get: { screenshotService.isEnabled },
+                        set: { screenshotService.setEnabled($0) }))
+                }
+
+                if let message = screenshotService.errorMessage {
+                    FRDivider()
+                    Text(verbatim: message)
+                        .font(.system(size: 12))
+                        .foregroundColor(FRTheme.warnText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                }
+            }
+
+            FRFootnote(Text("可在「设置 → 快捷键」中设置全局快捷键。"))
+        }
     }
 
     // MARK: 快速查看

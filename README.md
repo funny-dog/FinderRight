@@ -40,6 +40,8 @@
 - 👀 **扩展空格预览** —— 系统自带的快速查看（空格快捷键）增强，支持大多数格式，包括文件夹和压缩包等等，markdown支持渲染
 - 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
 - ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
+- 📋 **轻量剪贴板**（默认关闭）—— 在「设置 → 功能」开启后，内存中记录最近 5 / 10 / 15 / 20 条复制的文本、图片与文件；支持状态栏菜单或全局快捷键唤起，可在弹窗内切换条数、固定窗口与左右分栏详情预览，点击复制、直接拖入其他应用，退出应用即清空
+- 📸 **快速截图**（默认关闭）—— 在「设置 → 功能」开启后，通过状态栏菜单或自定义全局快捷键直接唤起系统原生截图面板（⌘⇧5），无需额外录制权限
 - 🕘 **操作历史** —— 按日期查看每次操作的结果与失败原因，可搜索、筛选、在访达中定位
 - ☁️ **云盘里也能用** —— iCloud / Google Drive 等目录通过右键「服务」菜单使用
 - **简洁模式** —— 点击设置窗口右上角的胶囊按钮，收拢为固定大小、可拖动的小窗口；再次点击恢复完整设置，自动记住所选模式
@@ -216,6 +218,8 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 👀 **Extended Quick Look previews** — enhance the built-in Quick Look (Space bar) with support for most formats, including folders and archives, plus rendered Markdown
 - 👁 **Toggle Hidden Files** — instant, no Finder restart
 - ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
+- 📋 **Lightweight Clipboard** (off by default) — enable in Settings → Features to keep the last 5 / 10 / 15 / 20 copied text, image, or file items in memory; open from the menu bar or a global shortcut, adjust the limit, pin the window, or toggle the detail preview pane inside the popup, click to copy or drag into other apps, and cleared on quit
+- 📸 **Quick Screenshot** (off by default) — enable in Settings → Features to launch the native macOS Screenshot panel (⌘⇧5) from the menu bar or a custom global shortcut, with no extra recording permission required
 - 🕘 **Operation History** — review each action's result or failure reason by date; search, filter and reveal in Finder
 - ☁️ **Works in cloud folders** — use it in iCloud / Google Drive via the right-click Services menu
 - **Compact mode** — click the capsule at the top right of Settings to fold it into a small, fixed-size window you can drag; click again to restore full settings. Your choice is remembered.
