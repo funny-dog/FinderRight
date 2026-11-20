@@ -3,13 +3,12 @@ import Combine
 import FinderRightKit
 import ImageIO
 
-/// 内存剪贴板历史服务：默认关闭，开启后仅在内存中保留最近 N 条文本、图片或文件引用。
+/// 轻量剪贴板历史服务：默认开启，在本机保留最近 N 条文本、图片或文件引用（关闭或清空时删除磁盘数据）。
 final class ClipboardHistoryService: ObservableObject {
     static let shared = ClipboardHistoryService()
 
     private static let pollInterval: TimeInterval = 0.5
-    private static let maxTextUTF8Bytes = 1_048_576 // 1 MiB
-    private static let filenamesPasteboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+    static let filenamesPasteboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
 
     @Published private(set) var items: [ClipboardItem] = []
     @Published private(set) var isEnabled: Bool
@@ -18,19 +17,34 @@ final class ClipboardHistoryService: ObservableObject {
     @Published private(set) var showDetails: Bool
 
     private let config: SharedConfig
+    private let persistence: ClipboardHistoryPersistence
+    private let ioQueue = DispatchQueue(label: "com.finderright.app.clipboardHistory.io", qos: .utility)
     private var store: ClipboardHistoryStore
     private var timer: Timer?
     private var lastChangeCount: Int
     private let tempDragDirectory: URL
 
-    init(config: SharedConfig = .shared) {
+    init(config: SharedConfig = .shared,
+         persistence: ClipboardHistoryPersistence = ClipboardHistoryPersistence()) {
         self.config = config
+        self.persistence = persistence
         let savedLimit = config.clipboardHistoryLimit
-        self.isEnabled = config.clipboardEnabled
+        let enabled = config.clipboardEnabled
+        self.isEnabled = enabled
         self.limit = savedLimit
         self.isPinned = config.clipboardWindowPinned
         self.showDetails = config.clipboardShowDetails
-        self.store = ClipboardHistoryStore(limit: savedLimit)
+        if enabled {
+            let restored = persistence.load(limit: savedLimit)
+            self.store = ClipboardHistoryStore(limit: savedLimit, items: restored)
+            self.items = self.store.items
+        } else {
+            self.store = ClipboardHistoryStore(limit: savedLimit)
+            self.items = []
+            ioQueue.async {
+                persistence.clear()
+            }
+        }
         self.lastChangeCount = NSPasteboard.general.changeCount
         self.tempDragDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("FinderRightClipboard-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
@@ -77,10 +91,14 @@ final class ClipboardHistoryService: ObservableObject {
         limit = configuredLimit
         isPinned = pinned
         showDetails = details
-        store.setLimit(configuredLimit)
-        items = store.items
 
         if enabled {
+            let previousItems = store.items
+            store.setLimit(configuredLimit)
+            items = store.items
+            if store.items != previousItems {
+                persistSnapshot()
+            }
             startPollingIfNeeded()
         } else {
             stopPolling()
@@ -93,12 +111,24 @@ final class ClipboardHistoryService: ObservableObject {
         store.clear()
         items = []
         cleanupAllTemporaryFiles()
+        let persistence = self.persistence
+        ioQueue.async {
+            persistence.clear()
+        }
+    }
+
+    /// 退出前停止轮询并等待在途写盘完成，保留持久化历史并清理拖拽临时文件。
+    func prepareForTermination() {
+        stopPolling()
+        ioQueue.sync {}
+        cleanupAllTemporaryFiles()
     }
 
     /// 将条目写回系统剪贴板并置顶，返回是否写入成功
     @discardableResult
-    func copyItem(_ item: ClipboardItem) -> Bool {
-        let pasteboard = NSPasteboard.general
+    func copyItem(_ item: ClipboardItem,
+                  pasteboard: NSPasteboard = .general,
+                  showToast: Bool = true) -> Bool {
         pasteboard.clearContents()
 
         let wrote: Bool
@@ -111,16 +141,47 @@ final class ClipboardHistoryService: ObservableObject {
             wrote = pasteboard.writeObjects(urls.map { $0 as NSURL })
         }
 
-        lastChangeCount = pasteboard.changeCount
+        if pasteboard === NSPasteboard.general {
+            lastChangeCount = pasteboard.changeCount
+        }
         guard wrote else {
-            ClipboardToast.showCopied(message: NSLocalizedString("无法写入剪贴板", comment: "notification"), isWarning: true)
+            if showToast {
+                ClipboardToast.showCopied(message: NSLocalizedString("无法写入剪贴板", comment: "notification"), isWarning: true)
+            }
             return false
         }
 
-        store.record(item.kind)
+        store.record(item.kind, id: item.id)
         items = store.items
-        ClipboardToast.showCopied()
+        persistSnapshot()
+        if showToast {
+            ClipboardToast.showCopied()
+        }
         return true
+    }
+
+    func filterDroppedFileURLs(_ urls: [URL]) -> [URL] {
+        ClipboardHistoryStore.normalizedFileURLs(urls, excludingDirectory: tempDragDirectory)
+    }
+
+    /// 接收外部拖入的本地文件：同步写入系统剪贴板、记入历史顶部并持久化。
+    @discardableResult
+    func recordDroppedFiles(_ urls: [URL],
+                            pasteboard: NSPasteboard = .general,
+                            showToast: Bool = true) -> Bool {
+        guard isEnabled else { return false }
+        let filtered = filterDroppedFileURLs(urls)
+        guard !filtered.isEmpty else { return false }
+        return copyItem(ClipboardItem(kind: .files(filtered)), pasteboard: pasteboard, showToast: showToast)
+    }
+
+    static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        let types = pasteboard.types ?? []
+        guard types.contains(.fileURL) || types.contains(filenamesPasteboardType) else { return [] }
+        return (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+            ?? (pasteboard.propertyList(forType: filenamesPasteboardType) as? [String])?.map { URL(fileURLWithPath: $0) }
+            ?? [])
+            .filter(\.isFileURL)
     }
 
     /// 为图片条目生成临时 PNG 文件 URL，便于拖入 Finder 或其他接收文件的应用
@@ -172,6 +233,7 @@ final class ClipboardHistoryService: ObservableObject {
 
         store.record(kind)
         items = store.items
+        persistSnapshot()
 
         let currentIds = Set(store.items.map(\.id))
         for droppedId in previousImageIds.subtracting(currentIds) {
@@ -179,30 +241,34 @@ final class ClipboardHistoryService: ObservableObject {
         }
     }
 
+    private func persistSnapshot() {
+        let snapshot = store.items
+        let persistence = self.persistence
+        ioQueue.async {
+            persistence.save(snapshot)
+        }
+    }
+
     private func readPasteboardKind(from pasteboard: NSPasteboard) -> ClipboardItem.Kind? {
-        let types = pasteboard.types ?? []
-        if types.contains(.fileURL) || types.contains(Self.filenamesPasteboardType) {
-            let urls = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-                ?? (pasteboard.propertyList(forType: Self.filenamesPasteboardType) as? [String])?.map { URL(fileURLWithPath: $0) }
-                ?? [])
-                .filter(\.isFileURL)
-            if !urls.isEmpty {
-                return .files(urls)
-            }
+        let urls = Self.fileURLs(from: pasteboard)
+        if !urls.isEmpty {
+            return .files(urls)
         }
 
         if let pngData = pasteboard.data(forType: .png),
+           pngData.count <= ClipboardHistoryPersistence.maxImageBytes,
            let (width, height) = imageDimensions(from: pngData) {
             return .image(pngData, pixelWidth: width, pixelHeight: height)
         }
 
         if let tiffData = pasteboard.data(forType: .tiff),
-           let (pngData, width, height) = encodePNG(from: tiffData) {
+           let (pngData, width, height) = encodePNG(from: tiffData),
+           pngData.count <= ClipboardHistoryPersistence.maxImageBytes {
             return .image(pngData, pixelWidth: width, pixelHeight: height)
         }
 
         if let text = pasteboard.string(forType: .string), !text.isEmpty,
-           text.utf8.count <= Self.maxTextUTF8Bytes {
+           text.utf8.count <= ClipboardHistoryPersistence.maxTextUTF8Bytes {
             return .text(text)
         }
 

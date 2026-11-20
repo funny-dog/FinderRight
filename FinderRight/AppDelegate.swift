@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         UndoCenter.shared.clear()
-        ClipboardHistoryService.shared.clear()
+        ClipboardHistoryService.shared.prepareForTermination()
     }
 
     // MARK: - Reopen 响应（Spotlight / 启动台 / 访达重复打开）

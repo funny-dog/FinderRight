@@ -45,6 +45,15 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.2",
+            date: "2026-11-20",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "新增轻量剪贴板历史（默认开启）：在本机保留最近 5–20 条文本、图片与文件，支持退出保留、详情预览、文件拖入与拖出"),
+                ChangelogEntry(type: .feature, textKey: "新增可选快速截图入口（默认关闭）：支持通过状态栏菜单或全局快捷键快速唤起系统原生截图"),
+                ChangelogEntry(type: .improvement, textKey: "状态栏菜单同步显示剪贴板与截图的自定义快捷键，并精简菜单项文案")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.13.1",
             date: "2026-11-16",
             items: [

@@ -111,6 +111,90 @@ struct GlobalDirectoryShortcutTests {
         controller.refresh()
         precondition(!controller.isEnabled && canRegister(first), "清除组合时关闭全局入口")
         print("✓ 全局打开路径：默认关闭、事件派发、重复刷新、录制暂停、改键、关闭、冲突和清除检查通过")
+
+        let menu = NSMenu()
+        func toolItems() -> (clipboard: NSMenuItem, screenshot: NSMenuItem) {
+            menu.removeAllItems()
+            delegate.populate(menu, clipboardEnabled: true, screenshotEnabled: true, config: config)
+            guard let clipboard = menu.items.first(where: { $0.action == #selector(AppDelegate.openClipboardHistory) }),
+                  let screenshot = menu.items.first(where: { $0.action == #selector(AppDelegate.triggerScreenshot) }) else {
+                preconditionFailure("状态栏菜单应包含剪贴板与截图菜单项")
+            }
+            return (clipboard, screenshot)
+        }
+
+        let initialItems = toolItems()
+        precondition(initialItems.clipboard.keyEquivalent == "" && initialItems.clipboard.keyEquivalentModifierMask.isEmpty,
+                     "未设置剪贴板快捷键时菜单项右侧不应显示快捷键")
+        precondition(initialItems.screenshot.keyEquivalent == "" && initialItems.screenshot.keyEquivalentModifierMask.isEmpty,
+                     "未设置截图快捷键时菜单项右侧不应显示快捷键")
+        let targetSelectors: [Selector] = [
+            #selector(AppDelegate.openClipboardHistory),
+            #selector(AppDelegate.triggerScreenshot),
+            #selector(AppDelegate.openSettings),
+            #selector(AppDelegate.checkForUpdates),
+        ]
+        for selector in targetSelectors {
+            guard let item = menu.items.first(where: { $0.action == selector }) else {
+                preconditionFailure("状态栏菜单缺少预期的菜单项：\(selector)")
+            }
+            precondition(!item.title.contains("…") && !item.title.contains("..."),
+                         "状态栏静态菜单文案不应带省略号：\(item.title)")
+        }
+
+        let clipboardShortcut = ActionShortcut(key: "V", modifiers: Int(NSEvent.ModifierFlags([.command, .option]).rawValue))
+        config.setShortcut(clipboardShortcut, forActionId: FinderKeyTakeover.clipboardActionId)
+        config.setShortcut(FinderKeyTakeover.defaultScreenshotShortcut, forActionId: FinderKeyTakeover.screenshotActionId)
+        let configuredItems = toolItems()
+        precondition(configuredItems.clipboard.keyEquivalent == "v"
+                     && configuredItems.clipboard.keyEquivalentModifierMask == [.command, .option],
+                     "剪贴板菜单项应显示用户设置的 ⌥⌘V 快捷键")
+        precondition(configuredItems.screenshot.keyEquivalent == "5"
+                     && configuredItems.screenshot.keyEquivalentModifierMask == [.command, .shift],
+                     "截图菜单项应显示用户设置的 ⇧⌘5 快捷键")
+
+        config.setShortcut(nil, forActionId: FinderKeyTakeover.clipboardActionId)
+        let clearedItems = toolItems()
+        precondition(clearedItems.clipboard.keyEquivalent == "" && clearedItems.clipboard.keyEquivalentModifierMask.isEmpty,
+                     "清空剪贴板快捷键后菜单项右侧应同步清除")
+        precondition(clearedItems.screenshot.keyEquivalent == "5"
+                     && clearedItems.screenshot.keyEquivalentModifierMask == [.command, .shift],
+                     "清空剪贴板快捷键不应影响截图菜单项快捷键")
+        print("✓ 状态栏菜单：剪贴板与截图快捷键显示与更新检查通过")
+
+        let clipboardRoot = directory.appendingPathComponent("clipboard-service", isDirectory: true)
+        let clipboardDir = clipboardRoot.appendingPathComponent("history", isDirectory: true)
+        let clipboardConfig = SharedConfig(fileURL: clipboardRoot.appendingPathComponent("settings.plist"))
+        precondition(clipboardConfig.clipboardEnabled, "剪贴板功能应默认开启")
+        let persistence = ClipboardHistoryPersistence(directoryURL: clipboardDir)
+        let isolatedPasteboard = NSPasteboard.withUniqueName()
+        defer { isolatedPasteboard.releaseGlobally() }
+
+        let fileA = directory.appendingPathComponent("drop-a.txt")
+        let fileB = directory.appendingPathComponent("drop-b.txt")
+        try Data("a".utf8).write(to: fileA)
+        try Data("b".utf8).write(to: fileB)
+
+        let service = ClipboardHistoryService(config: clipboardConfig, persistence: persistence)
+        precondition(service.recordDroppedFiles([fileA, fileB], pasteboard: isolatedPasteboard, showToast: false),
+                     "拖入有效文件应写入隔离剪贴板与历史记录")
+        precondition(service.items.first?.kind == .files([fileA.standardizedFileURL, fileB.standardizedFileURL]),
+                     "拖入文件应置顶进入剪贴板历史")
+        let pbURLs = ClipboardHistoryService.fileURLs(from: isolatedPasteboard).map(\.standardizedFileURL)
+        precondition(pbURLs == [fileA.standardizedFileURL, fileB.standardizedFileURL],
+                     "拖入文件后应同时写入剪贴板：\(pbURLs)")
+        precondition(!service.recordDroppedFiles([URL(string: "https://example.com")!], pasteboard: isolatedPasteboard, showToast: false),
+                     "非 fileURL 不应被记录")
+        service.prepareForTermination()
+
+        let restarted = ClipboardHistoryService(config: clipboardConfig, persistence: persistence)
+        precondition(restarted.items.first?.kind == .files([fileA.standardizedFileURL, fileB.standardizedFileURL]),
+                     "退出重建服务后应仍保留已持久化的拖入文件记录")
+        restarted.clear()
+        restarted.prepareForTermination()
+        precondition(!FileManager.default.fileExists(atPath: clipboardDir.path),
+                     "清空历史并同步写盘后应删除磁盘目录")
+        print("✓ 剪贴板文件拖入：写入剪贴板、重启持久化恢复与清空删除检查通过")
     }
 
     static func canRegister(_ shortcut: ActionShortcut) -> Bool {

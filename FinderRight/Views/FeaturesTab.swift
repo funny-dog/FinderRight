@@ -119,10 +119,22 @@ struct FeaturesTab: View {
         FRSection("剪贴板") {
             FRCard {
                 FRRow(title: Text("启用剪贴板"),
-                      subtitle: Text("默认关闭。开启后在内存中记录最近复制的文本、图片与文件，可从菜单栏或全局快捷键唤起；退出应用后自动清空。")) {
+                      subtitle: Text("默认开启。在本机记录最近复制的文本、图片与文件，退出应用后仍保留；关闭时自动清空。")) {
                     FRSwitch(label: "启用剪贴板", isOn: Binding(
                         get: { clipboardService.isEnabled },
                         set: { clipboardService.setEnabled($0) }))
+                }
+
+                if clipboardService.isEnabled {
+                    FRDivider()
+                    FRRow(title: Text("剪贴板历史"),
+                          subtitle: Text("仅保存在本机，不纳入系统备份。")) {
+                        Button("清空历史") {
+                            clipboardService.clear()
+                        }
+                        .buttonStyle(.frSecondary)
+                        .disabled(clipboardService.items.isEmpty)
+                    }
                 }
 
                 if let message = clipboardShortcut.errorMessage {

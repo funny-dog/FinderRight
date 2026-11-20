@@ -26,7 +26,10 @@ extension AppDelegate {
         return menu
     }
 
-    func populate(_ menu: NSMenu) {
+    func populate(_ menu: NSMenu,
+                  clipboardEnabled: Bool = ClipboardHistoryService.shared.isEnabled,
+                  screenshotEnabled: Bool = ScreenshotService.shared.isEnabled,
+                  config: SharedConfig = .shared) {
         let status = NSMenuItem(title: L("FinderRight 运行中"), action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
@@ -44,15 +47,17 @@ extension AppDelegate {
         menu.addItem(.separator())
 
         var addedToolItem = false
-        if ClipboardHistoryService.shared.isEnabled {
-            let clipboard = NSMenuItem(title: L("剪贴板…"), action: #selector(openClipboardHistory), keyEquivalent: "")
+        if clipboardEnabled {
+            let clipboard = NSMenuItem(title: L("剪贴板"), action: #selector(openClipboardHistory), keyEquivalent: "")
             clipboard.target = self
+            Self.applyShortcut(FinderKeyTakeover.clipboardActionId, to: clipboard, config: config)
             menu.addItem(clipboard)
             addedToolItem = true
         }
-        if ScreenshotService.shared.isEnabled {
-            let screenshot = NSMenuItem(title: L("截图…"), action: #selector(triggerScreenshot), keyEquivalent: "")
+        if screenshotEnabled {
+            let screenshot = NSMenuItem(title: L("截图"), action: #selector(triggerScreenshot), keyEquivalent: "")
             screenshot.target = self
+            Self.applyShortcut(FinderKeyTakeover.screenshotActionId, to: screenshot, config: config)
             menu.addItem(screenshot)
             addedToolItem = true
         }
@@ -60,7 +65,7 @@ extension AppDelegate {
             menu.addItem(.separator())
         }
 
-        let settings = NSMenuItem(title: L("设置..."), action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: L("设置"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
 
@@ -75,6 +80,19 @@ extension AppDelegate {
         let quit = NSMenuItem(title: L("退出 FinderRight"), action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+    }
+
+    /// 将用户在设置中配置的快捷键应用到菜单项右侧显示。
+    static func applyShortcut(_ actionId: String, to item: NSMenuItem, config: SharedConfig = .shared) {
+        config.reload()
+        guard let shortcut = config.shortcut(forActionId: actionId), !shortcut.key.isEmpty else {
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
+            return
+        }
+        item.keyEquivalent = shortcut.key.lowercased()
+        item.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: UInt(shortcut.modifiers))
+            .intersection([.command, .option, .shift, .control])
     }
 
     func L(_ key: String) -> String { NSLocalizedString(key, comment: "menu") }
@@ -92,7 +110,7 @@ extension AppDelegate {
         case .installing:
             item.title = L("正在安装更新…")
         default:
-            item.title = L("检查更新…")
+            item.title = L("检查更新")
         }
         item.action = status.isInProgress ? nil : #selector(checkForUpdates)
     }

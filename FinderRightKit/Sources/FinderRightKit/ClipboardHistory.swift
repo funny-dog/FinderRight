@@ -26,7 +26,7 @@ public enum ClipboardHistoryLimitPreset: Int, CaseIterable, Identifiable {
     }
 }
 
-/// 单条内存剪贴板历史记录
+/// 单条剪贴板历史记录
 public struct ClipboardItem: Identifiable, Equatable {
     public enum Kind: Equatable {
         case text(String)
@@ -66,13 +66,15 @@ public struct ClipboardItem: Identifiable, Equatable {
     }
 }
 
-/// 纯内存剪贴板历史存储（带容量上限与去重置顶）
+/// 剪贴板历史内存存储（带容量上限与去重置顶）
 public struct ClipboardHistoryStore: Equatable {
     public private(set) var items: [ClipboardItem] = []
     public private(set) var limit: Int
 
-    public init(limit: Int = ClipboardHistoryLimitPreset.defaultLimit) {
+    public init(limit: Int = ClipboardHistoryLimitPreset.defaultLimit, items: [ClipboardItem] = []) {
         self.limit = ClipboardHistoryLimitPreset.normalize(limit)
+        self.items = items
+        trimToLimit()
     }
 
     /// 记录新内容：忽略空内容，若已存在相同内容则移至顶部，超出上限时淘汰最旧条目
@@ -104,9 +106,265 @@ public struct ClipboardHistoryStore: Equatable {
         items.removeAll()
     }
 
+    /// 过滤并去重拖入的本地文件 URL（保留原顺序，排除指定目录及其子路径）。
+    public static func normalizedFileURLs(_ urls: [URL], excludingDirectory: URL? = nil) -> [URL] {
+        let excludedPath = excludingDirectory?.standardizedFileURL.path
+        var seen: Set<String> = []
+        var result: [URL] = []
+        result.reserveCapacity(urls.count)
+        for url in urls where url.isFileURL && !url.path.isEmpty {
+            let standardized = url.standardizedFileURL
+            let path = standardized.path
+            guard !path.isEmpty else { continue }
+            if let excludedPath, path == excludedPath || path.hasPrefix(excludedPath + "/") {
+                continue
+            }
+            if seen.insert(path).inserted {
+                result.append(standardized)
+            }
+        }
+        return result
+    }
+
     private mutating func trimToLimit() {
         if items.count > limit {
             items.removeSubrange(limit...)
+        }
+    }
+}
+
+/// 剪贴板历史本地持久化：
+/// 索引存放在 `index.json`，图片按独立 PNG 文件保存；目录收紧为 0700、文件收紧为 0600 并排除系统备份。
+public struct ClipboardHistoryPersistence {
+    public static let defaultDirectory: URL = IPCBridge.rootDirectory
+        .appendingPathComponent("clipboard-history", isDirectory: true)
+    public static let maxTextUTF8Bytes = 1_048_576
+    public static let maxImageBytes = 20 * 1024 * 1024
+    private static let indexFileName = "index.json"
+
+    public let directoryURL: URL
+
+    public var indexFileURL: URL {
+        directoryURL.appendingPathComponent(Self.indexFileName, isDirectory: false)
+    }
+
+    public init(directoryURL: URL = ClipboardHistoryPersistence.defaultDirectory) {
+        self.directoryURL = directoryURL
+    }
+
+    /// 从磁盘恢复历史条目，跳过损坏、超限或不合法的记录。
+    public func load(limit: Int) -> [ClipboardItem] {
+        let maxCount = ClipboardHistoryLimitPreset.normalize(limit)
+        let fm = FileManager.default
+        guard !isSymbolicLink(indexFileURL),
+              let data = try? Data(contentsOf: indexFileURL),
+              let decoded = try? JSONDecoder().decode([LossyRecord].self, from: data) else {
+            return []
+        }
+
+        var loaded: [ClipboardItem] = []
+        loaded.reserveCapacity(min(decoded.count, maxCount))
+        for wrapper in decoded {
+            guard loaded.count < maxCount, let record = wrapper.record else { continue }
+            guard let item = materialize(record, fileManager: fm) else { continue }
+            loaded.append(item)
+        }
+        return loaded
+    }
+
+    /// 将当前历史写入磁盘并清理已淘汰或移除的孤立图片；列表为空时直接删除整个目录。
+    public func save(_ items: [ClipboardItem]) {
+        guard !items.isEmpty else {
+            clear()
+            return
+        }
+
+        let validItems = items.filter(isPersistable)
+        guard !validItems.isEmpty else {
+            clear()
+            return
+        }
+
+        let fm = FileManager.default
+        do {
+            try PrivateStorage.ensurePrivateDirectory(directoryURL)
+            var dirURL = directoryURL
+            var resourceValues = URLResourceValues()
+            resourceValues.isExcludedFromBackup = true
+            try? dirURL.setResourceValues(resourceValues)
+
+            var records: [Record] = []
+            records.reserveCapacity(validItems.count)
+            var referencedFiles: Set<String> = []
+
+            for item in validItems {
+                switch item.kind {
+                case .text(let text):
+                    records.append(Record(
+                        id: item.id,
+                        copiedAt: item.copiedAt,
+                        type: .text,
+                        text: text,
+                        filePaths: nil,
+                        imageFileName: nil,
+                        pixelWidth: nil,
+                        pixelHeight: nil
+                    ))
+                case .files(let urls):
+                    let paths = urls.filter(\.isFileURL).map(\.path).filter { !$0.isEmpty }
+                    guard !paths.isEmpty else { continue }
+                    records.append(Record(
+                        id: item.id,
+                        copiedAt: item.copiedAt,
+                        type: .files,
+                        text: nil,
+                        filePaths: paths,
+                        imageFileName: nil,
+                        pixelWidth: nil,
+                        pixelHeight: nil
+                    ))
+                case .image(let data, let width, let height):
+                    let fileName = "\(item.id.uuidString).png"
+                    let imageURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
+                    if isSymbolicLink(imageURL) {
+                        try? fm.removeItem(at: imageURL)
+                    }
+                    if !fm.fileExists(atPath: imageURL.path) {
+                        try data.write(to: imageURL, options: .atomic)
+                    }
+                    PrivateStorage.restrictFile(imageURL)
+                    referencedFiles.insert(fileName)
+                    records.append(Record(
+                        id: item.id,
+                        copiedAt: item.copiedAt,
+                        type: .image,
+                        text: nil,
+                        filePaths: nil,
+                        imageFileName: fileName,
+                        pixelWidth: width,
+                        pixelHeight: height
+                    ))
+                }
+            }
+
+            guard !records.isEmpty else {
+                clear()
+                return
+            }
+
+            let encoded = try JSONEncoder().encode(records)
+            if isSymbolicLink(indexFileURL) {
+                try? fm.removeItem(at: indexFileURL)
+            }
+            try encoded.write(to: indexFileURL, options: .atomic)
+            PrivateStorage.restrictFile(indexFileURL)
+
+            if let existing = try? fm.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil) {
+                for url in existing {
+                    let name = url.lastPathComponent
+                    if name != Self.indexFileName && !referencedFiles.contains(name) {
+                        try? fm.removeItem(at: url)
+                    }
+                }
+            }
+        } catch {
+            let nsError = error as NSError
+            NSLog("[ClipboardHistoryPersistence] 保存失败（%@:%ld）", nsError.domain, nsError.code)
+        }
+    }
+
+    /// 删除整个剪贴板持久化目录。
+    public func clear() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: directoryURL.path) || isSymbolicLink(directoryURL) else { return }
+        try? fm.removeItem(at: directoryURL)
+    }
+
+    private func isPersistable(_ item: ClipboardItem) -> Bool {
+        switch item.kind {
+        case .text(let text):
+            return !text.isEmpty && text.utf8.count <= Self.maxTextUTF8Bytes
+        case .image(let data, let width, let height):
+            return !data.isEmpty && data.count <= Self.maxImageBytes && width > 0 && height > 0
+        case .files(let urls):
+            return urls.contains(where: { $0.isFileURL && !$0.path.isEmpty })
+        }
+    }
+
+    private func materialize(_ record: Record, fileManager: FileManager) -> ClipboardItem? {
+        switch record.type {
+        case .text:
+            guard let text = record.text, !text.isEmpty, text.utf8.count <= Self.maxTextUTF8Bytes else {
+                return nil
+            }
+            return ClipboardItem(id: record.id, kind: .text(text), copiedAt: record.copiedAt)
+
+        case .files:
+            guard let paths = record.filePaths else { return nil }
+            let urls = paths.filter { !$0.isEmpty }.map { URL(fileURLWithPath: $0) }
+            guard !urls.isEmpty else { return nil }
+            return ClipboardItem(id: record.id, kind: .files(urls), copiedAt: record.copiedAt)
+
+        case .image:
+            guard let fileName = record.imageFileName,
+                  Self.isSafeImageFileName(fileName),
+                  let width = record.pixelWidth, width > 0,
+                  let height = record.pixelHeight, height > 0 else {
+                return nil
+            }
+            let imageURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
+            guard !isSymbolicLink(imageURL),
+                  fileManager.fileExists(atPath: imageURL.path),
+                  let data = try? Data(contentsOf: imageURL),
+                  !data.isEmpty, data.count <= Self.maxImageBytes else {
+                return nil
+            }
+            return ClipboardItem(
+                id: record.id,
+                kind: .image(data, pixelWidth: width, pixelHeight: height),
+                copiedAt: record.copiedAt
+            )
+        }
+    }
+
+    private static func isSafeImageFileName(_ name: String) -> Bool {
+        guard !name.isEmpty,
+              name != ".",
+              name != "..",
+              !name.contains("/"),
+              !name.contains("\\"),
+              name.lowercased().hasSuffix(".png") else {
+            return false
+        }
+        return true
+    }
+
+    private func isSymbolicLink(_ url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType) == .typeSymbolicLink
+    }
+
+    private enum KindType: String, Codable {
+        case text
+        case image
+        case files
+    }
+
+    private struct Record: Codable {
+        let id: UUID
+        let copiedAt: Date
+        let type: KindType
+        let text: String?
+        let filePaths: [String]?
+        let imageFileName: String?
+        let pixelWidth: Int?
+        let pixelHeight: Int?
+    }
+
+    private struct LossyRecord: Decodable {
+        let record: Record?
+
+        init(from decoder: Decoder) throws {
+            record = try? Record(from: decoder)
         }
     }
 }

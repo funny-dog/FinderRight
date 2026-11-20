@@ -7124,20 +7124,20 @@ struct FinderRightKitTestsRunner {
             let dir = makeTempDirectory()
             let configURL = dir.appendingPathComponent("settings.plist")
             let config = SharedConfig(fileURL: configURL)
-            try assertEqual(config.clipboardEnabled, false)
+            try assertEqual(config.clipboardEnabled, true)
             try assertEqual(config.clipboardHistoryLimit, 5)
             try assertEqual(config.clipboardWindowPinned, false)
             try assertEqual(config.clipboardShowDetails, false)
             try assertEqual(config.screenshotEnabled, false)
 
-            config.clipboardEnabled = true
+            config.clipboardEnabled = false
             config.clipboardHistoryLimit = 15
             config.clipboardWindowPinned = true
             config.clipboardShowDetails = true
             config.screenshotEnabled = true
 
             let reloaded = SharedConfig(fileURL: configURL)
-            try assertEqual(reloaded.clipboardEnabled, true)
+            try assertEqual(reloaded.clipboardEnabled, false)
             try assertEqual(reloaded.clipboardHistoryLimit, 15)
             try assertEqual(reloaded.clipboardWindowPinned, true)
             try assertEqual(reloaded.clipboardShowDetails, true)
@@ -7145,6 +7145,111 @@ struct FinderRightKitTestsRunner {
 
             reloaded.clipboardHistoryLimit = 99
             try assertEqual(SharedConfig(fileURL: configURL).clipboardHistoryLimit, 5)
+        }
+
+        runTest("剪贴板历史：持久化、权限免备份、淘汰清理与清空") {
+            let root = makeTempDirectory()
+            let dir = root.appendingPathComponent("clipboard-history", isDirectory: true)
+            let persistence = ClipboardHistoryPersistence(directoryURL: dir)
+
+            let imageA = Data([0x89, 0x50, 0x4E, 0x47, 0x01])
+            let imageB = Data([0x89, 0x50, 0x4E, 0x47, 0x02])
+            let t1 = Date(timeIntervalSince1970: 1_700_000_001)
+            let t2 = Date(timeIntervalSince1970: 1_700_000_002)
+            let t3 = Date(timeIntervalSince1970: 1_700_000_003)
+
+            var store = ClipboardHistoryStore(limit: 10)
+            let id1 = UUID()
+            let id2 = UUID()
+            let id3 = UUID()
+            for idx in 1...3 {
+                store.record(.text("extra-\(idx)"), now: Date(timeIntervalSince1970: 1_699_999_990 + Double(idx)))
+            }
+            store.record(.text("hello clipboard"), id: id1, now: t1)
+            store.record(.image(imageA, pixelWidth: 320, pixelHeight: 240), id: id2, now: t2)
+            store.record(.files([URL(fileURLWithPath: "/tmp/demo.txt")]), id: id3, now: t3)
+
+            persistence.save(store.items)
+
+            let fm = FileManager.default
+            let dirAttrs = try fm.attributesOfItem(atPath: dir.path)
+            try assertEqual((dirAttrs[.posixPermissions] as? NSNumber)?.intValue, 0o700, "历史目录权限应为 0700")
+            let resourceValues = try dir.resourceValues(forKeys: [.isExcludedFromBackupKey])
+            try assertEqual(resourceValues.isExcludedFromBackup, true, "历史目录应排除系统备份")
+
+            let indexAttrs = try fm.attributesOfItem(atPath: persistence.indexFileURL.path)
+            try assertEqual((indexAttrs[.posixPermissions] as? NSNumber)?.intValue, 0o600, "索引文件权限应为 0600")
+            let imageAFile = dir.appendingPathComponent("\(id2.uuidString).png")
+            let imgAttrs = try fm.attributesOfItem(atPath: imageAFile.path)
+            try assertEqual((imgAttrs[.posixPermissions] as? NSNumber)?.intValue, 0o600, "图片文件权限应为 0600")
+
+            let restored = persistence.load(limit: 10)
+            try assertEqual(restored.count, 6)
+            try assertEqual(restored, store.items)
+            let limited = persistence.load(limit: 5)
+            try assertEqual(limited, Array(store.items.prefix(5)))
+
+            // 替换/淘汰图片后应清理孤立图片文件
+            let id4 = UUID()
+            let updatedItems = [
+                ClipboardItem(id: id4, kind: .image(imageB, pixelWidth: 64, pixelHeight: 64), copiedAt: Date(timeIntervalSince1970: 1_700_000_004)),
+                store.items[0],
+            ]
+            persistence.save(updatedItems)
+            try assertTrue(!fm.fileExists(atPath: imageAFile.path), "被移除条目的图片文件应被清理")
+            let imageBFile = dir.appendingPathComponent("\(id4.uuidString).png")
+            try assertTrue(fm.fileExists(atPath: imageBFile.path), "保留条目的图片文件应存在")
+
+            // 超限文本与超限图片不落盘
+            let oversizedText = String(repeating: "a", count: ClipboardHistoryPersistence.maxTextUTF8Bytes + 1)
+            let oversizedImage = Data(count: ClipboardHistoryPersistence.maxImageBytes + 1)
+            persistence.save([
+                ClipboardItem(kind: .text(oversizedText)),
+                ClipboardItem(kind: .image(oversizedImage, pixelWidth: 100, pixelHeight: 100)),
+                updatedItems[0],
+            ])
+            let afterLimit = persistence.load(limit: 10)
+            try assertEqual(afterLimit.count, 1)
+            try assertEqual(afterLimit[0], updatedItems[0])
+
+            // 索引含损坏项、缺失图片或路径穿越名时只跳过非法项，不丢正常项
+            let escapeFile = root.appendingPathComponent("escape.png")
+            try Data([0x89, 0x50, 0x4E, 0x47]).write(to: escapeFile)
+            let mixedJSON = """
+            [
+              {"broken": true},
+              {"id":"\(UUID().uuidString)","copiedAt":1700000000,"type":"image","imageFileName":"../escape.png","pixelWidth":10,"pixelHeight":10},
+              {"id":"\(UUID().uuidString)","copiedAt":1700000000,"type":"image","imageFileName":"missing.png","pixelWidth":10,"pixelHeight":10},
+              {"id":"\(id1.uuidString)","copiedAt":1700000001,"type":"text","text":"kept item"}
+            ]
+            """
+            try mixedJSON.data(using: .utf8)!.write(to: persistence.indexFileURL)
+            let mixedLoaded = persistence.load(limit: 5)
+            try assertEqual(mixedLoaded.count, 1)
+            try assertEqual(mixedLoaded[0].kind, .text("kept item"))
+
+            // 空列表与 clear 均删除整个目录
+            persistence.save([])
+            try assertTrue(!fm.fileExists(atPath: dir.path), "保存空列表应删除历史目录")
+
+            persistence.save(updatedItems)
+            try assertTrue(fm.fileExists(atPath: dir.path))
+            persistence.clear()
+            try assertTrue(!fm.fileExists(atPath: dir.path), "clear 应删除整个历史目录")
+
+            let excludedDir = root.appendingPathComponent("FinderRightClipboard-123", isDirectory: true)
+            let siblingDir = root.appendingPathComponent("FinderRightClipboard-1234", isDirectory: true)
+            let localA = root.appendingPathComponent("a.txt")
+            let localB = siblingDir.appendingPathComponent("b.txt")
+            let insideExcluded = excludedDir.appendingPathComponent("temp.png")
+            let normalized = ClipboardHistoryStore.normalizedFileURLs([
+                URL(string: "https://example.com/demo.png")!,
+                localA,
+                insideExcluded,
+                localB,
+                URL(fileURLWithPath: localA.path),
+            ], excludingDirectory: excludedDir)
+            try assertEqual(normalized, [localA.standardizedFileURL, localB.standardizedFileURL], "应保留本地文件并排除临时拖拽目录且保留同前缀兄弟目录")
         }
 
         print("\n-----------------------------------------")

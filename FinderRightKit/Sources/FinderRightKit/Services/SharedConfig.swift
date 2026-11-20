@@ -156,12 +156,12 @@ public final class SharedConfig {
 
     // MARK: - Clipboard
 
-    /// 是否开启轻量剪贴板历史（默认关闭）
+    /// 是否开启轻量剪贴板历史（默认开启）
     public var clipboardEnabled: Bool {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return store[Keys.clipboardEnabled] as? Bool ?? false
+            return store[Keys.clipboardEnabled] as? Bool ?? true
         }
         set {
             lock.lock()

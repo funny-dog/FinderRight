@@ -160,8 +160,13 @@ private enum ClipboardPreviewLoader {
 
 // MARK: - 主视图
 
+fileprivate final class ClipboardDropState: ObservableObject {
+    @Published var isTargeted = false
+}
+
 struct ClipboardHistoryView: View {
     @ObservedObject private var service = ClipboardHistoryService.shared
+    @ObservedObject fileprivate var dropState: ClipboardDropState
     @FRState private var selectedId: UUID? = nil
 
     private var activeItem: ClipboardItem? {
@@ -179,6 +184,26 @@ struct ClipboardHistoryView: View {
         }
         .frame(minWidth: service.showDetails ? 520 : 240, minHeight: 240)
         .background(FRTheme.window)
+        .overlay {
+            if dropState.isTargeted {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(FRTheme.selection.opacity(0.85))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(FRTheme.accent, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                    VStack(spacing: 8) {
+                        Image(systemName: "tray.and.arrow.down")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(FRTheme.accentText)
+                        Text("松开以加入剪贴板")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(FRTheme.text)
+                    }
+                }
+                .padding(8)
+                .allowsHitTesting(false)
+            }
+        }
         .ignoresSafeArea()
         .onAppear {
             if selectedId == nil {
@@ -291,6 +316,9 @@ struct ClipboardHistoryView: View {
                     Text("剪贴板记录为空")
                         .font(.system(size: 12.5))
                         .foregroundColor(FRTheme.mute)
+                    Text("也可将文件拖入此处")
+                        .font(.system(size: 11.5))
+                        .foregroundColor(FRTheme.mute.opacity(0.85))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if service.showDetails {
@@ -772,6 +800,64 @@ private final class ClipboardWindowDragBar: NSView {
     }
 }
 
+private final class ClipboardDropContainerView: NSView {
+    private let dropState: ClipboardDropState
+    var onDropFiles: (([URL]) -> Bool)?
+
+    init(dropState: ClipboardDropState) {
+        self.dropState = dropState
+        super.init(frame: .zero)
+        registerForDraggedTypes([.fileURL, ClipboardHistoryService.filenamesPasteboardType])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func wantsPeriodicDraggingUpdates() -> Bool {
+        false
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateTargetState(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        updateTargetState(for: sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        dropState.isTargeted = false
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        dropState.isTargeted = false
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        dropState.isTargeted = false
+        let urls = draggedFileURLs(from: sender)
+        guard !urls.isEmpty else { return false }
+        return onDropFiles?(urls) ?? false
+    }
+
+    private func updateTargetState(for sender: NSDraggingInfo) -> NSDragOperation {
+        let canAccept = !draggedFileURLs(from: sender).isEmpty
+        dropState.isTargeted = canAccept
+        return canAccept ? .copy : []
+    }
+
+    private func draggedFileURLs(from sender: NSDraggingInfo) -> [URL] {
+        // 内部列表拖出时不接受回落到自身面板
+        if sender.draggingSource is ClipboardDragNSView {
+            return []
+        }
+        let raw = ClipboardHistoryService.fileURLs(from: sender.draggingPasteboard)
+        return ClipboardHistoryService.shared.filterDroppedFileURLs(raw)
+    }
+}
+
 // MARK: - 控制器
 
 final class ClipboardHistoryController: NSObject, NSWindowDelegate {
@@ -800,7 +886,22 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
             panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
             panel.standardWindowButton(.zoomButton)?.isHidden = true
             panel.delegate = self
-            panel.contentView = NSHostingView(rootView: ClipboardHistoryView())
+
+            let dropState = ClipboardDropState()
+            let container = ClipboardDropContainerView(dropState: dropState)
+            container.onDropFiles = { urls in
+                ClipboardHistoryService.shared.recordDroppedFiles(urls)
+            }
+            let hostingView = NSHostingView(rootView: ClipboardHistoryView(dropState: dropState))
+            hostingView.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(hostingView)
+            NSLayoutConstraint.activate([
+                hostingView.topAnchor.constraint(equalTo: container.topAnchor),
+                hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            ])
+            panel.contentView = container
             installHeaderDragBar(in: panel)
             self.window = panel
         }
