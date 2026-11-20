@@ -33,9 +33,12 @@ public enum EncryptedZipExtractor {
     }
 
     /// stderr 是否表明密码错误。ZipCrypto 只有 1 字节校验、AES 只有 2 字节校验，少数错误密码会通过头部校验，
-    /// 解到数据末尾才以 CRC / 认证码不符失败，这两种也按密码错误处理
+    /// 解到数据末尾以 CRC / 认证码不符失败，或在 deflate 解压阶段因错误解密的乱码流报 `ZIP decompression failed`，
+    /// 这些情况均按密码错误处理
     public static func indicatesWrongPassword(_ stderr: String) -> Bool {
-        ["Incorrect passphrase", "bad CRC", "bad Authentication code"].contains { stderr.localizedCaseInsensitiveContains($0) }
+        ["Incorrect passphrase", "bad CRC", "bad Authentication code", "ZIP decompression failed"].contains {
+            stderr.localizedCaseInsensitiveContains($0)
+        }
     }
 
     private static func emptyDirectory(_ directory: URL) throws {

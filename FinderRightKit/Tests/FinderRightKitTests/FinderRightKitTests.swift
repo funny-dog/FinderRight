@@ -1863,6 +1863,7 @@ struct FinderRightKitTestsRunner {
             try assertTrue(!EncryptedZipExtractor.indicatesWrongPassword("tar: Error opening archive: Unrecognized archive format"))
             try assertTrue(EncryptedZipExtractor.indicatesWrongPassword("a.txt: Incorrect passphrase: Unknown error: -1"))
             try assertTrue(EncryptedZipExtractor.indicatesWrongPassword("a.txt: ZIP bad CRC: 0x1234 should be 0x5678"))
+            try assertTrue(EncryptedZipExtractor.indicatesWrongPassword("资料/报告.txt: ZIP decompression failed (-5): Unknown error: -1"))
         }
 
         runTest("ProcessRunner 子进程 stdin 接 /dev/null，不会等待输入") {
