@@ -75,6 +75,8 @@ enum LocalGit {
         environment["LC_ALL"] = "C"
         if writing {
             environment["GIT_EDITOR"] = ":"
+            environment["GIT_HTTP_LOW_SPEED_LIMIT"] = "1000"
+            environment["GIT_HTTP_LOW_SPEED_TIME"] = "30"
             environment["PATH"] = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:" + (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
         }
         process.environment = environment
@@ -329,7 +331,7 @@ public struct GitCommitPreview {
 public enum GitLocalAction {
     case stage([String]), unstage([String]), switchBranch(String), createBranch(String)
     case commit(message: String, preview: GitCommitPreview)
-    case pull(rebase: Bool), push(remoteBranch: String?)
+    case fetch, pull(rebase: Bool), push(remoteBranch: String?)
 }
 
 public enum GitOperationError: LocalizedError {
@@ -415,10 +417,12 @@ public enum GitLocalRepository {
             let file = directory.appendingPathComponent("message")
             try message.write(to: file, atomically: true, encoding: .utf8)
             arguments = ["commit", "--file", file.path]
+        case .fetch:
+            arguments = ["fetch", "--prune"]
         case .pull(let rebase):
             // 真正的拉取：先取回远端，再合并（或变基）到当前分支。
-            // 只 fetch 不会更新工作区，却提示「已拉取」会误导用户。
-            arguments = rebase ? ["pull", "--rebase", "--no-edit"] : ["pull", "--no-edit"]
+            // 只 fetch 不会更新工作区，却提示「已拉取」会误导用户；显式传 --no-rebase 避免未配置 pull.rebase 时分叉直接报错。
+            arguments = rebase ? ["pull", "--rebase", "--no-edit"] : ["pull", "--no-rebase", "--no-edit"]
         case .push(let remoteBranch):
             // 有上游就按 upstream 推；指定了分支才显式推送 origin/<branch>。
             if let branch = remoteBranch {
@@ -427,12 +431,146 @@ public enum GitLocalRepository {
                 arguments = ["push"]
             }
         }
-        
+
+        let beforeHead = revision(of: "HEAD", at: root)
+        let beforeUpstream = revision(of: "@{upstream}", at: root)
         let result = try LocalGit.run(at: root, arguments, limit: 128 * 1024, writing: true)
         guard result.status == 0 else {
             let detail = [String(decoding: result.data, as: UTF8.self), result.error].filter { !$0.isEmpty }.joined(separator: "\n")
-            throw GitOperationError.failed(detail)
+            throw GitOperationError.failed(formattedFailureDetail(detail, for: action))
         }
-        return String(decoding: result.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return formattedSuccessMessage(for: action, at: root, snapshot: snapshot,
+                                       beforeHead: beforeHead, beforeUpstream: beforeUpstream, stderr: result.error)
+            ?? String(decoding: result.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func revision(of ref: String, at root: URL) -> String? {
+        guard let output = try? LocalGit.run(at: root, ["rev-parse", "--verify", ref]),
+              output.status == 0 else { return nil }
+        let value = String(decoding: output.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private static func commitCount(at root: URL, range: String) -> Int {
+        guard let output = try? LocalGit.run(at: root, ["rev-list", "--count", range]),
+              output.status == 0 else { return 0 }
+        return Int(String(decoding: output.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+
+    private static func latestCommitSummary(at root: URL) -> String? {
+        guard let output = try? LocalGit.run(at: root, ["log", "-1", "--format=%h %s"]),
+              output.status == 0 else { return nil }
+        let value = String(decoding: output.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private static func formattedSuccessMessage(
+        for action: GitLocalAction,
+        at root: URL,
+        snapshot: GitStatusSnapshot,
+        beforeHead: String?,
+        beforeUpstream: String?,
+        stderr: String
+    ) -> String? {
+        switch action {
+        case .fetch:
+            guard let after = try? GitStatusSnapshot.read(at: root) else {
+                return NSLocalizedString("已获取远端引用", comment: "")
+            }
+            guard let target = after.upstream else {
+                return NSLocalizedString("已获取远端引用", comment: "")
+            }
+            if after.behind > 0 && after.ahead > 0 {
+                return String(format: NSLocalizedString("已获取远端（%@）：本地领先 %d 个提交，落后 %d 个提交", comment: ""),
+                              target, after.ahead, after.behind)
+            }
+            if after.behind > 0 {
+                return String(format: NSLocalizedString("已获取远端（%@）：发现 %d 个新提交可拉取", comment: ""),
+                              target, after.behind)
+            }
+            if after.ahead > 0 {
+                return String(format: NSLocalizedString("已获取远端（%@）：本地领先 %d 个提交可推送", comment: ""),
+                              target, after.ahead)
+            }
+            return String(format: NSLocalizedString("已获取远端（%@）：已是最新，无新提交", comment: ""), target)
+
+        case .pull(let rebase):
+            let afterHead = revision(of: "HEAD", at: root)
+            let target = snapshot.upstream ?? NSLocalizedString("远端", comment: "")
+            if beforeHead != nil && beforeHead == afterHead {
+                if snapshot.entries.isEmpty {
+                    return String(format: NSLocalizedString("已是最新，远端无新提交（%@）", comment: ""), target)
+                }
+                return String(format: NSLocalizedString("远端无新提交（%@），当前仅有本地未提交改动，无冲突", comment: ""), target)
+            }
+            let afterUpstream = revision(of: "@{upstream}", at: root)
+            let count: Int
+            if rebase, let beforeUpstream, let afterUpstream, beforeUpstream != afterUpstream {
+                count = commitCount(at: root, range: "\(beforeUpstream)..\(afterUpstream)")
+            } else if let beforeHead {
+                count = commitCount(at: root, range: "\(beforeHead)..HEAD")
+            } else {
+                count = commitCount(at: root, range: "HEAD")
+            }
+            let latest = latestCommitSummary(at: root)
+            let hasLocalEdits = !snapshot.entries.isEmpty
+            if count > 0, let latest {
+                let format = hasLocalEdits
+                    ? NSLocalizedString("已从 %@ 拉取 %d 个新提交，本地改动无冲突（最新：%@）", comment: "")
+                    : NSLocalizedString("已从 %@ 拉取 %d 个新提交（最新：%@）", comment: "")
+                return String(format: format, target, count, latest)
+            }
+            let format = hasLocalEdits
+                ? NSLocalizedString("已从 %@ 拉取更新，本地改动无冲突", comment: "")
+                : NSLocalizedString("已从 %@ 拉取更新", comment: "")
+            return String(format: format, target)
+
+        case .push(let remoteBranch):
+            let target = remoteBranch.map { "origin/\($0)" } ?? snapshot.upstream ?? NSLocalizedString("远端", comment: "")
+            let afterUpstream = revision(of: "@{upstream}", at: root)
+            if stderr.contains("Everything up-to-date") || (beforeUpstream != nil && beforeUpstream == afterUpstream && snapshot.ahead == 0) {
+                return String(format: NSLocalizedString("已是最新，无需推送（%@）", comment: ""), target)
+            }
+            if snapshot.ahead > 0 {
+                return String(format: NSLocalizedString("已推送 %d 个提交到 %@", comment: ""), snapshot.ahead, target)
+            }
+            return String(format: NSLocalizedString("已推送到 %@", comment: ""), target)
+
+        case .stage, .unstage, .switchBranch, .createBranch, .commit:
+            return nil
+        }
+    }
+
+    private static func formattedFailureDetail(_ detail: String, for action: GitLocalAction) -> String {
+        switch action {
+        case .pull, .fetch, .push:
+            let lower = detail.lowercased()
+            let summary: String?
+            if lower.contains("conflict") || lower.contains("automatic merge failed") || lower.contains("could not apply") {
+                summary = NSLocalizedString("拉取产生合并冲突，请在上方标为「冲突」的文件中处理后暂存并提交", comment: "")
+            } else if lower.contains("would be overwritten")
+                        || lower.contains("your local changes")
+                        || lower.contains("please commit your changes or stash them")
+                        || lower.contains("unstaged changes")
+                        || lower.contains("uncommitted changes") {
+                summary = NSLocalizedString("拉取已中止：本地未提交的改动会与远端更新冲突，请先提交或还原本地改动后再试", comment: "")
+            } else if lower.contains("reconcile divergent branches") || lower.contains("diverging branches") {
+                summary = NSLocalizedString("本地与远端提交已分叉，请使用变基拉取或在终端处理分叉", comment: "")
+            } else if lower.contains("authentication failed")
+                        || lower.contains("could not read from remote")
+                        || lower.contains("permission denied")
+                        || lower.contains("unable to access")
+                        || lower.contains("failed to connect")
+                        || lower.contains("timed out")
+                        || lower.contains("operation too slow") {
+                summary = NSLocalizedString("无法连接或验证远程仓库，请检查网络、代理或凭据设置", comment: "")
+            } else {
+                summary = nil
+            }
+            guard let summary else { return detail }
+            return detail.isEmpty ? summary : "\(summary)\n\(detail)"
+        case .stage, .unstage, .switchBranch, .createBranch, .commit:
+            return detail
+        }
     }
 }

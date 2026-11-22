@@ -75,12 +75,15 @@ struct GitPullPushChecks {
         try git(["commit", "-m", "feat: 本地提交"], at: origin)
         let aheadOne = try snapshot(origin)
         precondition(aheadOne.ahead == 1 && aheadOne.behind == 0, "本地领先应统计为 ahead=1")
-        try GitLocalRepository.perform(.push(remoteBranch: nil), at: origin)
+        let pushMessage = try GitLocalRepository.perform(.push(remoteBranch: nil), at: origin)
+        precondition(pushMessage.contains("1") && pushMessage.contains("origin/main"), "推送应反馈提交数与目标：\(pushMessage)")
+        let noopPush = try GitLocalRepository.perform(.push(remoteBranch: nil), at: origin)
+        precondition(noopPush.contains("已是最新"), "无领先提交时推送应提示已是最新：\(noopPush)")
         try git(["fetch", "origin"], at: origin)
         let afterPush = try snapshot(origin)
         precondition(afterPush.ahead == 0, "推送后不应再领先")
 
-        // 5. 另一个克隆提交并推送 → 本地 behind = 1；拉取后工作区拿到新内容
+        // 5. 另一个克隆提交并推送 → fetch 检出 behind = 1；拉取后工作区拿到新内容
         try git(["clone", remote.path, peer.path], at: sandbox)
         try git(["config", "user.name", "Fixture"], at: peer)
         try git(["config", "user.email", "fixture@example.invalid"], at: peer)
@@ -91,25 +94,36 @@ struct GitPullPushChecks {
 
         let beforeFetch = try snapshot(origin)
         precondition(beforeFetch.behind == 0, "未 fetch 前还不知道落后")
-        try git(["fetch", "origin"], at: origin)
+        let fetchMessage = try GitLocalRepository.perform(.fetch, at: origin)
+        precondition(fetchMessage.contains("1"), "fetch 应提示发现 1 个新提交：\(fetchMessage)")
         let afterFetch = try snapshot(origin)
         precondition(afterFetch.behind == 1, "fetch 后应显示落后 1 个提交")
 
         // 6. 真正的拉取：必须更新 HEAD 与工作区，而不是只 fetch
-        try GitLocalRepository.perform(.pull(rebase: false), at: origin)
+        let pullMessage = try GitLocalRepository.perform(.pull(rebase: false), at: origin)
+        precondition(pullMessage.contains("1") && pullMessage.contains("feat: 远端提交"), "拉取应反馈新提交数量与最新提交：\(pullMessage)")
         let pulledText = try String(contentsOf: origin.appendingPathComponent("a.txt"), encoding: .utf8)
         precondition(pulledText == "from peer\n", "拉取必须把远端内容合并进工作区")
         let afterPull = try snapshot(origin)
         precondition(afterPull.ahead == 0 && afterPull.behind == 0 && afterPull.entries.isEmpty,
                      "拉取后应与远端同步且工作区干净")
 
-        // 7. 冲突场景：拉取失败要报错，且不能静默丢数据
+        // 6.1 无新提交时拉取：明确提示已是最新；存在本地未提交改动时明确说明无冲突
+        let upToDatePull = try GitLocalRepository.perform(.pull(rebase: false), at: origin)
+        precondition(upToDatePull.contains("已是最新"), "无新提交时不应只提示模糊的已拉取：\(upToDatePull)")
+        try write("local-only.txt", "dirty\n", at: origin)
+        let dirtyUpToDatePull = try GitLocalRepository.perform(.pull(rebase: false), at: origin)
+        precondition(dirtyUpToDatePull.contains("无冲突") && dirtyUpToDatePull.contains("本地未提交改动"),
+                     "存在本地改动且远端无更新时应明确说明无冲突：\(dirtyUpToDatePull)")
+        try fm.removeItem(at: origin.appendingPathComponent("local-only.txt"))
+
+        // 7. 冲突场景：拉取失败要报错并给出中文提示，且不能静默丢数据
         try write("a.txt", "local conflict\n", at: origin)
         try git(["commit", "-am", "feat: 本地冲突"], at: origin)
         try write("a.txt", "remote conflict\n", at: peer)
         try git(["commit", "-am", "feat: 远端冲突"], at: peer)
         try git(["push", "origin", "main"], at: peer)
-        expect({ $0.localizedDescription.contains("Git 操作失败") }) {
+        expect({ $0.localizedDescription.contains("合并冲突") }) {
             _ = try GitLocalRepository.perform(.pull(rebase: false), at: origin)
         }
         let conflicted = try snapshot(origin)
@@ -117,6 +131,17 @@ struct GitPullPushChecks {
                      "拉取冲突应保留可诊断状态，不能假装成功")
         try git(["merge", "--abort"], at: origin, allowFailure: true)
         try git(["reset", "--hard", "origin/main"], at: origin)
+
+        // 7.1 本地未提交改动会被远端覆盖时，应给出明确的中文中止原因
+        try write("a.txt", "remote overwrite\n", at: peer)
+        try git(["commit", "-am", "feat: 远端覆盖"], at: peer)
+        try git(["push", "origin", "main"], at: peer)
+        try write("a.txt", "uncommitted local edit\n", at: origin)
+        expect({ $0.localizedDescription.contains("本地未提交的改动会与远端更新冲突") }) {
+            _ = try GitLocalRepository.perform(.pull(rebase: false), at: origin)
+        }
+        try git(["checkout", "--", "a.txt"], at: origin)
+        try git(["pull", "--no-edit"], at: origin)
 
         // 8. 变基模式可用
         try write("a.txt", "remote rebase\n", at: peer)

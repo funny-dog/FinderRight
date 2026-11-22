@@ -1184,4 +1184,33 @@
 "需先在「功能 → 截图」中开启" = "Enable it first in Features → Screenshot";
 "全局生效，可在任意应用中唤起系统截图" = "Works globally to open system Screenshot from any app";
 
+/* Git 远程状态与拉取反馈 */
+"远端" = "remote";
+"已获取远端引用" = "Fetched remote refs";
+"已获取远端（%@）：本地领先 %d 个提交，落后 %d 个提交" = "Fetched (%1$@): %2$d ahead, %3$d behind";
+"已获取远端（%@）：发现 %d 个新提交可拉取" = "Fetched (%1$@): %2$d new commit(s) to pull";
+"已获取远端（%@）：本地领先 %d 个提交可推送" = "Fetched (%1$@): %2$d local commit(s) to push";
+"已获取远端（%@）：已是最新，无新提交" = "Fetched (%@): already up to date";
+"已是最新，远端无新提交（%@）" = "Already up to date; no new commits on %@";
+"远端无新提交（%@），当前仅有本地未提交改动，无冲突" = "No new commits on %@; only local uncommitted changes, no conflicts";
+"已从 %@ 拉取 %d 个新提交，本地改动无冲突（最新：%@）" = "Pulled %2$d new commit(s) from %1$@ with no conflicts with local changes (latest: %3$@)";
+"已从 %@ 拉取 %d 个新提交（最新：%@）" = "Pulled %2$d new commit(s) from %1$@ (latest: %3$@)";
+"已从 %@ 拉取更新，本地改动无冲突" = "Pulled updates from %@ with no conflicts with local changes";
+"已从 %@ 拉取更新" = "Pulled updates from %@";
+"已是最新，无需推送（%@）" = "Already up to date; nothing to push (%@)";
+"已推送 %d 个提交到 %@" = "Pushed %1$d commit(s) to %2$@";
+"已推送到 %@" = "Pushed to %@";
+"拉取产生合并冲突，请在上方标为「冲突」的文件中处理后暂存并提交" = "Pull caused merge conflicts; resolve the files marked Conflict above, then stage and commit.";
+"拉取已中止：本地未提交的改动会与远端更新冲突，请先提交或还原本地改动后再试" = "Pull aborted: your local uncommitted changes would be overwritten by remote updates; commit or discard them first.";
+"本地与远端提交已分叉，请使用变基拉取或在终端处理分叉" = "Local and remote commits have diverged; try pulling with rebase or resolve divergent branches in Terminal.";
+"无法连接或验证远程仓库，请检查网络、代理或凭据设置" = "Unable to connect to or authenticate with the remote repository; check your network, proxy, or credentials.";
+"存在合并冲突" = "Merge conflicts";
+"远端有 %d 个新提交可拉取" = "%d new remote commit(s) to pull";
+"本地有 %d 个提交可推送" = "%d local commit(s) to push";
+"未关联上游" = "No upstream";
+"仅本地" = "Local only";
+"检查远端" = "Fetch";
+"获取远端最新提交状态（不修改本地文件）" = "Fetch remote branch status without modifying local files";
+"改用变基拉取" = "Pull with Rebase";
+
 

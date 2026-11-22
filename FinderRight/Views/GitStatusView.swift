@@ -273,8 +273,13 @@ final class GitStatusModel: ObservableObject {
             DispatchQueue.main.async { [self] in
                 isPerforming = false
                 switch result {
-                case .success:
-                    actionMessage = NSLocalizedString(success, comment: "")
+                case .success(let output):
+                    switch action {
+                    case .fetch, .pull, .push:
+                        actionMessage = output.isEmpty ? NSLocalizedString(success, comment: "") : output
+                    case .stage, .unstage, .switchBranch, .createBranch, .commit:
+                        actionMessage = NSLocalizedString(success, comment: "")
+                    }
                     if case .commit = action { commitPreview = nil; commitMessage = "" }
                     onSuccess()
                 case .failure(let error): actionError = error.localizedDescription
@@ -417,24 +422,71 @@ struct GitStatusView: View {
                     Text(verbatim: model.snapshot?.root.lastPathComponent ?? NSLocalizedString("Git 状态", comment: ""))
                         .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     if let snapshot = model.snapshot {
-                        Menu {
-                            ForEach(snapshot.localBranches, id: \.self) { branch in
-                                Button { model.perform(.switchBranch(branch), success: "已切换分支") } label: {
-                                    if branch == snapshot.branch { Label(branch, systemImage: "checkmark") }
-                                    else { Text(verbatim: branch) }
+                        HStack(spacing: 6) {
+                            Menu {
+                                ForEach(snapshot.localBranches, id: \.self) { branch in
+                                    Button { model.perform(.switchBranch(branch), success: "已切换分支") } label: {
+                                        if branch == snapshot.branch { Label(branch, systemImage: "checkmark") }
+                                        else { Text(verbatim: branch) }
+                                    }
+                                    .disabled(branch == snapshot.branch)
                                 }
-                                .disabled(branch == snapshot.branch)
+                                Divider()
+                                Button("新建分支…") { showingNewBranch = true }
+                            } label: {
+                                Label(snapshot.branch, systemImage: "arrow.triangle.branch")
+                                    .font(.system(size: 11)).foregroundColor(FRTheme.accentText).lineLimit(1)
                             }
-                            Divider()
-                            Button("新建分支…") { showingNewBranch = true }
-                        } label: {
-                            Label(snapshot.branch, systemImage: "arrow.triangle.branch")
-                                .font(.system(size: 11)).foregroundColor(FRTheme.accentText).lineLimit(1)
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                            .disabled(model.isLoading || model.isPerforming)
+                            .help("切换本地分支")
+
+                            if model.hasConflicts {
+                                statusBadge(NSLocalizedString("存在合并冲突", comment: ""),
+                                            foreground: FRTheme.danger,
+                                            background: FRTheme.danger.opacity(0.14))
+                            }
+                            if let upstream = snapshot.upstream {
+                                Text(verbatim: "→ " + upstream)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(FRTheme.mute)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if snapshot.behind > 0 {
+                                    statusBadge("↓\(snapshot.behind)",
+                                                foreground: FRTheme.warnText,
+                                                background: FRTheme.warnBackground)
+                                        .help(Text(verbatim: String(format: NSLocalizedString("远端有 %d 个新提交可拉取", comment: ""), snapshot.behind)))
+                                }
+                                if snapshot.ahead > 0 {
+                                    statusBadge("↑\(snapshot.ahead)",
+                                                foreground: FRTheme.accentText,
+                                                background: FRTheme.selection)
+                                        .help(Text(verbatim: String(format: NSLocalizedString("本地有 %d 个提交可推送", comment: ""), snapshot.ahead)))
+                                }
+                            } else if snapshot.hasRemote {
+                                Text("未关联上游")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(FRTheme.mute)
+                                    .lineLimit(1)
+                            } else {
+                                Text("仅本地")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(FRTheme.mute)
+                                    .lineLimit(1)
+                            }
+                            if snapshot.hasRemote {
+                                Button("检查远端") {
+                                    model.perform(.fetch, success: NSLocalizedString("已获取远端引用", comment: ""))
+                                }
+                                .buttonStyle(.frLink)
+                                .font(.system(size: 11))
+                                .fixedSize()
+                                .disabled(model.isLoading || model.isPerforming)
+                                .help("获取远端最新提交状态（不修改本地文件）")
+                            }
                         }
-                        .menuStyle(.borderlessButton)
-                        .frame(maxWidth: 220, alignment: .leading)
-                        .disabled(model.isLoading || model.isPerforming)
-                        .help("切换本地分支")
                     }
                 }
                 .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -466,6 +518,16 @@ struct GitStatusView: View {
             .keyboardShortcut("r", modifiers: .command)
         }
         .padding(12)
+    }
+
+    private func statusBadge(_ text: String, foreground: Color, background: Color) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(foreground)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(RoundedRectangle(cornerRadius: 4).fill(background))
+            .fixedSize()
     }
 
     private var actionBar: some View {
@@ -801,14 +863,30 @@ struct GitActionFeedback: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 10)
         } else if let error = model.actionError {
-            ScrollView {
-                Text(verbatim: error).font(.system(size: 11)).foregroundColor(FRTheme.danger)
-                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                ScrollView {
+                    Text(verbatim: error).font(.system(size: 11)).foregroundColor(FRTheme.danger)
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 72)
+                if error.lowercased().contains("divergent branches")
+                    || error.lowercased().contains("diverging branches")
+                    || error.contains("变基拉取") {
+                    Button("改用变基拉取") {
+                        model.perform(.pull(rebase: true), success: NSLocalizedString("已拉取", comment: ""))
+                    }
+                    .buttonStyle(.frLink)
+                    .font(.system(size: 11))
+                    .disabled(model.isLoading || model.isPerforming)
+                }
             }
-            .frame(maxHeight: 72).padding(.horizontal, 12).padding(.bottom, 10)
+            .padding(.horizontal, 12).padding(.bottom, 10)
         } else if let message = model.actionMessage {
             Text(verbatim: message).font(.system(size: 11)).foregroundColor(FRTheme.okText)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.bottom, 10)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12).padding(.bottom, 10)
         }
     }
 }
