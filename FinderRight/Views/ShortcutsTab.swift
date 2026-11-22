@@ -431,10 +431,11 @@ struct ShortcutCell: View {
 
 enum ServiceShortcutSync {
     static let showsServicesMenuKey = "showServicesMenu"
+    static let defaultShowsServicesMenu = false
     /// 最近一次真正改写 pbs 的时间；访达早于它启动就说明还没读到新快捷键
     private static let syncedAtKey = "serviceShortcutsSyncedAt"
 
-    /// 同步服务快捷键及用户明确设置过的菜单显示状态，返回是否有变化。
+    /// 同步服务快捷键及菜单显示状态（默认在「服务」中隐藏），返回是否有变化。
     @discardableResult
     static func run() -> Bool {
         var shortcuts = SharedConfig.shared.shortcuts
@@ -442,13 +443,13 @@ enum ServiceShortcutSync {
             // 全局热键独占入口，移除服务回退，避免同一组合触发两次。
             shortcuts.removeValue(forKey: FinderKeyTakeover.goToDirectoryActionId)
         }
-        let showsMenu = UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool
+        let showsMenu = (UserDefaults.standard.object(forKey: showsServicesMenuKey) as? Bool) ?? defaultShowsServicesMenu
         var developerVisibility: [String: Bool] = [:]
         for id in MenuFeatureCatalog.developerFeatureIds {
             let enabled = SharedConfig.shared.isActionEnabled(id)
             if !enabled { shortcuts.removeValue(forKey: id.replacingOccurrences(of: "feature.", with: "shortcut.")) }
             for service in MenuFeatureCatalog.feature(forId: id)?.serviceDeclarations ?? [] {
-                developerVisibility[service.message] = enabled && showsMenu != false
+                developerVisibility[service.message] = enabled && showsMenu
             }
         }
         guard let bundleId = Bundle.main.bundleIdentifier,

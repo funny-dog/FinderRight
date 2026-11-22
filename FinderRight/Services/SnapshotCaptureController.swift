@@ -832,10 +832,10 @@ private final class SnapshotToolbarView: NSView {
         stack.spacing = 4
         stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
 
-        stack.addArrangedSubview(copyButton)
-        stack.addArrangedSubview(saveGroup)
-        stack.addArrangedSubview(makeDivider(alpha: 0.18))
         stack.addArrangedSubview(cancelButton)
+        stack.addArrangedSubview(makeDivider(alpha: 0.18))
+        stack.addArrangedSubview(saveGroup)
+        stack.addArrangedSubview(copyButton)
 
         addSubview(stack)
     }

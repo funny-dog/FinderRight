@@ -25,6 +25,7 @@ private final class DialogTestApplication: NSApplication {
 @main
 struct GlobalDirectoryShortcutTests {
     static func main() throws {
+        precondition(!ServiceShortcutSync.defaultShowsServicesMenu, "在服务中显示 FinderRight 应默认关闭")
         let application = DialogTestApplication.shared as! DialogTestApplication
         application.setActivationPolicy(.prohibited)
         let delegate = AppDelegate()

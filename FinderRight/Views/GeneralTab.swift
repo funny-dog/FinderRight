@@ -8,7 +8,7 @@ struct GeneralTab: View {
     @AppStorage(UpdateChecker.automaticUpdatesKey) private var automaticUpdates = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @AppStorage("showDockIcon") private var showDockIcon = false
-    @AppStorage(ServiceShortcutSync.showsServicesMenuKey) private var showServicesMenu = true
+    @AppStorage(ServiceShortcutSync.showsServicesMenuKey) private var showServicesMenu = ServiceShortcutSync.defaultShowsServicesMenu
     @FRState private var servicesMenuNeedsRestart = ServiceShortcutSync.finderNeedsRelaunch
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage

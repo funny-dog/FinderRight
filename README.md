@@ -41,7 +41,7 @@
 - 👁 **切换隐藏文件** —— 一键显示或隐藏隐藏文件，即时生效无需重启 Finder。
 - ↩️ **撤销** —— 按 ⌘Z 即可撤销上一次移动、剪切、新建或压缩等操作。
 - 📋 **轻量剪贴板** —— 在本地记录近期复制的文本、图片与文件，支持快捷键唤起、分栏预览和拖放使用。
-- 📸 **快速截图**（默认关闭）—— 通过菜单栏或自定义全局快捷键直接唤起系统原生截图面板（⌘⇧5），无需额外录制权限。
+- 📸 **快速截图**（默认关闭）—— 支持在系统原生截图面板与 FinderRight 瞬时快照之间切换，框选后可直接复制或保存到常用目录。
 - 🕘 **操作历史** —— 按日期记录每次操作的结果与失败原因，支持搜索、筛选和在访达中定位。
 - ☁️ **云盘里也能用** —— 在 iCloud、Google Drive 等云盘目录中通过右键「服务」菜单使用各项操作。
 - 🪟 **简洁模式** —— 点击设置窗口右上角即可收拢为可拖动的紧凑小窗并记住状态，随时还原完整视图。
@@ -132,7 +132,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - 粘贴：剪切后在目标目录空白处选「服务 → FinderRight：粘贴到此文件夹」；若空白处没有「服务」，可回到上一级右键目标文件夹。它移动的是 FinderRight 的剪切队列，而不是系统剪贴板。
 - 新建文件、移动到 / 复制到会先弹确认框；取消不会操作文件。
 - 「服务」菜单标题跟随系统语言，不随 FinderRight 的界面语言切换。
-- 可在「设置 → 通用 → 显示」切换 **在「服务」中显示 FinderRight**，统一显示或隐藏全部服务项（默认显示）。若访达仍显示旧菜单，可点击「重启访达」刷新；重启可能中断正在进行的拷贝。
+- 可在「设置 → 通用 → 显示」切换 **在「服务」中显示 FinderRight**，统一显示或隐藏全部服务项（默认关闭）。若访达仍显示旧菜单，可点击「重启访达」刷新；重启可能中断正在进行的拷贝。
 
 </details>
 
@@ -219,7 +219,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 👁 **Toggle Hidden Files** — Show or hide hidden files instantly without restarting Finder.
 - ↩️ **Undo** — Press ⌘Z to undo your last move, cut, new file, or compression action.
 - 📋 **Lightweight Clipboard** — Keep a local history of recently copied text, images, and files, ready for quick preview, clicking, or drag-and-drop.
-- 📸 **Quick Screenshot** (off by default) — Launch the native macOS Screenshot panel (⌘⇧5) from the menu bar or a global shortcut without extra recording permissions.
+- 📸 **Quick Screenshot** (off by default) — Switch between the macOS Screenshot panel and FinderRight instant snapshots, then copy or save selections directly to favorite folders.
 - 🕘 **Operation History** — Review past action results and errors by date, with search, filtering, and Finder reveal.
 - ☁️ **Works in Cloud Folders** — Access FinderRight actions inside iCloud Drive, Google Drive, and other cloud folders via right-click → Services.
 - 🪟 **Compact Mode** — Collapse Settings into a small draggable window that remembers your preferred layout.
@@ -312,7 +312,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - Paste: after cutting, right-click empty space in the destination and choose "Services → FinderRight: Paste into This Folder"; if Services is missing there, right-click the destination folder from its parent. It moves FinderRight's cut queue, not the system clipboard.
 - New File and Move To / Copy To show a confirmation dialog first; cancelling does nothing.
 - Service titles follow the system language, not FinderRight's language setting.
-- In Settings → General → Display, use “Show FinderRight in Services” to show or hide all service items (shown by default). If Finder still shows the old menu, click “Relaunch Finder” to refresh it; relaunching may interrupt copies in progress.
+- In Settings → General → Display, use “Show FinderRight in Services” to show or hide all service items (off by default). If Finder still shows the old menu, click “Relaunch Finder” to refresh it; relaunching may interrupt copies in progress.
 
 </details>
 
