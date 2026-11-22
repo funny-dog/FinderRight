@@ -27,24 +27,24 @@
 
 ### ✨ 功能
 
-- 📄 **新建文件** —— txt / Markdown / Python / JSON 等常用文本，空白 Word / Excel / PowerPoint，以及自定义模板；支持从剪贴板新建文本或 PNG/JPEG/HEIC 图片（包括在 Finder 中复制的单张图片文件），在「设置 → 文件模板」中开关（默认开启）
-- ✂️ **剪切 / 粘贴** —— 补上 Finder 缺失的剪切，⌘X / ⌘V 直接用，粘贴时才真正移动；右键「已剪切 N 项…」可弹窗查看待剪切项目并逐项移除
-- 💻 **打开终端 / 编辑器** —— 可自定义终端 / 编辑器
-- 📋 **复制路径 / 文件名 / 文件内容** —— 支持设置各种格式的路径 / 文件名可选择是否带后缀
-- 💾 **查看磁盘占用** —— 在访达空白处或单选文件/文件夹时，在右键菜单顶部查看占用大小，点击文件夹或空白处可查看直属子项占用排行；设置「功能 → 显示大小」可关闭（默认开启）
-- 📂 **打开路径** —— 默认 ⇧⌘G 在 Finder 中唤起，替代系统「前往文件夹」，粘贴路径即可定位或打开；在设置「功能 → 打开路径」可选「全局生效」（默认关闭），从其他应用唤起
-- 📁 **移动到 / 复制到** —— 一键把选中项送到常用目录，可按最近使用排序
-- 🛠 **开发者工具**（默认关闭）—— 复制哈希（SHA-256 / SHA-1 / MD5）、创建符号链接、复制项目相对路径、复制目录树、内置文件比较、本地 Git 状态，以及对文件 / 目录执行自定义命令；各项直接显示在常规菜单之后，在「设置 → 开发者工具」中单独开关和拖动排序。命令支持多选，可查看、复制输出和停止执行
-- 🖼️ **图片快速转换 / 缩放** —— 转换为 PNG / JPEG / HEIC，或按长边等比缩放至 2560px / 1920px / 1280px / 800px；仅在选中项全为图片时显示，支持批量与撤销
-- 📦 **压缩 / 解压** —— 默认关闭：ZIP 使用 UTF-8 文件名
-- 👀 **扩展空格预览** —— 系统自带的快速查看（空格快捷键）增强，支持大多数格式，包括文件夹和压缩包等等，markdown支持渲染
-- 👁 **切换隐藏文件** —— 即时生效，不重启 Finder
-- ↩️ **撤销** —— ⌘Z 撤销上一次移动、剪切、新建、压缩等操作
-- 📋 **轻量剪贴板**（默认开启）—— 在「设置 → 功能」可开关，在本机记录最近 5 / 10 / 15 / 20 条复制的文本、图片与文件；支持状态栏菜单或全局快捷键唤起，可在弹窗内切换条数、固定窗口与左右分栏详情预览，点击复制、直接拖入其他应用，或将文件拖入面板加入剪贴板；退出应用后仍保留（不纳入系统备份），关闭或清空时同步删除磁盘数据
-- 📸 **快速截图**（默认关闭）—— 在「设置 → 功能」开启后，通过状态栏菜单或自定义全局快捷键直接唤起系统原生截图面板（⌘⇧5），无需额外录制权限
-- 🕘 **操作历史** —— 按日期查看每次操作的结果与失败原因，可搜索、筛选、在访达中定位
-- ☁️ **云盘里也能用** —— iCloud / Google Drive 等目录通过右键「服务」菜单使用
-- **简洁模式** —— 点击设置窗口右上角的胶囊按钮，收拢为固定大小、可拖动的小窗口；再次点击恢复完整设置，自动记住所选模式
+- 📄 **新建文件** —— 一键创建常用文本、空白 Office 文档、自定义模板，或直接从剪贴板新建文本与图片。
+- ✂️ **剪切 / 粘贴** —— 补齐 Finder 缺失的 ⌘X / ⌘V 剪切功能，粘贴时才移动文件，并支持查看和移除待剪切项。
+- 💻 **打开终端 / 编辑器** —— 在当前目录快速打开自定义终端或代码编辑器。
+- 📋 **复制路径 / 文件名 / 文件内容** —— 支持多种路径格式与可选扩展名，也能直接复制文件内容。
+- 💾 **查看磁盘占用** —— 在右键菜单顶部实时显示文件或文件夹大小，点击可查看子项占用排行。
+- 📂 **打开路径** —— 默认按 ⇧⌘G 替代系统「前往文件夹」，粘贴路径即可定位或打开，也支持设为全局唤起。
+- 📁 **移动到 / 复制到** —— 一键将选中项送到常用目录，并支持按最近使用排序。
+- 🛠 **开发者工具**（默认关闭）—— 集成复制哈希、符号链接、项目相对路径、目录树、文件比较、本地 Git 状态和自定义命令，可单独开关与排序。
+- 🖼️ **图片快速转换 / 缩放** —— 选中图片时可批量转换格式（PNG / JPEG / HEIC）或按常用尺寸等比缩放，并支持撤销。
+- 📦 **压缩 / 解压**（默认关闭）—— 快速打包含 UTF-8 文件名的 ZIP 压缩包，或直接解压常见归档文件。
+- 👀 **扩展空格预览** —— 增强系统快速查看，按空格即可预览文件夹、压缩包、源码配置和渲染后的 Markdown。
+- 👁 **切换隐藏文件** —— 一键显示或隐藏隐藏文件，即时生效无需重启 Finder。
+- ↩️ **撤销** —— 按 ⌘Z 即可撤销上一次移动、剪切、新建或压缩等操作。
+- 📋 **轻量剪贴板** —— 在本地记录近期复制的文本、图片与文件，支持快捷键唤起、分栏预览和拖放使用。
+- 📸 **快速截图**（默认关闭）—— 通过菜单栏或自定义全局快捷键直接唤起系统原生截图面板（⌘⇧5），无需额外录制权限。
+- 🕘 **操作历史** —— 按日期记录每次操作的结果与失败原因，支持搜索、筛选和在访达中定位。
+- ☁️ **云盘里也能用** —— 在 iCloud、Google Drive 等云盘目录中通过右键「服务」菜单使用各项操作。
+- 🪟 **简洁模式** —— 点击设置窗口右上角即可收拢为可拖动的紧凑小窗并记住状态，随时还原完整视图。
 - ⌨️ **自定义快捷键与菜单顺序**，🌗 **中英双语**，🔄 **应用内自动更新**
 
 ### 📸 截图
@@ -205,24 +205,24 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 ### ✨ Features
 
-- 📄 **New File** — common text files (txt / Markdown / Python / JSON…), blank Word / Excel / PowerPoint, and your own templates; create text files or PNG/JPEG/HEIC images from the clipboard, including a single image file copied in Finder; enabled by default in Settings → File Templates
-- ✂️ **Cut / Paste** — the cut that Finder lacks; use ⌘X / ⌘V, files only move when you paste; right-click “N Item(s) Cut…” to inspect queued items and remove them individually
-- 💻 **Open in Terminal / Editor** — customize your terminal and editor
-- 📋 **Copy Path / File Name / File Content** — choose from various path formats and whether file names include extensions
-- 💾 **Disk Usage** — see the size at the top of Finder’s right-click menu for empty areas or a selected file/folder, and click folders to view direct children breakdown; turn it off in Settings → Features → Show Size (on by default)
-- 📂 **Open Path** — press ⇧⌘G in Finder by default to replace Go to Folder, then paste a path to reveal or open it; optionally enable “Use Globally” in Settings → Features → Open Path (off by default) to invoke it from other apps
-- 📁 **Move To / Copy To** — send the selection to a favorite folder in one click, optionally sorted by recent use
-- 🛠 **Developer Tools** (off by default) — copy file hashes (SHA-256 / SHA-1 / MD5), create symbolic links, copy project-relative paths and directory trees, compare text files in a built-in window, view local Git status, or run custom commands on files and folders. Actions appear directly after the regular menu; toggle and reorder them separately in Settings → Developer Tools. Commands support multiple items, output viewing and copying, and stopping
-- 🖼️ **Image Convert / Scale** — convert to PNG / JPEG / HEIC, or scale proportionally by long edge to 2560px / 1920px / 1280px / 800px; shown only when all selected items are images, with batch support and undo
-- 📦 **Compress / Extract** — off by default; ZIPs use UTF-8 filenames
-- 👀 **Extended Quick Look previews** — enhance the built-in Quick Look (Space bar) with support for most formats, including folders and archives, plus rendered Markdown
-- 👁 **Toggle Hidden Files** — instant, no Finder restart
-- ↩️ **Undo** — ⌘Z undoes the last move, cut, new file, compress and more
-- 📋 **Lightweight Clipboard** (on by default) — toggle in Settings → Features to save the last 5 / 10 / 15 / 20 copied text, image, or file items locally across app restarts (excluded from system backups); open from the menu bar or a global shortcut, adjust the limit, pin the window, or toggle the detail preview pane inside the popup, click to copy, drag into other apps, or drop files into the panel to add them to the clipboard; cleared from disk when turned off or cleared
-- 📸 **Quick Screenshot** (off by default) — enable in Settings → Features to launch the native macOS Screenshot panel (⌘⇧5) from the menu bar or a custom global shortcut, with no extra recording permission required
-- 🕘 **Operation History** — review each action's result or failure reason by date; search, filter and reveal in Finder
-- ☁️ **Works in cloud folders** — use it in iCloud / Google Drive via the right-click Services menu
-- **Compact mode** — click the capsule at the top right of Settings to fold it into a small, fixed-size window you can drag; click again to restore full settings. Your choice is remembered.
+- 📄 **New File** — Create common text files, blank Office documents, custom templates, or new text and image files straight from the clipboard.
+- ✂️ **Cut / Paste** — Bring ⌘X / ⌘V cut-and-paste to Finder, moving files only on paste with a queue viewer to inspect or remove items.
+- 💻 **Open in Terminal / Editor** — Open the current location directly in your preferred terminal or code editor.
+- 📋 **Copy Path / File Name / File Content** — Copy paths in multiple formats, file names with or without extensions, or file contents directly.
+- 💾 **Disk Usage** — View file or folder sizes right at the top of Finder’s right-click menu, with a drill-down breakdown of direct children.
+- 📂 **Open Path** — Replace Go to Folder (⇧⌘G by default) to jump to or open any pasted path, with an option to invoke it globally.
+- 📁 **Move To / Copy To** — Send selected items to favorite folders in one click, optionally sorted by recent use.
+- 🛠 **Developer Tools** (off by default) — Copy hashes, create symlinks, copy relative paths or directory trees, compare files, manage local Git status, and run custom commands, each toggleable and reorderable.
+- 🖼️ **Image Convert / Scale** — Batch convert selected images (PNG / JPEG / HEIC) or resize them proportionally to preset dimensions, with undo support.
+- 📦 **Compress / Extract** (off by default) — Create UTF-8 ZIP archives or extract common archive formats directly from the menu.
+- 👀 **Extended Quick Look Previews** — Enhance Space-bar Quick Look to inspect folders, archives, source/config files, and rendered Markdown.
+- 👁 **Toggle Hidden Files** — Show or hide hidden files instantly without restarting Finder.
+- ↩️ **Undo** — Press ⌘Z to undo your last move, cut, new file, or compression action.
+- 📋 **Lightweight Clipboard** — Keep a local history of recently copied text, images, and files, ready for quick preview, clicking, or drag-and-drop.
+- 📸 **Quick Screenshot** (off by default) — Launch the native macOS Screenshot panel (⌘⇧5) from the menu bar or a global shortcut without extra recording permissions.
+- 🕘 **Operation History** — Review past action results and errors by date, with search, filtering, and Finder reveal.
+- ☁️ **Works in Cloud Folders** — Access FinderRight actions inside iCloud Drive, Google Drive, and other cloud folders via right-click → Services.
+- 🪟 **Compact Mode** — Collapse Settings into a small draggable window that remembers your preferred layout.
 - ⌨️ **Custom shortcuts and menu order**, 🌗 **English & Chinese**, 🔄 **in-app auto-update**
 
 ### 📸 Screenshots
