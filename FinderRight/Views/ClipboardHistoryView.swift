@@ -234,7 +234,8 @@ struct ClipboardHistoryView: View {
 
             Spacer(minLength: 6)
 
-            Picker("记录条数", selection: Binding(
+            let limitPreset = ClipboardHistoryLimitPreset(rawValue: service.limit) ?? .five
+            FRPicker(label: "记录条数", titleKey: limitPreset.titleKey, selection: Binding(
                 get: { ClipboardHistoryLimitPreset(rawValue: service.limit) ?? .five },
                 set: { service.setLimit($0.rawValue) }
             )) {
@@ -242,10 +243,7 @@ struct ClipboardHistoryView: View {
                     Text(LocalizedStringKey(preset.titleKey)).tag(preset)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
             .controlSize(.small)
-            .fixedSize()
             .help("记录条数")
 
             headerIconButton(

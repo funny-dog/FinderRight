@@ -53,7 +53,8 @@ struct CompactSettingsView: View {
 
     private var appearanceRow: some View {
         FRRow(title: Text("深色模式")) {
-            FRPicker(label: "深色模式", selection: Binding(
+            let appearance = FRAppearanceMode(rawValue: appearanceRaw) ?? .system
+            FRPicker(label: "深色模式", titleKey: appearance.titleKey, selection: Binding(
                 get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
                 set: { newValue in
                     appearanceRaw = newValue.rawValue
@@ -72,7 +73,7 @@ struct CompactSettingsView: View {
             HStack(spacing: 8) {
                 MenuIconPreview(style: menuIconStyle, maxCount: 1)
 
-                FRPicker(label: "右键菜单图标", selection: Binding(
+                FRPicker(label: "右键菜单图标", titleKey: menuIconStyle.titleKey, selection: Binding(
                     get: { menuIconStyle },
                     set: { newValue in
                         menuIconStyle = newValue

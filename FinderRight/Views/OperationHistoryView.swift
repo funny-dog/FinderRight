@@ -63,7 +63,7 @@ struct OperationHistoryView: View {
             // 记录新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果
             FRRow(title: Text("保留历史记录")) {
                 HStack(spacing: 10) {
-                    FRPicker(label: "保留历史记录", selection: Binding(
+                    FRPicker(label: "保留历史记录", title: savedLimitTitle, selection: Binding(
                         get: { savedLimit },
                         set: { setLimit($0) }
                     )) {
@@ -112,7 +112,7 @@ struct OperationHistoryView: View {
                     resultSummary(visibleCount)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    FRPicker(label: "操作状态", selection: $filter.status) {
+                    FRPicker(label: "操作状态", titleKey: filter.status.titleKey, selection: $filter.status) {
                         ForEach(OperationHistoryFilter.Status.allCases, id: \.self) { status in
                             Text(LocalizedStringKey(status.titleKey)).tag(status)
                         }
@@ -159,11 +159,22 @@ struct OperationHistoryView: View {
     private var kindFilter: some View {
         let present = Set(records.map(\.kind))
         let kinds = OperationHistoryFilter.kinds.filter { present.contains($0) || $0 == filter.kind }
-        return FRPicker(label: "操作类型", selection: $filter.kind) {
+        let title = filter.kind.map { Text(verbatim: OperationHistoryPresentation.actionTitle($0)) } ?? Text("全部操作")
+        return FRPicker(label: "操作类型", title: title, selection: $filter.kind) {
             Text("全部操作").tag(Optional<OperationRecord.Kind>.none)
             ForEach(kinds, id: \.self) { kind in
                 Text(verbatim: OperationHistoryPresentation.actionTitle(kind)).tag(Optional(kind))
             }
+        }
+    }
+
+    private var savedLimitTitle: Text {
+        switch savedLimit {
+        case 0: return Text("不保留")
+        case 50: return Text("最近 50 条")
+        case 100: return Text("最近 100 条")
+        case 500: return Text("最近 500 条")
+        default: return Text("最近 \(savedLimit) 条")
         }
     }
 

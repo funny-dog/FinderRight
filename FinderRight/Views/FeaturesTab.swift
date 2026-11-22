@@ -61,6 +61,10 @@ struct FeaturesTab: View {
         }
         .onAppear {
             featureOrder = MenuFeatureCatalog.ordered(by: SharedConfig.shared.menuOrder).filter { !MenuFeatureCatalog.developerFeatureIds.contains($0.id) }
+            screenshotService.refreshPermission()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            screenshotService.refreshPermission()
         }
     }
 
@@ -153,14 +157,51 @@ struct FeaturesTab: View {
 
     // MARK: 截图
 
+    private var screenshotModeSubtitle: LocalizedStringKey {
+        switch screenshotService.mode {
+        case .system:
+            return LocalizedStringKey("唤起 macOS 原生截图面板（⌘⇧5），无需屏幕录制权限。")
+        case .snapshot:
+            return LocalizedStringKey("按下瞬间定格当前屏幕，框选后可直接复制或保存到常用目录。")
+        }
+    }
+
     private var screenshotSection: some View {
         FRSection("截图") {
             FRCard {
                 FRRow(title: Text("启用截图"),
-                      subtitle: Text("默认关闭。开启后可从菜单栏或自定义全局快捷键直接唤起系统截图面板（⌘⇧5），无需额外录制权限。")) {
+                      subtitle: Text("默认关闭。开启后可从菜单栏或自定义全局快捷键快速截图。")) {
                     FRSwitch(label: "启用截图", isOn: Binding(
                         get: { screenshotService.isEnabled },
                         set: { screenshotService.setEnabled($0) }))
+                }
+
+                if screenshotService.isEnabled {
+                    FRDivider()
+                    FRRow(title: Text("截图方式"), subtitle: Text(screenshotModeSubtitle)) {
+                        FRSegmentedPicker(
+                            label: "截图方式",
+                            selection: Binding(
+                                get: { screenshotService.mode },
+                                set: { screenshotService.setMode($0) }
+                            ),
+                            ScreenshotMode.allCases,
+                            titleKey: \.titleKey
+                        )
+                    }
+
+                    if screenshotService.mode == .snapshot && !screenshotService.hasScreenCaptureAccess {
+                        FRDivider()
+                        FRRow(title: Text("需要「屏幕录制」权限"),
+                              subtitle: Text("用于抓取当前屏幕静态快照；未授权时无法截取其他应用窗口。")) {
+                            HStack(spacing: 8) {
+                                Button("重新检测") { screenshotService.refreshPermission() }
+                                    .buttonStyle(.frSecondary)
+                                Button("授权屏幕录制…") { screenshotService.requestScreenCapturePermission() }
+                                    .buttonStyle(.frPrimary)
+                            }
+                        }
+                    }
                 }
 
                 if let message = screenshotService.errorMessage {
@@ -255,7 +296,7 @@ struct FeaturesTab: View {
         FRSection("复制路径") {
             FRCard {
                 FRRow(title: Text("复制格式")) {
-                    FRPicker(label: "复制格式", selection: Binding(
+                    FRPicker(label: "复制格式", titleKey: copyPathFormat.titleKey, selection: Binding(
                         get: { copyPathFormat },
                         set: { newValue in
                             copyPathFormat = newValue
@@ -298,17 +339,18 @@ struct FeaturesTab: View {
         FRSection("复制文件名") {
             FRCard {
                 FRRow(title: Text("复制格式")) {
-                    FRPicker(label: "复制格式", selection: Binding(
-                        get: { copyFileNameFormat },
-                        set: { newValue in
-                            copyFileNameFormat = newValue
-                            SharedConfig.shared.copyFileNameFormat = newValue
-                        }
-                    )) {
-                        ForEach(CopyFileNameFormat.allCases) { format in
-                            Text(LocalizedStringKey(format.titleKey)).tag(format)
-                        }
-                    }
+                    FRSegmentedPicker(
+                        label: "复制格式",
+                        selection: Binding(
+                            get: { copyFileNameFormat },
+                            set: { newValue in
+                                copyFileNameFormat = newValue
+                                SharedConfig.shared.copyFileNameFormat = newValue
+                            }
+                        ),
+                        CopyFileNameFormat.allCases,
+                        titleKey: \.titleKey
+                    )
                 }
 
                 FRDivider()
@@ -339,7 +381,8 @@ struct FeaturesTab: View {
         FRSection("复制文件内容") {
             FRCard {
                 FRRow(title: Text("文件大小上限"), subtitle: Text("仅在单选常规文件且大小在上限内时显示菜单项")) {
-                    FRPicker(label: "文件大小上限", selection: Binding(
+                    let selectedPreset = CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
+                    FRPicker(label: "文件大小上限", titleKey: selectedPreset.titleKey, selection: Binding(
                         get: {
                             CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
                         },

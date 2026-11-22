@@ -23,7 +23,7 @@ struct EditorsTab: View {
             FRSection("默认编辑器") {
                 FRCard {
                     FRRow(title: Text("默认编辑器")) {
-                        FRPicker(label: "默认编辑器", selection: Binding(
+                        FRPicker(label: "默认编辑器", title: selectedEditorTitle, selection: Binding(
                             get: { defaultId },
                             set: { newValue in
                                 defaultId = newValue
@@ -76,6 +76,13 @@ struct EditorsTab: View {
             }
         }
         .onAppear(perform: reload)
+    }
+
+    private var selectedEditorTitle: Text {
+        if let editor = editors.first(where: { $0.id == defaultId }) {
+            return Text(verbatim: editor.name)
+        }
+        return Text("跟随系统")
     }
 
     private func row(_ editor: KnownEditor) -> some View {

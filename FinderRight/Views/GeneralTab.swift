@@ -73,7 +73,8 @@ struct GeneralTab: View {
                 FRDivider()
 
                 FRRow(title: Text("深色模式")) {
-                    FRPicker(label: "深色模式", selection: Binding(
+                    let appearance = FRAppearanceMode(rawValue: appearanceRaw) ?? .system
+                    FRPicker(label: "深色模式", titleKey: appearance.titleKey, selection: Binding(
                         get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
                         set: { newValue in
                             appearanceRaw = newValue.rawValue
@@ -89,7 +90,7 @@ struct GeneralTab: View {
                 FRDivider()
 
                 FRRow(title: Text("语言")) {
-                    FRPicker(label: "语言", selection: Binding(
+                    FRPicker(label: "语言", title: appLanguageTitle, selection: Binding(
                         get: { appLanguage },
                         set: { changeLanguage(to: $0) }
                     )) {
@@ -105,7 +106,7 @@ struct GeneralTab: View {
                     HStack(spacing: 12) {
                         MenuIconPreview(style: menuIconStyle)
 
-                        FRPicker(label: "右键菜单图标", selection: Binding(
+                        FRPicker(label: "右键菜单图标", titleKey: menuIconStyle.titleKey, selection: Binding(
                             get: { menuIconStyle },
                             set: { newValue in
                                 menuIconStyle = newValue
@@ -179,6 +180,14 @@ struct GeneralTab: View {
     }
 
     // MARK: 行为
+
+    private var appLanguageTitle: Text {
+        switch appLanguage {
+        case "zh-Hans": return Text(verbatim: "中文")
+        case "en": return Text(verbatim: "English")
+        default: return Text("跟随系统")
+        }
+    }
 
     private func changeLanguage(to newValue: String) {
         guard newValue != appLanguage else { return }

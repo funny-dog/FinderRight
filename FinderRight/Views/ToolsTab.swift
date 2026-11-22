@@ -19,7 +19,7 @@ struct ToolsTab: View {
             FRSection("默认终端") {
                 FRCard {
                     FRRow(title: Text("默认终端")) {
-                        FRPicker(label: "默认终端", selection: Binding(
+                        FRPicker(label: "默认终端", title: selectedTerminalTitle, selection: Binding(
                             get: { selectedTerminalBundleId },
                             set: { newValue in
                                 let config = SharedConfig.shared
@@ -78,6 +78,13 @@ struct ToolsTab: View {
             }
         }
         .onAppear(perform: detectInstalledApps)
+    }
+
+    private var selectedTerminalTitle: Text {
+        if let terminal = availableTerminals.first(where: { $0.bundleIdentifier == selectedTerminalBundleId }) {
+            return Text(verbatim: NSLocalizedString(terminal.name, comment: ""))
+        }
+        return Text("跟随系统")
     }
 
     private func terminalRow(_ terminal: KnownTerminal) -> some View {

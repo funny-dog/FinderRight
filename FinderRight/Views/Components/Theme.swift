@@ -37,6 +37,14 @@ enum FRTheme {
     static let field = themed(\.field)
     static let fieldBorder = themed(\.fieldBorder)
 
+    /// 分段选择器轨道、滑块及下拉触发器动态色
+    static let segmentedTrack = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.055), NSColor(hex: 0x000000, alpha: 0.24)))
+    static let segmentedTrackBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.10)))
+    static let segmentedThumb = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.13)))
+    static let segmentedThumbBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.16)))
+    static let dropdownFill = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.07)))
+    static let dropdownHoverFill = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.04), NSColor(hex: 0xFFFFFF, alpha: 0.11)))
+
     /// 状态色：表达含义，不随主题变化
     static let okBackground = dynamic(FRColorPair(NSColor(hex: 0x109664, alpha: 0.12), NSColor(hex: 0x50DCA0, alpha: 0.16)))
     static let okText = dynamic(FRColorPair(0x0B7A5A, 0x6EE7B7))
@@ -252,19 +260,172 @@ struct FRSwitch: View {
     }
 }
 
-/// 下拉选择器：系统菜单样式，隐藏自带标签（标题由所在行提供）
-struct FRPicker<Selection: Hashable, Content: View>: View {
+/// 胶囊分段选择器：外层微凹轨道，内层浮起高亮胶囊，适用于二选一或少量固定选项
+struct FRSegmentedPicker<Selection: Hashable>: View {
     let label: LocalizedStringKey
     @Binding var selection: Selection
-    @ViewBuilder let content: Content
+    let options: [(value: Selection, titleKey: String)]
+
+    @FRState private var hovered: Selection?
+    @Namespace private var thumbNamespace
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(label: LocalizedStringKey, selection: Binding<Selection>, options: [(value: Selection, titleKey: String)]) {
+        self.label = label
+        self._selection = selection
+        self.options = options
+    }
+
+    init<Data: RandomAccessCollection>(
+        label: LocalizedStringKey,
+        selection: Binding<Selection>,
+        _ data: Data,
+        titleKey: KeyPath<Data.Element, String>
+    ) where Data.Element == Selection {
+        self.label = label
+        self._selection = selection
+        self.options = data.map { ($0, $0[keyPath: titleKey]) }
+    }
 
     var body: some View {
-        Picker(label, selection: $selection) {
-            content
+        HStack(spacing: 2) {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                let isSelected = selection == option.value
+                let isHovered = hovered == option.value
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        selection = option.value
+                    }
+                } label: {
+                    Text(LocalizedStringKey(option.titleKey))
+                        .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
+                        .foregroundColor(isSelected ? FRTheme.text : (isHovered ? FRTheme.text.opacity(0.88) : FRTheme.mute))
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background {
+                            if isSelected {
+                                Capsule()
+                                    .fill(FRTheme.segmentedThumb)
+                                    .overlay(Capsule().strokeBorder(FRTheme.segmentedThumbBorder, lineWidth: 1))
+                                    .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+                                    .matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+                            } else if isHovered {
+                                Capsule()
+                                    .fill(FRTheme.hover)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .onHover { inside in
+                    if inside {
+                        hovered = option.value
+                    } else if hovered == option.value {
+                        hovered = nil
+                    }
+                }
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
+        .padding(3)
+        .background(Capsule().fill(FRTheme.segmentedTrack))
+        .overlay(Capsule().strokeBorder(FRTheme.segmentedTrackBorder, lineWidth: 1))
         .fixedSize()
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(label))
+    }
+}
+
+/// 下拉选择器：自定义胶囊触发器 + 原生系统菜单（保留勾选、键盘导航与无障碍语义）
+struct FRPicker<Selection: Hashable, Content: View>: View {
+    let label: LocalizedStringKey
+    let title: Text
+    @Binding var selection: Selection
+    var fullWidth: Bool = false
+    @ViewBuilder let content: Content
+
+    @FRState private var isHovering = false
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(
+        label: LocalizedStringKey,
+        title: Text,
+        selection: Binding<Selection>,
+        fullWidth: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.label = label
+        self.title = title
+        self._selection = selection
+        self.fullWidth = fullWidth
+        self.content = content()
+    }
+
+    init(
+        label: LocalizedStringKey,
+        titleKey: String,
+        selection: Binding<Selection>,
+        fullWidth: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(
+            label: label,
+            title: Text(LocalizedStringKey(titleKey)),
+            selection: selection,
+            fullWidth: fullWidth,
+            content: content
+        )
+    }
+
+    private var isSmall: Bool { controlSize == .small }
+
+    var body: some View {
+        let activeHover = isHovering && isEnabled
+        Menu {
+            Picker(label, selection: $selection) {
+                content
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: isSmall ? 6 : 8) {
+                title
+                    .font(.system(size: isSmall ? 11.5 : 12.5, weight: .medium))
+                    .foregroundColor(FRTheme.text)
+                    .lineLimit(1)
+                if fullWidth {
+                    Spacer(minLength: 8)
+                }
+                ZStack {
+                    Circle()
+                        .fill(activeHover ? FRTheme.selection : FRTheme.segmentedTrack)
+                        .frame(width: isSmall ? 16 : 20, height: isSmall ? 16 : 20)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: isSmall ? 8.5 : 9.5, weight: .semibold))
+                        .foregroundColor(activeHover ? FRTheme.accentText : FRTheme.mute)
+                }
+            }
+            .padding(.leading, isSmall ? 10 : 12)
+            .padding(.trailing, isSmall ? 5 : 6)
+            .frame(height: isSmall ? 24 : 28)
+            .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
+            .background(Capsule().fill(activeHover ? FRTheme.dropdownHoverFill : FRTheme.dropdownFill))
+            .overlay(
+                Capsule().strokeBorder(activeHover ? FRTheme.accentText.opacity(0.45) : FRTheme.fieldBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
+            .contentShape(Capsule())
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: !fullWidth, vertical: true)
+        .opacity(isEnabled ? 1 : 0.45)
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: activeHover)
+        .accessibilityLabel(Text(label))
     }
 }
 

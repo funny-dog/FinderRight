@@ -383,17 +383,24 @@ private struct FRDialogView: View {
             }
             .padding(.top, 12)
         case .choice(let choices, let label):
-            Picker("", selection: $model.selected) {
+            let selectedTitle = choices.indices.contains(model.selected) ? Text(verbatim: choices[model.selected]) : Text(verbatim: "")
+            FRPicker(label: LocalizedStringKey(label), title: selectedTitle, selection: $model.selected, fullWidth: true) {
                 ForEach(choices.indices, id: \.self) { index in
                     Text(choices[index]).tag(index)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(maxWidth: .infinity)
             .accessibilityLabel(label)
             .padding(.top, 12)
         case .file(_, let extensions, let allowsCustom):
+            let fileTypeTitle: Text = {
+                if extensions.indices.contains(model.selected) {
+                    return Text(verbatim: ".\(extensions[model.selected])")
+                }
+                if allowsCustom && model.selected == extensions.count {
+                    return Text("自定义")
+                }
+                return Text(verbatim: "")
+            }()
             VStack(alignment: .leading, spacing: 10) {
                 field(symbol: "doc") {
                     TextField("文件名", text: $model.text)
@@ -402,14 +409,12 @@ private struct FRDialogView: View {
                         .onSubmit { model.onPress?(0) }
                         .accessibilityLabel(Text("文件名"))
                 }
-                Picker("文件类型", selection: $model.selected) {
+                FRPicker(label: "文件类型", title: fileTypeTitle, selection: $model.selected, fullWidth: true) {
                     ForEach(extensions.indices, id: \.self) { index in
                         Text(verbatim: ".\(extensions[index])").tag(index)
                     }
                     if allowsCustom { Text("自定义").tag(extensions.count) }
                 }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity)
                 if allowsCustom && model.selected == extensions.count {
                     field(symbol: "textformat") {
                         TextField("自定义后缀，例如 yaml 或 log", text: $model.customExtension)
