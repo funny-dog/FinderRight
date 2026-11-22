@@ -81,6 +81,7 @@ public final class SharedConfig {
         static let clipboardWindowPinned = "clipboardWindowPinned"
         static let clipboardShowDetails = "clipboardShowDetails"
         static let screenshotEnabled = "screenshotEnabled"
+        static let screenshotMode = "screenshotMode"
         /// 一次性迁移标记：图标风格默认值已按「老用户保持单色线条」处理过
         static let iconStyleDefaultMigrated = "iconStyleDefaultMigrated"
     }
@@ -230,6 +231,23 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.screenshotEnabled] = newValue
+            save()
+        }
+    }
+
+    /// 截图触发方式（默认系统原生）
+    public var screenshotMode: ScreenshotMode {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let raw = store[Keys.screenshotMode] as? String,
+                  let mode = ScreenshotMode(rawValue: raw) else { return .system }
+            return mode
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.screenshotMode] = newValue.rawValue
             save()
         }
     }

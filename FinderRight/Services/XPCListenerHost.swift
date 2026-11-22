@@ -24,6 +24,11 @@ final class IPCWatcher {
         self.requestGate = RequestDrainGate(queue: queue)
     }
 
+    /// 无任何在途请求时同步关闭入口并返回 true；存在未完成请求时保持开启并返回 false，交由 shutdown 异步排空。
+    func shutdownIfIdle() -> Bool {
+        requestGate.closeIfIdle()
+    }
+
     /// 退出前调用：关闭入口拒绝新请求，已受理请求全部处理完后在 IPC 队列上回调一次。
     /// 调用方必须异步等待排空——已受理请求可能还要回到调用方线程完成（例如写剪贴板回主线程），
     /// 在主线程同步等待队列会死锁

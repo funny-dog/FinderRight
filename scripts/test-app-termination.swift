@@ -38,6 +38,8 @@ final class IPCWatcher {
     var shutdownCount = 0
     let queue = DispatchQueue(label: "test.termination.ipc")
 
+    func shutdownIfIdle() -> Bool { false }
+
     func shutdown(notifyDrained: @escaping () -> Void) {
         shutdownCount += 1
         queue.async {

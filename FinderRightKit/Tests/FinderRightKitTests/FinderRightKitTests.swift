@@ -2030,6 +2030,21 @@ struct FinderRightKitTestsRunner {
             try assertTrue(drained.wait(timeout: .now() + 5) == .success, "请求完成后排空应到达")
         }
 
+        runTest("RequestDrainGate 空闲时同步关闭并在有在途请求时拒绝早关") {
+            let queue = DispatchQueue(label: "test.drain.idle")
+            let gate = RequestDrainGate(queue: queue)
+            let release = DispatchSemaphore(value: 0)
+            let started = DispatchSemaphore(value: 0)
+            try assertTrue(gate.accept { started.signal(); release.wait() })
+            try assertTrue(started.wait(timeout: .now() + 5) == .success)
+            try assertTrue(!gate.closeIfIdle(), "有在途请求时不应同步早关")
+            try assertTrue(gate.accept {}, "拒绝早关后门应仍开启")
+            release.signal()
+            queue.sync {}
+            try assertTrue(gate.closeIfIdle(), "全部请求完成后应能同步关闭")
+            try assertTrue(!gate.accept {}, "同步关闭后应拒绝新请求")
+        }
+
         runTest("BackgroundJobs 关闭时未完成的任务让等待超时") {
             let jobs = BackgroundJobs()
             let release = DispatchSemaphore(value: 0)
@@ -7146,6 +7161,54 @@ struct FinderRightKitTestsRunner {
 
             reloaded.clipboardHistoryLimit = 99
             try assertEqual(SharedConfig(fileURL: configURL).clipboardHistoryLimit, 5)
+        }
+
+        runTest("截图方式配置持久化与坐标换算") {
+            let dir = makeTempDirectory()
+            let configURL = dir.appendingPathComponent("settings.plist")
+            let config = SharedConfig(fileURL: configURL)
+            try assertEqual(config.screenshotMode, .system)
+
+            config.screenshotMode = .snapshot
+            let reloaded = SharedConfig(fileURL: configURL)
+            try assertEqual(reloaded.screenshotMode, .snapshot)
+
+            let date = Date(timeIntervalSince1970: 1_700_000_000)
+            let utc = TimeZone(secondsFromGMT: 0)!
+            try assertEqual(
+                ScreenshotSnapshotGeometry.defaultBaseName(at: date, timeZone: utc, prefix: "截图"),
+                "截图 2023-11-14 22.13.20"
+            )
+
+            let viewSize = CGSize(width: 1440, height: 900)
+            let crop = ScreenshotSnapshotGeometry.pixelCropRect(
+                selectionInView: CGRect(x: 100, y: 200, width: 300, height: 150),
+                viewSize: viewSize,
+                imageWidth: 2880,
+                imageHeight: 1800
+            )
+            // AppKit 左下角 (100, 200, 300, 150) 翻转到像素左上角：
+            // x = 200, y = (900 - 350) * 2 = 1100, w = 600, h = 300
+            try assertEqual(crop, CGRect(x: 200, y: 1100, width: 600, height: 300))
+
+            // 越界矩形应被裁剪到图像范围内
+            let edgeCrop = ScreenshotSnapshotGeometry.pixelCropRect(
+                selectionInView: CGRect(x: -10, y: 800, width: 100, height: 200),
+                viewSize: viewSize,
+                imageWidth: 2880,
+                imageHeight: 1800
+            )
+            try assertEqual(edgeCrop, CGRect(x: 0, y: 0, width: 180, height: 200))
+
+            // 极小选区应返回 nil
+            try assertNil(
+                ScreenshotSnapshotGeometry.pixelCropRect(
+                    selectionInView: CGRect(x: 10, y: 10, width: 0.4, height: 0.4),
+                    viewSize: viewSize,
+                    imageWidth: 2880,
+                    imageHeight: 1800
+                )
+            )
         }
 
         runTest("剪贴板历史：持久化、权限免备份、淘汰清理与清空") {

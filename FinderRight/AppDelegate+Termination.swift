@@ -10,11 +10,17 @@ extension AppDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         CustomCommandController.shared.cancelAll()
         let jobs = FinderRightService.backgroundJobs
-        // 先关闭后台任务入口与 IPC 监听；已受理的 IPC 请求可能还要回主线程完成（例如写剪贴板），
-        // 主线程必须保持可调度，所有等待都放在后台线程
+        // 先关闭后台任务入口；若当前无在途任务和 IPC 请求且无需更新/Git 收尾，
+        // 直接返回 .terminateNow，让 AppKit 正常回复 Quit AppleEvent（系统授权「退出并重新打开」依赖该回复才能自动拉起新进程）。
         jobs.close()
         let quittingForUpdate = UpdateChecker.shared.isInstallingUpdate
         let finishingGitOperation = GitStatusController.shared.isPerforming
+        if !quittingForUpdate && !finishingGitOperation && jobs.isIdle && IPCWatcher.shared.shutdownIfIdle() {
+            return .terminateNow
+        }
+
+        // 有在途任务时关闭 IPC 监听并异步排空；已受理请求可能还要回主线程完成，
+        // 主线程必须保持可调度，所有等待都放在后台线程
         let ipcDrained = DispatchSemaphore(value: 0)
         IPCWatcher.shared.shutdown { ipcDrained.signal() }
         DispatchQueue.global(qos: .userInitiated).async {

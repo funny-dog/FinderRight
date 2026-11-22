@@ -11,6 +11,7 @@ final class GlobalActionHotKey {
     private let config: SharedConfig
     private let isFeatureEnabled: (SharedConfig) -> Bool
     private let allowsNativeSystemShortcut: (ActionShortcut) -> Bool
+    private let systemConflictMessage: (ActionShortcut) -> String?
     private let onStateChange: (_ isRegistered: Bool, _ errorMessage: String?) -> Void
 
     private var hotKey: EventHotKeyRef?
@@ -25,6 +26,7 @@ final class GlobalActionHotKey {
         config: SharedConfig = .shared,
         isFeatureEnabled: @escaping (SharedConfig) -> Bool,
         allowsNativeSystemShortcut: @escaping (ActionShortcut) -> Bool = { _ in false },
+        systemConflictMessage: @escaping (ActionShortcut) -> String? = { _ in nil },
         onStateChange: @escaping (_ isRegistered: Bool, _ errorMessage: String?) -> Void
     ) {
         self.hotKeyID = hotKeyID
@@ -32,6 +34,7 @@ final class GlobalActionHotKey {
         self.config = config
         self.isFeatureEnabled = isFeatureEnabled
         self.allowsNativeSystemShortcut = allowsNativeSystemShortcut
+        self.systemConflictMessage = systemConflictMessage
         self.onStateChange = onStateChange
     }
 
@@ -86,7 +89,8 @@ final class GlobalActionHotKey {
                 onStateChange(false, nil)
                 return
             }
-            fail(NSLocalizedString("该组合不能用作全局快捷键，或已被系统使用，请重新录制", comment: ""))
+            fail(systemConflictMessage(shortcut)
+                 ?? NSLocalizedString("该组合不能用作全局快捷键，或已被系统使用，请重新录制", comment: ""))
             return
         }
 

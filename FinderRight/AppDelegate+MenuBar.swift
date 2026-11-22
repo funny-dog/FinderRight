@@ -201,7 +201,7 @@ extension AppDelegate {
     }
 
     @objc func triggerScreenshot() {
-        ScreenshotService.shared.trigger()
+        ScreenshotService.shared.trigger(fromMenu: true)
     }
 
     @objc func quitApp() {

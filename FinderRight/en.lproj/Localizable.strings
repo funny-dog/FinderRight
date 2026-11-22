@@ -1213,4 +1213,26 @@
 "获取远端最新提交状态（不修改本地文件）" = "Fetch remote branch status without modifying local files";
 "改用变基拉取" = "Pull with Rebase";
 
+/* 截图方式切换与快照截图 */
+"截图方式" = "Capture Method";
+"系统原生" = "System Native";
+"FinderRight 快照" = "FinderRight Snapshot";
+"默认关闭。开启后可从菜单栏或自定义全局快捷键快速截图。" = "Off by default. When enabled, capture screenshots from the menu bar or a custom global shortcut.";
+"唤起 macOS 原生截图面板（⌘⇧5），无需屏幕录制权限。" = "Opens the macOS Screenshot panel (⌘⇧5) with no extra screen recording permission.";
+"按下瞬间定格当前屏幕，框选后可直接复制或保存到常用目录。" = "Freezes the current screen on trigger so you can drag to select and copy or save to a favorite folder.";
+"需要「屏幕录制」权限" = "Screen Recording Permission Required";
+"用于抓取当前屏幕静态快照；未授权时无法截取其他应用窗口。" = "Used to capture a static snapshot of the screen. Other app windows cannot be captured without permission.";
+"授权屏幕录制…" = "Authorize Screen Recording…";
+"需先在「功能 → 截图」中授权屏幕录制" = "Authorize Screen Recording first in Features → Screenshot";
+"全局生效，可在任意应用中定格屏幕并框选截图" = "Works globally to freeze the screen and select an area in any app";
+"⇧⌘5 已被系统截屏占用，请换一个组合或在系统设置中关闭系统截屏快捷键" = "⇧⌘5 is reserved by macOS Screenshot. Record another shortcut or disable it in System Settings.";
+"请先在系统设置中授权「屏幕录制」权限" = "Please allow Screen Recording in System Settings first";
+"无法抓取当前屏幕" = "Unable to capture the current screen";
+"已复制截图到剪贴板" = "Screenshot copied to clipboard";
+"已保存截图" = "Screenshot saved";
+"保存截图失败" = "Failed to save screenshot";
+"保存到常用目录" = "Save to Favorite Folder";
+"已保存到「%@」" = "Saved to “%@”";
+"保存到其他位置…" = "Save to Other Location…";
+
 

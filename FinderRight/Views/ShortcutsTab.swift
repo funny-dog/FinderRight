@@ -64,6 +64,12 @@ struct ShortcutsTab: View {
         if let error = screenshotService.errorMessage {
             return error
         }
+        if screenshotService.mode == .snapshot {
+            if !screenshotService.hasScreenCaptureAccess {
+                return NSLocalizedString("需先在「功能 → 截图」中授权屏幕录制", comment: "")
+            }
+            return NSLocalizedString("全局生效，可在任意应用中定格屏幕并框选截图", comment: "")
+        }
         return NSLocalizedString("全局生效，可在任意应用中唤起系统截图", comment: "")
     }
 
@@ -151,7 +157,9 @@ struct ShortcutsTab: View {
                                  allActions: allShortcutActions,
                                  interceptorAvailable: true,
                                  subtitleOverride: screenshotShortcutSubtitle,
-                                 subtitleIsWarning: screenshotService.isEnabled && screenshotService.errorMessage != nil,
+                                 subtitleIsWarning: screenshotService.isEnabled
+                                     && (screenshotService.errorMessage != nil
+                                         || (screenshotService.mode == .snapshot && !screenshotService.hasScreenCaptureAccess)),
                                  onConflict: { msg in
                                      conflictMessage = msg
                                  },
@@ -165,10 +173,12 @@ struct ShortcutsTab: View {
         .onAppear {
             needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
             hasAccessibility = AccessibilityChecker.check()
+            screenshotService.refreshPermission()
         }
         // 从系统设置授权后切回本 App 时刷新提示
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasAccessibility = AccessibilityChecker.check()
+            screenshotService.refreshPermission()
         }
         .onChange(of: conflictMessage) { message in
             guard let message else { return }
@@ -198,6 +208,8 @@ struct ShortcutsTab: View {
         FinderShortcutInterceptor.restoreDefaultShortcuts()
         reloadToken += 1
         FinderShortcutInterceptor.shared.refresh()
+        GlobalClipboardShortcut.shared.refresh()
+        ScreenshotService.shared.refresh()
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
         needsFinderRestart = true
@@ -206,6 +218,13 @@ struct ShortcutsTab: View {
     /// 按键拦截立即生效；其余行同时同步为系统服务快捷键（未授权时的回退），有变化时记下需重启访达
     private func shortcutChanged(actionId: String) {
         FinderShortcutInterceptor.shared.refresh()
+        if actionId == FinderKeyTakeover.clipboardActionId {
+            GlobalClipboardShortcut.shared.refresh()
+        } else if actionId == FinderKeyTakeover.screenshotActionId {
+            ScreenshotService.shared.refresh()
+        } else if actionId == FinderKeyTakeover.goToDirectoryActionId {
+            GlobalDirectoryShortcut.shared.refresh()
+        }
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
         if ServiceShortcuts.syncsShortcut(actionId: actionId) { needsFinderRestart = true }

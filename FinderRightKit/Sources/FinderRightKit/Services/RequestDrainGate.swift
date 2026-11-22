@@ -9,10 +9,20 @@ public final class RequestDrainGate {
     private let lock = NSLock()
     private let queue: DispatchQueue
     private var closed = false
+    private var pendingCount = 0
 
     /// - Parameter queue: 承载请求的串行队列
     public init(queue: DispatchQueue) {
         self.queue = queue
+    }
+
+    /// 仅在当前没有任何在途请求时同步关闭入口并返回 true；存在未完成请求时保持开启并返回 false。
+    public func closeIfIdle() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard pendingCount == 0 else { return false }
+        closed = true
+        return true
     }
 
     /// 关闭入口并登记排空回调；回调在队列上执行一次，位于所有已受理请求之后。
@@ -30,7 +40,15 @@ public final class RequestDrainGate {
         lock.lock()
         defer { lock.unlock() }
         guard !closed else { return false }
-        queue.async(execute: work)
+        pendingCount += 1
+        queue.async {
+            defer {
+                self.lock.lock()
+                self.pendingCount -= 1
+                self.lock.unlock()
+            }
+            work()
+        }
         return true
     }
 }
