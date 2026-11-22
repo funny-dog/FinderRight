@@ -805,7 +805,7 @@ private final class ClipboardDropContainerView: NSView {
     init(dropState: ClipboardDropState) {
         self.dropState = dropState
         super.init(frame: .zero)
-        registerForDraggedTypes([.fileURL, ClipboardHistoryService.filenamesPasteboardType])
+        registerForDraggedTypes([.fileURL, ClipboardFileContent.filenamesPasteboardType])
     }
 
     @available(*, unavailable)

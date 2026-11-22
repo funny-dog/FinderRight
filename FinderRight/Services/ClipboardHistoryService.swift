@@ -1,14 +1,12 @@
 import AppKit
 import Combine
 import FinderRightKit
-import ImageIO
 
 /// 轻量剪贴板历史服务：默认开启，在本机保留最近 N 条文本、图片或文件引用（关闭或清空时删除磁盘数据）。
 final class ClipboardHistoryService: ObservableObject {
     static let shared = ClipboardHistoryService()
 
     private static let pollInterval: TimeInterval = 0.5
-    static let filenamesPasteboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
 
     @Published private(set) var items: [ClipboardItem] = []
     @Published private(set) var isEnabled: Bool
@@ -176,12 +174,7 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
-        let types = pasteboard.types ?? []
-        guard types.contains(.fileURL) || types.contains(filenamesPasteboardType) else { return [] }
-        return (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-            ?? (pasteboard.propertyList(forType: filenamesPasteboardType) as? [String])?.map { URL(fileURLWithPath: $0) }
-            ?? [])
-            .filter(\.isFileURL)
+        ClipboardFileContent.fileURLs(from: pasteboard)
     }
 
     /// 为图片条目生成临时 PNG 文件 URL，便于拖入 Finder 或其他接收文件的应用
@@ -257,12 +250,12 @@ final class ClipboardHistoryService: ObservableObject {
 
         if let pngData = pasteboard.data(forType: .png),
            pngData.count <= ClipboardHistoryPersistence.maxImageBytes,
-           let (width, height) = imageDimensions(from: pngData) {
+           let (width, height) = ClipboardFileContent.validatedImageDimensions(from: pngData) {
             return .image(pngData, pixelWidth: width, pixelHeight: height)
         }
 
         if let tiffData = pasteboard.data(forType: .tiff),
-           let (pngData, width, height) = encodePNG(from: tiffData),
+           let (pngData, width, height) = ClipboardFileContent.normalizedPNG(from: tiffData),
            pngData.count <= ClipboardHistoryPersistence.maxImageBytes {
             return .image(pngData, pixelWidth: width, pixelHeight: height)
         }
@@ -273,44 +266,6 @@ final class ClipboardHistoryService: ObservableObject {
         }
 
         return nil
-    }
-
-    private func imageDimensions(from data: Data) -> (width: Int, height: Int)? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-              CGImageSourceGetCount(source) >= 1,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              (try? ImageTransformer.validateConversionSize(width: width, height: height)) != nil else {
-            return nil
-        }
-        return (width, height)
-    }
-
-    private func encodePNG(from data: Data) -> (data: Data, width: Int, height: Int)? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-              CGImageSourceGetCount(source) >= 1,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              (try? ImageTransformer.validateConversionSize(width: width, height: height)) != nil else {
-            return nil
-        }
-        let thumbOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
-        ]
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else {
-            return nil
-        }
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, ImageTargetFormat.png.utType, 1, nil) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, cgImage, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return (output as Data, cgImage.width, cgImage.height)
     }
 
     private func temporaryFileURL(forItemId id: UUID) -> URL {

@@ -116,12 +116,7 @@ final class ServicesProvider: NSObject {
     }()
 
     private func fileURLs(from pboard: NSPasteboard) -> [URL] {
-        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
-        if let paths = pboard.propertyList(forType: filenamesType) as? [String], !paths.isEmpty {
-            return paths.map { URL(fileURLWithPath: $0) }
-        }
-        let opts: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
-        return (pboard.readObjects(forClasses: [NSURL.self], options: opts) as? [URL]) ?? []
+        ClipboardFileContent.fileURLs(from: pboard)
     }
 
     /// 终端工作目录：下沉至 ServiceInvocationPolicy.targetDirectory

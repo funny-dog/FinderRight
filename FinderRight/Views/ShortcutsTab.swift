@@ -208,8 +208,6 @@ struct ShortcutsTab: View {
         FinderShortcutInterceptor.restoreDefaultShortcuts()
         reloadToken += 1
         FinderShortcutInterceptor.shared.refresh()
-        GlobalClipboardShortcut.shared.refresh()
-        ScreenshotService.shared.refresh()
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
         needsFinderRestart = true
@@ -218,13 +216,6 @@ struct ShortcutsTab: View {
     /// 按键拦截立即生效；其余行同时同步为系统服务快捷键（未授权时的回退），有变化时记下需重启访达
     private func shortcutChanged(actionId: String) {
         FinderShortcutInterceptor.shared.refresh()
-        if actionId == FinderKeyTakeover.clipboardActionId {
-            GlobalClipboardShortcut.shared.refresh()
-        } else if actionId == FinderKeyTakeover.screenshotActionId {
-            ScreenshotService.shared.refresh()
-        } else if actionId == FinderKeyTakeover.goToDirectoryActionId {
-            GlobalDirectoryShortcut.shared.refresh()
-        }
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
         if ServiceShortcuts.syncsShortcut(actionId: actionId) { needsFinderRestart = true }

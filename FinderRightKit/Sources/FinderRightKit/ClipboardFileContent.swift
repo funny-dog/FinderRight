@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 /// 读取文字、内嵌图片或经调用方授权的单张图片文件。
 public struct ClipboardFileContent {
+    public static let filenamesPasteboardType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+
     public let data: Data
     public let fileExtension: String
 
@@ -30,12 +32,69 @@ public struct ClipboardFileContent {
         }
     }
 
+    /// 剪贴板是否声明了本地文件引用类型（`.fileURL` 或 `NSFilenamesPboardType`）
+    public static func containsFileReferenceTypes(_ pasteboard: NSPasteboard) -> Bool {
+        let types = pasteboard.types ?? []
+        return types.contains(.fileURL) || types.contains(filenamesPasteboardType)
+    }
+
+    /// 从剪贴板读取本地文件 URL 列表（兼容 `.fileURL` 与 `NSFilenamesPboardType`）
+    public static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        guard containsFileReferenceTypes(pasteboard) else { return [] }
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            return urls.filter(\.isFileURL)
+        }
+        if let paths = pasteboard.propertyList(forType: filenamesPasteboardType) as? [String],
+           !paths.isEmpty {
+            return paths.filter { !$0.isEmpty }.map { URL(fileURLWithPath: $0) }
+        }
+        return []
+    }
+
+    /// 读取并校验单帧图片的像素尺寸（须在 `ImageTransformer.maxConversionPixels` 上限内）
+    public static func validatedImageDimensions(from source: CGImageSource) throws -> (width: Int, height: Int) {
+        guard CGImageSourceGetCount(source) == 1,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            throw ReadError.invalidImage
+        }
+        try ImageTransformer.validateConversionSize(width: width, height: height)
+        return (width, height)
+    }
+
+    public static func validatedImageDimensions(from data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            return nil
+        }
+        return try? validatedImageDimensions(from: source)
+    }
+
+    /// 将图片源按 EXIF 方向归一化并编码为 PNG 数据及最终像素宽高
+    public static func normalizedPNG(from source: CGImageSource) throws -> (data: Data, width: Int, height: Int) {
+        let (width, height) = try validatedImageDimensions(from: source)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            throw ReadError.invalidImage
+        }
+        return (try encode(image, as: .png), image.width, image.height)
+    }
+
+    public static func normalizedPNG(from data: Data) -> (data: Data, width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            return nil
+        }
+        return try? normalizedPNG(from: source)
+    }
+
     public static func read(from pasteboard: NSPasteboard, allowFile: (URL) -> Bool = { _ in false }) throws -> ClipboardFileContent {
-        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
-        if (pasteboard.types ?? []).contains(.fileURL) || (pasteboard.types ?? []).contains(filenamesType) {
-            let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-                ?? (pasteboard.propertyList(forType: filenamesType) as? [String])?.map { URL(fileURLWithPath: $0) }
-                ?? []
+        if containsFileReferenceTypes(pasteboard) {
+            let urls = fileURLs(from: pasteboard)
             guard urls.count == 1, let url = urls.first, url.isFileURL, allowFile(url),
                   let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentTypeKey]),
                   values.isRegularFile == true, values.contentType?.conforms(to: .image) == true else {
@@ -58,16 +117,8 @@ public struct ClipboardFileContent {
     }
 
     private static func png(from source: CGImageSource) throws -> ClipboardFileContent {
-        guard CGImageSourceGetCount(source) == 1,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int else { throw ReadError.invalidImage }
-        try ImageTransformer.validateConversionSize(width: width, height: height)
-        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                                      kCGImageSourceCreateThumbnailWithTransform: true,
-                                      kCGImageSourceThumbnailMaxPixelSize: max(width, height)]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw ReadError.invalidImage }
-        return ClipboardFileContent(data: try encode(image, as: .png), fileExtension: "png")
+        let normalized = try normalizedPNG(from: source)
+        return ClipboardFileContent(data: normalized.data, fileExtension: "png")
     }
 
     private static func encode(_ image: CGImage, as format: ImageTargetFormat) throws -> Data {
