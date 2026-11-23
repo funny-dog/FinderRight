@@ -11,6 +11,7 @@ final class ClipboardHistoryService: ObservableObject {
     @Published private(set) var items: [ClipboardItem] = []
     @Published private(set) var isEnabled: Bool
     @Published private(set) var limit: Int
+    @Published private(set) var recordSensitive: Bool
     @Published private(set) var isPinned: Bool
     @Published private(set) var showDetails: Bool
 
@@ -19,6 +20,8 @@ final class ClipboardHistoryService: ObservableObject {
     private let ioQueue = DispatchQueue(label: "com.finderright.app.clipboardHistory.io", qos: .utility)
     private var store: ClipboardHistoryStore
     private var timer: Timer?
+    private var mouseMonitor: Any?
+    private var sensitiveMenuBarTracker = ClipboardHistoryStore.SensitiveMenuBarTracker()
     private var lastChangeCount: Int
     private let tempDragDirectory: URL
 
@@ -30,6 +33,7 @@ final class ClipboardHistoryService: ObservableObject {
         let enabled = config.clipboardEnabled
         self.isEnabled = enabled
         self.limit = savedLimit
+        self.recordSensitive = config.clipboardRecordSensitive
         self.isPinned = config.clipboardWindowPinned
         self.showDetails = config.clipboardShowDetails
         if enabled {
@@ -50,6 +54,7 @@ final class ClipboardHistoryService: ObservableObject {
 
     deinit {
         timer?.invalidate()
+        removeMouseMonitor()
         cleanupAllTemporaryFiles()
     }
 
@@ -68,6 +73,11 @@ final class ClipboardHistoryService: ObservableObject {
         refreshConfig()
     }
 
+    func setRecordSensitive(_ enabled: Bool) {
+        config.clipboardRecordSensitive = enabled
+        refreshConfig()
+    }
+
     func setPinned(_ pinned: Bool) {
         config.clipboardWindowPinned = pinned
         isPinned = config.clipboardWindowPinned
@@ -82,11 +92,13 @@ final class ClipboardHistoryService: ObservableObject {
         config.reload()
         let enabled = config.clipboardEnabled
         let configuredLimit = config.clipboardHistoryLimit
+        let allowSensitive = config.clipboardRecordSensitive
         let pinned = config.clipboardWindowPinned
         let details = config.clipboardShowDetails
 
         isEnabled = enabled
         limit = configuredLimit
+        recordSensitive = allowSensitive
         isPinned = pinned
         showDetails = details
 
@@ -197,6 +209,7 @@ final class ClipboardHistoryService: ObservableObject {
     // MARK: - 剪贴板轮询
 
     private func startPollingIfNeeded() {
+        updateMouseMonitor()
         guard timer == nil else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         let pollTimer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
@@ -209,14 +222,114 @@ final class ClipboardHistoryService: ObservableObject {
     private func stopPolling() {
         timer?.invalidate()
         timer = nil
+        removeMouseMonitor()
+        sensitiveMenuBarTracker.clear()
+    }
+
+    private func updateMouseMonitor() {
+        guard isEnabled && !recordSensitive else {
+            removeMouseMonitor()
+            sensitiveMenuBarTracker.clear()
+            return
+        }
+        guard mouseMonitor == nil else { return }
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+            self?.handleGlobalMouseDown()
+        }
+    }
+
+    private func removeMouseMonitor() {
+        if let mouseMonitor {
+            NSEvent.removeMonitor(mouseMonitor)
+            self.mouseMonitor = nil
+        }
+    }
+
+    private func handleGlobalMouseDown() {
+        guard isEnabled && !recordSensitive else { return }
+        let popovers = visibleSensitiveMenuBarPopovers()
+        guard !popovers.isEmpty else {
+            sensitiveMenuBarTracker.clear()
+            return
+        }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let clickPoint = ClipboardHistoryStore.quartzPoint(
+            fromCocoaPoint: NSEvent.mouseLocation,
+            primaryScreenHeight: primaryHeight
+        )
+        if popovers.contains(where: { $0.insetBy(dx: -4, dy: -4).contains(clickPoint) }) {
+            sensitiveMenuBarTracker.arm(changeCount: NSPasteboard.general.changeCount)
+        } else {
+            sensitiveMenuBarTracker.clear()
+        }
+    }
+
+    private func visibleSensitiveMenuBarPopovers() -> [CGRect] {
+        var pidBundleMap: [pid_t: String] = [:]
+        for bundleId in ClipboardHistoryStore.sensitiveMenuBarBundleIdentifiers {
+            for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleId) {
+                pidBundleMap[app.processIdentifier] = bundleId
+            }
+        }
+        guard !pidBundleMap.isEmpty else { return [] }
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+        var rects: [CGRect] = []
+        for entry in windowList {
+            guard let pidNumber = entry[kCGWindowOwnerPID as String] as? NSNumber,
+                  let bundleId = pidBundleMap[pid_t(pidNumber.intValue)],
+                  let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsDict) else {
+                continue
+            }
+            let layer = (entry[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+            if ClipboardHistoryStore.isSensitiveMenuBarPopover(
+                ownerBundleIdentifier: bundleId,
+                bounds: bounds,
+                layer: layer
+            ) {
+                rects.append(bounds)
+            }
+        }
+        return rects
+    }
+
+    private func focusedApplicationBundleIdentifier() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedApp: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedApp) == .success,
+              let focusedApp,
+              CFGetTypeID(focusedApp) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        var pid: pid_t = 0
+        let axElement = unsafeBitCast(focusedApp, to: AXUIElement.self)
+        guard AXUIElementGetPid(axElement, &pid) == .success, pid != 0 else { return nil }
+        return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
     }
 
     private func pollPasteboard() {
         guard isEnabled else { return }
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
+
+        let popoverVisible = !recordSensitive && !visibleSensitiveMenuBarPopovers().isEmpty
+        if popoverVisible && currentCount == lastChangeCount {
+            sensitiveMenuBarTracker.arm(changeCount: currentCount)
+        }
+
         guard currentCount != lastChangeCount else { return }
         lastChangeCount = currentCount
+
+        if !recordSensitive {
+            let consumedGrace = sensitiveMenuBarTracker.consumeIfActive(newChangeCount: currentCount)
+            if popoverVisible || consumedGrace {
+                return
+            }
+        }
 
         guard let kind = readPasteboardKind(from: pasteboard) else { return }
         let previousImageIds = Set(store.items.compactMap { item -> UUID? in
@@ -243,6 +356,24 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     private func readPasteboardKind(from pasteboard: NSPasteboard) -> ClipboardItem.Kind? {
+        if !recordSensitive {
+            var typeIdentifiers = (pasteboard.types ?? []).map(\.rawValue)
+            if let itemTypes = pasteboard.pasteboardItems?.flatMap({ $0.types.map(\.rawValue) }) {
+                typeIdentifiers.append(contentsOf: itemTypes)
+            }
+            let sourceBundleIds = [
+                NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                focusedApplicationBundleIdentifier(),
+            ].compactMap { $0 }
+            if ClipboardHistoryStore.shouldIgnorePasteboard(
+                typeIdentifiers: typeIdentifiers,
+                sourceBundleIdentifiers: sourceBundleIds,
+                allowSensitive: false
+            ) {
+                return nil
+            }
+        }
+
         let urls = Self.fileURLs(from: pasteboard)
         if !urls.isEmpty {
             return .files(urls)

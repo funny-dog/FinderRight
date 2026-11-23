@@ -34,7 +34,7 @@ private enum ClipboardPreviewLoader {
     }
 
     private static let maxThumbPixels = 88
-    private static let maxDetailPixels = 720
+    private static let maxDetailPixels = 1440
     private static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "heic", "heif", "webp", "gif", "tiff", "tif", "bmp", "ico"
     ]
@@ -182,7 +182,7 @@ struct ClipboardHistoryView: View {
             FRDivider()
             contentArea
         }
-        .frame(minWidth: service.showDetails ? 520 : 240, minHeight: 240)
+        .frame(minWidth: service.showDetails ? 560 : 240, minHeight: service.showDetails ? 340 : 240)
         .background(FRTheme.window)
         .overlay {
             if dropState.isTargeted {
@@ -500,11 +500,13 @@ private struct ClipboardDetailPane: View {
             ZStack {
                 Image(nsImage: detail.image)
                     .resizable()
-                    .scaledToFit()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .shadow(color: Color.black.opacity(0.14), radius: 5, y: 2)
             }
-            .padding(14)
+            .padding(10)
         } else {
             switch item.kind {
             case .text(let text):
@@ -565,37 +567,56 @@ private struct ClipboardDetailPane: View {
     }
 
     private func informationSection(for item: ClipboardItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let allRows = metadataRows(for: item)
+        let pathRow = allRows.first { $0.labelKey == "路径" }
+        let compactRows = allRows.filter { $0.labelKey != "路径" }
+        let pairedRows = stride(from: 0, to: compactRows.count, by: 2).map { index in
+            Array(compactRows[index..<min(index + 2, compactRows.count)])
+        }
+
+        return VStack(alignment: .leading, spacing: 5) {
             Text("信息")
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundColor(FRTheme.mute)
                 .padding(.horizontal, 2)
 
             VStack(spacing: 4) {
-                ForEach(Array(metadataRows(for: item).enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 10) {
-                        Text(LocalizedStringKey(row.labelKey))
-                            .font(.system(size: 11.5))
-                            .foregroundColor(FRTheme.mute)
-                        Spacer(minLength: 8)
-                        Text(verbatim: row.value)
-                            .font(.system(size: 11.5, design: row.monospaced ? .monospaced : .default))
-                            .foregroundColor(FRTheme.text)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                ForEach(Array(pairedRows.enumerated()), id: \.offset) { _, pair in
+                    HStack(spacing: 4) {
+                        ForEach(Array(pair.enumerated()), id: \.offset) { _, row in
+                            metadataRowView(row)
+                        }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(FRTheme.card)
-                    )
+                }
+                if let pathRow {
+                    metadataRowView(pathRow)
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 12)
-        .padding(.top, 4)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+        .padding(.top, 2)
+    }
+
+    private func metadataRowView(_ row: MetadataRow) -> some View {
+        HStack(spacing: 8) {
+            Text(LocalizedStringKey(row.labelKey))
+                .font(.system(size: 11.5))
+                .foregroundColor(FRTheme.mute)
+            Spacer(minLength: 6)
+            Text(verbatim: row.value)
+                .font(.system(size: 11.5, design: row.monospaced ? .monospaced : .default))
+                .foregroundColor(FRTheme.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(FRTheme.card)
+        )
     }
 
     private func metadataRows(for item: ClipboardItem) -> [MetadataRow] {
@@ -863,9 +884,9 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
 
     private static let compactSize = CGSize(width: 300, height: 360)
-    private static let expandedSize = CGSize(width: 640, height: 360)
+    private static let expandedSize = CGSize(width: 740, height: 480)
     private static let compactMinSize = CGSize(width: 240, height: 240)
-    private static let expandedMinSize = CGSize(width: 520, height: 240)
+    private static let expandedMinSize = CGSize(width: 560, height: 380)
 
     func show() {
         guard ClipboardHistoryService.shared.isEnabled else { return }
@@ -904,10 +925,10 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
             self.window = panel
         }
         if let panel = window {
-            let needsWidthSync = showDetails
-                ? panel.frame.width < Self.expandedMinSize.width
+            let needsLayoutSync = showDetails
+                ? (panel.frame.width < Self.expandedMinSize.width || panel.frame.height < Self.expandedMinSize.height)
                 : panel.frame.width > Self.compactSize.width + 60
-            if needsWidthSync {
+            if needsLayoutSync {
                 updateLayout(showDetails: showDetails, animated: false)
             }
         }
@@ -938,10 +959,16 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
             styleMask: panel.styleMask).size
         panel.minSize = minFrameSize
 
-        let targetWidth = showDetails ? Self.expandedSize.width : Self.compactSize.width
+        let targetContent = showDetails ? Self.expandedSize : Self.compactSize
+        let targetFrameSize = NSWindow.frameRect(
+            forContentRect: NSRect(origin: .zero, size: targetContent),
+            styleMask: panel.styleMask).size
         var frame = panel.frame
         let topY = frame.maxY
-        frame.size.width = max(minFrameSize.width, targetWidth)
+        frame.size.width = max(minFrameSize.width, targetFrameSize.width)
+        frame.size.height = showDetails
+            ? max(minFrameSize.height, max(frame.height, targetFrameSize.height))
+            : max(minFrameSize.height, min(frame.height, targetFrameSize.height))
         frame.origin.y = topY - frame.size.height
         if let screen = panel.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
@@ -950,6 +977,12 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
             }
             if frame.minX < visible.minX {
                 frame.origin.x = visible.minX
+            }
+            if frame.minY < visible.minY {
+                frame.origin.y = visible.minY
+            }
+            if frame.maxY > visible.maxY {
+                frame.origin.y = max(visible.minY, visible.maxY - frame.height)
             }
         }
         panel.setFrame(frame, display: true, animate: animated)

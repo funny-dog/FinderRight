@@ -248,6 +248,7 @@ private final class SnapshotOverlayView: NSView {
         case create(origin: NSPoint)
         case move(startMouse: NSPoint, startRect: NSRect)
         case resize(handle: ResizeHandle, oppositeCorner: NSPoint, originalRect: NSRect)
+        case draw
     }
 
     private enum ResizeHandle: CaseIterable {
@@ -267,8 +268,14 @@ private final class SnapshotOverlayView: NSView {
     private var selectionRect: NSRect?
     private var dragMode: DragMode = .none
     private var toolbar: SnapshotToolbarView?
+    private var annotationBar: SnapshotAnnotationBarView?
+    private var colorPalette: SnapshotColorPaletteView?
     private var trackingAreaRef: NSTrackingArea?
+    private var strokes: [ScreenshotBrushStroke] = []
+    private var isBrushActive = false
+    private var selectedBrushColor: ScreenshotRGBA = SnapshotColorPaletteView.presetColors[0]
 
+    private static let brushLineWidth: CGFloat = 3.5
     private static let handleHitRadius: CGFloat = 7
     private static let handleDrawSize: CGFloat = 6
 
@@ -289,6 +296,11 @@ private final class SnapshotOverlayView: NSView {
     func clearResources() {
         toolbar?.removeFromSuperview()
         toolbar = nil
+        annotationBar?.removeFromSuperview()
+        annotationBar = nil
+        colorPalette?.removeFromSuperview()
+        colorPalette = nil
+        strokes.removeAll()
         image = nil
     }
 
@@ -319,13 +331,24 @@ private final class SnapshotOverlayView: NSView {
 
     private func updateCursor(at point: NSPoint) {
         if let rect = selectionRect, toolbar?.isHidden == false {
-            if let handle = hitHandle(at: point, in: rect) {
-                handle.cursor.set()
-                return
-            }
-            if rect.contains(point) {
-                NSCursor.openHand.set()
-                return
+            if isBrushActive {
+                if rect.contains(point) {
+                    NSCursor.crosshair.set()
+                    return
+                }
+                if let handle = hitHandle(at: point, in: rect) {
+                    handle.cursor.set()
+                    return
+                }
+            } else {
+                if let handle = hitHandle(at: point, in: rect) {
+                    handle.cursor.set()
+                    return
+                }
+                if rect.contains(point) {
+                    NSCursor.openHand.set()
+                    return
+                }
             }
         }
         NSCursor.crosshair.set()
@@ -350,6 +373,13 @@ private final class SnapshotOverlayView: NSView {
         ctx.restoreGState()
 
         guard let rect = selectionRect, rect.width >= 1, rect.height >= 1 else { return }
+
+        if !strokes.isEmpty {
+            ctx.saveGState()
+            ctx.clip(to: rect)
+            ScreenshotSnapshotGeometry.drawStrokes(strokes, in: ctx)
+            ctx.restoreGState()
+        }
 
         // 选区描边
         let accent = FRThemeID.current.palette.accent.resolved(for: effectiveAppearance)
@@ -416,9 +446,33 @@ private final class SnapshotOverlayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = clampedToBounds(convert(event.locationInWindow, from: nil))
-        hideToolbar()
 
         if let rect = selectionRect {
+            if isBrushActive {
+                if rect.contains(point) {
+                    hideToolbar()
+                    dragMode = .draw
+                    strokes.append(
+                        ScreenshotBrushStroke(
+                            points: [point],
+                            color: selectedBrushColor,
+                            lineWidth: Self.brushLineWidth
+                        )
+                    )
+                    needsDisplay = true
+                    return
+                }
+                if let handle = hitHandle(at: point, in: rect) {
+                    hideToolbar()
+                    let opposite = oppositeAnchor(for: handle, in: rect)
+                    dragMode = .resize(handle: handle, oppositeCorner: opposite, originalRect: rect)
+                    needsDisplay = true
+                    return
+                }
+                return
+            }
+
+            hideToolbar()
             if let handle = hitHandle(at: point, in: rect) {
                 let opposite = oppositeAnchor(for: handle, in: rect)
                 dragMode = .resize(handle: handle, oppositeCorner: opposite, originalRect: rect)
@@ -431,8 +485,11 @@ private final class SnapshotOverlayView: NSView {
                 needsDisplay = true
                 return
             }
+        } else {
+            hideToolbar()
         }
 
+        strokes.removeAll()
         dragMode = .create(origin: point)
         selectionRect = NSRect(origin: point, size: .zero)
         needsDisplay = true
@@ -456,6 +513,14 @@ private final class SnapshotOverlayView: NSView {
             selectionRect = NSRect(x: clampedX, y: clampedY, width: startRect.width, height: startRect.height)
         case .resize(let handle, let opposite, let original):
             selectionRect = resizedRect(handle: handle, point: point, opposite: opposite, original: original)
+        case .draw:
+            if let lastIndex = strokes.indices.last {
+                if let prev = strokes[lastIndex].points.last,
+                   hypot(point.x - prev.x, point.y - prev.y) < 0.5 {
+                    break
+                }
+                strokes[lastIndex].points.append(point)
+            }
         case .none:
             break
         }
@@ -470,6 +535,7 @@ private final class SnapshotOverlayView: NSView {
                 showToolbar(below: rect)
             } else {
                 selectionRect = nil
+                strokes.removeAll()
                 hideToolbar()
             }
             needsDisplay = true
@@ -481,6 +547,10 @@ private final class SnapshotOverlayView: NSView {
         if selectionRect != nil {
             selectionRect = nil
             dragMode = .none
+            strokes.removeAll()
+            isBrushActive = false
+            annotationBar?.setBrushActive(false)
+            annotationBar?.setUndoEnabled(false)
             hideToolbar()
             needsDisplay = true
         } else {
@@ -513,6 +583,10 @@ private final class SnapshotOverlayView: NSView {
                 performSaveWithPanel()
                 return true
             }
+            if key == "z", !strokes.isEmpty {
+                performUndo()
+                return true
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
@@ -527,8 +601,16 @@ private final class SnapshotOverlayView: NSView {
                 viewSize: bounds.size,
                 imageWidth: image.width,
                 imageHeight: image.height
-              ) else { return nil }
-        return image.cropping(to: cropRect)
+              ),
+              let cropped = image.cropping(to: cropRect) else { return nil }
+        return ScreenshotSnapshotGeometry.renderCroppedImage(
+            cropped,
+            strokes: strokes,
+            viewSize: bounds.size,
+            imageWidth: image.width,
+            imageHeight: image.height,
+            cropRect: cropRect
+        )
     }
 
     private func performCopy() {
@@ -588,6 +670,30 @@ private final class SnapshotOverlayView: NSView {
         }
     }
 
+    private func toggleBrush() {
+        isBrushActive.toggle()
+        annotationBar?.setBrushActive(isBrushActive)
+        if let rect = selectionRect {
+            showToolbar(below: rect)
+        }
+        if let window {
+            updateCursor(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
+    }
+
+    private func performUndo() {
+        guard !strokes.isEmpty else { return }
+        strokes.removeLast()
+        annotationBar?.setUndoEnabled(!strokes.isEmpty)
+        needsDisplay = true
+    }
+
+    private func selectBrushColor(_ color: ScreenshotRGBA) {
+        selectedBrushColor = color
+        annotationBar?.setBrushColor(color)
+        colorPalette?.setSelectedColor(color)
+    }
+
     // MARK: 悬浮工具条定位与菜单
 
     private func showToolbar(below rect: NSRect) {
@@ -606,23 +712,78 @@ private final class SnapshotOverlayView: NSView {
             bar = created
         }
 
-        let size = bar.fittingSize
+        let leftBar: SnapshotAnnotationBarView
+        if let existing = annotationBar {
+            leftBar = existing
+        } else {
+            let created = SnapshotAnnotationBarView(
+                onBrushToggle: { [weak self] in self?.toggleBrush() },
+                onUndo: { [weak self] in self?.performUndo() }
+            )
+            addSubview(created)
+            annotationBar = created
+            leftBar = created
+        }
+
+        leftBar.setBrushActive(isBrushActive)
+        leftBar.setBrushColor(selectedBrushColor)
+        leftBar.setUndoEnabled(!strokes.isEmpty)
+
+        let rightSize = bar.fittingSize
+        let leftSize = leftBar.fittingSize
         let margin: CGFloat = 8
-        let x = min(max(bounds.minX + margin, rect.maxX - size.width), bounds.maxX - size.width - margin)
+        let barGap: CGFloat = 12
+        let barHeight = max(rightSize.height, leftSize.height)
         let y: CGFloat
-        if rect.minY - margin - size.height >= bounds.minY + margin {
-            y = rect.minY - margin - size.height
-        } else if rect.maxY + margin + size.height <= bounds.maxY - margin {
+        if rect.minY - margin - barHeight >= bounds.minY + margin {
+            y = rect.minY - margin - barHeight
+        } else if rect.maxY + margin + barHeight <= bounds.maxY - margin {
             y = rect.maxY + margin
         } else {
             y = max(bounds.minY + margin, rect.minY + 12)
         }
-        bar.frame = NSRect(origin: NSPoint(x: x, y: y), size: size)
+
+        let maxRightX = max(bounds.minX + margin, bounds.maxX - rightSize.width - margin)
+        let minRightXForLeft = min(maxRightX, bounds.minX + margin + leftSize.width + barGap)
+        let rightX = min(max(minRightXForLeft, rect.maxX - rightSize.width), maxRightX)
+        let leftX = max(bounds.minX + margin, min(rect.minX, rightX - barGap - leftSize.width))
+
+        bar.frame = NSRect(origin: NSPoint(x: rightX, y: y), size: rightSize)
         bar.isHidden = false
+        leftBar.frame = NSRect(origin: NSPoint(x: leftX, y: y), size: leftSize)
+        leftBar.isHidden = false
+
+        if isBrushActive {
+            let palette: SnapshotColorPaletteView
+            if let existing = colorPalette {
+                palette = existing
+            } else {
+                let created = SnapshotColorPaletteView(
+                    initialColor: selectedBrushColor,
+                    onSelectColor: { [weak self] color in self?.selectBrushColor(color) }
+                )
+                addSubview(created)
+                colorPalette = created
+                palette = created
+            }
+            palette.setSelectedColor(selectedBrushColor)
+            let paletteSize = palette.fittingSize
+            let px = min(max(bounds.minX + margin, leftBar.frame.minX), bounds.maxX - paletteSize.width - margin)
+            let gap: CGFloat = 6
+            let py: CGFloat = (leftBar.frame.minY - gap - paletteSize.height >= bounds.minY + margin)
+                ? leftBar.frame.minY - gap - paletteSize.height
+                : min(bounds.maxY - paletteSize.height - margin, leftBar.frame.maxY + gap)
+            palette.frame = NSRect(origin: NSPoint(x: px, y: py), size: paletteSize)
+            palette.isHidden = false
+        } else {
+            colorPalette?.isHidden = true
+        }
     }
 
     private func hideToolbar() {
         toolbar?.isHidden = true
+        annotationBar?.isHidden = true
+        colorPalette?.isHidden = true
     }
 
     private func showFavoriteSaveMenu(anchoredTo button: NSView) {
@@ -766,6 +927,88 @@ private final class QuickSaveTarget {
 
 // MARK: - 选区右下角悬浮工具条
 
+private func configureSnapshotCapsuleStyle(on view: NSView, stack: NSStackView? = nil) {
+    // 胶囊本身为深色高对比背景，固定深色外观以便主题按钮（尤其石墨主题）在任意系统外观下都清晰醒目
+    view.appearance = NSAppearance(named: .darkAqua)
+    view.wantsLayer = true
+    view.layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 0.94).cgColor
+    view.layer?.cornerRadius = 8
+    view.layer?.borderWidth = 1
+    view.layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
+    view.shadow = {
+        let s = NSShadow()
+        s.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        s.shadowBlurRadius = 12
+        s.shadowOffset = NSSize(width: 0, height: -4)
+        return s
+    }()
+    if let stack {
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
+        view.addSubview(stack)
+    }
+}
+
+private final class SnapshotAnnotationBarView: NSView {
+    private let onBrushToggle: () -> Void
+    private let onUndo: () -> Void
+
+    private let stack = NSStackView()
+    private let brushButton: SnapshotBarButton
+    private let undoButton: SnapshotBarButton
+
+    init(onBrushToggle: @escaping () -> Void, onUndo: @escaping () -> Void) {
+        self.onBrushToggle = onBrushToggle
+        self.onUndo = onUndo
+        self.brushButton = SnapshotBarButton(symbol: "paintbrush.pointed", title: nil, minWidth: 32, showsColorDot: true)
+        self.undoButton = SnapshotBarButton(symbol: "arrow.uturn.backward", title: nil, minWidth: 28)
+
+        super.init(frame: .zero)
+        configureSnapshotCapsuleStyle(on: self, stack: stack)
+
+        brushButton.target = self
+        brushButton.action = #selector(brushClicked)
+        brushButton.toolTip = NSLocalizedString("画笔", comment: "")
+
+        undoButton.target = self
+        undoButton.action = #selector(undoClicked)
+        undoButton.toolTip = NSLocalizedString("撤销", comment: "")
+        undoButton.isActionEnabled = false
+
+        stack.addArrangedSubview(brushButton)
+        stack.addArrangedSubview(undoButton)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        stack.frame = bounds
+    }
+
+    override var fittingSize: NSSize {
+        stack.fittingSize
+    }
+
+    func setBrushActive(_ active: Bool) {
+        brushButton.isSelectedState = active
+    }
+
+    func setBrushColor(_ color: ScreenshotRGBA) {
+        brushButton.setColorDot(color.cgColor)
+    }
+
+    func setUndoEnabled(_ enabled: Bool) {
+        undoButton.isActionEnabled = enabled
+    }
+
+    @objc private func brushClicked() { onBrushToggle() }
+    @objc private func undoClicked() { onUndo() }
+}
+
 private final class SnapshotToolbarView: NSView {
     private let onCopy: () -> Void
     private let onSave: () -> Void
@@ -786,20 +1029,7 @@ private final class SnapshotToolbarView: NSView {
         self.saveDropdownButton = SnapshotBarButton(symbol: "chevron.down", title: nil, minWidth: 22)
 
         super.init(frame: .zero)
-        // 胶囊本身为深色高对比背景，固定深色外观以便主题按钮（尤其石墨主题）在任意系统外观下都清晰醒目
-        appearance = NSAppearance(named: .darkAqua)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 0.94).cgColor
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        shadow = {
-            let s = NSShadow()
-            s.shadowColor = NSColor.black.withAlphaComponent(0.45)
-            s.shadowBlurRadius = 12
-            s.shadowOffset = NSSize(width: 0, height: -4)
-            return s
-        }()
+        configureSnapshotCapsuleStyle(on: self, stack: stack)
 
         let copyButton = SnapshotBarButton(
             symbol: "doc.on.doc",
@@ -827,17 +1057,10 @@ private final class SnapshotToolbarView: NSView {
         saveGroup.spacing = 0
         saveGroup.alignment = .centerY
 
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 6, bottom: 4, right: 6)
-
         stack.addArrangedSubview(cancelButton)
         stack.addArrangedSubview(makeDivider(alpha: 0.18))
         stack.addArrangedSubview(saveGroup)
         stack.addArrangedSubview(copyButton)
-
-        addSubview(stack)
     }
 
     @available(*, unavailable)
@@ -870,12 +1093,130 @@ private final class SnapshotToolbarView: NSView {
     @objc private func cancelClicked() { onCancel() }
 }
 
+private final class SnapshotColorPaletteView: NSView {
+    static let presetColors: [ScreenshotRGBA] = [
+        ScreenshotRGBA(red: 1.0, green: 0.231, blue: 0.188),
+        ScreenshotRGBA(red: 1.0, green: 0.8, blue: 0.0),
+        ScreenshotRGBA(red: 0.204, green: 0.78, blue: 0.349),
+        ScreenshotRGBA(red: 0.0, green: 0.478, blue: 1.0),
+        ScreenshotRGBA(red: 1.0, green: 1.0, blue: 1.0),
+        ScreenshotRGBA(red: 0.11, green: 0.11, blue: 0.118),
+    ]
+
+    private let onSelectColor: (ScreenshotRGBA) -> Void
+    private let stack = NSStackView()
+    private var swatchButtons: [SnapshotSwatchButton] = []
+
+    init(initialColor: ScreenshotRGBA, onSelectColor: @escaping (ScreenshotRGBA) -> Void) {
+        self.onSelectColor = onSelectColor
+        super.init(frame: .zero)
+        configureSnapshotCapsuleStyle(on: self, stack: stack)
+
+        for (index, color) in Self.presetColors.enumerated() {
+            let button = SnapshotSwatchButton(color: color, tagIndex: index)
+            button.target = self
+            button.action = #selector(swatchClicked(_:))
+            swatchButtons.append(button)
+            stack.addArrangedSubview(button)
+        }
+        setSelectedColor(initialColor)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        stack.frame = bounds
+    }
+
+    override var fittingSize: NSSize {
+        stack.fittingSize
+    }
+
+    func setSelectedColor(_ color: ScreenshotRGBA) {
+        for button in swatchButtons {
+            button.isSelectedSwatch = (button.swatchColor == color)
+        }
+    }
+
+    @objc private func swatchClicked(_ sender: SnapshotSwatchButton) {
+        onSelectColor(sender.swatchColor)
+    }
+}
+
+private final class SnapshotSwatchButton: NSButton {
+    let swatchColor: ScreenshotRGBA
+    private let dotLayer = CALayer()
+    var isSelectedSwatch = false {
+        didSet { updateAppearance() }
+    }
+
+    init(color: ScreenshotRGBA, tagIndex: Int) {
+        self.swatchColor = color
+        super.init(frame: .zero)
+        tag = tagIndex
+        title = ""
+        isBordered = false
+        setButtonType(.momentaryChange)
+        wantsLayer = true
+        layer?.cornerRadius = 11
+
+        dotLayer.backgroundColor = color.cgColor
+        dotLayer.cornerRadius = 6.5
+        dotLayer.borderWidth = 1
+        dotLayer.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
+        layer?.addSublayer(dotLayer)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 22),
+            heightAnchor.constraint(equalToConstant: 22),
+        ])
+        updateAppearance()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        dotLayer.frame = NSRect(x: (bounds.width - 13) / 2, y: (bounds.height - 13) / 2, width: 13, height: 13)
+    }
+
+    private func updateAppearance() {
+        layer?.backgroundColor = isSelectedSwatch
+            ? NSColor.white.withAlphaComponent(0.22).cgColor
+            : NSColor.clear.cgColor
+        dotLayer.borderWidth = isSelectedSwatch ? 1.5 : 1
+        dotLayer.borderColor = NSColor.white.withAlphaComponent(isSelectedSwatch ? 0.95 : 0.35).cgColor
+    }
+}
+
 private final class SnapshotBarButton: NSButton {
     private let isPrimary: Bool
     private var isHovered = false
     private var trackingAreaRef: NSTrackingArea?
+    private var colorDotLayer: CALayer?
 
-    init(symbol: String, title: String?, minWidth: CGFloat? = nil, isPrimary: Bool = false) {
+    var isSelectedState = false {
+        didSet { updateBackground() }
+    }
+
+    var isActionEnabled = true {
+        didSet {
+            isEnabled = isActionEnabled
+            if !isActionEnabled { isHovered = false }
+            alphaValue = isActionEnabled ? 1.0 : 0.35
+            updateBackground()
+        }
+    }
+
+    init(symbol: String,
+         title: String?,
+         minWidth: CGFloat? = nil,
+         isPrimary: Bool = false,
+         showsColorDot: Bool = false) {
         self.isPrimary = isPrimary
         super.init(frame: .zero)
         isBordered = false
@@ -917,6 +1258,16 @@ private final class SnapshotBarButton: NSButton {
             imagePosition = .imageOnly
         }
 
+        if showsColorDot {
+            let dot = CALayer()
+            dot.cornerRadius = 3.5
+            dot.borderWidth = 1
+            dot.borderColor = NSColor.white.withAlphaComponent(0.85).cgColor
+            dot.backgroundColor = SnapshotColorPaletteView.presetColors[0].cgColor
+            layer?.addSublayer(dot)
+            colorDotLayer = dot
+        }
+
         updateBackground()
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -929,6 +1280,15 @@ private final class SnapshotBarButton: NSButton {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        colorDotLayer?.frame = NSRect(x: bounds.width - 10, y: 3, width: 7, height: 7)
+    }
+
+    func setColorDot(_ cgColor: CGColor) {
+        colorDotLayer?.backgroundColor = cgColor
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -944,6 +1304,7 @@ private final class SnapshotBarButton: NSButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard isActionEnabled else { return }
         isHovered = true
         updateBackground()
     }
@@ -958,8 +1319,13 @@ private final class SnapshotBarButton: NSButton {
             let darkAppearance = NSAppearance(named: .darkAqua)
             let accent = FRThemeID.current.palette.accent.resolved(for: darkAppearance)
             layer?.backgroundColor = (isHovered ? accent.withAlphaComponent(0.85) : accent).cgColor
+        } else if isSelectedState {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.24).cgColor
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor.white.withAlphaComponent(0.45).cgColor
         } else {
-            layer?.backgroundColor = isHovered
+            layer?.borderWidth = 0
+            layer?.backgroundColor = (isActionEnabled && isHovered)
                 ? NSColor.white.withAlphaComponent(0.14).cgColor
                 : NSColor.clear.cgColor
         }

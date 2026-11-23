@@ -1148,6 +1148,8 @@
 "%@ 等 %d 个项目" = "%@ and %d items";
 "启用剪贴板" = "Enable Clipboard";
 "默认开启。在本机记录最近复制的文本、图片与文件，退出应用后仍保留；关闭时自动清空。" = "On by default. Saves recent copied text, images, and files locally across app restarts; cleared automatically when turned off.";
+"记录密码等敏感内容" = "Save Passwords & Sensitive Items";
+"默认关闭。开启后，来自「密码」应用或带有敏感、临时标记的剪贴板内容也会存入本地历史。" = "Off by default. When enabled, items from the Passwords app or marked as sensitive or transient are also saved to local history.";
 "剪贴板历史" = "Clipboard History";
 "仅保存在本机，不纳入系统备份。" = "Stored only on this Mac and excluded from system backups.";
 "记录条数" = "History Limit";
@@ -1234,5 +1236,6 @@
 "保存到常用目录" = "Save to Favorite Folder";
 "已保存到「%@」" = "Saved to “%@”";
 "保存到其他位置…" = "Save to Other Location…";
+"画笔" = "Brush";
 
 

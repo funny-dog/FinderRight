@@ -40,8 +40,10 @@ struct ShortcutsTab: View {
     @FRState private var needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
     /// 授权后所有快捷键由按键拦截处理；未授权时剪切 / 粘贴不可用，其他行退回服务快捷键
     @FRState private var hasAccessibility = AccessibilityChecker.check()
-    /// 恢复默认后递增，让各行重新读取快捷键
-    @FRState private var reloadToken = 0
+    @FRState private var shortcuts: [String: ActionShortcut] = SharedConfig.shared.shortcuts
+    /// 全局仅允许同时录制一行快捷键，避免多行同时处于录制态
+    @FRState private var recordingActionId: String?
+    @FRState private var recordingMonitor: Any?
     @ObservedObject private var globalShortcut = GlobalDirectoryShortcut.shared
     @ObservedObject private var clipboardService = ClipboardHistoryService.shared
     @ObservedObject private var clipboardShortcut = GlobalClipboardShortcut.shared
@@ -112,14 +114,11 @@ struct ShortcutsTab: View {
                         ShortcutCell(actionId: action.id,
                                      actionName: action.name,
                                      actionIcon: action.icon,
-                                     allActions: allShortcutActions,
-                                     interceptorAvailable: hasAccessibility ||
-                                         (action.id == FinderKeyTakeover.goToDirectoryActionId && globalShortcut.isEnabled),
-                                     onConflict: { msg in
-                                         conflictMessage = msg
-                                     },
-                                     onChange: { shortcutChanged(actionId: action.id) })
-                        .id("\(action.id)-\(reloadToken)")
+                                     shortcut: shortcuts[action.id],
+                                     isRecording: recordingActionId == action.id,
+                                     interceptorAvailable: interceptorAvailable(for: action.id),
+                                     onToggleRecording: { toggleRecording(for: action.id) },
+                                     onClear: { clearShortcut(for: action.id) })
                     }
                 }
 
@@ -139,41 +138,42 @@ struct ShortcutsTab: View {
                     ShortcutCell(actionId: clipboardAction.id,
                                  actionName: clipboardAction.name,
                                  actionIcon: clipboardAction.icon,
-                                 allActions: allShortcutActions,
+                                 shortcut: shortcuts[clipboardAction.id],
+                                 isRecording: recordingActionId == clipboardAction.id,
                                  interceptorAvailable: true,
                                  subtitleOverride: clipboardShortcutSubtitle,
                                  subtitleIsWarning: clipboardService.isEnabled && clipboardShortcut.errorMessage != nil,
-                                 onConflict: { msg in
-                                     conflictMessage = msg
-                                 },
-                                 onChange: { shortcutChanged(actionId: clipboardAction.id) })
-                    .id("\(clipboardAction.id)-\(reloadToken)")
+                                 onToggleRecording: { toggleRecording(for: clipboardAction.id) },
+                                 onClear: { clearShortcut(for: clipboardAction.id) })
 
                     FRDivider()
 
                     ShortcutCell(actionId: screenshotAction.id,
                                  actionName: screenshotAction.name,
                                  actionIcon: screenshotAction.icon,
-                                 allActions: allShortcutActions,
+                                 shortcut: shortcuts[screenshotAction.id],
+                                 isRecording: recordingActionId == screenshotAction.id,
                                  interceptorAvailable: true,
                                  subtitleOverride: screenshotShortcutSubtitle,
                                  subtitleIsWarning: screenshotService.isEnabled
                                      && (screenshotService.errorMessage != nil
                                          || (screenshotService.mode == .snapshot && !screenshotService.hasScreenCaptureAccess)),
-                                 onConflict: { msg in
-                                     conflictMessage = msg
-                                 },
-                                 onChange: { shortcutChanged(actionId: screenshotAction.id) })
-                    .id("\(screenshotAction.id)-\(reloadToken)")
+                                 onToggleRecording: { toggleRecording(for: screenshotAction.id) },
+                                 onClear: { clearShortcut(for: screenshotAction.id) })
                 }
 
                 FRFootnote(Text("全局快捷键在任意应用中均可使用，无需辅助功能权限，也无需重启访达。"))
             }
         }
         .onAppear {
+            SharedConfig.shared.reload()
+            shortcuts = SharedConfig.shared.shortcuts
             needsFinderRestart = ServiceShortcutSync.finderNeedsRelaunch
             hasAccessibility = AccessibilityChecker.check()
             screenshotService.refreshPermission()
+        }
+        .onDisappear {
+            stopRecording()
         }
         // 从系统设置授权后切回本 App 时刷新提示
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -188,6 +188,106 @@ struct ShortcutsTab: View {
         }
     }
 
+    private func interceptorAvailable(for actionId: String) -> Bool {
+        if actionId == clipboardAction.id || actionId == screenshotAction.id {
+            return true
+        }
+        return hasAccessibility || (actionId == FinderKeyTakeover.goToDirectoryActionId && globalShortcut.isEnabled)
+    }
+
+    private func toggleRecording(for actionId: String) {
+        if recordingActionId == actionId {
+            stopRecording()
+            return
+        }
+        startRecording(for: actionId)
+    }
+
+    private func startRecording(for actionId: String) {
+        stopRecording()
+        recordingActionId = actionId
+        GlobalDirectoryShortcut.shared.setRecording(true)
+        GlobalClipboardShortcut.shared.setRecording(true)
+        ScreenshotService.shared.setRecording(true)
+        recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let targetId = self.recordingActionId else { return event }
+            if event.keyCode == 53 {
+                self.stopRecording()
+            } else if event.keyCode == 51 || event.keyCode == 117 {
+                self.finishRecording(nil, for: targetId)
+            } else {
+                let cleanMods = event.modifierFlags.intersection([.command, .option, .shift, .control])
+                let keyFromCode = FinderKeyTakeover.functionKeyCharacter(forKeyCode: Int(event.keyCode))
+                let rawChars = keyFromCode ?? event.charactersIgnoringModifiers?.lowercased()
+                guard let chars = rawChars, !chars.isEmpty else { return nil }
+                let hasPrimaryModifier = !cleanMods.intersection([.command, .option, .control]).isEmpty
+                let allowFunctionKey = self.interceptorAvailable(for: targetId) && FinderKeyTakeover.isFunctionKey(chars)
+                guard hasPrimaryModifier || allowFunctionKey else { return nil }
+                self.finishRecording(ActionShortcut(key: chars, modifiers: Int(cleanMods.rawValue)), for: targetId)
+            }
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        recordingActionId = nil
+        if let monitor = recordingMonitor {
+            NSEvent.removeMonitor(monitor)
+            recordingMonitor = nil
+            GlobalDirectoryShortcut.shared.setRecording(false)
+            GlobalClipboardShortcut.shared.setRecording(false)
+            ScreenshotService.shared.setRecording(false)
+        }
+    }
+
+    private func clearShortcut(for actionId: String) {
+        stopRecording()
+        finishRecording(nil, for: actionId)
+    }
+
+    private func finishRecording(_ newShortcut: ActionShortcut?, for actionId: String) {
+        if let candidate = newShortcut {
+            let available = interceptorAvailable(for: actionId)
+            // 已授权：按键拦截抢在访达之前处理，只拦系统全局快捷键；未授权：除剪切 / 粘贴外退回服务快捷键，照旧拦截
+            if let reserved = FinderKeyTakeover.recordingConflict(for: candidate, actionId: actionId,
+                                                                   interceptorAvailable: available) {
+                var message: String
+                switch reserved.kind {
+                case .system:
+                    message = String(format: NSLocalizedString("该快捷键已被系统「%@」占用，请换一个组合", comment: ""),
+                                     NSLocalizedString(reserved.name, comment: ""))
+                case .finderMenu:
+                    message = String(format: NSLocalizedString("该快捷键是访达自带的「%@」，访达会优先响应，请换一个组合（例如加上 ⌃）", comment: ""),
+                                     NSLocalizedString(reserved.name, comment: ""))
+                case .textEditing:
+                    message = String(format: NSLocalizedString("该快捷键是系统文本编辑按键（%@），访达会先拿去处理，请换一个组合（例如 ⌃⌘ 组合）", comment: ""),
+                                     reserved.name)
+                }
+                if !reserved.isSystem {
+                    message += "\n" + NSLocalizedString("授权「辅助功能」后可以使用这个组合。", comment: "")
+                }
+                stopRecording()
+                conflictMessage = message
+                return
+            }
+            for other in allShortcutActions where other.id != actionId {
+                if let existing = shortcuts[other.id],
+                   existing.key.lowercased() == candidate.key.lowercased(),
+                   existing.modifiers == candidate.modifiers {
+                    let otherTitle = NSLocalizedString(other.name, comment: "")
+                    let msg = String(format: NSLocalizedString("该快捷键已被「%@」占用", comment: ""), otherTitle)
+                    stopRecording()
+                    conflictMessage = msg
+                    return
+                }
+            }
+        }
+        SharedConfig.shared.setShortcut(newShortcut, forActionId: actionId)
+        shortcuts = SharedConfig.shared.shortcuts
+        stopRecording()
+        shortcutChanged(actionId: actionId)
+    }
+
     /// 系统弹窗会把 FinderRight 加进辅助功能列表；再打开设置页，用户只需打开开关
     private func requestAccessibility() {
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
@@ -195,6 +295,7 @@ struct ShortcutsTab: View {
     }
 
     private func confirmRestoreDefaults() {
+        stopRecording()
         let dialog = FRDialog(
             title: NSLocalizedString("恢复默认快捷键？", comment: ""),
             message: NSLocalizedString("你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。", comment: ""),
@@ -205,8 +306,9 @@ struct ShortcutsTab: View {
 
     /// 全部换成默认快捷键，并刷新各行、按键拦截与服务快捷键
     private func restoreDefaults() {
+        stopRecording()
         FinderShortcutInterceptor.restoreDefaultShortcuts()
-        reloadToken += 1
+        shortcuts = SharedConfig.shared.shortcuts
         FinderShortcutInterceptor.shared.refresh()
         guard ServiceShortcutSync.run() else { return }
         NSUpdateDynamicServices()
@@ -228,17 +330,14 @@ struct ShortcutCell: View {
     let actionId: String
     let actionName: String
     let actionIcon: String
-    let allActions: [(id: String, name: String, icon: String)]
+    let shortcut: ActionShortcut?
+    let isRecording: Bool
     /// 已授权「辅助功能」：所有行由按键拦截处理
     let interceptorAvailable: Bool
     var subtitleOverride: String? = nil
     var subtitleIsWarning: Bool = false
-    let onConflict: (String) -> Void
-    let onChange: () -> Void
-
-    @FRState private var shortcut: ActionShortcut?
-    @FRState private var isRecording = false
-    @FRState private var monitor: Any?
+    let onToggleRecording: () -> Void
+    let onClear: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -283,7 +382,7 @@ struct ShortcutCell: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button { isRecording ? cancelRecording() : startRecording() } label: {
+            Button(action: onToggleRecording) {
                 Group {
                     if isRecording {
                         Text("按下快捷键…")
@@ -313,7 +412,7 @@ struct ShortcutCell: View {
             .buttonStyle(.plain)
             .animation(.easeInOut(duration: 0.15), value: isRecording)
 
-            Button { finishRecording(nil) } label: {
+            Button(action: onClear) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(FRTheme.mute.opacity(0.7))
             }
@@ -323,87 +422,6 @@ struct ShortcutCell: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .onAppear { shortcut = SharedConfig.shared.shortcut(forActionId: actionId) }
-        .onDisappear {
-            isRecording = false
-            removeMonitor()
-        }
-    }
-
-    private func startRecording() {
-        isRecording = true
-        GlobalDirectoryShortcut.shared.setRecording(true)
-        GlobalClipboardShortcut.shared.setRecording(true)
-        ScreenshotService.shared.setRecording(true)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 {
-                self.cancelRecording()
-            } else if event.keyCode == 51 || event.keyCode == 117 {
-                self.finishRecording(nil)
-            } else {
-                let cleanMods = event.modifierFlags.intersection([.command, .option, .shift, .control])
-                guard !cleanMods.intersection([.command, .option, .control]).isEmpty,
-                      let chars = event.charactersIgnoringModifiers?.lowercased(),
-                      !chars.isEmpty else { return nil }
-                self.finishRecording(ActionShortcut(key: chars, modifiers: Int(cleanMods.rawValue)))
-            }
-            return nil
-        }
-    }
-
-    private func cancelRecording() { isRecording = false; removeMonitor() }
-
-    private func finishRecording(_ newShortcut: ActionShortcut?) {
-        if let candidate = newShortcut {
-            // 已授权：按键拦截抢在访达之前处理，只拦系统全局快捷键；未授权：除剪切 / 粘贴外退回服务快捷键，照旧拦截
-            if let reserved = FinderKeyTakeover.recordingConflict(for: candidate, actionId: actionId,
-                                                                   interceptorAvailable: interceptorAvailable) {
-                var message: String
-                switch reserved.kind {
-                case .system:
-                    message = String(format: NSLocalizedString("该快捷键已被系统「%@」占用，请换一个组合", comment: ""),
-                                     NSLocalizedString(reserved.name, comment: ""))
-                case .finderMenu:
-                    message = String(format: NSLocalizedString("该快捷键是访达自带的「%@」，访达会优先响应，请换一个组合（例如加上 ⌃）", comment: ""),
-                                     NSLocalizedString(reserved.name, comment: ""))
-                case .textEditing:
-                    message = String(format: NSLocalizedString("该快捷键是系统文本编辑按键（%@），访达会先拿去处理，请换一个组合（例如 ⌃⌘ 组合）", comment: ""),
-                                     reserved.name)
-                }
-                if !reserved.isSystem {
-                    message += "\n" + NSLocalizedString("授权「辅助功能」后可以使用这个组合。", comment: "")
-                }
-                cancelRecording()
-                onConflict(message)
-                return
-            }
-            for other in allActions where other.id != actionId {
-                if let existing = SharedConfig.shared.shortcut(forActionId: other.id),
-                   existing.key.lowercased() == candidate.key.lowercased(),
-                   existing.modifiers == candidate.modifiers {
-                    let otherTitle = NSLocalizedString(other.name, comment: "")
-                    let msg = String(format: NSLocalizedString("该快捷键已被「%@」占用", comment: ""), otherTitle)
-                    cancelRecording()
-                    onConflict(msg)
-                    return
-                }
-            }
-        }
-        isRecording = false
-        shortcut = newShortcut
-        SharedConfig.shared.setShortcut(newShortcut, forActionId: actionId)
-        removeMonitor()
-        onChange()
-    }
-
-    private func removeMonitor() {
-        if let m = monitor {
-            NSEvent.removeMonitor(m)
-            monitor = nil
-            GlobalDirectoryShortcut.shared.setRecording(false)
-            GlobalClipboardShortcut.shared.setRecording(false)
-            ScreenshotService.shared.setRecording(false)
-        }
     }
 
     private func displayString(_ s: ActionShortcut) -> String {
@@ -413,7 +431,7 @@ struct ShortcutCell: View {
         if flags.contains(.option)  { r += "⌥" }
         if flags.contains(.shift)   { r += "⇧" }
         if flags.contains(.command) { r += "⌘" }
-        r += s.key.uppercased()
+        r += FinderKeyTakeover.displayKeyName(for: s.key)
         return r
     }
 }

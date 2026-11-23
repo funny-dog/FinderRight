@@ -156,16 +156,63 @@ public enum FinderKeyTakeover {
         return pressed == copy ? .copy : nil
     }
 
+    private struct SpecialKeySpec {
+        let scalarValue: UInt32
+        let keyCode: Int
+        let displayName: String
+        let isFunctionKey: Bool
+    }
+
+    private static let specialKeys: [SpecialKeySpec] = [
+        SpecialKeySpec(scalarValue: 0xF700, keyCode: 126, displayName: "↑", isFunctionKey: false),
+        SpecialKeySpec(scalarValue: 0xF701, keyCode: 125, displayName: "↓", isFunctionKey: false),
+        SpecialKeySpec(scalarValue: 0xF702, keyCode: 123, displayName: "←", isFunctionKey: false),
+        SpecialKeySpec(scalarValue: 0xF703, keyCode: 124, displayName: "→", isFunctionKey: false),
+        SpecialKeySpec(scalarValue: 0xF704, keyCode: 122, displayName: "F1", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF705, keyCode: 120, displayName: "F2", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF706, keyCode: 99,  displayName: "F3", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF707, keyCode: 118, displayName: "F4", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF708, keyCode: 96,  displayName: "F5", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF709, keyCode: 97,  displayName: "F6", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70A, keyCode: 98,  displayName: "F7", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70B, keyCode: 100, displayName: "F8", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70C, keyCode: 101, displayName: "F9", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70D, keyCode: 109, displayName: "F10", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70E, keyCode: 103, displayName: "F11", isFunctionKey: true),
+        SpecialKeySpec(scalarValue: 0xF70F, keyCode: 111, displayName: "F12", isFunctionKey: true),
+    ]
+
     /// 功能键与方向键：录制时得到的是 NSEvent 私有区字符，键盘布局换算不出来，按固定键码处理
     public static func functionKeyCode(for character: String) -> Int? {
         guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1 else { return nil }
-        let table: [UInt32: Int] = [
-            0xF700: 126, 0xF701: 125, 0xF702: 123, 0xF703: 124,             // ↑ ↓ ← →
-            0xF704: 122, 0xF705: 120, 0xF706: 99, 0xF707: 118,               // F1–F4
-            0xF708: 96, 0xF709: 97, 0xF70A: 98, 0xF70B: 100,                 // F5–F8
-            0xF70C: 101, 0xF70D: 109, 0xF70E: 103, 0xF70F: 111,              // F9–F12
-        ]
-        return table[scalar.value]
+        return specialKeys.first(where: { $0.scalarValue == scalar.value })?.keyCode
+    }
+
+    /// 是否为 F1–F12 功能键（允许单独作为快捷键，不强制要求 ⌘/⌥/⌃）
+    public static func isFunctionKey(_ character: String) -> Bool {
+        guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1 else { return false }
+        return specialKeys.first(where: { $0.scalarValue == scalar.value })?.isFunctionKey == true
+    }
+
+    /// 根据硬件键码反查 F1–F12 的标准功能键字符
+    public static func functionKeyCharacter(forKeyCode keyCode: Int) -> String? {
+        guard let spec = specialKeys.first(where: { $0.isFunctionKey && $0.keyCode == keyCode }),
+              let scalar = UnicodeScalar(spec.scalarValue) else { return nil }
+        return String(scalar)
+    }
+
+    /// 设置界面显示的按键名称（将 F1–F12 与方向键等私有区字符转为可读名称）
+    public static func displayKeyName(for character: String) -> String {
+        if let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1,
+           let spec = specialKeys.first(where: { $0.scalarValue == scalar.value }) {
+            return spec.displayName
+        }
+        switch character {
+        case " ": return "Space"
+        case "\t": return "Tab"
+        case "\u{1B}": return "Esc"
+        default: return character.uppercased()
+        }
     }
 
     /// 焦点在文字输入里（重命名、搜索框、路径输入框）时，快捷键是编辑文字用的，必须放行。

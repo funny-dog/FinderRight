@@ -78,6 +78,7 @@ public final class SharedConfig {
         static let recentGitRepositories = "recentGitRepositories"
         static let clipboardEnabled = "clipboardEnabled"
         static let clipboardHistoryLimit = "clipboardHistoryLimit"
+        static let clipboardRecordSensitive = "clipboardRecordSensitive"
         static let clipboardWindowPinned = "clipboardWindowPinned"
         static let clipboardShowDetails = "clipboardShowDetails"
         static let screenshotEnabled = "screenshotEnabled"
@@ -184,6 +185,21 @@ public final class SharedConfig {
             lock.lock()
             defer { lock.unlock() }
             store[Keys.clipboardHistoryLimit] = ClipboardHistoryLimitPreset.normalize(newValue)
+            save()
+        }
+    }
+
+    /// 是否允许记录密码管理器等标记为敏感或临时的剪贴板内容（默认关闭）
+    public var clipboardRecordSensitive: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return store[Keys.clipboardRecordSensitive] as? Bool ?? false
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            store[Keys.clipboardRecordSensitive] = newValue
             save()
         }
     }

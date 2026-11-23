@@ -41,7 +41,7 @@
 - 👁 **切换隐藏文件** —— 一键显示或隐藏隐藏文件，即时生效无需重启 Finder。
 - ↩️ **撤销** —— 按 ⌘Z 即可撤销上一次移动、剪切、新建或压缩等操作。
 - 📋 **轻量剪贴板** —— 在本地记录近期复制的文本、图片与文件，支持快捷键唤起、分栏预览和拖放使用。
-- 📸 **快速截图**（默认关闭）—— 支持在系统原生截图面板与 FinderRight 瞬时快照之间切换，框选后可直接复制或保存到常用目录。
+- 📸 **快速截图**（默认关闭）—— 支持在系统原生截图面板与 FinderRight 瞬时快照之间切换，框选后支持颜色画笔标注与撤销，可直接复制或保存到常用目录。
 - 🕘 **操作历史** —— 按日期记录每次操作的结果与失败原因，支持搜索、筛选和在访达中定位。
 - ☁️ **云盘里也能用** —— 在 iCloud、Google Drive 等云盘目录中通过右键「服务」菜单使用各项操作。
 - 🪟 **简洁模式** —— 点击设置窗口右上角即可收拢为可拖动的紧凑小窗并记住状态，随时还原完整视图。
@@ -161,6 +161,7 @@ iCloud Drive、Google Drive、OneDrive、Dropbox 等云盘是 macOS 的 File Pro
 - **加密 / 分卷压缩包**：加密 ZIP 会弹密码框；加密的 7z / RAR 和分卷包无法解压，会提示失败并自动清理临时文件。
 - **撤销**：只支持单级撤销，与访达自己的撤销按先后顺序共存；文件被改过或原位置有同名项时跳过，删除一律进废纸篓。
 - **新建文件**：桌面新建不弹出访达窗口，其他目录仍自动选中新文件。
+- **轻量剪贴板**：默认跳过「密码」等系统密码应用及带有敏感或临时标记的剪贴板内容，可在「设置 → 功能 → 剪贴板」中开启「记录密码等敏感内容」以允许存储。
 - **剪贴板新建**：文件名默认 `untitled`，可修改；文本类型从下拉框选择，最后一项「自定义」可填写后缀；图片可选 PNG、JPEG 或 HEIC，JPEG 的透明区域会铺白底。文本和图片分别记住上次成功创建时的格式，包括自定义文本后缀；取消或创建失败不更新记忆。
 - **开发者工具**：复制哈希计算 SHA-256 / SHA-1 / MD5，多选与 shasum 格式一致；创建符号链接在原位置生成终端与开发工具可识别的符号链接。项目相对路径以最近 Git 仓库为基准；目录树最多 4 层、1,000 项和 128 KiB，跳过常见依赖与构建目录，不展开符号链接或文件包。文件比较使用紧凑窗口，未选齐时显示左右拖入框，选齐后收成顶部窄栏，下方按行并排显示新增、删除与行号，可随时移除或替换文件；只读支持 UTF-8 和带 BOM 的 UTF-16，每个文件最多 1 MiB、20,000 行。Git 状态支持切换和新建本地分支、暂存／取消暂存、提交，以及目录筛选和已暂存／未暂存 diff。提交前列出整个仓库的暂存文件，沿用 Git 身份、hooks 与签名配置；需要终端交互的流程暂不支持。拉取会把远端改动合并到当前分支，推送按当前分支的上游提交，两者都只通过 https、ssh 或 git 协议联网，并且需要仓库已在终端配置好远端与上游分支。不比较符号链接或子模块内容。自定义命令以 `zsh` 登录环境在后台执行，选中项通过 `"$@"` 传入；不支持交互输入和撤销，关闭输出窗口或退出应用会停止命令。自定义命令暂不提供云盘「服务」入口。
 - **操作历史**：仅保存在本机，默认保留最近 100 条（可选 0 / 50 / 500）；清空历史不影响文件和撤销。
@@ -219,7 +220,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 👁 **Toggle Hidden Files** — Show or hide hidden files instantly without restarting Finder.
 - ↩️ **Undo** — Press ⌘Z to undo your last move, cut, new file, or compression action.
 - 📋 **Lightweight Clipboard** — Keep a local history of recently copied text, images, and files, ready for quick preview, clicking, or drag-and-drop.
-- 📸 **Quick Screenshot** (off by default) — Switch between the macOS Screenshot panel and FinderRight instant snapshots, then copy or save selections directly to favorite folders.
+- 📸 **Quick Screenshot** (off by default) — Switch between the macOS Screenshot panel and FinderRight instant snapshots, annotate with the color brush and undo, then copy or save selections directly to favorite folders.
 - 🕘 **Operation History** — Review past action results and errors by date, with search, filtering, and Finder reveal.
 - ☁️ **Works in Cloud Folders** — Access FinderRight actions inside iCloud Drive, Google Drive, and other cloud folders via right-click → Services.
 - 🪟 **Compact Mode** — Collapse Settings into a small draggable window that remembers your preferred layout.
@@ -341,6 +342,7 @@ In these places FinderRight's actions are available under **right-click → Serv
 - **Encrypted / multi-volume archives**: encrypted ZIPs prompt for a password; encrypted 7z / RAR and split archives fail with a message, and temporary files are cleaned up.
 - **Undo**: single-level only, interleaved with Finder's own undo; items that changed or whose original location is taken are skipped, and deletions always go to the Trash.
 - **New File**: creating a file on the desktop does not open a Finder window; other folders still select the new file automatically.
+- **Lightweight clipboard**: items from built-in password apps (such as Passwords) or marked as sensitive or transient are skipped by default; enable "Save Passwords & Sensitive Items" in Settings → Features → Clipboard to allow storing them.
 - **Create from Clipboard**: the file name defaults to `untitled` and can be changed. Select a text file type from the dropdown, or use its final Custom option to enter an extension. Images can be saved as PNG, JPEG or HEIC; transparent areas are filled white for JPEG. Text and images separately remember the last successfully used format, including custom text extensions; cancelling or a failed creation keeps the previous choice.
 - **Developer Tools**: Copy Hash computes SHA-256 / SHA-1 / MD5 with output matching shasum for multiple items. Make Symbolic Link creates symbolic links next to the originals that Terminal and developer tools recognize. Relative paths use the nearest Git repository. Directory trees show up to 4 levels, 1,000 items and 128 KiB, skip common dependency and build folders, and do not expand symbolic links or packages. File comparison uses a compact window: two drop areas before both files are selected, then slim file bars above aligned line numbers and additions/deletions. Files can be removed or replaced at any time. It is read-only and supports UTF-8 and UTF-16 with a BOM, up to 1 MiB and 20,000 lines per file. Git status supports switching and creating local branches, staging/unstaging, commits, folder filtering and staged/unstaged diffs. Review all staged files across the repository before committing. Git identity, hooks and signing settings are respected; workflows requiring terminal input are unsupported. Pull merges remote changes into the current branch, and push sends it to its upstream; both connect only over https, ssh or git, and require a remote and upstream branch already configured in Terminal. Content diffs for symbolic links or submodules are not provided. Custom commands run in a background login `zsh`, with selected items passed as `"$@"`; interactive input and undo are unavailable. Closing the output window or quitting stops the command. Custom commands are not currently available through Services in cloud folders.
 - **Operation history**: stored only on this Mac, keeping the latest 100 entries by default (0 / 50 / 500 also available); clearing it doesn't affect files or undo.

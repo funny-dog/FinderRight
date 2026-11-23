@@ -131,6 +131,14 @@ struct FeaturesTab: View {
 
                 if clipboardService.isEnabled {
                     FRDivider()
+                    FRRow(title: Text("记录密码等敏感内容"),
+                          subtitle: Text("默认关闭。开启后，来自「密码」应用或带有敏感、临时标记的剪贴板内容也会存入本地历史。")) {
+                        FRSwitch(label: "记录密码等敏感内容", isOn: Binding(
+                            get: { clipboardService.recordSensitive },
+                            set: { clipboardService.setRecordSensitive($0) }))
+                    }
+
+                    FRDivider()
                     FRRow(title: Text("剪贴板历史"),
                           subtitle: Text("仅保存在本机，不纳入系统备份。")) {
                         Button("清空历史") {

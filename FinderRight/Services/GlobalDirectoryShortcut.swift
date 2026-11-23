@@ -64,7 +64,8 @@ final class GlobalDirectoryShortcut: ObservableObject {
             ($0[kHISymbolicHotKeyCode] as? Int) == chord.keyCode &&
             ($0[kHISymbolicHotKeyModifiers] as? UInt32) == modifiers
         }
-        guard modifiers & UInt32(cmdKey | controlKey | optionKey) != 0,
+        guard modifiers & UInt32(cmdKey | controlKey | optionKey) != 0
+                || FinderKeyTakeover.isFunctionKey(shortcut.key),
               FinderKeyTakeover.recordingConflict(for: shortcut, actionId: FinderKeyTakeover.goToDirectoryActionId,
                                                   interceptorAvailable: true)?.isSystem != true,
               !systemConflict else {

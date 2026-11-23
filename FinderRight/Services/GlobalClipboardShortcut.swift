@@ -74,7 +74,8 @@ final class GlobalActionHotKey {
             return
         }
         let modifiers = Self.carbonModifiers(chord.modifiers)
-        guard modifiers & UInt32(cmdKey | controlKey | optionKey) != 0,
+        guard modifiers & UInt32(cmdKey | controlKey | optionKey) != 0
+                || FinderKeyTakeover.isFunctionKey(shortcut.key),
               FinderKeyTakeover.recordingConflict(for: shortcut, actionId: actionId,
                                                   interceptorAvailable: true)?.isSystem != true else {
             fail(NSLocalizedString("该组合不能用作全局快捷键，或已被系统使用，请重新录制", comment: ""))

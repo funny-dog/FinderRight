@@ -196,12 +196,26 @@ struct GlobalDirectoryShortcutTests {
         precondition(!FileManager.default.fileExists(atPath: clipboardDir.path),
                      "清空历史并同步写盘后应删除磁盘目录")
         print("✓ 剪贴板文件拖入：写入剪贴板、重启持久化恢复与清空删除检查通过")
+
+        let bareFunctionKeys = ["\u{F70B}", "\u{F70C}", "\u{F70D}", "\u{F70A}", "\u{F709}"] // F8–F10, F7, F6
+        guard let freeKey = bareFunctionKeys.first(where: { canRegister(ActionShortcut(key: $0, modifiers: 0), carbonModifiers: 0) }) else {
+            preconditionFailure("没有可用的测试功能键")
+        }
+        let fnShortcut = ActionShortcut(key: freeKey, modifiers: 0)
+        config.setShortcut(fnShortcut, forActionId: FinderKeyTakeover.screenshotActionId)
+        let screenshotService = ScreenshotService(config: config)
+        screenshotService.setEnabled(true)
+        precondition(screenshotService.isRegistered && screenshotService.errorMessage == nil,
+                     "截图快捷键应支持单独设置功能键：\(screenshotService.errorMessage ?? "")")
+        screenshotService.setEnabled(false)
+        print("✓ 全局截图快捷键：支持单独功能键注册与释放检查通过")
     }
 
-    static func canRegister(_ shortcut: ActionShortcut) -> Bool {
+    static func canRegister(_ shortcut: ActionShortcut,
+                            carbonModifiers: UInt32 = UInt32(cmdKey | controlKey | optionKey | shiftKey)) -> Bool {
         let chord = FinderShortcutInterceptor.chord(for: shortcut)!
         var reference: EventHotKeyRef?
-        let status = RegisterEventHotKey(UInt32(chord.keyCode), UInt32(cmdKey | controlKey | optionKey | shiftKey),
+        let status = RegisterEventHotKey(UInt32(chord.keyCode), carbonModifiers,
                                         EventHotKeyID(signature: 0x54455354, id: 3), GetApplicationEventTarget(),
                                         OptionBits(kEventHotKeyExclusive), &reference)
         if let reference { UnregisterEventHotKey(reference) }

@@ -60,4 +60,122 @@ public enum ScreenshotSnapshotGeometry {
         guard !integral.isNull, integral.width >= 2, integral.height >= 2 else { return nil }
         return integral
     }
+
+    /// 在当前 CoreGraphics 上下文中绘制画笔轨迹。
+    public static func drawStrokes(_ strokes: [ScreenshotBrushStroke], in context: CGContext) {
+        context.saveGState()
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+
+        for stroke in strokes {
+            guard let first = stroke.points.first else { continue }
+            let color = stroke.color.cgColor
+            let width = max(1, stroke.lineWidth)
+            let isSinglePoint = stroke.points.count == 1
+                || stroke.points.allSatisfy { hypot($0.x - first.x, $0.y - first.y) < 0.01 }
+
+            if isSinglePoint {
+                let radius = width / 2
+                let dotRect = CGRect(x: first.x - radius, y: first.y - radius, width: width, height: width)
+                context.setFillColor(color)
+                context.fillEllipse(in: dotRect)
+            } else {
+                context.beginPath()
+                context.move(to: first)
+                for point in stroke.points.dropFirst() {
+                    context.addLine(to: point)
+                }
+                context.setStrokeColor(color)
+                context.setLineWidth(width)
+                context.strokePath()
+            }
+        }
+
+        context.restoreGState()
+    }
+
+    /// 将视图坐标系下的画笔轨迹按裁剪像素区域合成到裁剪后的截图上。
+    public static func renderCroppedImage(_ croppedImage: CGImage,
+                                          strokes: [ScreenshotBrushStroke],
+                                          viewSize: CGSize,
+                                          imageWidth: Int,
+                                          imageHeight: Int,
+                                          cropRect: CGRect) -> CGImage {
+        guard !strokes.isEmpty,
+              viewSize.width > 0, viewSize.height > 0,
+              imageWidth > 0, imageHeight > 0 else {
+            return croppedImage
+        }
+
+        let width = croppedImage.width
+        let height = croppedImage.height
+        let fallbackSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let preferredSpace: CGColorSpace
+        if let imageSpace = croppedImage.colorSpace, imageSpace.model == .rgb {
+            preferredSpace = imageSpace
+        } else {
+            preferredSpace = fallbackSpace
+        }
+
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: preferredSpace,
+            bitmapInfo: bitmapInfo
+        ) ?? CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: fallbackSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return croppedImage
+        }
+
+        context.draw(croppedImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let scaleX = CGFloat(imageWidth) / viewSize.width
+        let scaleY = CGFloat(imageHeight) / viewSize.height
+        context.translateBy(x: -cropRect.minX, y: -(CGFloat(imageHeight) - cropRect.maxY))
+        context.scaleBy(x: scaleX, y: scaleY)
+
+        drawStrokes(strokes, in: context)
+        return context.makeImage() ?? croppedImage
+    }
+}
+
+public struct ScreenshotRGBA: Equatable {
+    public let red: CGFloat
+    public let green: CGFloat
+    public let blue: CGFloat
+    public let alpha: CGFloat
+
+    public init(red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat = 1) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    }
+
+    public var cgColor: CGColor {
+        CGColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+
+public struct ScreenshotBrushStroke: Equatable {
+    public var points: [CGPoint]
+    public var color: ScreenshotRGBA
+    public var lineWidth: CGFloat
+
+    public init(points: [CGPoint], color: ScreenshotRGBA, lineWidth: CGFloat) {
+        self.points = points
+        self.color = color
+        self.lineWidth = lineWidth
+    }
 }
