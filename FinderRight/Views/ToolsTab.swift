@@ -15,7 +15,7 @@ struct ToolsTab: View {
     @FRState private var isSearching = true
 
     var body: some View {
-        FRPage(title: "终端", subtitle: "选择右键菜单中「在终端中打开」使用的终端应用") {
+        FRPage(title: "终端", subtitle: "配置右键「打开终端」使用的应用") {
             FRSection("默认终端") {
                 FRCard {
                     FRRow(title: Text("默认终端")) {
@@ -73,8 +73,7 @@ struct ToolsTab: View {
                         terminalRow(terminal)
                     }
                 }
-                FRFootnote(Text("自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。"))
-                FRFootnote(Text("默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。"))
+                FRFootnote(Text("自动识别终端应用，也可手动添加；启用多个时展开子菜单，拖动 ≡ 排序。"))
             }
         }
         .onAppear(perform: detectInstalledApps)

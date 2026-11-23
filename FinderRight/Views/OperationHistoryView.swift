@@ -22,7 +22,7 @@ struct OperationHistoryView: View {
     }
 
     var body: some View {
-        FRPage(title: "操作历史", subtitle: "查看文件操作的结果，快速找到处理后的文件。") {
+        FRPage(title: "操作历史", subtitle: "查看近期文件操作与结果") {
             preferences
 
             if persistenceError != nil {
@@ -271,8 +271,8 @@ struct OperationHistoryView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(FRTheme.text)
             Text(LocalizedStringKey(savedLimit == 0
-                 ? "选择保留条数后，新的文件操作会出现在这里。不保留历史时，操作失败仍会提示。"
-                 : "用 FinderRight 新建、移动或压缩文件后，就能在这里查看结果。"))
+                 ? "选择保留条数后即可记录操作；关闭时失败仍会提示。"
+                 : "执行文件操作后会显示在这里。"))
                 .font(.system(size: 12.5))
                 .foregroundColor(FRTheme.mute)
                 .multilineTextAlignment(.center)

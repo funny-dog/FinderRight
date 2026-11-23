@@ -19,7 +19,7 @@ struct EditorsTab: View {
     @FRState private var dropTargetEditorId: String?
 
     var body: some View {
-        FRPage(title: "编辑器", subtitle: "右键「打开编辑器」与服务菜单使用的编辑器") {
+        FRPage(title: "编辑器", subtitle: "配置右键「打开编辑器」使用的应用") {
             FRSection("默认编辑器") {
                 FRCard {
                     FRRow(title: Text("默认编辑器")) {
@@ -72,7 +72,7 @@ struct EditorsTab: View {
                         row(editor)
                     }
                 }
-                FRFootnote(Text("自动列出声明支持通用文本、通用源码或所有文件的编辑器；仅编辑特定文本格式的应用可通过「添加编辑器…」加入，无法识别时会弹窗说明。关闭开关可隐藏菜单项，拖动左侧的 ≡ 可调整顺序。"))
+                FRFootnote(Text("自动识别常见编辑器，也可手动添加；关闭可隐藏，拖动 ≡ 排序。"))
             }
         }
         .onAppear(perform: reload)

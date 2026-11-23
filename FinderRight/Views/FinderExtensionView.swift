@@ -16,9 +16,9 @@ struct FinderExtensionView: View {
             granted: enabled,
             grantedDetail: "已启用",
             deniedDetail: "未启用 — 访达右键菜单中不会出现 FinderRight",
-            explanation: "FinderRight 的右键菜单由访达扩展提供，需要在系统设置中启用后才会出现。",
+            explanation: "右键菜单由访达扩展提供，需在系统设置中启用。",
             openTitle: "打开扩展设置…",
-            tip: "提示：启用后若右键仍没有菜单，可在「设置 → 通用」中点「重启访达」。",
+            tip: "启用后若仍无菜单，可点下方「重启访达」。",
             steps: [
                 "1. 点击上方按钮，会跳转到系统设置的扩展管理",
                 "2. 在列表中找到 FinderRight",

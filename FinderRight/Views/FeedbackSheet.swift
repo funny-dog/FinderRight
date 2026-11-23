@@ -24,7 +24,7 @@ struct FeedbackSheet: View {
                     Text("反馈与建议")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundColor(FRTheme.text)
-                    Text("提交会在浏览器中打开 GitHub，需要登录 GitHub 账号")
+                    Text("将在浏览器打开 GitHub 提交")
                         .font(.system(size: 12))
                         .foregroundColor(FRTheme.mute)
                 }
@@ -105,7 +105,7 @@ struct FeedbackSheet: View {
                     .strokeBorder(FRTheme.fieldBorder, lineWidth: 1)
             )
 
-            Text("用户名已从路径中隐去；提交前可在网页中修改或删除")
+            Text("已隐去用户名，提交前可在网页修改")
                 .font(.system(size: 11.5))
                 .foregroundColor(FRTheme.mute)
         }

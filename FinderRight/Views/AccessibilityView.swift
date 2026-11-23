@@ -13,9 +13,9 @@ struct AccessibilityView: View {
             title: "辅助功能",
             granted: hasAccess,
             deniedDetail: "未授权 — 「切换隐藏文件」需重启访达，会关闭所有访达窗口",
-            explanation: "FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件；剪切、粘贴快捷键也需要它。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。",
+            explanation: "用于免重启切换隐藏文件，以及剪切、粘贴等访达快捷键。",
             openTitle: "打开辅助功能设置…",
-            tip: "提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。",
+            tip: "更新后若失效，在系统设置中删除旧项再重新添加。",
             steps: [
                 "1. 点击上方按钮，会跳转到「辅助功能」列表",
                 "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app",

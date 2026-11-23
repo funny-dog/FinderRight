@@ -45,7 +45,7 @@ struct OnboardingView: View {
                         PermissionStep(
                             icon: "puzzlepiece.extension.fill",
                             title: "启用 Finder 扩展",
-                            subtitle: "FinderRight 的右键菜单由访达扩展提供，启用后才会出现在访达中。"
+                            subtitle: "右键菜单由访达扩展提供，需先启用。"
                         ) {
                             FRCard { FinderExtensionView() }
                         }
@@ -53,7 +53,7 @@ struct OnboardingView: View {
                         PermissionStep(
                             icon: "externaldrive.fill.badge.checkmark",
                             title: "授予完全磁盘访问（推荐）",
-                            subtitle: "用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。"
+                            subtitle: "用于受保护目录，可先跳过，稍后在设置中授权。"
                         ) {
                             FRCard { FullDiskAccessView() }
                         }
@@ -61,7 +61,7 @@ struct OnboardingView: View {
                         PermissionStep(
                             icon: "accessibility",
                             title: "授予辅助功能（可选）",
-                            subtitle: "仅用于免重启访达切换隐藏文件，不会关闭访达窗口或中断拷贝，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。"
+                            subtitle: "用于免重启切换隐藏文件与快捷键，可先跳过。"
                         ) {
                             FRCard { AccessibilityView() }
                         }

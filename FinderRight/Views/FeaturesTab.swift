@@ -74,7 +74,7 @@ struct FeaturesTab: View {
         FRSection("打开路径") {
             FRCard {
                 FRRow(title: Text("全局生效"),
-                      subtitle: Text("默认关闭。开启后，同一快捷键可在其他应用中唤起打开路径；FinderRight 需保持运行。")) {
+                      subtitle: Text("可在其他应用中用同一快捷键唤起")) {
                     FRSwitch(label: "打开路径快捷键全局生效", isOn: Binding(
                         get: { globalShortcut.isEnabled },
                         set: { setGlobalShortcut($0) }))
@@ -123,7 +123,7 @@ struct FeaturesTab: View {
         FRSection("剪贴板") {
             FRCard {
                 FRRow(title: Text("启用剪贴板"),
-                      subtitle: Text("默认开启。在本机记录最近复制的文本、图片与文件，退出应用后仍保留；关闭时自动清空。")) {
+                      subtitle: Text("本机记录最近复制的文本、图片与文件，关闭时清空")) {
                     FRSwitch(label: "启用剪贴板", isOn: Binding(
                         get: { clipboardService.isEnabled },
                         set: { clipboardService.setEnabled($0) }))
@@ -132,7 +132,7 @@ struct FeaturesTab: View {
                 if clipboardService.isEnabled {
                     FRDivider()
                     FRRow(title: Text("记录密码等敏感内容"),
-                          subtitle: Text("默认关闭。开启后，来自「密码」应用或带有敏感、临时标记的剪贴板内容也会存入本地历史。")) {
+                          subtitle: Text("同时记录「密码」应用及敏感、临时内容")) {
                         FRSwitch(label: "记录密码等敏感内容", isOn: Binding(
                             get: { clipboardService.recordSensitive },
                             set: { clipboardService.setRecordSensitive($0) }))
@@ -159,7 +159,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("可在「设置 → 快捷键」中设置全局快捷键。"))
+            FRFootnote(Text("全局快捷键请在「快捷键」页设置。"))
         }
     }
 
@@ -168,9 +168,9 @@ struct FeaturesTab: View {
     private var screenshotModeSubtitle: LocalizedStringKey {
         switch screenshotService.mode {
         case .system:
-            return LocalizedStringKey("唤起 macOS 原生截图面板（⌘⇧5），无需屏幕录制权限。")
+            return LocalizedStringKey("唤起系统原生截图（⌘⇧5），免录制权限")
         case .snapshot:
-            return LocalizedStringKey("按下瞬间定格当前屏幕，框选后可直接复制或保存到常用目录。")
+            return LocalizedStringKey("定格屏幕框选，可标注、复制或保存")
         }
     }
 
@@ -178,7 +178,7 @@ struct FeaturesTab: View {
         FRSection("截图") {
             FRCard {
                 FRRow(title: Text("启用截图"),
-                      subtitle: Text("默认关闭。开启后可从菜单栏或自定义全局快捷键快速截图。")) {
+                      subtitle: Text("通过菜单栏或全局快捷键快速截图")) {
                     FRSwitch(label: "启用截图", isOn: Binding(
                         get: { screenshotService.isEnabled },
                         set: { screenshotService.setEnabled($0) }))
@@ -201,7 +201,7 @@ struct FeaturesTab: View {
                     if screenshotService.mode == .snapshot && !screenshotService.hasScreenCaptureAccess {
                         FRDivider()
                         FRRow(title: Text("需要「屏幕录制」权限"),
-                              subtitle: Text("用于抓取当前屏幕静态快照；未授权时无法截取其他应用窗口。")) {
+                              subtitle: Text("未授权时无法截取其他应用窗口")) {
                             HStack(spacing: 8) {
                                 Button("重新检测") { screenshotService.refreshPermission() }
                                     .buttonStyle(.frSecondary)
@@ -222,7 +222,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("可在「设置 → 快捷键」中设置全局快捷键。"))
+            FRFootnote(Text("全局快捷键请在「快捷键」页设置。"))
         }
     }
 
@@ -271,7 +271,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。"))
+            FRFootnote(Text("关闭项不显示在右键菜单，拖动 ≡ 可排序。"))
         }
     }
 
@@ -336,8 +336,8 @@ struct FeaturesTab: View {
             }
 
             FRFootnote(Text(copyPathFormat == .shellEscaped
-                            ? "含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。"
-                            : "多选时每行一项。「服务」菜单里的复制路径也使用此格式。"))
+                            ? "特殊字符自动加引号，多选以空格分隔。"
+                            : "多选每行一项，同步用于「服务」菜单。"))
         }
     }
 
@@ -379,7 +379,7 @@ struct FeaturesTab: View {
                 .padding(.vertical, 11)
             }
 
-            FRFootnote(Text("不含扩展名时仅去除普通文件最后一段扩展名（如 report.tar.gz → report.tar）；目录（含 .app 包）与无扩展名文件保持原名。多选时每行一项。"))
+            FRFootnote(Text("仅去除普通文件末段扩展名，目录保持原名，多选每行一项。"))
         }
     }
 
@@ -388,7 +388,7 @@ struct FeaturesTab: View {
     private var copyContentSection: some View {
         FRSection("复制文件内容") {
             FRCard {
-                FRRow(title: Text("文件大小上限"), subtitle: Text("仅在单选常规文件且大小在上限内时显示菜单项")) {
+                FRRow(title: Text("文件大小上限"), subtitle: Text("单选且不超过此大小时显示")) {
                     let selectedPreset = CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
                     FRPicker(label: "文件大小上限", titleKey: selectedPreset.titleKey, selection: Binding(
                         get: {
@@ -426,7 +426,7 @@ struct FeaturesTab: View {
                 }
             }
 
-            FRFootnote(Text("注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。"))
+            FRFootnote(Text("开启后可能隐藏网盘等扩展的同步角标。"))
         }
     }
 
@@ -479,7 +479,7 @@ private struct PreviewExtensionToggle: View {
             }
             if enabled == true, hasConflict {
                 FRDivider()
-                Text("检测到其他应用的 Markdown 预览，系统可能优先使用它")
+                Text("检测到其他 Markdown 预览扩展，系统可能优先使用")
                     .font(.system(size: 12))
                     .foregroundColor(FRTheme.mute)
                     .fixedSize(horizontal: false, vertical: true)

@@ -11,7 +11,7 @@ struct FullDiskAccessView: View {
             title: "完全磁盘访问",
             granted: hasFDA,
             deniedDetail: "未授权 — 在 ~/Pictures、~/Documents 等受保护目录将无法工作",
-            explanation: "FinderRight 需要「完全磁盘访问」权限，才能在系统保护目录（Documents、Desktop、Downloads、Pictures、Movies、Music）执行右键菜单功能。",
+            explanation: "用于在「文稿」「桌面」「下载」等受保护目录执行操作。",
             openTitle: "打开系统设置授权…",
             steps: [
                 "1. 点击上方按钮，会自动跳转到「完全磁盘访问」列表",

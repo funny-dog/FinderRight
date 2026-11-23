@@ -184,7 +184,7 @@ private struct EditDeveloperCommandSheet: View {
                     .frame(height: 170)
                     .background(FRTheme.field)
                     .cornerRadius(7)
-                Text("选中项通过 \"$@\" 传入；后台运行，不支持交互输入。")
+                Text("选中项经 \"$@\" 传入，后台运行且不支持交互。")
                     .font(.system(size: 12)).foregroundColor(FRTheme.mute)
             }
             Text("命令可修改文件，不支持撤销。")

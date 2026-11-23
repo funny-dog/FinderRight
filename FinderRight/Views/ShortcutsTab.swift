@@ -56,7 +56,7 @@ struct ShortcutsTab: View {
         if let error = clipboardShortcut.errorMessage {
             return error
         }
-        return NSLocalizedString("全局生效，可在任意应用中唤起剪贴板", comment: "")
+        return NSLocalizedString("全局可用，任意应用唤起剪贴板", comment: "")
     }
 
     private var screenshotShortcutSubtitle: String {
@@ -70,18 +70,18 @@ struct ShortcutsTab: View {
             if !screenshotService.hasScreenCaptureAccess {
                 return NSLocalizedString("需先在「功能 → 截图」中授权屏幕录制", comment: "")
             }
-            return NSLocalizedString("全局生效，可在任意应用中定格屏幕并框选截图", comment: "")
+            return NSLocalizedString("全局可用，任意应用定格框选截图", comment: "")
         }
-        return NSLocalizedString("全局生效，可在任意应用中唤起系统截图", comment: "")
+        return NSLocalizedString("全局可用，任意应用唤起系统截图", comment: "")
     }
 
     var body: some View {
-        FRPage(title: "快捷键", subtitle: "在访达中选中文件后直接按键，无需展开右键菜单") {
+        FRPage(title: "快捷键", subtitle: "在访达中直接按键触发操作") {
             FRSection("访达快捷键") {
                 if !hasAccessibility {
                     FRCard {
                         FRRow(title: Text("快捷键需要「辅助功能」权限"),
-                              subtitle: Text("授权后任意组合都能用、改完立即生效；未授权时剪切、粘贴不可用，其余快捷键要重启访达才生效。")) {
+                              subtitle: Text("授权后立即生效且支持剪切/粘贴；未授权需重启访达。")) {
                             VStack(alignment: .trailing, spacing: 8) {
                                 Button("授权辅助功能…") { requestAccessibility() }
                                     .buttonStyle(.frPrimary)
@@ -98,7 +98,7 @@ struct ShortcutsTab: View {
                 if needsFinderRestart && !hasAccessibility {
                     FRCard {
                         FRRow(title: Text("重启访达后新快捷键生效"),
-                              subtitle: Text("访达只在启动时读取服务快捷键；重启会关闭所有访达窗口，可能中断正在进行的拷贝。")) {
+                              subtitle: Text("重启访达以载入新快捷键（会关闭访达窗口）")) {
                             Button("重启访达") {
                                 FinderRelauncher.relaunch()
                                 needsFinderRestart = false
@@ -124,13 +124,13 @@ struct ShortcutsTab: View {
 
                 FRCard {
                     FRRow(title: Text("恢复默认快捷键"),
-                          subtitle: Text("恢复与访达一致的默认组合，没有默认的会清空。")) {
+                          subtitle: Text("恢复默认组合，其余清空")) {
                         Button("恢复默认…") { confirmRestoreDefaults() }
                             .buttonStyle(.frSecondary)
                     }
                 }
 
-                FRFootnote(Text("点击按钮后按键录制，Delete 清除，ESC 取消。默认与访达一致，升级不会改动你的设置。\n除剪切、粘贴、切换隐藏文件、打开路径外，其余快捷键需先选中文件。"))
+                FRFootnote(Text("点击录制，Delete 清除，ESC 取消。多数操作需先选中文件。"))
             }
 
             FRSection("全局快捷键") {
@@ -162,7 +162,7 @@ struct ShortcutsTab: View {
                                  onClear: { clearShortcut(for: screenshotAction.id) })
                 }
 
-                FRFootnote(Text("全局快捷键在任意应用中均可使用，无需辅助功能权限，也无需重启访达。"))
+                FRFootnote(Text("任意应用可用，无需辅助功能权限或重启访达。"))
             }
         }
         .onAppear {
@@ -367,11 +367,11 @@ struct ShortcutCell: View {
                     .font(.system(size: 11))
                     .foregroundColor(FRTheme.warnText)
                 } else if actionId == FinderKeyTakeover.pasteActionId {
-                    Text("粘贴到当前窗口所在的文件夹，空白处也可以")
+                    Text("粘贴到当前文件夹，空白处可用")
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
                 } else if actionId == FinderKeyTakeover.toggleHiddenActionId && !interceptorAvailable {
-                    Text("需要「辅助功能」权限，否则仅在右键菜单展开时生效")
+                    Text("需辅助功能权限，否则仅右键展开时生效")
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
                 } else if let subtitleOverride {

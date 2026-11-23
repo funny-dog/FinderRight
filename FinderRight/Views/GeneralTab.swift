@@ -123,7 +123,7 @@ struct GeneralTab: View {
                 FRDivider()
 
                 FRRow(title: Text("在「服务」中显示 FinderRight"),
-                      subtitle: Text("控制系统与右键「服务」菜单中的全部 FinderRight 功能，云盘目录也使用此入口。")) {
+                      subtitle: Text("在系统与右键「服务」菜单中显示（云盘目录适用）")) {
                     FRSwitch(label: "在「服务」中显示 FinderRight", isOn: $showServicesMenu)
                 }
                 .onChange(of: showServicesMenu) { _ in
@@ -136,7 +136,7 @@ struct GeneralTab: View {
                 if servicesMenuNeedsRestart {
                     FRDivider()
                     FRRow(title: Text("重启访达以刷新服务菜单"),
-                          subtitle: Text("访达可能仍显示缓存的服务项；重启会关闭所有访达窗口，可能中断正在进行的拷贝。")) {
+                          subtitle: Text("重启访达以刷新缓存（会关闭访达窗口）")) {
                         Button("重启访达") {
                             FinderRelauncher.relaunch()
                             servicesMenuNeedsRestart = false
@@ -154,7 +154,7 @@ struct GeneralTab: View {
 
                 FRDivider()
 
-                FRRow(title: Text("显示程序坞图标"), subtitle: Text("关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）")) {
+                FRRow(title: Text("显示程序坞图标"), subtitle: Text("关闭后隐藏 Dock 图标，仍在后台运行")) {
                     FRSwitch(label: "显示程序坞图标", isOn: $showDockIcon)
                 }
                 .onChange(of: showDockIcon) { newValue in
@@ -162,8 +162,8 @@ struct GeneralTab: View {
                 }
             }
 
-            FRFootnote(Text("切换语言将立即自动重启应用以生效"))
-            FRFootnote(Text("云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。"))
+            FRFootnote(Text("切换语言后将自动重启应用"))
+            FRFootnote(Text("「服务」菜单语言跟随系统，不受此设置影响。"))
 
             if !showMenuBarIcon && !showDockIcon {
                 Label {

@@ -19,7 +19,7 @@ struct WebsiteSheet: View {
              detail: "主站 · 产品介绍与安装包下载",
              url: URL(string: UpdatePolicy.websiteOrigin)!),
         Site(id: "china", symbol: "network", title: "国内站",
-             detail: "展示镜像 · 不含安装包，主站访问不畅时使用",
+             detail: "国内展示镜像（不含安装包）",
              url: URL(string: "https://finderright-bhnr38evqjb.qoder.zone")!),
     ]
 

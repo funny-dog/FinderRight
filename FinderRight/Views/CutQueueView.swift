@@ -65,7 +65,7 @@ struct CutQueueView: View {
                     Text(NSLocalizedString("剪切队列为空", comment: ""))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(FRTheme.text)
-                    Text(NSLocalizedString("在访达中选中文件右键选择「剪切」或按 ⌘X 后，待移动的项目会显示在这里", comment: ""))
+                    Text(NSLocalizedString("在访达中剪切文件（⌘X）后会显示在这里", comment: ""))
                         .font(.system(size: 11))
                         .foregroundColor(FRTheme.mute)
                         .multilineTextAlignment(.center)
@@ -106,7 +106,7 @@ struct CutQueueView: View {
 
     private var footerBar: some View {
         HStack(spacing: 8) {
-            Text(NSLocalizedString("提示：前往目标目录右键选择「粘贴」或按 ⌘V 即可完成移动", comment: ""))
+            Text(NSLocalizedString("在目标目录右键「粘贴」或按 ⌘V 即可移动", comment: ""))
                 .font(.system(size: 11))
                 .foregroundColor(FRTheme.mute)
                 .lineLimit(1)

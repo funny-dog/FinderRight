@@ -25,7 +25,7 @@ struct PermissionsTab: View {
                     AccessibilityView()
                 }
 
-                FRFootnote(Text("「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。"))
+                FRFootnote(Text("「完全磁盘访问」用于受保护目录；「辅助功能」用于免重启切换隐藏文件及快捷键。"))
             }
 
             FRSection {
@@ -40,7 +40,7 @@ struct PermissionsTab: View {
                 }
             } content: {
                 FRCard {
-                    FRRow(title: Text("右键菜单排查"), subtitle: Text("若右键未显示菜单，可尝试重启访达或检查扩展开关")) {
+                    FRRow(title: Text("右键菜单排查"), subtitle: Text("右键无菜单时，可重启访达或检查扩展")) {
                         HStack(spacing: 8) {
                             Button("重启访达") { FinderRelauncher.relaunch() }
                                 .buttonStyle(.frSecondary)
@@ -69,7 +69,7 @@ struct PermissionsTab: View {
                     Text("FinderRight 正在以临时副本运行")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(FRTheme.text)
-                    Text("当前是从下载目录直接打开的，macOS 会把它挂载到只读的临时路径下运行，扩展状态判断与「新建文件」等操作可能表现异常。把 FinderRight 拖到「应用程序」文件夹后再打开即可恢复正常。")
+                    Text("从下载目录直接打开会导致扩展异常，请拖入「应用程序」文件夹后重开。")
                         .font(.system(size: 12))
                         .foregroundColor(FRTheme.mute)
                         .fixedSize(horizontal: false, vertical: true)

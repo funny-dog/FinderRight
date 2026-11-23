@@ -65,9 +65,9 @@
 "复制文件名" = "Copy File Name";
 "复制文件名到剪贴板" = "Copy file name to clipboard";
 "复制文件内容" = "Copy File Content";
-"复制单选文本文件的全部内容到剪贴板" = "Copy the full content of a selected text file to the clipboard";
+"复制单选文本文件内容" = "Copy text content of a selected file";
 "文件大小上限" = "Maximum File Size";
-"仅在单选常规文件且大小在上限内时显示菜单项" = "Only shown when a single regular file is selected and its size is within the limit";
+"单选且不超过此大小时显示" = "Shown only for single files within limit";
 "已复制文件内容到剪贴板" = "Copied file content to clipboard";
 "无法复制：非文本文件" = "Cannot copy: not a text file";
 "文件大小超过限制" = "File size exceeds limit";
@@ -87,11 +87,11 @@
 "右键菜单功能" = "Right-Click Menu Features";
 "关闭的功能不会出现在 Finder 右键菜单中。" = "Disabled features won't appear in the Finder right-click menu.";
 "显示大小" = "Show Size";
-"单选文件或文件夹时，在右键菜单中显示磁盘占用" = "Show disk usage in the right-click menu for one selected file or folder.";
+"单选时在右键菜单显示磁盘占用" = "Show disk usage in context menu for a single item";
 "剪切角标" = "Cut Badge";
 "自动解决角标冲突" = "Resolve Badge Conflicts Automatically";
 "其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。" = "Other Finder extensions (such as Keka or Pearcleaner) may hold the badge slot, so the cut badge doesn't appear. When enabled, FinderRight briefly restarts those extensions to take the slot back, but only when the current folder contains cut items (at most once per Finder launch).";
-"注意：这可能使网盘等扩展的同步状态图标在 FinderRight 监控的目录中不再显示。" = "Note: this may hide sync status icons from cloud storage extensions in folders FinderRight monitors.";
+"开启后可能隐藏网盘等扩展的同步角标。" = "May hide cloud sync badges in monitored folders.";
 
 /* General tab */
 "开机自动启动" = "Launch at Login";
@@ -99,7 +99,7 @@
 "显示菜单栏图标" = "Show Menu Bar Icon";
 "关闭后，菜单栏不显示 FinderRight 图标" = "When off, FinderRight won't appear in the menu bar";
 "显示程序坞图标" = "Show Dock Icon";
-"关闭后，FinderRight 在 Dock 中隐藏（仍可后台运行）" = "When off, FinderRight is hidden from the Dock (still runs in the background)";
+"关闭后隐藏 Dock 图标，仍在后台运行" = "Hide Dock icon when off; keeps running in background";
 "启动" = "Startup";
 "显示" = "Appearance";
 "主题色" = "Theme Color";
@@ -114,7 +114,7 @@
 "深色" = "Dark";
 "语言" = "Language";
 "跟随系统" = "System";
-"切换语言将立即自动重启应用以生效" = "Switching language will immediately restart the app to take effect";
+"切换语言后将自动重启应用" = "App restarts automatically on language change";
 "右键菜单图标" = "Right-Click Menu Icons";
 "单色线条" = "Mono Symbols";
 "彩色线条" = "Color Symbols";
@@ -122,7 +122,7 @@
 "无图标" = "No Icons";
 "两个图标都关闭后，可通过 Spotlight 搜索「FinderRight」重新打开偏好设置" = "With both icons off, search \"FinderRight\" in Spotlight to reopen Settings";
 "权限" = "Permissions";
-"「完全磁盘访问」让你能在 ~/Documents、~/Desktop、~/Pictures 等受保护目录使用所有功能。「辅助功能」让「切换隐藏文件」无需重启访达，不会关闭访达窗口或中断拷贝。" = "\"Full Disk Access\" lets all features work in protected folders like ~/Documents, ~/Desktop, ~/Pictures. \"Accessibility\" lets \"Toggle Hidden Files\" work without restarting Finder, so Finder windows stay open and copies aren't interrupted.";
+"「完全磁盘访问」用于受保护目录；「辅助功能」用于免重启切换隐藏文件及快捷键。" = "Full Disk Access covers protected folders; Accessibility enables instant Hidden Files toggle and shortcuts.";
 
 /* Tools tab */
 "默认终端" = "Default Terminal";
@@ -132,10 +132,10 @@
 "无法添加编辑器" = "Unable to Add Editor";
 "未识别到文本编辑功能：%@" = "No text-editing capability declared: %@";
 "所选应用未声明文本编辑功能，无法打开。" = "The selected app does not declare text-editing capabilities and cannot be opened.";
-"自动列出声明支持通用文本、通用源码或所有文件的编辑器；仅编辑特定文本格式的应用可通过「添加编辑器…」加入，无法识别时会弹窗说明。关闭开关可隐藏菜单项，拖动左侧的 ≡ 可调整顺序。" = "Editors that declare support for general text, general source code, or all files are listed automatically. Apps that edit only specific text formats can be added with Add Editor…; a dialog explains any recognition failure. Turn off an app to hide it from the menu, or drag the grip to reorder.";
+"自动识别常见编辑器，也可手动添加；关闭可隐藏，拖动 ≡ 排序。" = "Auto-detects common editors or add manually; toggle to hide, drag ≡ to reorder.";
 "所选应用未声明终端功能，无法打开。" = "The selected app does not declare terminal capabilities and cannot be opened.";
-"自动识别已声明终端功能的应用；也可通过「添加终端…」手动选择，所选应用须通过同样的校验。默认终端跟随系统，可在上方更改。" = "Apps that declare terminal capabilities are detected automatically. Use Add Terminal… to select an app manually; the same validation applies. The default terminal follows your system setting unless changed above.";
-"选择右键菜单中「在终端中打开」使用的终端应用" = "Choose the terminal used by \"Open in Terminal\"";
+"自动识别终端应用，也可手动添加；启用多个时展开子菜单，拖动 ≡ 排序。" = "Auto-detects terminals or add manually; multiple show a submenu, drag ≡ to reorder.";
+"配置右键「打开终端」使用的应用" = "Choose apps for \"Open in Terminal\"";
 "终端" = "Terminal";
 "默认编辑器" = "Default Editor";
 "用于服务菜单和快捷键。" = "Used by Services and keyboard shortcuts.";
@@ -158,18 +158,18 @@
 "切换隐藏文件" = "Toggle Hidden Files";
 "访达快捷键" = "Finder Shortcuts";
 "快捷键需要「辅助功能」权限" = "Shortcuts need Accessibility permission";
-"授权后任意组合都能用、改完立即生效；未授权时剪切、粘贴不可用，其余快捷键要重启访达才生效。" = "Once granted, any combination works and changes apply immediately. Without it, Cut and Paste are unavailable and the other shortcuts take effect only after relaunching Finder.";
-"粘贴到当前窗口所在的文件夹，空白处也可以" = "Pastes into the folder of the current window, even with nothing selected";
-"点击按钮后按键录制，Delete 清除，ESC 取消。默认与访达一致，升级不会改动你的设置。\n除剪切、粘贴、切换隐藏文件、打开路径外，其余快捷键需先选中文件。" = "Click a button to record, Delete to clear, ESC to cancel. Defaults match Finder, and updates never change your settings.\nApart from Cut, Paste, Toggle Hidden Files and Open Path, shortcuts need files selected first.";
+"授权后立即生效且支持剪切/粘贴；未授权需重启访达。" = "Applies immediately with Cut/Paste when granted; otherwise relaunch Finder.";
+"粘贴到当前文件夹，空白处可用" = "Paste into current folder, even in blank space";
+"点击录制，Delete 清除，ESC 取消。多数操作需先选中文件。" = "Click to record, Delete to clear, ESC to cancel. Most actions require selection.";
 "重启访达后新快捷键生效" = "Relaunch Finder to Use New Shortcuts";
-"访达只在启动时读取服务快捷键；重启会关闭所有访达窗口，可能中断正在进行的拷贝。" = "Finder reads service shortcuts only at launch; relaunching closes all Finder windows and may interrupt copies in progress.";
-"需要「辅助功能」权限，否则仅在右键菜单展开时生效" = "Needs Accessibility permission; otherwise only works while the context menu is open";
+"重启访达以载入新快捷键（会关闭访达窗口）" = "Relaunch Finder to load shortcuts (closes Finder windows)";
+"需辅助功能权限，否则仅右键展开时生效" = "Requires Accessibility, or only works when menu is open";
 "与系统「%@」冲突，不会生效，请重新录制" = "Conflicts with the system's \"%@\" and won't work; please record another";
 "未授权「辅助功能」时被系统文本编辑按键（%@）占用" = "Without Accessibility permission, this is taken by the system text-editing key (%@)";
 "该快捷键是系统文本编辑按键（%@），访达会先拿去处理，请换一个组合（例如 ⌃⌘ 组合）" = "This is a system text-editing key (%@) that Finder handles first; please choose another (e.g. a ⌃⌘ combination)";
 "未授权「辅助功能」时由访达自带的「%@」响应" = "Without Accessibility permission, Finder's own \"%@\" responds instead";
 "恢复默认快捷键" = "Restore Default Shortcuts";
-"恢复与访达一致的默认组合，没有默认的会清空。" = "Restores the defaults that match Finder; shortcuts without a default are cleared.";
+"恢复默认组合，其余清空" = "Restore defaults; clear others";
 "恢复默认…" = "Restore Defaults…";
 "恢复默认快捷键？" = "Restore default shortcuts?";
 "你设置的快捷键会被替换为默认组合，没有默认组合的会被清空。" = "Your shortcuts will be replaced with the defaults, and those without a default will be cleared.";
@@ -177,7 +177,7 @@
 "授权「辅助功能」后可以使用这个组合。" = "Grant Accessibility permission to use this combination.";
 "该快捷键已被系统「%@」占用，请换一个组合" = "This shortcut is used by the system (\"%@\"); please choose another";
 "该快捷键是访达自带的「%@」，访达会优先响应，请换一个组合（例如加上 ⌃）" = "This is Finder's built-in \"%@\" shortcut, which Finder handles first; please choose another (e.g. add ⌃)";
-"在访达中选中文件后直接按键，无需展开右键菜单" = "Select files in Finder and press the shortcut — no need to open the context menu";
+"在访达中直接按键触发操作" = "Trigger actions directly with keys in Finder";
 
 /* 快捷键冲突提示中的访达 / 系统菜单名 */
 "创建副本" = "Duplicate";
@@ -289,7 +289,7 @@
 "FinderRight 已准备好为你服务" = "FinderRight is ready to go";
 "差一步就好" = "Almost There";
 "Finder 扩展尚未启用，右键菜单暂不会出现。可点「上一步」返回启用" = "The Finder extension is not enabled yet, so the context menu won't appear. Click \"Back\" to enable it.";
-"FinderRight 的右键菜单由访达扩展提供，启用后才会出现在访达中。" = "FinderRight's context menu is provided by a Finder extension. It appears in Finder once the extension is enabled.";
+"右键菜单由访达扩展提供，需先启用。" = "Enable the Finder extension to show the context menu.";
 "右键菜单预览" = "Right-Click Menu Preview";
 "在 VS Code 中打开" = "Open in VS Code";
 
@@ -299,16 +299,16 @@
 "访达扩展" = "Finder Extension";
 "已启用" = "Enabled";
 "未启用 — 访达右键菜单中不会出现 FinderRight" = "Disabled — FinderRight won't appear in the Finder context menu";
-"FinderRight 的右键菜单由访达扩展提供，需要在系统设置中启用后才会出现。" = "FinderRight's context menu is provided by a Finder extension, which must be enabled in System Settings.";
+"右键菜单由访达扩展提供，需在系统设置中启用。" = "Context menu requires enabling the Finder extension in System Settings.";
 "打开扩展设置…" = "Open Extension Settings…";
-"提示：启用后若右键仍没有菜单，可在「设置 → 通用」中点「重启访达」。" = "Tip: If the context menu still doesn't appear after enabling, click \"Relaunch Finder\" in Settings → General.";
+"启用后若仍无菜单，可点下方「重启访达」。" = "If menu is still missing, click \"Relaunch Finder\" below.";
 "1. 点击上方按钮，会跳转到系统设置的扩展管理" = "1. Click the button above to open extension management in System Settings";
 "2. 在列表中找到 FinderRight" = "2. Find FinderRight in the list";
 "3. 打开 FinderRight 的访达扩展开关" = "3. Turn on the Finder extension switch for FinderRight";
 "4. 回到此处，状态会自动刷新" = "4. Come back here; the status refreshes automatically";
 "重新查看引导" = "View Setup Guide Again";
 "未授权 — 在 ~/Pictures、~/Documents 等受保护目录将无法工作" = "Not granted — won't work in protected folders like ~/Pictures, ~/Documents";
-"FinderRight 需要「完全磁盘访问」权限，才能在系统保护目录（Documents、Desktop、Downloads、Pictures、Movies、Music）执行右键菜单功能。" = "FinderRight needs Full Disk Access to run right-click actions in protected folders (Documents, Desktop, Downloads, Pictures, Movies, Music).";
+"用于在「文稿」「桌面」「下载」等受保护目录执行操作。" = "Allows actions in protected folders like Documents and Desktop.";
 "打开系统设置授权…" = "Open System Settings…";
 "重新检测" = "Re-check";
 "授权步骤说明" = "How to grant access";
@@ -320,9 +320,9 @@
 /* Accessibility */
 "辅助功能" = "Accessibility";
 "未授权 — 「切换隐藏文件」需重启访达，会关闭所有访达窗口" = "Not granted — \"Toggle Hidden Files\" must restart Finder, closing all Finder windows";
-"FinderRight 用「辅助功能」权限模拟 Cmd+Shift+. 快捷键，无需重启访达即可切换隐藏文件；剪切、粘贴快捷键也需要它。未授权时只能重启访达，会关闭所有访达窗口，并可能中断正在进行的拷贝或移动。" = "FinderRight uses Accessibility to simulate the Cmd+Shift+. shortcut, toggling hidden files without restarting Finder. Cut and paste shortcuts need it too. Without it, Finder has to restart, which closes all Finder windows and may interrupt copies or moves in progress.";
+"用于免重启切换隐藏文件，以及剪切、粘贴等访达快捷键。" = "Enables instant Hidden Files toggle and Cut/Paste shortcuts.";
 "打开辅助功能设置…" = "Open Accessibility Settings…";
-"提示：版本更新后若授权失效，请在系统设置中点「-」删除旧项，再点「+」重新添加。" = "Note: If authorization fails after an update, remove the old entry with \"-\" in System Settings and re-add it with \"+\".";
+"更新后若失效，在系统设置中删除旧项再重新添加。" = "If it stops working after an update, remove and re-add in System Settings.";
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";
 "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app" = "2. Find FinderRight and turn it on; if it's not listed, click + and add FinderRight.app";
 "3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加" = "3. After updates: if still inactive, select FinderRight, click \"-\" to remove the old entry, then click \"+\" to re-add";
@@ -339,7 +339,7 @@
 "排查与引导" = "Troubleshooting & Setup";
 "前往权限与扩展" = "Open Permissions & Extensions";
 "右键菜单排查" = "Troubleshooting";
-"若右键未显示菜单，可尝试重启访达或检查扩展开关" = "If the context menu does not appear, try restarting Finder or checking extension settings";
+"右键无菜单时，可重启访达或检查扩展" = "If menu is missing, relaunch Finder or check extension";
 "重启访达" = "Relaunch Finder";
 "扩展设置..." = "Extension Settings…";
 
@@ -446,9 +446,9 @@
 
 /* Onboarding: permission steps */
 "授予完全磁盘访问（推荐）" = "Grant Full Disk Access (Recommended)";
-"用于在「文稿」「桌面」「下载」等受保护目录中执行操作。可以先跳过，之后在「设置 → 通用」中授权。" = "Needed to work in protected folders such as Documents, Desktop and Downloads. You can skip this and grant it later in Settings → General.";
+"用于受保护目录，可先跳过，稍后在设置中授权。" = "For protected folders; can skip and grant later in Settings.";
 "授予辅助功能（可选）" = "Grant Accessibility (Optional)";
-"仅用于免重启访达切换隐藏文件，不会关闭访达窗口或中断拷贝，其他功能不需要它。可以先跳过，之后在「设置 → 通用」中授权。" = "Only used to toggle hidden files without restarting Finder, so windows stay open and copies aren't interrupted; nothing else needs it. You can skip this and grant it later in Settings → General.";
+"用于免重启切换隐藏文件与快捷键，可先跳过。" = "For instant Hidden Files toggle and shortcuts; optional.";
 
 /* Settings: copy path format */
 "复制格式" = "Format";
@@ -458,13 +458,13 @@
 "仅文件名" = "File name only";
 "终端转义路径" = "Shell-escaped path";
 "文件 URL" = "File URL";
-"含空格等特殊字符的路径会加引号；多选时以空格分隔，可直接粘贴为终端命令参数。" = "Paths with spaces or other special characters are quoted; multiple items are separated by spaces, ready to paste as command-line arguments.";
-"多选时每行一项。「服务」菜单里的复制路径也使用此格式。" = "One item per line when several are selected. Copy Path in the Services menu uses this format too.";
+"特殊字符自动加引号，多选以空格分隔。" = "Quotes special characters; space-separated for multiple items.";
+"多选每行一项，同步用于「服务」菜单。" = "One per line; also used by Services.";
 
 /* Settings: menu order */
 "打开路径…" = "Open Path…";
 "文件或文件夹路径" = "File or folder path";
-"输入文件或文件夹路径，在访达中显示或直接打开" = "Enter a file or folder path to show it in Finder or open it";
+"按路径在访达中显示或打开" = "Reveal or open a path in Finder";
 "输入或粘贴文件、文件夹的路径（绝对路径或以 ~/ 开头）" = "Type or paste the path of a file or folder (absolute, or starting with ~/)";
 "在访达中显示" = "Show in Finder";
 "请输入有效的绝对路径或以 ~/ 开头的路径" = "Enter a valid absolute path or a path starting with ~/";
@@ -474,7 +474,7 @@
 "打开" = "Open";
 "拖动调整在右键菜单中的顺序" = "Drag to reorder in the right-click menu";
 "恢复默认顺序" = "Restore Default Order";
-"关闭的功能不会出现在 Finder 右键菜单中。拖动左侧的 ≡ 可调整它们在右键菜单中的顺序。" = "Disabled features won't appear in the Finder right-click menu. Drag the ≡ handle on the left to change their order in the menu.";
+"关闭项不显示在右键菜单，拖动 ≡ 可排序。" = "Disabled items are hidden; drag ≡ to reorder.";
 
 /* Favorites: move / copy to */
 "常用目录" = "Favorite Folders";
@@ -498,7 +498,7 @@
 "拖动调整顺序" = "Drag to reorder";
 "移除" = "Remove";
 "以下目录不在允许范围内，未添加：%@" = "These folders are outside the allowed locations and were not added: %@";
-"添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。" = "Once added, right-click selected files and choose Move To or Copy To. Drag the ≡ handle to reorder. Only folders in your home folder or on external drives can be added. You can paste the result of Copy Path into the field, one folder per line.";
+"仅支持主目录或外接磁盘目录；输入框可粘贴多行路径，拖动 ≡ 可排序。" = "Home or external drive folders only; paste multi-line paths, drag ≡ to reorder.";
 "粘贴或输入目录路径，如 ~/Downloads" = "Paste or type a folder path, e.g. ~/Downloads";
 "已在列表中" = "already in the list";
 "不在允许范围内" = "outside the allowed locations";
@@ -556,10 +556,10 @@
 "恢复中断粘贴" = "Recover Interrupted Paste";
 "目标不是常用目录" = "The destination is not a favorite folder";
 "常用目录不存在" = "The favorite folder no longer exists";
-"云盘文件夹中的「服务」菜单由 macOS 按系统语言显示，不受此设置影响。" = "The Services menu used in cloud folders is shown by macOS in the system language and is not affected by this setting.";
+"「服务」菜单语言跟随系统，不受此设置影响。" = "Services menu follows system language.";
 
 /* 编辑器设置 */
-"右键「打开编辑器」与服务菜单使用的编辑器" = "Editors used by \"Open in Editor\" and the Services menu";
+"配置右键「打开编辑器」使用的应用" = "Choose apps for \"Open in Editor\"";
 "右键菜单中显示" = "Show in Context Menu";
 "添加编辑器…" = "Add Editor…";
 "默认" = "Default";
@@ -587,7 +587,7 @@
 "预览增强" = "Enhanced previews";
 "文件夹、压缩包与更多文本格式" = "Folders, archives and more text formats";
 "Markdown 渲染" = "Markdown rendering";
-"检测到其他应用的 Markdown 预览，系统可能优先使用它" = "Another app’s Markdown preview was found; macOS may use it instead";
+"检测到其他 Markdown 预览扩展，系统可能优先使用" = "Another Markdown preview extension may take priority";
 "正在更新预览设置" = "Updating preview settings";
 "未找到快速查看扩展，请确认 FinderRight 已安装并在系统设置中启用扩展。" = "Quick Look extension not found. Make sure FinderRight is installed and enable the extension in System Settings.";
 "无法确认快速查看扩展状态，请在系统设置中检查后重新检测。" = "Unable to determine the Quick Look extension state. Check System Settings, then try again.";
@@ -615,10 +615,10 @@
 "等 %d 项" = " and %d more";
 "已撤销 %@" = "Undone %@";
 "撤销未完成：%@" = "Undo incomplete: %@";
-"撤销 FinderRight 的上一次文件操作，只在可撤销时出现" = "Undo FinderRight’s last file operation; shown only when something can be undone";
+"撤销上一次文件操作" = "Undo the last file operation";
 "剪切队列" = "Cut queue";
 "FinderRight 正在以临时副本运行" = "FinderRight is running as a temporary copy";
-"当前是从下载目录直接打开的，macOS 会把它挂载到只读的临时路径下运行，扩展状态判断与「新建文件」等操作可能表现异常。把 FinderRight 拖到「应用程序」文件夹后再打开即可恢复正常。" = "It was opened straight from the Downloads folder, so macOS is running it from a read-only temporary location. Extension status checks and actions such as New File may behave oddly. Drag FinderRight into the Applications folder and open it again to fix this.";
+"从下载目录直接打开会导致扩展异常，请拖入「应用程序」文件夹后重开。" = "Running from Downloads causes issues; move to Applications and reopen.";
 "打开应用程序文件夹" = "Open Applications Folder";
 
 /* 诊断信息 */
@@ -627,14 +627,14 @@
 "反馈与建议" = "Feedback";
 "反馈问题或提出功能建议" = "Report a problem or suggest a feature";
 "功能建议" = "Feature Request";
-"提交会在浏览器中打开 GitHub，需要登录 GitHub 账号" = "Submitting opens GitHub in your browser; a GitHub account is required";
+"将在浏览器打开 GitHub 提交" = "Opens GitHub in browser to submit";
 "问题反馈" = "Bug Report";
 "功能出错、崩溃或与预期不符" = "Something fails, crashes or behaves unexpectedly";
 "希望新增或改进的功能" = "Something you'd like added or improved";
 "复制版本、系统、权限与扩展状态，用于邮件、群聊或补充到已有 issue" = "Copies the version, system, permission and extension state for email, chat or an existing issue";
 "前往 GitHub 提交" = "Continue on GitHub";
 "将自动填入以下诊断信息" = "The following diagnostics will be filled in";
-"用户名已从路径中隐去；提交前可在网页中修改或删除" = "Your user name is removed from paths; you can edit or delete anything before submitting";
+"已隐去用户名，提交前可在网页修改" = "Username hidden; editable before submitting";
 "系统：%@" = "System: %@";
 "芯片：%@（%@）" = "Chip: %@ (%@)";
 "辅助功能：%@" = "Accessibility: %@";
@@ -661,29 +661,28 @@
 "编辑文件模板" = "Edit File Template";
 "编辑模板" = "Edit Template";
 "文件模板" = "File Templates";
-"右键「新建文件」子菜单里可以新建的文件类型，拖动调整顺序" = "File types you can create from the right-click \"New File\" submenu; drag to reorder";
+"管理右键「新建文件」类型，拖动可排序" = "Manage New File types; drag to reorder";
 "已启用的类型数" = "Enabled types";
-"关闭的类型不会出现在访达右键「新建文件」子菜单中。拖动左侧的 ≡ 可调整顺序，双击自定义模板可编辑。" = "Types that are off won't appear in Finder's \"New File\" submenu. Drag ≡ on the left to reorder; double-click a custom template to edit it.";
+"关闭项不显示；拖动 ≡ 排序，双击自定义模板编辑。" = "Disabled items are hidden; drag ≡ to reorder, double-click custom to edit.";
 "空白 Office 文档" = "Blank Office document";
 "空白文件" = "Empty file";
 "删除模板「%@」？" = "Delete template \"%@\"?";
 "删除后它不再出现在右键「新建文件」中，已经新建的文件不受影响。" = "It will no longer appear under \"New File\". Files you've already created are not affected.";
 "出现在访达右键「新建文件」子菜单中" = "Appears in Finder's right-click \"New File\" submenu";
 "名称" = "Name";
-"可留空，留空时菜单里显示后缀名" = "Optional. If empty, the menu shows the extension";
+"可留空，默认显示后缀名" = "Optional; defaults to file extension";
 "例如：配置文件" = "e.g. Config File";
 "后缀" = "Extension";
 "默认内容" = "Default Content";
-"新建的文件会写入这些文字；留空则新建空白文件" = "New files start with this text; leave empty for an empty file";
+"新建时自动写入，留空为空白文件" = "Written to new files; empty creates a blank file";
 "新建出的文件名" = "New file name";
 "已有同后缀的「%@」，两者都会出现在子菜单中" = "\"%@\" uses the same extension; both will appear in the submenu";
 "保存" = "Save";
 "从列表移除" = "Remove from List";
 "已移除的内置类型" = "Removed Built-in Types";
 "恢复" = "Restore";
-"恢复后重新出现在上方列表中，并处于开启状态。" = "Restored types return to the list above and are turned on.";
+"恢复后将重新启用并回到上方列表。" = "Restored items are re-enabled above.";
 
-"默认只显示一个终端；启用多个终端时展开子菜单，只有一个时直接打开。全部关闭则隐藏右键入口。拖动左侧的 ≡ 可调整终端在右键菜单中的顺序。" = "Only one terminal is shown by default. Enable several for a submenu, or just one to open it directly. Turn all off to hide the context-menu entry. Drag the handle on the left to reorder terminals in the context menu.";
 
 "更新" = "Updates";
 "自动检查并安装更新" = "Automatically check for and install updates";
@@ -712,7 +711,7 @@
 "部分项目已完成，其余项目未能处理。请查看详细信息，确认未完成的文件后再重试。" = "Some items were processed, but others could not be completed. Review the details to identify unfinished files before trying again.";
 "未能解开这个压缩包。请确认文件完整、格式受支持，再重试。" = "The archive could not be extracted. Make sure it is complete and uses a supported format, then try again.";
 "这次操作未能完成。请确认文件仍在原处、目标文件夹可以写入，再重试。" = "The action could not be completed. Check that the files are still in place and the destination is writable, then try again.";
-"查看文件操作的结果，快速找到处理后的文件。" = "Review your file operations and find the resulting files.";
+"查看近期文件操作与结果" = "View recent file operations and results";
 "保留历史记录" = "Keep operation history";
 "记录新建、剪切、粘贴、移动、复制、压缩解压和撤销的结果" = "Keep results for creating, cutting, pasting, moving, copying, compressing, extracting and undoing files";
 "不保留" = "Do not keep history";
@@ -726,8 +725,8 @@
 "历史记录用于回看操作，不代表每条都能撤销。当前仍通过访达右键或 ⌘Z 撤销上一次操作。" = "History is for reviewing actions; not every entry can be undone. Use Finder’s context menu or ⌘Z to undo the last action.";
 "操作历史已关闭" = "Operation history is off";
 "还没有操作记录" = "No actions yet";
-"选择保留条数后，新的文件操作会出现在这里。不保留历史时，操作失败仍会提示。" = "Choose a history limit to see new file operations here. Failed background operations are still reported when history is off.";
-"用 FinderRight 新建、移动或压缩文件后，就能在这里查看结果。" = "Create, move or compress files with FinderRight to see the results here.";
+"选择保留条数后即可记录操作；关闭时失败仍会提示。" = "Select a limit to record actions; failures still alert when off.";
+"执行文件操作后会显示在这里。" = "File operations will appear here.";
 "减少保留的历史记录？" = "Keep fewer history entries?";
 "超出新条数的较早记录会被移除。这只影响历史记录，不会删除文件或改变撤销状态。" = "Older entries beyond the new limit will be removed. This only affects history; it does not delete files or change what can be undone.";
 "确认调整" = "Change limit";
@@ -773,14 +772,14 @@
 
 "含扩展名" = "Include extension";
 "不含扩展名" = "Exclude extension";
-"复制文件名（可选含/不含扩展名），多选时每行一项" = "Copy file names with or without the final extension; one item per line for multiple selections";
-"不含扩展名时仅去除普通文件最后一段扩展名（如 report.tar.gz → report.tar）；目录（含 .app 包）与无扩展名文件保持原名。多选时每行一项。" = "Excluding extensions removes only the final extension of regular files (for example, report.tar.gz → report.tar). Folders (including .app bundles) and names without extensions stay unchanged. Multiple selections use one item per line.";
+"复制文件名，多选每行一项" = "Copy file names, one per line";
+"仅去除普通文件末段扩展名，目录保持原名，多选每行一项。" = "Strips last extension on files only; one per line.";
 
 /* 复制哈希 / 创建符号链接 / 常用目录按最近使用排序 */
 "复制哈希" = "Copy Hash";
-"计算选中文件的 SHA-256 / SHA-1 / MD5 并复制，多选时与 shasum 输出格式一致" = "Compute and copy the SHA-256 / SHA-1 / MD5 of selected files; multiple files use the shasum output format";
+"计算并复制文件哈希值" = "Compute and copy file hashes";
 "创建符号链接" = "Make Symbolic Link";
-"在原位置为选中项创建符号链接，终端与开发工具都能识别（访达的替身不行）" = "Create symbolic links next to the selected items, which Terminal and developer tools understand (Finder aliases don’t)";
+"在原位置创建符号链接" = "Create symbolic links in place";
 "创建符号链接（%d 项）" = "Make symbolic link (%d items)";
 "%d 项未能创建符号链接：%@" = "%d items could not be linked: %@";
 "链接" = "link";
@@ -789,9 +788,9 @@
 "已复制 %@" = "Copied %@";
 "已复制 %d 个文件的 %@，%d 项未计算" = "Copied %2$@ of %1$d files; %3$d items skipped";
 "按最近使用排序" = "Sort by Recent Use";
-"最近移动或复制过的目录排在前面，右键菜单与这里的顺序一致" = "Folders you moved or copied to recently come first; the context menu uses the same order";
+"最近使用的目录排在前面，与右键菜单同步" = "Recently used folders first, synced with context menu";
 "按最近使用排序时不能拖动" = "Turn off Sort by Recent Use to reorder";
-"添加后，选中文件右键即可「移动到」或「复制到」这些目录。关闭「按最近使用排序」后可拖动调整顺序，并恢复之前排好的顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。" = "Once added, right-click selected files to Move To or Copy To these folders. Turn off Sort by Recent Use to drag them into order; your previous manual order comes back. Only folders in your home folder or on external disks can be added. You can paste the output of Copy Path into the field, one folder per line.";
+"仅支持主目录或外接磁盘目录；输入框可粘贴多行路径。关闭自动排序后可拖动调整顺序。" = "Home or external drive folders only; paste multi-line paths. Turn off auto-sort to reorder.";
 
 "已剪切 %d 项" = "%d Item(s) Cut";
 "移除：%@" = "Remove: %@";
@@ -799,8 +798,8 @@
 "移除剪切项失败：%@" = "Failed to remove cut item: %@";
 "剪切 / 粘贴" = "Cut / Paste";
 
-"ZIP 使用 UTF-8 文件名，便于 Windows 正确显示中文；通常不含 Mac 元数据（应用包等情况保留），需保留时请用访达自带「压缩」" = "ZIP uses UTF-8 names for Chinese filenames on Windows, usually without Mac metadata (preserved for app bundles and other fallbacks); use Finder’s Compress to retain it";
-"解压到当前目录，支持输入密码解压加密 ZIP" = "Extract here, including encrypted ZIPs with a password prompt";
+"打包为跨平台 UTF-8 编码 ZIP" = "Create cross-platform UTF-8 ZIP";
+"解压到当前目录，支持加密 ZIP" = "Extract here, with encrypted ZIP support";
 
 "图片" = "Images";
 "转换为 PNG" = "Convert to PNG";
@@ -810,7 +809,7 @@
 "缩放到 1920 像素" = "Scale to 1920 px";
 "缩放到 1280 像素" = "Scale to 1280 px";
 "缩放到 800 像素" = "Scale to 800 px";
-"快速转换格式（PNG/JPEG/HEIC）或按长边等比缩放，仅在选中图片时显示" = "Quickly convert formats (PNG/JPEG/HEIC) or scale proportionally by long edge, shown only when images are selected";
+"转换图片格式或等比缩放" = "Convert image format or resize";
 "转换图片" = "Convert Images";
 "已完成图片处理（%d 项）" = "Finished processing %d image(s)";
 "转换“%@”" = "Convert \"%@\"";
@@ -835,13 +834,13 @@
 
 "原图长边为 %d 像素，不超过目标 %d 像素；缩放只缩小、不放大，本次未执行。" = "The original long edge is %d px, at or below the %d px target. Resizing only reduces images; nothing was changed.";
 "在「服务」中显示 FinderRight" = "Show FinderRight in Services";
-"控制系统与右键「服务」菜单中的全部 FinderRight 功能，云盘目录也使用此入口。" = "Show all FinderRight actions in the system and right-click Services menus. Cloud folders also use this entry point.";
+"在系统与右键「服务」菜单中显示（云盘目录适用）" = "Show in system and context Services menu (works in cloud folders)";
 "重启访达以刷新服务菜单" = "Relaunch Finder to refresh Services";
-"访达可能仍显示缓存的服务项；重启会关闭所有访达窗口，可能中断正在进行的拷贝。" = "Finder may still show cached service items. Relaunching closes all Finder windows and may interrupt copies in progress.";
+"重启访达以刷新缓存（会关闭访达窗口）" = "Relaunch Finder to refresh cache (closes Finder windows)";
 
 // Global Open Path shortcut
 "全局生效" = "Use Globally";
-"默认关闭。开启后，同一快捷键可在其他应用中唤起打开路径；FinderRight 需保持运行。" = "Off by default. When enabled, the same shortcut opens Open Path from other apps. FinderRight must be running.";
+"可在其他应用中用同一快捷键唤起" = "Trigger Open Path from any app with the same shortcut";
 "打开路径快捷键全局生效" = "Use the Open Path shortcut globally";
 "让打开路径快捷键全局生效？" = "Use the Open Path shortcut globally?";
 "开启后，在其他应用中按下该组合也会打开 FinderRight，可能覆盖原有操作（包括打开、保存对话框中的按键）。无法检测所有应用的快捷键冲突；注册成功也不代表没有冲突。" = "This combination will also open FinderRight from other apps and may override existing actions, including shortcuts in Open and Save dialogs. Conflicts with every app cannot be detected; successful registration does not guarantee there are no conflicts.";
@@ -852,7 +851,7 @@
 "无法注册全局快捷键（错误 %d），请换一个组合。其他应用可能已注册此快捷键。" = "Could not register the global shortcut (error %d). Choose another combination; another app may have registered this shortcut.";
 "从剪贴板新建" = "Create from Clipboard";
 "从剪贴板新建…" = "Create from Clipboard…";
-"将复制的文字保存为文本，或将图片保存为 PNG/JPEG/HEIC；默认开启。" = "Save copied text as a text file or an image as PNG/JPEG/HEIC. Enabled by default.";
+"将剪贴板文字或图片直接保存为文件" = "Save clipboard text or image directly as a file";
 "剪贴板中没有可保存的文字或图片" = "The clipboard contains no text or image to save";
 "无法读取剪贴板图片" = "Cannot read the clipboard image";
 "请输入有效的文件名和后缀" = "Enter a valid file name and extension";
@@ -914,16 +913,16 @@
 "全部清空" = "Clear All";
 "共 %d 项待移动" = "%d item(s) pending move";
 "剪切队列为空" = "Cut Queue is Empty";
-"在访达中选中文件右键选择「剪切」或按 ⌘X 后，待移动的项目会显示在这里" = "Select files in Finder and choose Cut or press ⌘X to see pending items here.";
+"在访达中剪切文件（⌘X）后会显示在这里" = "Files cut in Finder (⌘X) appear here";
 "已剪切项目" = "Cut Items";
-"提示：前往目标目录右键选择「粘贴」或按 ⌘V 即可完成移动" = "Tip: Right-click Paste in the destination or press ⌘V to move files.";
+"在目标目录右键「粘贴」或按 ⌘V 即可移动" = "Right-click Paste or press ⌘V in destination to move";
 
 "开发者工具" = "Developer Tools";
 "启用开发者工具" = "Enable Developer Tools";
 "复制项目相对路径" = "Copy Project Relative Path";
 "复制目录树" = "Copy Directory Tree";
-"复制相对于最近 Git 仓库根目录的路径，多选时每行一项" = "Copy paths relative to the nearest Git repository root, one per line for multiple items";
-"复制文件夹结构，跳过常见依赖与构建目录，不读取文件内容" = "Copy the folder structure, skipping common dependency and build folders without reading file contents";
+"复制相对 Git 根目录的路径" = "Copy path relative to Git root";
+"复制文件夹目录树结构" = "Copy folder tree structure";
 "无法访问所选路径" = "Cannot access the selected path";
 "请选择一个文件夹" = "Select one folder";
 
@@ -938,7 +937,7 @@
 "启用命令" = "Enable Command";
 "菜单名称" = "Menu Name";
 "命令（zsh）" = "Command (zsh)";
-"选中项通过 \"$@\" 传入；后台运行，不支持交互输入。" = "Selected items are passed as \"$@\". Runs in the background without interactive input.";
+"选中项经 \"$@\" 传入，后台运行且不支持交互。" = "Passed via \"$@\"; runs in background without input.";
 "命令可修改文件，不支持撤销。" = "Commands can modify files and cannot be undone.";
 "正在停止…" = "Stopping…";
 "正在运行…" = "Running…";
@@ -1068,11 +1067,11 @@
 
 /* 开发者工具：文件权限与代码行数统计 */
 "文件权限" = "File Permissions";
-"单选文件或文件夹时，在右键菜单中直接显示权限（如 -rwxr-xr-x 755），点击可复制" = "Show permissions directly in the context menu for a single file or folder (e.g. -rwxr-xr-x 755); click to copy";
+"单选时显示权限，点击可复制" = "Show permissions for a single item; click to copy";
 "已复制权限：%@" = "Copied permissions: %@";
 "代码行数统计…" = "Count Lines of Code…";
 "代码行数统计" = "Count Lines of Code";
-"统计文件夹内各语言的代码行数、注释行与空行" = "Count code, comments, and blank lines across languages in a folder";
+"统计各语言代码、注释与空行" = "Count code, comments, and blank lines";
 "打开代码行数统计" = "Open Line Count";
 "在访达中显示" = "Show in Finder";
 "正在扫描并统计代码行数…" = "Scanning and counting lines of code…";
@@ -1102,7 +1101,7 @@
 "国内站" = "China Mirror";
 "点击卡片在浏览器中打开，或复制网址" = "Click a card to open it in your browser, or copy its URL";
 "主站 · 产品介绍与安装包下载" = "Main site · features and installer downloads";
-"展示镜像 · 不含安装包，主站访问不畅时使用" = "Showcase mirror · no installers; use when the main site is slow";
+"国内展示镜像（不含安装包）" = "China showcase mirror (no installers)";
 "在浏览器中打开" = "Open in browser";
 "复制网址" = "Copy URL";
 "访问 FinderRight 官方网站" = "Visit the FinderRight website";
@@ -1153,17 +1152,17 @@
 "固定剪贴板窗口" = "Pin Clipboard Window";
 "%@ 等 %d 个项目" = "%@ and %d items";
 "启用剪贴板" = "Enable Clipboard";
-"默认开启。在本机记录最近复制的文本、图片与文件，退出应用后仍保留；关闭时自动清空。" = "On by default. Saves recent copied text, images, and files locally across app restarts; cleared automatically when turned off.";
+"本机记录最近复制的文本、图片与文件，关闭时清空" = "Locally save recent text, images, and files; clears when off";
 "记录密码等敏感内容" = "Save Passwords & Sensitive Items";
-"默认关闭。开启后，来自「密码」应用或带有敏感、临时标记的剪贴板内容也会存入本地历史。" = "Off by default. When enabled, items from the Passwords app or marked as sensitive or transient are also saved to local history.";
+"同时记录「密码」应用及敏感、临时内容" = "Also save items from Passwords or marked sensitive";
 "剪贴板历史" = "Clipboard History";
 "仅保存在本机，不纳入系统备份。" = "Stored only on this Mac and excluded from system backups.";
 "记录条数" = "History Limit";
-"可在「设置 → 快捷键」中设置全局快捷键。" = "Set a global shortcut in Settings → Shortcuts.";
+"全局快捷键请在「快捷键」页设置。" = "Set global shortcuts in Shortcuts.";
 "全局快捷键" = "Global Shortcuts";
-"全局快捷键在任意应用中均可使用，无需辅助功能权限，也无需重启访达。" = "Global shortcuts work in any app without Accessibility permission or restarting Finder.";
+"任意应用可用，无需辅助功能权限或重启访达。" = "Works in any app without Accessibility or relaunching Finder.";
 "需先在「功能 → 剪贴板」中开启" = "Enable it first in Features → Clipboard";
-"全局生效，可在任意应用中唤起剪贴板" = "Works globally to open the clipboard from any app";
+"全局可用，任意应用唤起剪贴板" = "Works globally to open Clipboard from any app";
 "剪贴板记录为空" = "Clipboard History Is Empty";
 "也可将文件拖入此处" = "You can also drop files here";
 "松开以加入剪贴板" = "Drop to add to clipboard";
@@ -1190,7 +1189,7 @@
 "启用截图" = "Enable Screenshot";
 "默认关闭。开启后可从菜单栏或自定义全局快捷键直接唤起系统截图面板（⌘⇧5），无需额外录制权限。" = "Off by default. When enabled, open the system Screenshot panel (⌘⇧5) from the menu bar or a custom global shortcut with no extra screen recording permission.";
 "需先在「功能 → 截图」中开启" = "Enable it first in Features → Screenshot";
-"全局生效，可在任意应用中唤起系统截图" = "Works globally to open system Screenshot from any app";
+"全局可用，任意应用唤起系统截图" = "Works globally to open Screenshot from any app";
 
 /* Git 远程状态与拉取反馈 */
 "远端" = "remote";
@@ -1225,14 +1224,14 @@
 "截图方式" = "Capture Method";
 "系统原生" = "System Native";
 "FinderRight 快照" = "FinderRight Snapshot";
-"默认关闭。开启后可从菜单栏或自定义全局快捷键快速截图。" = "Off by default. When enabled, capture screenshots from the menu bar or a custom global shortcut.";
-"唤起 macOS 原生截图面板（⌘⇧5），无需屏幕录制权限。" = "Opens the macOS Screenshot panel (⌘⇧5) with no extra screen recording permission.";
-"按下瞬间定格当前屏幕，框选后可直接复制或保存到常用目录。" = "Freezes the current screen on trigger so you can drag to select and copy or save to a favorite folder.";
+"通过菜单栏或全局快捷键快速截图" = "Capture via menu bar or global shortcut";
+"唤起系统原生截图（⌘⇧5），免录制权限" = "Open macOS Screenshot (⌘⇧5), no permission needed";
+"定格屏幕框选，可标注、复制或保存" = "Freeze screen to capture, annotate, copy, or save";
 "需要「屏幕录制」权限" = "Screen Recording Permission Required";
-"用于抓取当前屏幕静态快照；未授权时无法截取其他应用窗口。" = "Used to capture a static snapshot of the screen. Other app windows cannot be captured without permission.";
+"未授权时无法截取其他应用窗口" = "Cannot capture other app windows without permission";
 "授权屏幕录制…" = "Authorize Screen Recording…";
 "需先在「功能 → 截图」中授权屏幕录制" = "Authorize Screen Recording first in Features → Screenshot";
-"全局生效，可在任意应用中定格屏幕并框选截图" = "Works globally to freeze the screen and select an area in any app";
+"全局可用，任意应用定格框选截图" = "Works globally to capture a screen snapshot from any app";
 "⇧⌘5 已被系统截屏占用，请换一个组合或在系统设置中关闭系统截屏快捷键" = "⇧⌘5 is reserved by macOS Screenshot. Record another shortcut or disable it in System Settings.";
 "请先在系统设置中授权「屏幕录制」权限" = "Please allow Screen Recording in System Settings first";
 "无法抓取当前屏幕" = "Unable to capture the current screen";

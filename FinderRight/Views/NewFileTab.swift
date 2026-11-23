@@ -38,10 +38,10 @@ struct NewFileTab: View {
     }
 
     var body: some View {
-        FRPage(title: "文件模板", subtitle: "右键「新建文件」子菜单里可以新建的文件类型，拖动调整顺序") {
+        FRPage(title: "文件模板", subtitle: "管理右键「新建文件」类型，拖动可排序") {
             FRSection("剪贴板") {
                 FRCard {
-                    FRRow(title: Text("从剪贴板新建"), subtitle: Text("将复制的文字保存为文本，或将图片保存为 PNG/JPEG/HEIC；默认开启。")) {
+                    FRRow(title: Text("从剪贴板新建"), subtitle: Text("将剪贴板文字或图片直接保存为文件")) {
                         FRSwitch(label: "从剪贴板新建", isOn: Binding(
                             get: { newFileFromClipboard },
                             set: {
@@ -114,7 +114,7 @@ struct NewFileTab: View {
                 }
             }
 
-            FRFootnote(Text("关闭的类型不会出现在访达右键「新建文件」子菜单中。拖动左侧的 ≡ 可调整顺序，双击自定义模板可编辑。"))
+            FRFootnote(Text("关闭项不显示；拖动 ≡ 排序，双击自定义模板编辑。"))
         }
     }
 
@@ -208,7 +208,7 @@ struct NewFileTab: View {
                     .padding(.vertical, 8)
                 }
             }
-            FRFootnote(Text("恢复后重新出现在上方列表中，并处于开启状态。"))
+            FRFootnote(Text("恢复后将重新启用并回到上方列表。"))
         }
     }
 
@@ -406,7 +406,7 @@ struct EditTemplateSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 14) {
-                field("名称", hint: "可留空，留空时菜单里显示后缀名") {
+                field("名称", hint: "可留空，默认显示后缀名") {
                     TextField("例如：配置文件", text: $name)
                         .textFieldStyle(.roundedBorder)
                 }
@@ -423,7 +423,7 @@ struct EditTemplateSheet: View {
                     }
                 }
 
-                field("默认内容", hint: "新建的文件会写入这些文字；留空则新建空白文件") {
+                field("默认内容", hint: "新建时自动写入，留空为空白文件") {
                     TextEditor(text: $content)
                         .font(.system(size: 12.5, design: .monospaced))
                         .scrollContentBackground(.hidden)

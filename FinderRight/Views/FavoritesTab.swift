@@ -39,7 +39,7 @@ struct FavoritesTab: View {
                 pathInputRow
 
                 FRCard {
-                    FRRow(title: Text("按最近使用排序"), subtitle: Text("最近移动或复制过的目录排在前面，右键菜单与这里的顺序一致")) {
+                    FRRow(title: Text("按最近使用排序"), subtitle: Text("最近使用的目录排在前面，与右键菜单同步")) {
                         FRSwitch(label: "按最近使用排序", isOn: Binding(
                             get: { sortByRecent },
                             set: { newValue in
@@ -72,9 +72,9 @@ struct FavoritesTab: View {
                 }
 
                 if sortByRecent {
-                    FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。关闭「按最近使用排序」后可拖动调整顺序，并恢复之前排好的顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
+                    FRFootnote(Text("仅支持主目录或外接磁盘目录；输入框可粘贴多行路径。关闭自动排序后可拖动调整顺序。"))
                 } else {
-                    FRFootnote(Text("添加后，选中文件右键即可「移动到」或「复制到」这些目录。拖动左侧的 ≡ 可调整顺序。只能添加用户主目录或外接磁盘中的目录。输入框可直接粘贴「复制路径」得到的内容，多个目录每行一个。"))
+                    FRFootnote(Text("仅支持主目录或外接磁盘目录；输入框可粘贴多行路径，拖动 ≡ 可排序。"))
                 }
             }
         }
