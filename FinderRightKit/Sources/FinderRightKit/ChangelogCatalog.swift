@@ -45,6 +45,16 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.3",
+            date: "2026-11-23",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "新增瞬时快照截图方式：支持全屏定格框选、颜色画笔标注与撤销，可直接复制或保存到常用目录"),
+                ChangelogEntry(type: .feature, textKey: "剪贴板默认跳过系统「密码」应用（含菜单栏小组件）及带敏感、临时标记的内容，可在设置中按需开启记录"),
+                ChangelogEntry(type: .improvement, textKey: "全局快捷键支持单独设置 F1–F12 功能键，并升级二选一胶囊选择器与全局下拉框样式"),
+                ChangelogEntry(type: .improvement, textKey: "优化 Git 远端分支状态展示与拉取、推送反馈；右键「服务」菜单改为默认关闭")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.13.2",
             date: "2026-11-20",
             items: [

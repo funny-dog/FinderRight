@@ -1126,6 +1126,12 @@
 "正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
 "清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
 
+/* v1.13.3 更新日志 */
+"新增瞬时快照截图方式：支持全屏定格框选、颜色画笔标注与撤销，可直接复制或保存到常用目录" = "Added instant snapshot capture mode with full-screen selection, color brush annotation and undo, and quick copy or saving to favorite folders";
+"剪贴板默认跳过系统「密码」应用（含菜单栏小组件）及带敏感、临时标记的内容，可在设置中按需开启记录" = "Clipboard history now skips Apple Passwords (including the menu bar extra) and sensitive or transient items by default, with an optional toggle in Settings";
+"全局快捷键支持单独设置 F1–F12 功能键，并升级二选一胶囊选择器与全局下拉框样式" = "Added standalone F1–F12 function key support for global shortcuts and upgraded binary switches and dropdowns across Settings";
+"优化 Git 远端分支状态展示与拉取、推送反馈；右键「服务」菜单改为默认关闭" = "Improved Git remote branch status display and fetch/pull/push feedback; right-click Services menu items are now off by default";
+
 /* v1.13.2 更新日志 */
 "新增轻量剪贴板历史（默认开启）：在本机保留最近 5–20 条文本、图片与文件，支持退出保留、详情预览、文件拖入与拖出" = "Added lightweight clipboard history (on by default): keeps the last 5–20 text, image, and file items locally across restarts with detail preview and drag in/out";
 "新增可选快速截图入口（默认关闭）：支持通过状态栏菜单或全局快捷键快速唤起系统原生截图" = "Added optional Quick Screenshot shortcut (off by default) to open the native Screenshot panel from the menu bar or a global shortcut";
