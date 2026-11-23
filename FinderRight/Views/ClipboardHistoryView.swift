@@ -284,7 +284,7 @@ struct ClipboardHistoryView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundColor(isOn ? FRTheme.accentText : FRTheme.mute)
+                .foregroundColor(isOn ? FRTheme.accentText : FRTheme.text)
                 .frame(width: 26, height: 24)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -882,6 +882,7 @@ private final class ClipboardDropContainerView: NSView {
 final class ClipboardHistoryController: NSObject, NSWindowDelegate {
     static let shared = ClipboardHistoryController()
     private var window: NSWindow?
+    private var sizeBeforeExpand: NSSize?
 
     private static let compactSize = CGSize(width: 300, height: 360)
     private static let expandedSize = CGSize(width: 740, height: 480)
@@ -965,10 +966,18 @@ final class ClipboardHistoryController: NSObject, NSWindowDelegate {
             styleMask: panel.styleMask).size
         var frame = panel.frame
         let topY = frame.maxY
-        frame.size.width = max(minFrameSize.width, targetFrameSize.width)
-        frame.size.height = showDetails
-            ? max(minFrameSize.height, max(frame.height, targetFrameSize.height))
-            : max(minFrameSize.height, min(frame.height, targetFrameSize.height))
+        if showDetails {
+            if sizeBeforeExpand == nil, frame.width < Self.expandedMinSize.width { sizeBeforeExpand = frame.size }
+            frame.size.width = max(minFrameSize.width, targetFrameSize.width)
+            frame.size.height = max(minFrameSize.height, max(frame.height, targetFrameSize.height))
+        } else if let saved = sizeBeforeExpand {
+            sizeBeforeExpand = nil
+            frame.size.width = max(minFrameSize.width, saved.width)
+            frame.size.height = max(minFrameSize.height, saved.height)
+        } else {
+            frame.size.width = max(minFrameSize.width, targetFrameSize.width)
+            frame.size.height = max(minFrameSize.height, min(frame.height, targetFrameSize.height))
+        }
         frame.origin.y = topY - frame.size.height
         if let screen = panel.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
