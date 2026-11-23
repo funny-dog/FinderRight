@@ -11,7 +11,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-SOURCE_APP="$PROJECT_DIR/build/dmg-stage/FinderRight.app"
+SOURCE_APP="${SOURCE_APP:-$PROJECT_DIR/build/dmg-stage/FinderRight.app}"
 TARGET_APP="/Applications/FinderRight.app"
 BUNDLE_ID="com.finderright.app"
 EXTENSION_ID="com.finderright.app.sync"
