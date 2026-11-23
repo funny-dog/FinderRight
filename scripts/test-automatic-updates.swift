@@ -11,6 +11,7 @@ enum FinderRightService {
 private final class ReleaseProtocol: URLProtocol {
     enum Reply {
         case hold
+        case holdAfterHeaders(Int)
         case failure
         case response(Int, Data)
     }
@@ -48,6 +49,11 @@ private final class ReleaseProtocol: URLProtocol {
             let reply = Self.replies[url.absoluteString] ?? (isRelease ? .response(200, Self.release()) : .failure)
             switch reply {
             case .hold: Self.pending.append(self)
+            case .holdAfterHeaders(let code):
+                let response = HTTPURLResponse(url: url, statusCode: code, httpVersion: nil,
+                                               headerFields: ["Content-Type": "application/octet-stream"])!
+                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                Self.pending.append(self)
             case .failure: self.client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
             case .response(let code, let data): self.respond(code: code, data: data)
             }
@@ -117,39 +123,30 @@ struct AutomaticUpdateChecks {
             }
         }
 
-        func manualWindowScenario(_ name: String, _ body: (UpdateChecker, UserDefaults, SupplementalController) -> Void) {
-            let suite = "FinderRight.AutomaticUpdateTests.\(UUID().uuidString)"
-            let defaults = UserDefaults(suiteName: suite)!
-            let config = URLSessionConfiguration.ephemeral
-            config.protocolClasses = [ReleaseProtocol.self]
-            let session = URLSession(configuration: config)
-            let controller = SupplementalController()
-            let checker = UpdateChecker(defaults: defaults, checkSession: session, downloadConfiguration: config,
-                                        firstByteTimeout: 0.1, stallTimeout: 0.1, supplementalScheduler: controller.scheduler)
-            ReleaseProtocol.requests = []
-            ReleaseProtocol.cancelled = []
-            ReleaseProtocol.replies = [:]
-            ReleaseProtocol.withChecksum = false
-            ReleaseProtocol.withChecksumFile = false
-            ReleaseProtocol.pending = []
-            body(checker, defaults, controller)
-            defaults.set(false, forKey: UpdateChecker.automaticUpdatesKey)
-            checker.configureAutomaticUpdates()
-            session.invalidateAndCancel()
-            pump()
-            defaults.removePersistentDomain(forName: suite)
-            print("✓ \(name)")
+        func sha256Hex(_ data: Data) -> String {
+            SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         }
 
-        // 两个检查实例的补充窗口都设为 80ms，避免测试真的等 800ms
-        func scenario(_ name: String, window: TimeInterval = 0.08, _ body: (UpdateChecker, UserDefaults) -> Void) {
+        func runCheckerScenario(
+            _ name: String,
+            firstByteTimeout: TimeInterval = 0.1,
+            stallTimeout: TimeInterval = 0.1,
+            window: TimeInterval = 0.08,
+            hedgeDelay: TimeInterval = 4,
+            supplementalScheduler: @escaping UpdateChecker.SupplementalScheduler = UpdateChecker.mainScheduler,
+            hedgeScheduler: @escaping UpdateChecker.SupplementalScheduler = UpdateChecker.mainScheduler,
+            _ body: (UpdateChecker, UserDefaults) -> Void
+        ) {
             let suite = "FinderRight.AutomaticUpdateTests.\(UUID().uuidString)"
             let defaults = UserDefaults(suiteName: suite)!
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [ReleaseProtocol.self]
             let session = URLSession(configuration: config)
             let checker = UpdateChecker(defaults: defaults, checkSession: session, downloadConfiguration: config,
-                                        firstByteTimeout: 0.1, stallTimeout: 0.1, supplementalWindow: window)
+                                        firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout,
+                                        supplementalWindow: window, downloadHedgeDelay: hedgeDelay,
+                                        supplementalScheduler: supplementalScheduler,
+                                        downloadHedgeScheduler: hedgeScheduler)
             ReleaseProtocol.requests = []
             ReleaseProtocol.cancelled = []
             ReleaseProtocol.replies = [:]
@@ -163,6 +160,27 @@ struct AutomaticUpdateChecks {
             pump()
             defaults.removePersistentDomain(forName: suite)
             print("✓ \(name)")
+        }
+
+        func manualWindowScenario(_ name: String, _ body: (UpdateChecker, UserDefaults, SupplementalController) -> Void) {
+            let controller = SupplementalController()
+            runCheckerScenario(name, supplementalScheduler: controller.scheduler) { checker, defaults in
+                body(checker, defaults, controller)
+            }
+        }
+
+        // 两个检查实例的补充窗口都设为 80ms，避免测试真的等 800ms
+        func scenario(_ name: String, window: TimeInterval = 0.08, _ body: (UpdateChecker, UserDefaults) -> Void) {
+            runCheckerScenario(name, window: window, body)
+        }
+
+        func hedgeScenario(_ name: String, firstByteTimeout: TimeInterval = 5, stallTimeout: TimeInterval = 5,
+                           hedgeDelay: TimeInterval = 4, _ body: (UpdateChecker, SupplementalController) -> Void) {
+            let controller = SupplementalController()
+            runCheckerScenario(name, firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout,
+                               hedgeDelay: hedgeDelay, hedgeScheduler: controller.scheduler) { checker, _ in
+                body(checker, controller)
+            }
         }
         func holdBoth() {
             ReleaseProtocol.replies[UpdateChecker.releaseAPI.absoluteString] = .hold
@@ -698,5 +716,79 @@ struct AutomaticUpdateChecks {
         print("✓ 持续传输重置停滞计时；停滞后超时且取消回调不重复完成")
 
         session.invalidateAndCancel()
+
+        for (primary, alternate, winnerIsPrimary) in [
+            (ReleaseProtocol.websiteZIP, ReleaseProtocol.githubZIP, false),
+            (ReleaseProtocol.githubZIP, ReleaseProtocol.websiteZIP, true)
+        ] {
+            hedgeScenario("慢启动竞速：\(winnerIsPrimary ? "主源胜出并取消备用源" : "备用源先回胜出并取消主源")") { checker, hedge in
+                let bytes = Data("winner-\(winnerIsPrimary)".utf8)
+                ReleaseProtocol.replies[primary.absoluteString] = .hold
+                ReleaseProtocol.replies[alternate.absoluteString] = .hold
+                checker.startDownloadAndInstall(downloadURL: primary, checksum: .digest(sha256Hex(bytes)),
+                                                version: ReleaseProtocol.checkedVersion) { _ in }
+                wait("主源请求与慢启动计时") { ReleaseProtocol.pending.count == 1 && hedge.scheduledAction != nil }
+                precondition(hedge.scheduledDelay == 4)
+                hedge.fire()
+                wait("慢启动拉起备用源") { ReleaseProtocol.pending.count == 2 }
+                let (winner, loser) = winnerIsPrimary ? (primary, alternate) : (alternate, primary)
+                ReleaseProtocol.pending.first { $0.request.url == winner }!.respond(code: 200, data: bytes)
+                wait("胜出方进入校验并取消另一路") { isFailed(checker) && ReleaseProtocol.cancelled.contains(loser) }
+                precondition(checker.currentStatus == .failed("安装失败: 解压更新包失败"))
+                precondition(ReleaseProtocol.requests == [primary, alternate])
+            }
+        }
+
+        hedgeScenario("主源快速收到首字节时取消慢启动计时，不请求备用源") { checker, hedge in
+            let primary = ReleaseProtocol.websiteZIP
+            let bytes = Data("fast primary".utf8)
+            ReleaseProtocol.replies[primary.absoluteString] = .hold
+            checker.startDownloadAndInstall(downloadURL: primary, checksum: .digest(sha256Hex(bytes)),
+                                            version: ReleaseProtocol.checkedVersion) { _ in }
+            wait("主源请求与慢启动计时") { ReleaseProtocol.pending.count == 1 && hedge.scheduledAction != nil }
+            ReleaseProtocol.pending[0].respond(code: 200, data: bytes)
+            wait { isFailed(checker) }
+            precondition(checker.currentStatus == .failed("安装失败: 解压更新包失败"))
+            precondition(hedge.scheduledAction == nil && hedge.cancelCount == 1)
+            precondition(ReleaseProtocol.requests == [primary])
+        }
+
+        for failPrimary in [false, true] {
+            hedgeScenario("竞速中\(failPrimary ? "主源" : "备用源") 503 带响应体不误胜出且继续等待另一路") { checker, hedge in
+                let (primary, alternate) = (ReleaseProtocol.websiteZIP, ReleaseProtocol.githubZIP)
+                let (failing, survivor) = failPrimary ? (primary, alternate) : (alternate, primary)
+                let bytes = Data("survivor-\(failPrimary)".utf8)
+                ReleaseProtocol.replies[primary.absoluteString] = .hold
+                ReleaseProtocol.replies[alternate.absoluteString] = .hold
+                checker.startDownloadAndInstall(downloadURL: primary, checksum: .digest(sha256Hex(bytes)),
+                                                version: ReleaseProtocol.checkedVersion) { _ in }
+                wait("主源请求") { ReleaseProtocol.pending.count == 1 && hedge.scheduledAction != nil }
+                hedge.fire()
+                wait("慢启动拉起备用源") { ReleaseProtocol.pending.count == 2 }
+                ReleaseProtocol.pending.first { $0.request.url == failing }!.respond(code: 503, data: Data(repeating: 0x65, count: 4096))
+                pump(0.05)
+                precondition(!ReleaseProtocol.cancelled.contains(survivor), "503 响应体绝不能取消另一路")
+                if case .downloading = checker.currentStatus {} else { preconditionFailure("另一路仍在途不应提前失败") }
+                ReleaseProtocol.pending.first { $0.request.url == survivor }!.respond(code: 200, data: bytes)
+                wait { isFailed(checker) }
+                precondition(checker.currentStatus == .failed("安装失败: 解压更新包失败"))
+            }
+        }
+
+        hedgeScenario("主源 4s 内仅收到 200 响应头但无数据块，触发慢启动后由备用源接管") { checker, hedge in
+            let (primary, alternate) = (ReleaseProtocol.websiteZIP, ReleaseProtocol.githubZIP)
+            let altBytes = Data("alt after header hang".utf8)
+            ReleaseProtocol.replies[primary.absoluteString] = .holdAfterHeaders(200)
+            ReleaseProtocol.replies[alternate.absoluteString] = .response(200, altBytes)
+            checker.startDownloadAndInstall(downloadURL: primary, checksum: .digest(sha256Hex(altBytes)),
+                                            version: ReleaseProtocol.checkedVersion) { _ in }
+            wait("主源收到 200 头但无数据") { ReleaseProtocol.pending.count == 1 && hedge.scheduledAction != nil }
+            pump(0.05)
+            precondition(hedge.scheduledAction != nil && hedge.cancelCount == 0, "仅收到响应头时不得取消慢启动计时")
+            hedge.fire()
+            wait("备用源接管并取消卡死主源") { isFailed(checker) && ReleaseProtocol.cancelled.contains(primary) }
+            precondition(checker.currentStatus == .failed("安装失败: 解压更新包失败"))
+            precondition(ReleaseProtocol.requests == [primary, alternate])
+        }
     }
 }

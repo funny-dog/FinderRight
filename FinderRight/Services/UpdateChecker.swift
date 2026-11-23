@@ -27,8 +27,15 @@ public final class UpdateChecker: NSObject {
     private let firstByteTimeout: TimeInterval
     private let stallTimeout: TimeInterval
     private let supplementalWindow: TimeInterval
+    private let downloadHedgeDelay: TimeInterval
     public typealias SupplementalScheduler = (_ delay: TimeInterval, _ action: @escaping () -> Void) -> () -> Void
+    static let mainScheduler: SupplementalScheduler = { delay, action in
+        let item = DispatchWorkItem(block: action)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        return { item.cancel() }
+    }
     private let supplementalScheduler: SupplementalScheduler
+    private let downloadHedgeScheduler: SupplementalScheduler
     private var checkTasks: [URLSessionDataTask] = []
     private var cancelSupplementalTimer: (() -> Void)?
     private var checkGeneration = 0
@@ -39,26 +46,30 @@ public final class UpdateChecker: NSObject {
     /// 已开始替换安装：此后进程只会因更新而退出，退出前同样要等在途文件任务
     private(set) var isInstallingUpdate = false
 
-    private var activeDownloadSession: URLSession?
-    private var downloadDelegate: UpdateDownloadDelegate?
+    private var activeDownloads: [URL: (session: URLSession, delegate: UpdateDownloadDelegate)] = [:]
+    private var cancelHedgeTimer: (() -> Void)?
 
     init(defaults: UserDefaults = .standard, checkSession: URLSession = .shared,
          downloadConfiguration: URLSessionConfiguration = .default,
-         firstByteTimeout: TimeInterval = 3, stallTimeout: TimeInterval = 10,
+         firstByteTimeout: TimeInterval = 15, stallTimeout: TimeInterval = 10,
          supplementalWindow: TimeInterval = UpdatePolicy.supplementalCheckWindow,
-         supplementalScheduler: @escaping SupplementalScheduler = { delay, action in
-             let item = DispatchWorkItem(block: action)
-             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-             return { item.cancel() }
-         }) {
+         downloadHedgeDelay: TimeInterval = 4,
+         supplementalScheduler: @escaping SupplementalScheduler = UpdateChecker.mainScheduler,
+         downloadHedgeScheduler: @escaping SupplementalScheduler = UpdateChecker.mainScheduler) {
         self.defaults = defaults
         self.checkSession = checkSession
         self.downloadConfiguration = downloadConfiguration
         self.firstByteTimeout = firstByteTimeout
         self.stallTimeout = stallTimeout
         self.supplementalWindow = supplementalWindow
+        self.downloadHedgeDelay = downloadHedgeDelay
         self.supplementalScheduler = supplementalScheduler
+        self.downloadHedgeScheduler = downloadHedgeScheduler
         super.init()
+    }
+
+    deinit {
+        cancelAllDownloads()
     }
 
     /// 启动和偏好变更时调用；关闭后不再发起更新，已开始的安装流程继续完成。
@@ -293,45 +304,98 @@ public final class UpdateChecker: NSObject {
         }.resume()
     }
 
-    private func downloadPackage(downloadURL: URL, expectedHash: String, version: String, allowFallback: Bool = true,
-                                 statusHandler: @escaping (UpdateCheckStatus) -> Void) {
-        let delegate = UpdateDownloadDelegate(
-            onProgress: { [weak self] progress in
-                guard let self = self else { return }
-                let status = UpdateCheckStatus.downloading(progress: progress)
-                self.currentStatus = status
-                statusHandler(status)
-            },
-            onFinish: { [weak self] result in
-                guard let self = self else { return }
-                self.activeDownloadSession?.invalidateAndCancel()
-                self.activeDownloadSession = nil
-                self.downloadDelegate = nil
-                switch result {
-                case .success(let zipLocation):
-                    self.verifyAndInstall(zipLocation: zipLocation, expectedHash: expectedHash,
-                                          version: version, statusHandler: statusHandler)
+    private func cancelDownloadAttempt(_ url: URL) {
+        guard let attempt = activeDownloads.removeValue(forKey: url) else { return }
+        attempt.delegate.cancel()
+        attempt.session.invalidateAndCancel()
+    }
 
-                case .failure(let error):
-                    if let alternate = UpdatePolicy.fallbackAssetURL(for: downloadURL, allowFallback: allowFallback) {
-                        self.downloadPackage(downloadURL: alternate, expectedHash: expectedHash, version: version,
-                                             allowFallback: false, statusHandler: statusHandler)
+    private func cancelAllDownloads() {
+        cancelHedgeTimer?()
+        cancelHedgeTimer = nil
+        Array(activeDownloads.keys).forEach(cancelDownloadAttempt)
+    }
+
+    private func downloadPackage(downloadURL: URL, expectedHash: String, version: String,
+                                 statusHandler: @escaping (UpdateCheckStatus) -> Void) {
+        let alternateURL = UpdatePolicy.fallbackAssetURL(for: downloadURL, allowFallback: true)
+        var alternateStarted = false
+        var winner: URL?
+        var finished = false
+
+        func launch(_ url: URL) {
+            if url == alternateURL { alternateStarted = true }
+            let delegate = UpdateDownloadDelegate(
+                onProgress: { [weak self] progress in
+                    guard let self, !finished, self.activeDownloads[url] != nil, winner == url else { return }
+                    let status = UpdateCheckStatus.downloading(progress: progress)
+                    self.currentStatus = status
+                    statusHandler(status)
+                },
+                onFinish: { [weak self] result in
+                    guard let self else {
+                        if case .success(let zipLocation) = result {
+                            try? FileManager.default.removeItem(at: zipLocation.deletingLastPathComponent())
+                        }
                         return
                     }
-                    self.fail("下载失败: \(error.localizedDescription)", statusHandler: statusHandler)
+                    switch result {
+                    case .success(let zipLocation):
+                        guard !finished, self.activeDownloads[url] != nil else {
+                            try? FileManager.default.removeItem(at: zipLocation.deletingLastPathComponent())
+                            return
+                        }
+                        finished = true
+                        winner = url
+                        self.cancelAllDownloads()
+                        self.verifyAndInstall(zipLocation: zipLocation, expectedHash: expectedHash,
+                                              version: version, statusHandler: statusHandler)
+                    case .failure(let error):
+                        guard !finished, self.activeDownloads[url] != nil else { return }
+                        self.cancelDownloadAttempt(url)
+                        if !self.activeDownloads.isEmpty { return }
+                        if !alternateStarted, let alternateURL {
+                            self.cancelHedgeTimer?()
+                            self.cancelHedgeTimer = nil
+                            winner = nil
+                            launch(alternateURL)
+                            return
+                        }
+                        finished = true
+                        self.cancelAllDownloads()
+                        self.fail("下载失败: \(error.localizedDescription)", statusHandler: statusHandler)
+                    }
+                },
+                onFirstData: { [weak self] in
+                    guard let self, !finished, self.activeDownloads[url] != nil, winner == nil else { return }
+                    winner = url
+                    self.cancelHedgeTimer?()
+                    self.cancelHedgeTimer = nil
+                    for other in Array(self.activeDownloads.keys) where other != url {
+                        self.cancelDownloadAttempt(other)
+                    }
                 }
+            )
+            let session = URLSession(configuration: downloadConfiguration, delegate: delegate, delegateQueue: OperationQueue.main)
+            activeDownloads[url] = (session, delegate)
+
+            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData,
+                                     timeoutInterval: max(firstByteTimeout, stallTimeout))
+            request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
+            let task = session.downloadTask(with: request)
+            delegate.watch(task, firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout)
+            task.resume()
+        }
+
+        cancelAllDownloads()
+        launch(downloadURL)
+        if let alternateURL, downloadHedgeDelay > 0, downloadHedgeDelay < firstByteTimeout {
+            cancelHedgeTimer = downloadHedgeScheduler(downloadHedgeDelay) { [weak self] in
+                guard let self, !finished, winner == nil, !alternateStarted else { return }
+                self.cancelHedgeTimer = nil
+                launch(alternateURL)
             }
-        )
-
-        self.downloadDelegate = delegate
-        let session = URLSession(configuration: downloadConfiguration, delegate: delegate, delegateQueue: OperationQueue.main)
-        self.activeDownloadSession = session
-
-        var request = URLRequest(url: downloadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: stallTimeout)
-        request.setValue("FinderRight-App", forHTTPHeaderField: "User-Agent")
-        let downloadTask = session.downloadTask(with: request)
-        delegate.watch(downloadTask, firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout)
-        downloadTask.resume()
+        }
     }
 
     private func verifyAndInstall(zipLocation: URL, expectedHash: String, version: String,
@@ -705,17 +769,21 @@ private extension URL {
 
 final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let onProgress: (Double) -> Void
+    private let onFirstData: (() -> Void)?
     private let onFinish: (Result<URL, Error>) -> Void
     private let schedule: (TimeInterval, DispatchWorkItem) -> Void
     private var tracker: DownloadTimeoutTracker
     private var timeout: DispatchWorkItem?
+    private var hasReceivedValidData = false
 
     init(onProgress: @escaping (Double) -> Void, onFinish: @escaping (Result<URL, Error>) -> Void,
          schedule: @escaping (TimeInterval, DispatchWorkItem) -> Void = { interval, work in
              DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: work)
-         }) {
-        self.tracker = DownloadTimeoutTracker(firstByteTimeout: 3, stallTimeout: 10)
+         },
+         onFirstData: (() -> Void)? = nil) {
+        self.tracker = DownloadTimeoutTracker(firstByteTimeout: 15, stallTimeout: 10)
         self.onProgress = onProgress
+        self.onFirstData = onFirstData
         self.onFinish = onFinish
         self.schedule = schedule
         super.init()
@@ -724,6 +792,12 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     func watch(_ task: URLSessionDownloadTask, firstByteTimeout: TimeInterval, stallTimeout: TimeInterval) {
         self.tracker = DownloadTimeoutTracker(firstByteTimeout: firstByteTimeout, stallTimeout: stallTimeout)
         scheduleTimeout(for: task, after: tracker.initialTimeout())
+    }
+
+    func cancel() {
+        guard tracker.handleFinished() else { return }
+        timeout?.cancel()
+        timeout = nil
     }
 
     private func scheduleTimeout(for task: URLSessionDownloadTask, after interval: TimeInterval) {
@@ -745,7 +819,16 @@ final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
+            downloadTask.cancel()
+            finish(.failure(URLError(.badServerResponse)))
+            return
+        }
         guard let decision = tracker.handleDataWritten(bytesWritten: bytesWritten, totalBytesWritten: totalBytesWritten, totalBytesExpected: totalBytesExpectedToWrite) else { return }
+        if !hasReceivedValidData && (bytesWritten > 0 || totalBytesWritten > 0) {
+            hasReceivedValidData = true
+            onFirstData?()
+        }
         if let resetInterval = decision.resetTimeoutInterval {
             scheduleTimeout(for: downloadTask, after: resetInterval)
         }
