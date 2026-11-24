@@ -71,6 +71,9 @@ enum DiagnosticsReport {
         lines.append(String(format: L("剪切队列：%d 项"), CutQueueStore().read().count))
 
         var failures: [String] = []
+        if case .failed(let message) = UpdateChecker.shared.currentStatus {
+            failures.append(String(format: L("更新失败：%@"), shorten(message)))
+        }
         let recent = RecentOperations.shared
         if recent.capacity > 0 {
             lines.append(String(format: L("操作历史：保留最近 %d 条"), recent.capacity))

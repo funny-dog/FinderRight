@@ -646,6 +646,7 @@
 "剪切队列：%d 项" = "Cut queue: %d item(s)";
 "最近操作记录：%@" = "Recent activity: %@";
 "最近失败：%@" = "Last failure: %@";
+"更新失败：%@" = "Update failed: %@";
 "未授权" = "Not granted";
 "未启用" = "Disabled";
 "未知" = "Unknown";
