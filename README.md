@@ -36,7 +36,7 @@
 - 📁 **移动到 / 复制到** —— 一键将选中项送到常用目录，并支持按最近使用排序。
 - 🛠 **开发者工具**（默认关闭）—— 集成复制哈希、符号链接、项目相对路径、目录树、文件比较、本地 Git 状态和自定义命令，可单独开关与排序。
 - 🖼️ **图片快速转换 / 缩放** —— 选中图片时可批量转换格式（PNG / JPEG / HEIC）或按常用尺寸等比缩放，并支持撤销。
-- ✏️ **批量重命名**（默认关闭） —— 多选后按查找替换、前后缀、序号或日期批量改名，先预览再执行，并支持撤销。
+- ✏️ **批量重命名**（默认关闭）—— 多选后按查找替换、前后缀、序号、日期或大小写批量改名，先预览再执行，并支持撤销。
 - 📦 **压缩 / 解压**（默认关闭）—— 快速打包含 UTF-8 文件名的 ZIP 压缩包，或直接解压常见归档文件。
 - 👀 **扩展空格预览** —— 增强系统快速查看，按空格即可预览文件夹、压缩包、源码配置和渲染后的 Markdown。
 - 👁 **切换隐藏文件** —— 一键显示或隐藏隐藏文件，即时生效无需重启 Finder。
@@ -216,7 +216,7 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 - 📁 **Move To / Copy To** — Send selected items to favorite folders in one click, optionally sorted by recent use.
 - 🛠 **Developer Tools** (off by default) — Copy hashes, create symlinks, copy relative paths or directory trees, compare files, manage local Git status, and run custom commands, each toggleable and reorderable.
 - 🖼️ **Image Convert / Scale** — Batch convert selected images (PNG / JPEG / HEIC) or resize them proportionally to preset dimensions, with undo support.
-- ✏️ **Batch Rename** (off by default) — Rename multiple selected items by find & replace, prefix/suffix, numbering or date, with preview and undo.
+- ✏️ **Batch Rename** (off by default) — Rename multiple selected items by find & replace, prefix/suffix, numbering, date, or letter case, with preview and undo.
 - 📦 **Compress / Extract** (off by default) — Create UTF-8 ZIP archives or extract common archive formats directly from the menu.
 - 👀 **Extended Quick Look Previews** — Enhance Space-bar Quick Look to inspect folders, archives, source/config files, and rendered Markdown.
 - 👁 **Toggle Hidden Files** — Show or hide hidden files instantly without restarting Finder.

@@ -45,6 +45,16 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.4",
+            date: "2026-11-25",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "新增批量重命名（默认关闭）：多选后支持查找替换、前后缀、序号、日期与大小写规则，可实时预览、提示冲突并撤销"),
+                ChangelogEntry(type: .improvement, textKey: "优化应用内自动更新下载：放宽首字节超时并新增双源慢启动竞速下载，诊断信息同步补充更新失败原因"),
+                ChangelogEntry(type: .improvement, textKey: "优化设置简洁模式切换动画与扩展状态异步检测，深色模式与语言改用分段选择器且仅在语言实际变化时重启"),
+                ChangelogEntry(type: .fix, textKey: "修复剪贴板历史收起详情时未恢复展开前尺寸，以及深色模式下详情图标置灰的问题")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.13.3",
             date: "2026-11-23",
             items: [

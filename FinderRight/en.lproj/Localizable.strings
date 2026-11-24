@@ -1126,6 +1126,12 @@
 "正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
 "清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
 
+/* v1.13.4 更新日志 */
+"新增批量重命名（默认关闭）：多选后支持查找替换、前后缀、序号、日期与大小写规则，可实时预览、提示冲突并撤销" = "Added Batch Rename (off by default): rename multiple items by find & replace, prefix/suffix, numbering, date, or letter case with live preview, conflict checks, and undo";
+"优化应用内自动更新下载：放宽首字节超时并新增双源慢启动竞速下载，诊断信息同步补充更新失败原因" = "Improved in-app update downloads with a longer first-byte timeout, dual-source slow-start racing, and update failure details in diagnostics";
+"优化设置简洁模式切换动画与扩展状态异步检测，深色模式与语言改用分段选择器且仅在语言实际变化时重启" = "Improved Compact Mode transition animations and async extension status checks, switched appearance and language to segmented pickers, and avoided unnecessary relaunches when the active language is unchanged";
+"修复剪贴板历史收起详情时未恢复展开前尺寸，以及深色模式下详情图标置灰的问题" = "Fixed Clipboard History not restoring its previous window size when collapsing details, and fixed the details icon appearing muted in Dark Mode";
+
 /* v1.13.3 更新日志 */
 "新增瞬时快照截图方式：支持全屏定格框选、颜色画笔标注与撤销，可直接复制或保存到常用目录" = "Added instant snapshot capture mode with full-screen selection, color brush annotation and undo, and quick copy or saving to favorite folders";
 "剪贴板默认跳过系统「密码」应用（含菜单栏小组件）及带敏感、临时标记的内容，可在设置中按需开启记录" = "Clipboard history now skips Apple Passwords (including the menu bar extra) and sensitive or transient items by default, with an optional toggle in Settings";
