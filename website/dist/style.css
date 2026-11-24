@@ -16,6 +16,7 @@
   --frame-bg: #141d2d;
   --paper-frame: #e6ecf3;
   --shadow: rgba(0, 0, 0, 0.6);
+  --backdrop: rgba(6, 10, 18, 0.72);
   --term-bg: #090e17;
   --term-text: #e7ecf3;
   --term-muted: #a0acc0;
@@ -46,6 +47,7 @@
   --frame-bg: #ffffff;
   --paper-frame: #edf1f5;
   --shadow: rgba(13, 20, 32, 0.2);
+  --backdrop: rgba(13, 20, 32, 0.42);
   color-scheme: light;
 }
 
@@ -138,6 +140,9 @@ img, video { display: block; max-width: 100%; height: auto; }
 .meta-line { color: var(--faint); font: 500 13px/1.5 var(--mono); letter-spacing: 0.02em; }
 .hero-lede { max-width: 30em; margin-bottom: 32px; color: var(--muted); font-size: 18px; line-height: 1.8; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-alt { margin-top: 16px; color: var(--faint); font-size: 14px; line-height: 1.6; }
+.hero-alt .text-link { color: var(--muted); font-weight: 500; }
+.hero-alt .text-link:hover { color: var(--accent-text); }
 .hero-visual { justify-self: end; width: 100%; max-width: 470px; }
 .hero-visual figcaption { margin-top: 12px; color: var(--faint); font: 500 13px/1.5 var(--mono); }
 
@@ -212,7 +217,33 @@ img, video { display: block; max-width: 100%; height: auto; }
 .trio dd { margin-top: 6px; font-size: clamp(26px, 2.6vw, 34px); line-height: 1.2; }
 
 /* 安装 */
+.install-tabs {
+  display: inline-flex; gap: 4px; padding: 4px; margin-bottom: clamp(28px, 3.5vw, 40px);
+  background: var(--bg-band); border: 1px solid var(--line-strong); border-radius: 999px;
+}
+.install-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 38px; padding: 0 18px;
+  background: transparent; border: 0; border-radius: 999px;
+  color: var(--muted); font: 600 14px/1 var(--sans); cursor: pointer;
+  transition: background-color 0.16s, color 0.16s;
+}
+.install-tab:hover { color: var(--text); }
+.install-tab.is-active { background: var(--accent); color: var(--on-accent); }
+.tab-badge {
+  padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text);
+  font: 600 11.5px/1.3 var(--sans);
+}
+.install-tab.is-active .tab-badge { background: rgba(8, 17, 28, 0.14); color: var(--on-accent); }
+.step-badge {
+  display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  color: var(--accent-text); font: 600 12px/1.4 var(--sans); vertical-align: 0.12em;
+}
 .install-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: clamp(36px, 6vw, 80px); align-items: start; }
+.install-grid[hidden] { display: none; }
 .install-steps li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; padding: 24px 0; border-top: 1px solid var(--line); }
 .install-steps li:first-child { padding-top: 0; border-top: 0; }
 .install-steps .step-n { margin-top: 2px; }
@@ -234,6 +265,34 @@ img, video { display: block; max-width: 100%; height: auto; }
 .copy-button:hover { background: var(--term-accent); border-color: var(--term-accent); color: var(--on-accent); }
 .copy-status { display: block; min-height: 1.5em; margin-top: 6px; color: var(--term-muted); font-size: 13px; }
 .term :focus-visible { outline-color: #fff; }
+
+/* 下载引导弹窗 */
+.dl-dialog {
+  width: min(560px, calc(100vw - 32px)); max-width: none; padding: 0;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  box-shadow: 0 32px 80px -20px var(--shadow);
+}
+.dl-dialog::backdrop {
+  background: var(--backdrop);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.dl-dialog[open] { animation: dl-in 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes dl-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }
+.dl-dialog-inner { padding: clamp(22px, 3vw, 32px); }
+.dl-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.dl-close { padding: 0; }
+.dl-title {
+  margin-top: 14px;
+  font-family: var(--display); font-weight: var(--display-weight); letter-spacing: var(--display-tracking);
+  font-size: clamp(22px, 2.6vw, 28px); line-height: 1.25;
+}
+.dl-lede { margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+.dl-steps { display: grid; gap: 12px; margin: 20px 0 18px; }
+.dl-steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; align-items: start; color: var(--text); font-size: 15px; line-height: 1.65; }
+.dl-term .term-body { padding: 16px; }
+.dl-term .cmd-line { margin-top: 0; }
+.dl-foot { margin-top: 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 
 /* 常见问题 */
 .faq-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(36px, 6vw, 80px); align-items: start; }
@@ -280,6 +339,9 @@ details p { padding-bottom: 22px; color: var(--muted); font-size: 15px; line-hei
   .feature { padding: 22px 20px 24px; }
   .feature-top { margin-bottom: 14px; }
   .feature-panel { padding: 24px 16px; }
+  .install-tabs { max-width: 100%; }
+  .install-tab { padding: 0 14px; font-size: 13.5px; }
+  .dl-dialog-inner { padding: 20px; }
       .hero-lede, .section-lede { font-size: 16px; }
   .header-actions { gap: 6px; }
   .brand span { display: none; }

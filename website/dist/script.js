@@ -106,11 +106,13 @@ for (const button of copyButtons) {
   });
 }
 
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const downloadDialog = document.querySelector('#download-dialog');
+
 // 功能卡片：点开后把对应示意图面板插到该卡片所在行的下方，同一时间只展开一张
 const showcase = document.querySelector('[data-showcase]');
 if (showcase) {
   const cards = [...showcase.querySelectorAll('.feature')];
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let openCard = null;
 
   const toggleOf = card => card.querySelector('.feature-toggle');
@@ -158,7 +160,7 @@ if (showcase) {
     }
   });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && openCard) {
+    if (event.key === 'Escape' && openCard && !downloadDialog?.open) {
       const card = openCard;
       close();
       toggleOf(card).focus();
@@ -166,4 +168,69 @@ if (showcase) {
   });
   // 列数随窗口宽度变化时，面板跟着回到正确的行下方
   window.addEventListener('resize', () => { if (openCard) place(openCard); });
+}
+
+// 安装方式 Tab 分流：默认选中 Homebrew，切换时同步面板与复制提示状态
+const installTablist = document.querySelector('.install-tabs');
+const installTabs = installTablist ? [...installTablist.querySelectorAll('[data-install-tab]')] : [];
+
+function selectInstallTab(name, { focus = false } = {}) {
+  for (const tab of installTabs) {
+    const selected = tab.dataset.installTab === name;
+    tab.classList.toggle('is-active', selected);
+    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+    const panel = document.getElementById(tab.getAttribute('aria-controls'));
+    if (panel) {
+      panel.hidden = !selected;
+      if (!selected) {
+        for (const status of panel.querySelectorAll('.copy-status')) status.textContent = '';
+      }
+    }
+    if (selected && focus) tab.focus();
+  }
+}
+
+if (installTablist && installTabs.length) {
+  installTablist.addEventListener('click', event => {
+    const tab = event.target.closest('[data-install-tab]');
+    if (tab) selectInstallTab(tab.dataset.installTab);
+  });
+  installTablist.addEventListener('keydown', event => {
+    const current = event.target.closest('[data-install-tab]');
+    if (!current) return;
+    const index = installTabs.indexOf(current);
+    let nextIndex = -1;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % installTabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + installTabs.length) % installTabs.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = installTabs.length - 1;
+    if (nextIndex === -1) return;
+    event.preventDefault();
+    selectInstallTab(installTabs[nextIndex].dataset.installTab, { focus: true });
+  });
+}
+
+// 快捷跳转到安装区并切换到指定 Tab（首屏辅助链接、下载弹窗底部链接）
+for (const link of document.querySelectorAll('[data-install-jump]')) {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    selectInstallTab(link.dataset.installJump);
+    if (downloadDialog?.open) downloadDialog.close();
+    document.querySelector('#install')?.scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+  });
+}
+
+// 点击 DMG 下载后不拦截原生下载，同时弹出「必做：移除隔离属性」指引弹窗
+if (downloadDialog && typeof downloadDialog.showModal === 'function') {
+  for (const link of document.querySelectorAll('a[href="/download/FinderRight.dmg"]')) {
+    link.addEventListener('click', event => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      for (const status of downloadDialog.querySelectorAll('.copy-status')) status.textContent = '';
+      if (!downloadDialog.open) downloadDialog.showModal();
+    });
+  }
+  downloadDialog.querySelector('.dl-close')?.addEventListener('click', () => downloadDialog.close());
+  downloadDialog.addEventListener('click', event => {
+    if (event.target === downloadDialog) downloadDialog.close();
+  });
 }

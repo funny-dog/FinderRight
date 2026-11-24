@@ -59,6 +59,7 @@
             <a class="button button-primary" href="/download/FinderRight.dmg"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg><span data-en="Download for Mac">下载 Mac 版</span></a>
             <a class="button button-ghost" href="https://github.com/funny-dog/FinderRight" target="_blank" rel="noopener noreferrer" data-en="Go to GitHub to star">前往 GitHub 点 Star</a>
           </div>
+          <p class="hero-alt"><span data-en="Or ">或通过 </span><a class="text-link" href="#install" data-install-jump="brew" data-en="install with Homebrew">Homebrew 安装</a><span data-en=" (no manual unblock needed)">（免手动移除隔离属性）</span></p>
         </div>
         <figure class="hero-visual is-mock">
           <div class="mock mock-menu" role="img" aria-label="示意图：在访达里右键 README.md，FinderRight 的菜单显示大小 12.4 MB，以及新建文件、复制路径、复制文件名、复制文件内容、打开路径、打开终端、打开编辑器、剪切、粘贴、移动到、复制到和切换隐藏文件" data-en-label="Illustration: right-clicking README.md in Finder shows Size: 12.4 MB, New File, Copy Path, Copy File Name, Copy File Content, Open Path, Open in Terminal, Open in Editor, Cut, Paste, Move To, Copy To and Toggle Hidden Files">
@@ -582,22 +583,37 @@
           </div>
           <p class="section-lede" data-en="macOS 13 or later · Apple Silicon. Intel Macs are not currently supported.">适用于 macOS 13 及以上、Apple Silicon。目前暂不支持 Intel Mac。</p>
         </div>
-        <div class="install-grid">
+        <div class="install-tabs" role="tablist" aria-label="安装方式" data-en-label="Installation method">
+          <button class="install-tab is-active" type="button" role="tab" id="tab-brew" aria-selected="true" aria-controls="panel-install-brew" data-install-tab="brew"><span data-en="Homebrew">Homebrew</span><span class="tab-badge" data-en="Recommended">推荐</span></button>
+          <button class="install-tab" type="button" role="tab" id="tab-dmg" aria-selected="false" aria-controls="panel-install-dmg" data-install-tab="dmg"><span data-en="Download DMG">下载 DMG</span></button>
+        </div>
+        <div class="install-grid" id="panel-install-brew" role="tabpanel" aria-labelledby="tab-brew">
           <ol class="install-steps">
-            <li><span class="step-n">1</span><div><h3 data-en="Install with Homebrew or a DMG">通过 Homebrew 或 DMG 安装</h3><p data-en="Run the command on the right, or open the DMG and drag FinderRight into Applications.">执行右侧命令，或打开 DMG 把 FinderRight 拖进「应用程序」。</p></div></li>
-            <li><span class="step-n">2</span><div><h3 data-en="Allow the first launch">允许首次打开</h3><p data-en="If macOS blocks a DMG install, go to System Settings → Privacy &amp; Security and click Open Anyway.">DMG 安装若被拦截，到「系统设置 → 隐私与安全性」点「仍要打开」。</p></div></li>
-            <li><span class="step-n">3</span><div><h3 data-en="Enable the extension and permissions">启用扩展，完成授权</h3><p data-en="Follow the app’s guide to enable the Finder extension, then grant Full Disk Access and Accessibility.">按应用引导启用访达扩展，再授予完全磁盘访问和辅助功能权限。</p></div></li>
+            <li><span class="step-n">1</span><div><h3 data-en="Install with one command">终端一行安装</h3><p data-en="Run the command on the right. Homebrew removes the quarantine attribute automatically.">运行右侧命令安装，Homebrew 会自动移除隔离属性，无需额外放行。</p></div></li>
+            <li><span class="step-n">2</span><div><h3 data-en="Enable the extension and permissions">启用扩展，完成授权</h3><p data-en="Open FinderRight, follow its guide to enable the Finder extension, then grant Full Disk Access and Accessibility.">打开 FinderRight，按应用引导启用访达扩展，再授予完全磁盘访问和辅助功能权限。</p></div></li>
           </ol>
           <aside class="term">
             <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>Terminal</span></div>
             <div class="term-body">
               <div class="cmd">
-                <p class="term-comment" data-en="# Install from the project’s Homebrew tap"># 从项目 Homebrew Tap 安装</p>
+                <p class="term-comment" data-en="# Install from the project’s Homebrew tap (removes quarantine automatically)"># 从项目 Homebrew Tap 安装（自动移除隔离属性）</p>
                 <div class="cmd-line"><code>brew install --cask funny-dog/tap/finderright</code><button class="copy-button" type="button" hidden aria-label="复制安装命令" data-en-label="Copy install command" data-en="Copy">复制</button></div>
                 <span class="copy-status" role="status" aria-live="polite"></span>
               </div>
+            </div>
+          </aside>
+        </div>
+        <div class="install-grid" id="panel-install-dmg" role="tabpanel" aria-labelledby="tab-dmg" hidden>
+          <ol class="install-steps">
+            <li><span class="step-n">1</span><div><h3 data-en="Drag into Applications">拖入「应用程序」</h3><p data-en="Open the downloaded FinderRight.dmg and drag FinderRight into Applications.">打开下载好的 FinderRight.dmg，把 FinderRight 拖进「应用程序」文件夹。</p></div></li>
+            <li><span class="step-n">2</span><div><h3><span data-en="Remove quarantine attribute">移除隔离属性</span><span class="step-badge" data-en="Required">必做</span></h3><p data-en="The app is self-signed and not notarized by Apple. Run the command on the right in Terminal before opening it, or macOS will block launch.">应用使用自签名证书且未经 Apple 公证，首次打开前必须在终端执行右侧命令，否则会被 macOS 拦截。</p></div></li>
+            <li><span class="step-n">3</span><div><h3 data-en="Enable the extension and permissions">启用扩展，完成授权</h3><p data-en="Open FinderRight, follow its guide to enable the Finder extension, then grant Full Disk Access and Accessibility.">打开 FinderRight，按应用引导启用访达扩展，再授予完全磁盘访问和辅助功能权限。</p></div></li>
+          </ol>
+          <aside class="term">
+            <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>Terminal</span></div>
+            <div class="term-body">
               <div class="cmd">
-                <p class="term-comment" data-en="# If a DMG install is blocked, remove the quarantine attribute"># DMG 安装被拦截时，可手动移除隔离属性</p>
+                <p class="term-comment" data-en="# Run in Terminal after dragging to Applications (required)"># 拖入「应用程序」后在终端执行（必做）</p>
                 <div class="cmd-line"><code>xattr -dr com.apple.quarantine /Applications/FinderRight.app</code><button class="copy-button" type="button" hidden aria-label="复制移除隔离属性的命令" data-en-label="Copy quarantine removal command" data-en="Copy">复制</button></div>
                 <span class="copy-status" role="status" aria-live="polite"></span>
               </div>
@@ -615,7 +631,7 @@
           <p class="section-foot"><a class="text-link" href="https://github.com/funny-dog/FinderRight/issues" target="_blank" rel="noopener noreferrer" data-en="Ask on GitHub ↗">在 GitHub 提问 ↗</a></p>
         </div>
         <div class="qa">
-          <details><summary><span data-en="Why does macOS block the first launch?">为什么首次打开会被系统拦截？</span><span class="plus" aria-hidden="true">＋</span></summary><p data-en="The current release uses a self-signed certificate and has not been notarized by Apple. Both the project’s Homebrew tap and the DMG install the official release. Homebrew removes the app’s quarantine attribute, so macOS skips this check; the DMG keeps it. For a DMG install, follow the installation guide above to allow the app, then enable the Finder extension and required permissions.">当前版本使用自签名证书，尚未经过 Apple 公证。项目 Homebrew Tap 和 DMG 均安装正式发布的 App；Homebrew 会删除此 App 的隔离属性，系统因此跳过这项检查，DMG 安装则保留检查。DMG 安装请按上方指南放行，再启用 Finder 扩展及必要权限。</p></details>
+          <details><summary><span data-en="Why does macOS block the first launch?">为什么首次打开会被系统拦截？</span><span class="plus" aria-hidden="true">＋</span></summary><p data-en="The current release uses a self-signed certificate and has not been notarized by Apple. Both the project’s Homebrew tap and the DMG install the official release. Homebrew removes the app’s quarantine attribute automatically; with a DMG install, drag the app into Applications and run the xattr command from the installation guide in Terminal before opening it, then enable the Finder extension and required permissions.">当前版本使用自签名证书，尚未经过 Apple 公证。项目 Homebrew Tap 和 DMG 均安装正式发布的 App；Homebrew 会自动移除隔离属性，无需额外操作；通过 DMG 安装则必须在拖入「应用程序」后，在终端执行安装指南中的 xattr 命令移除隔离属性，再打开应用并启用 Finder 扩展与必要权限。</p></details>
           <details><summary><span data-en="Why is the menu missing in cloud folders?">为什么云盘里没有右键菜单？</span><span class="plus" aria-hidden="true">＋</span></summary><p data-en="macOS File Provider folders (such as iCloud Drive and Google Drive) and read-only disks restrict third-party Finder menus. FinderRight offers its actions in the right-click Services submenu instead, which is off by default and can be enabled in Settings → General.">iCloud Drive、Google Drive 等云盘目录及只读磁盘受系统限制，不显示第三方 Finder 扩展菜单；在这些位置可通过「右键 → 服务」子菜单使用 FinderRight（默认关闭，可在「设置 → 通用」中开启）。</p></details>
           <details><summary><span data-en="What are the limitations of the image tools?">图片转换与缩放有什么限制？</span><span class="plus" aria-hidden="true">＋</span></summary><p data-en="Images at or below the target size stay unchanged, with a not-performed notice explaining that resizing only reduces images. WebP images can be converted to PNG/JPEG/HEIC, but direct scaling export to WebP is not supported due to system format limitations. For ultra-large images over 40 million pixels, please use the scale feature to reduce dimensions before converting.">达到或小于目标尺寸的图片保持原样，以未执行提示说明只缩小、不放大的原因。WebP 格式仅支持作为源格式转换为 PNG/JPEG/HEIC，受系统只读限制不支持直接缩放输出为 WebP；超过 4,000 万像素的图片，在格式转换前请先使用缩放功能减小尺寸。</p></details>
           <details><summary><span data-en="How do in-app updates choose a download source?">应用内更新如何选择下载线路？</span><span class="plus" aria-hidden="true">＋</span></summary><p data-en="Update checks query the website and GitHub at the same time, pick the faster available source, fall back to the alternate source on failure, and verify SHA-256 and code signatures before installing.">检查更新会同时请求官网和 GitHub，优先选用更快可用的线路，下载异常时自动切换备用源，并在校验 SHA-256 与代码签名后完成更新。</p></details>
@@ -642,5 +658,29 @@
       </div>
     </div>
   </footer>
+
+  <dialog class="dl-dialog" id="download-dialog" aria-labelledby="download-dialog-title">
+    <div class="dl-dialog-inner">
+      <div class="dl-head">
+        <p class="eyebrow" data-en="Download started">下载已开始</p>
+        <button class="icon-btn dl-close" type="button" aria-label="关闭提示" data-en-label="Close notice"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      </div>
+      <h2 class="dl-title" id="download-dialog-title" data-en="Two steps before you open it">完成这两步，即可顺利打开</h2>
+      <p class="dl-lede" data-en="FinderRight is self-signed and not notarized by Apple. After installing from DMG, remove the quarantine attribute once in Terminal.">应用使用自签名证书且未经 Apple 公证，通过 DMG 安装后需在终端移除一次系统隔离属性。</p>
+      <ol class="dl-steps">
+        <li><span class="step-n">1</span><span data-en="Open FinderRight.dmg and drag FinderRight into Applications.">打开下载好的 FinderRight.dmg，把 FinderRight 拖进「应用程序」。</span></li>
+        <li><span class="step-n">2</span><span><span data-en="Open Terminal and run the command below">打开「终端」执行下方命令</span><span class="step-badge" data-en="Required">必做</span></span></li>
+      </ol>
+      <div class="term dl-term">
+        <div class="term-body">
+          <div class="cmd">
+            <div class="cmd-line"><code>xattr -dr com.apple.quarantine /Applications/FinderRight.app</code><button class="copy-button" type="button" hidden aria-label="复制移除隔离属性的命令" data-en-label="Copy quarantine removal command" data-en="Copy">复制</button></div>
+            <span class="copy-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+      </div>
+      <p class="dl-foot"><span data-en="Prefer to skip this step? ">不想手动执行命令？</span><a class="text-link" href="#install" data-install-jump="brew" data-en="Install with Homebrew instead →">改用 Homebrew 一行安装 →</a></p>
+    </div>
+  </dialog>
 </body>
 </html>
