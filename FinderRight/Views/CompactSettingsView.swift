@@ -8,7 +8,6 @@ struct CompactSettingsView: View {
     let onOpenPermissions: () -> Void
 
     @FRState private var isExtensionEnabled: Bool = FinderExtensionChecker.fastCheck
-    @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
 
     init(isActive: Bool = true, onOpenPermissions: @escaping () -> Void) {
@@ -59,20 +58,8 @@ struct CompactSettingsView: View {
 
     private var appearanceRow: some View {
         FRRow(title: Text("深色模式")) {
-            FRSegmentedPicker(
-                label: "深色模式",
-                selection: Binding(
-                    get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
-                    set: { newValue in
-                        guard newValue.rawValue != appearanceRaw else { return }
-                        appearanceRaw = newValue.rawValue
-                        newValue.apply()
-                    }
-                ),
-                FRAppearanceMode.allCases,
-                titleKey: \.titleKey
-            )
-            .controlSize(.small)
+            FRAppearancePicker()
+                .controlSize(.small)
         }
     }
 

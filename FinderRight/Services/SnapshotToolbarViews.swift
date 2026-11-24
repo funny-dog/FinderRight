@@ -1,9 +1,6 @@
 import AppKit
 import CoreGraphics
 import FinderRightKit
-import ImageIO
-import ScreenCaptureKit
-import UniformTypeIdentifiers
 
 // MARK: - 选区右下角悬浮工具条
 

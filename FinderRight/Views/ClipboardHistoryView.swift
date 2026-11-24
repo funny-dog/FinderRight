@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import ImageIO
 import UniformTypeIdentifiers
 import FinderRightKit
 

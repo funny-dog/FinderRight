@@ -1,7 +1,6 @@
 import SwiftUI
 import AppKit
 import FinderRightKit
-import UniformTypeIdentifiers
 
 // MARK: - 左侧单行条目
 

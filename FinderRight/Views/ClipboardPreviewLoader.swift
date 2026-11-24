@@ -1,4 +1,3 @@
-import SwiftUI
 import AppKit
 import FinderRightKit
 import ImageIO

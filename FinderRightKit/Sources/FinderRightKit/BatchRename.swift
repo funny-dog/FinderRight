@@ -1,6 +1,6 @@
 import Foundation
 
-/// 批量重命名规则。只改主文件名，扩展名保持不变（文件夹与文件包整体视为主文件名）。
+/// 批量重命名规则。只改主文件名，扩展名保持不变（普通文件夹整体视为主文件名，文件包保留扩展名）。
 public enum BatchRenameCase: Equatable {
     case lower, upper, capitalized
 }
@@ -78,7 +78,7 @@ public enum BatchRename {
         if case .date(let format, _) = rule { formatter.dateFormat = format }
 
         let names: [String] = sorted.enumerated().map { index, url in
-            let (base, ext) = split(url)
+            let (base, ext) = UniqueName.splitName(for: url, fileManager: fileManager)
             let newBase: String
             switch rule {
             case .replace(let find, let replacement, let isRegex):
@@ -159,7 +159,7 @@ public enum BatchRename {
             let (base, ext) = split(name: entry.newName)
             do {
                 let final = try ExclusiveRename.move(temp, into: directory) { n in
-                    n == 0 ? entry.newName : (ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
+                    n == 0 ? entry.newName : UniqueName.candidateName(baseName: base, ext: ext, counter: n)
                 }
                 result.renamed.append(.init(from: entry.source, to: final))
             } catch {
@@ -168,14 +168,6 @@ public enum BatchRename {
             }
         }
         return result
-    }
-
-    private static func split(_ url: URL) -> (base: String, ext: String) {
-        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
-        if values?.isDirectory == true, values?.isPackage != true {
-            return (url.lastPathComponent, "")
-        }
-        return split(name: url.lastPathComponent)
     }
 
     private static func split(name: String) -> (base: String, ext: String) {

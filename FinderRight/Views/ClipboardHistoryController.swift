@@ -1,7 +1,6 @@
 import SwiftUI
 import AppKit
 import FinderRightKit
-import UniformTypeIdentifiers
 
 // MARK: - 控制器
 

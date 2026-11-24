@@ -1,7 +1,5 @@
 import SwiftUI
 import AppKit
-import ImageIO
-import UniformTypeIdentifiers
 import FinderRightKit
 
 // MARK: - 原生点击与拖出桥接

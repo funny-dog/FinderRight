@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 import FinderRightKit
 
 // MARK: - 下载进度与回调代理

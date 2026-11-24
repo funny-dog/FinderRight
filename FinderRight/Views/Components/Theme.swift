@@ -341,6 +341,27 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
     }
 }
 
+/// 深色模式分段选择器：通用设置与简洁模式共用；尺寸自动响应外层 `.controlSize(...)`。
+struct FRAppearancePicker: View {
+    @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
+
+    var body: some View {
+        FRSegmentedPicker(
+            label: "深色模式",
+            selection: Binding(
+                get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
+                set: { newValue in
+                    guard newValue.rawValue != appearanceRaw else { return }
+                    appearanceRaw = newValue.rawValue
+                    newValue.apply()
+                }
+            ),
+            FRAppearanceMode.allCases,
+            titleKey: \.titleKey
+        )
+    }
+}
+
 /// 下拉选择器：自定义胶囊触发器 + 原生系统菜单（保留勾选、键盘导航与无障碍语义）
 struct FRPicker<Selection: Hashable, Content: View>: View {
     let label: LocalizedStringKey

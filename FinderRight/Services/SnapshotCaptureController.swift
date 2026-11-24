@@ -3,7 +3,6 @@ import CoreGraphics
 import FinderRightKit
 import ImageIO
 import ScreenCaptureKit
-import UniformTypeIdentifiers
 
 /// 轻量快照截图控制器：按下快捷键时瞬时定格当前屏幕，支持框选、复制及保存到常用目录。
 /// 未激活时零窗口驻留、零图像缓存。

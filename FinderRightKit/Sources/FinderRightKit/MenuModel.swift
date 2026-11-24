@@ -1,5 +1,4 @@
 import Foundation
-import UniformTypeIdentifiers
 
 
 /// 纯数据菜单树构建器 —— 集中处理所有菜单项的过滤与排序逻辑

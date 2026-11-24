@@ -13,7 +13,6 @@ struct GeneralTab: View {
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
     @FRState private var appLanguage: String = SharedConfig.shared.appLanguage
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
-    @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
 
     var body: some View {
         FRPage(title: "通用", subtitle: "启动、显示与外观") {
@@ -73,19 +72,7 @@ struct GeneralTab: View {
                 FRDivider()
 
                 FRRow(title: Text("深色模式")) {
-                    FRSegmentedPicker(
-                        label: "深色模式",
-                        selection: Binding(
-                            get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
-                            set: { newValue in
-                                guard newValue.rawValue != appearanceRaw else { return }
-                                appearanceRaw = newValue.rawValue
-                                newValue.apply()
-                            }
-                        ),
-                        FRAppearanceMode.allCases,
-                        titleKey: \.titleKey
-                    )
+                    FRAppearancePicker()
                 }
 
                 FRDivider()

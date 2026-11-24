@@ -44,5 +44,18 @@ enum BatchRenameTests {
             try assertEqual(try String(contentsOf: dir.appendingPathComponent("2.txt")), "a")
             try assertEqual(try String(contentsOf: dir.appendingPathComponent("3.txt")), "b")
         }
+
+        runTest("批量重命名：普通带点目录保留全名，文件包保留扩展名") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let folder = dir.appendingPathComponent("v1.0")
+            let bundle = dir.appendingPathComponent("Demo.app")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+            let planned = BatchRename.plan(items: [folder, bundle], rule: .affix(prefix: "", suffix: "-new"))
+            let bySource = Dictionary(uniqueKeysWithValues: planned.map { ($0.source.lastPathComponent, $0.newName) })
+            try assertEqual(bySource["v1.0"], "v1.0-new")
+            try assertEqual(bySource["Demo.app"], "Demo-new.app")
+        }
     }
 }
