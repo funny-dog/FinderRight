@@ -137,16 +137,6 @@ struct FeaturesTab: View {
                             get: { clipboardService.recordSensitive },
                             set: { clipboardService.setRecordSensitive($0) }))
                     }
-
-                    FRDivider()
-                    FRRow(title: Text("剪贴板历史"),
-                          subtitle: Text("仅保存在本机，不纳入系统备份。")) {
-                        Button("清空历史") {
-                            clipboardService.clear()
-                        }
-                        .buttonStyle(.frSecondary)
-                        .disabled(clipboardService.items.isEmpty)
-                    }
                 }
 
                 if let message = clipboardShortcut.errorMessage {

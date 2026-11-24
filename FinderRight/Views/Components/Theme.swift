@@ -40,8 +40,8 @@ enum FRTheme {
     /// 分段选择器轨道、滑块及下拉触发器动态色
     static let segmentedTrack = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.055), NSColor(hex: 0x000000, alpha: 0.24)))
     static let segmentedTrackBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.10)))
-    static let segmentedThumb = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.13)))
-    static let segmentedThumbBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.16)))
+    static let segmentedThumb = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.16)))
+    static let segmentedThumbBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.18)))
     static let dropdownFill = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.07)))
     static let dropdownHoverFill = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.04), NSColor(hex: 0xFFFFFF, alpha: 0.11)))
 
@@ -268,7 +268,10 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
 
     @FRState private var hovered: Selection?
     @Namespace private var thumbNamespace
+    @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+
+    private var isSmall: Bool { controlSize == .small }
 
     init(label: LocalizedStringKey, selection: Binding<Selection>, options: [(value: Selection, titleKey: String)]) {
         self.label = label
@@ -298,11 +301,11 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
                     }
                 } label: {
                     Text(LocalizedStringKey(option.titleKey))
-                        .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
-                        .foregroundColor(isSelected ? FRTheme.text : (isHovered ? FRTheme.text.opacity(0.88) : FRTheme.mute))
+                        .font(.system(size: isSmall ? 11.5 : 12.5, weight: isSelected ? .semibold : .medium))
+                        .foregroundColor(isSelected ? FRTheme.accentText : (isHovered ? FRTheme.text.opacity(0.88) : FRTheme.mute))
                         .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, isSmall ? 9 : 12)
+                        .padding(.vertical, isSmall ? 4 : 5)
                         .background {
                             if isSelected {
                                 Capsule()
@@ -328,7 +331,7 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(3)
+        .padding(isSmall ? 2.5 : 3)
         .background(Capsule().fill(FRTheme.segmentedTrack))
         .overlay(Capsule().strokeBorder(FRTheme.segmentedTrackBorder, lineWidth: 1))
         .fixedSize()

@@ -63,34 +63,47 @@ struct SettingsView: View {
     @ObservedObject private var presentation = SettingsPresentation.shared
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FRState private var hasLoadedFullLayout = !SettingsPresentation.shared.isCompact
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .topLeading) {
-                Group {
-                    if presentation.isCompact {
-                        CompactSettingsView {
-                            navigation.selectedTab = .permissions
-                            presentation.showFullSettings()
-                        }
-                        .transition(.opacity.combined(with: .offset(y: 8)))
-                    } else {
+        let showCompact = presentation.isCompact
+        let showFull = !presentation.isCompact
+        let lockFullSize = presentation.isTransitioning || presentation.isCompact
+        let compactAnimation: Animation? = reduceMotion ? nil : (showCompact ? .easeOut(duration: 0.22).delay(0.06) : .easeOut(duration: 0.12))
+        let fullAnimation: Animation? = reduceMotion ? nil : (showFull ? .easeOut(duration: 0.22).delay(0.06) : .easeOut(duration: 0.13))
+
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topTrailing) {
+                ZStack(alignment: .topTrailing) {
+                    CompactSettingsView(isActive: presentation.isCompact && !presentation.isTransitioning) {
+                        navigation.selectedTab = .permissions
+                        presentation.showFullSettings()
+                    }
+                    .frame(width: SettingsWindowLayout.compactSize.width,
+                           height: SettingsWindowLayout.compactSize.height)
+                    .scaleEffect(showCompact ? 1 : 0.98, anchor: .topTrailing)
+                    .opacity(showCompact ? 1 : 0)
+                    .allowsHitTesting(showCompact && !presentation.isTransitioning)
+                    .accessibilityHidden(!showCompact)
+                    .animation(compactAnimation, value: showCompact)
+
+                    if hasLoadedFullLayout {
                         fullLayout
-                            .frame(width: max(680, geometry.size.width), height: max(500, geometry.size.height))
-                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                            .frame(width: lockFullSize ? presentation.fullSize.width : nil,
+                                   height: lockFullSize ? presentation.fullSize.height : nil)
+                            .frame(maxWidth: lockFullSize ? nil : .infinity,
+                                   maxHeight: lockFullSize ? nil : .infinity)
+                            .scaleEffect(showFull ? 1 : 0.96, anchor: .topTrailing)
+                            .opacity(showFull ? 1 : 0)
+                            .allowsHitTesting(showFull && !presentation.isTransitioning)
+                            .accessibilityHidden(!showFull)
+                            .animation(fullAnimation, value: showFull)
                     }
                 }
-                .opacity(presentation.showsContent ? 1 : 0)
-                .blur(radius: reduceMotion || presentation.showsContent ? 0 : 4)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: presentation.showsContent)
-                if presentation.isTransitioning && !reduceMotion {
-                    SettingsModeEffect(isCollapsing: presentation.isCompact)
-                        .id(presentation.isCompact)
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .clipped()
             }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: presentation.isCompact)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
-            .clipped()
             .overlay(alignment: .topTrailing) {
                 SettingsModeButton(isCompact: presentation.isCompact,
                                    isTransitioning: presentation.isTransitioning,
@@ -100,11 +113,22 @@ struct SettingsView: View {
                 .padding(.top, 8)
                 .padding(.trailing, 12)
             }
-        }
-        // 主题色变化时整棵视图重建，让所有动态颜色按新主题重新取值
-        .id(themeRaw)
-        .background(FRTheme.window)
-        .ignoresSafeArea()
+            .onAppear {
+                if !hasLoadedFullLayout {
+                    DispatchQueue.main.async {
+                        hasLoadedFullLayout = true
+                    }
+                }
+            }
+            .onChange(of: presentation.isCompact) { compact in
+                if !compact {
+                    hasLoadedFullLayout = true
+                }
+            }
+            // 主题色变化时整棵视图重建，让所有动态颜色按新主题重新取值
+            .id(themeRaw)
+            .background(FRTheme.window)
+            .ignoresSafeArea()
     }
 
     private var fullLayout: some View {

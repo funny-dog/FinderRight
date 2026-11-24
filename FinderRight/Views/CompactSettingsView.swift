@@ -4,13 +4,15 @@ import FinderRightKit
 
 /// 简洁窗口；较长的授权与错误提示可滚动查看。
 struct CompactSettingsView: View {
+    var isActive: Bool = true
     let onOpenPermissions: () -> Void
 
-    @FRState private var isExtensionEnabled: Bool = FinderExtensionChecker.check()
+    @FRState private var isExtensionEnabled: Bool = FinderExtensionChecker.fastCheck
     @AppStorage(FRAppearanceMode.storageKey) private var appearanceRaw = FRAppearanceMode.system.rawValue
     @FRState private var menuIconStyle: MenuIconStyle = SharedConfig.shared.menuIconStyle
 
-    init(onOpenPermissions: @escaping () -> Void) {
+    init(isActive: Bool = true, onOpenPermissions: @escaping () -> Void) {
+        self.isActive = isActive
         self.onOpenPermissions = onOpenPermissions
     }
 
@@ -28,17 +30,21 @@ struct CompactSettingsView: View {
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.top, 58)
+        .padding(.top, 50)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FRTheme.window)
-        .onAppear {
-            isExtensionEnabled = FinderExtensionChecker.check()
-            menuIconStyle = SharedConfig.shared.menuIconStyle
+        .onAppear(perform: refreshState)
+        .onChange(of: isActive) { active in
+            if active { refreshState() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            isExtensionEnabled = FinderExtensionChecker.check()
-            menuIconStyle = SharedConfig.shared.menuIconStyle
+            refreshState()
         }
+    }
+
+    private func refreshState() {
+        FinderExtensionChecker.checkAsync { isExtensionEnabled = $0 }
+        menuIconStyle = SharedConfig.shared.menuIconStyle
     }
 
     private var settingsCard: some View {
@@ -53,18 +59,20 @@ struct CompactSettingsView: View {
 
     private var appearanceRow: some View {
         FRRow(title: Text("深色模式")) {
-            let appearance = FRAppearanceMode(rawValue: appearanceRaw) ?? .system
-            FRPicker(label: "深色模式", titleKey: appearance.titleKey, selection: Binding(
-                get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
-                set: { newValue in
-                    appearanceRaw = newValue.rawValue
-                    newValue.apply()
-                }
-            )) {
-                ForEach(FRAppearanceMode.allCases) { mode in
-                    Text(LocalizedStringKey(mode.titleKey)).tag(mode)
-                }
-            }
+            FRSegmentedPicker(
+                label: "深色模式",
+                selection: Binding(
+                    get: { FRAppearanceMode(rawValue: appearanceRaw) ?? .system },
+                    set: { newValue in
+                        guard newValue.rawValue != appearanceRaw else { return }
+                        appearanceRaw = newValue.rawValue
+                        newValue.apply()
+                    }
+                ),
+                FRAppearanceMode.allCases,
+                titleKey: \.titleKey
+            )
+            .controlSize(.small)
         }
     }
 

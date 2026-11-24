@@ -40,12 +40,31 @@ struct FinderExtensionView: View {
 
 /// 查询 / 管理本 App 内嵌的访达扩展。系统专为宿主 App 提供了这两个接口，
 /// 比解析 `pluginkit -m` 输出更轻，可以在每次打开菜单栏菜单时同步调用。
-enum FinderExtensionChecker {    static func check() -> Bool {
-        if FIFinderSyncController.isExtensionEnabled { return true }
+enum FinderExtensionChecker {
+    static var fastCheck: Bool { FIFinderSyncController.isExtensionEnabled }
 
-        // 兜底：macOS 13 上 `isExtensionEnabled` 会在扩展**确实已启用**时也返回 false
-        // （VM macOS 13.3.1 实测：访达右键菜单可用、扩展进程在跑，但此接口恒为 false），
-        // 于是设置页永远显示「未启用」。退回 PluginKit 查询，行首 '+' 表示启用、'-' 表示被忽略。
+    static func check() -> Bool {
+        if fastCheck { return true }
+        return checkPluginKitFallback()
+    }
+
+    static func checkAsync(_ completion: @escaping (Bool) -> Void) {
+        if fastCheck {
+            completion(true)
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let enabled = checkPluginKitFallback()
+            DispatchQueue.main.async {
+                completion(enabled)
+            }
+        }
+    }
+
+    // 兜底：macOS 13 上 `isExtensionEnabled` 会在扩展**确实已启用**时也返回 false
+    // （VM macOS 13.3.1 实测：访达右键菜单可用、扩展进程在跑，但此接口恒为 false），
+    // 于是设置页永远显示「未启用」。退回 PluginKit 查询，行首 '+' 表示启用、'-' 表示被忽略。
+    private static func checkPluginKitFallback() -> Bool {
         let enabledByPluginKit = pluginKitSaysEnabled()
         NSLog("[FinderExtensionChecker] isExtensionEnabled=false, pluginkit 判定=\(enabledByPluginKit)")
         return enabledByPluginKit

@@ -696,6 +696,101 @@ enum MenuTests {
             try assertEqual(reloaded.appTheme, .sunset, "重载后应保持落日橙主题")
         }
 
+        runTest("AppLanguage 切换重启判定") {
+            let available = ["zh-Hans", "en"]
+            let zhSystem = ["zh-Hans-CN"]
+            let enSystem = ["en-US"]
+
+            // 跟随系统（中文）与固定中文互切：实际显示语言不变，不重启
+            try assertTrue(
+                !AppLanguage.requiresRelaunch(
+                    currentLocalization: "zh-Hans",
+                    target: "zh-Hans",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: zhSystem
+                ),
+                "跟随系统为中文时切换到中文不应重启"
+            )
+            try assertTrue(
+                !AppLanguage.requiresRelaunch(
+                    currentLocalization: "zh-Hans",
+                    target: "system",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: zhSystem
+                ),
+                "固定中文切回中文系统下跟随系统不应重启"
+            )
+
+            // 中文与英文之间切换：实际显示语言变化，需要重启
+            try assertTrue(
+                AppLanguage.requiresRelaunch(
+                    currentLocalization: "zh-Hans",
+                    target: "en",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: zhSystem
+                ),
+                "当前为中文时切换到英文应重启"
+            )
+            try assertTrue(
+                AppLanguage.requiresRelaunch(
+                    currentLocalization: "en",
+                    target: "system",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: zhSystem
+                ),
+                "当前为英文切回中文系统下跟随系统应重启"
+            )
+
+            // 跟随系统（英文）下的切换
+            try assertTrue(
+                !AppLanguage.requiresRelaunch(
+                    currentLocalization: "en",
+                    target: "en",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: enSystem
+                ),
+                "跟随系统为英文时切换到英文不应重启"
+            )
+            try assertTrue(
+                AppLanguage.requiresRelaunch(
+                    currentLocalization: "en",
+                    target: "zh-Hans",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: enSystem
+                ),
+                "跟随系统为英文时切换到中文应重启"
+            )
+            try assertTrue(
+                !AppLanguage.requiresRelaunch(
+                    currentLocalization: "en",
+                    target: "system",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: enSystem
+                ),
+                "固定英文切回英文系统下跟随系统不应重启"
+            )
+
+            // 无法判定时保守重启
+            try assertTrue(
+                AppLanguage.requiresRelaunch(
+                    currentLocalization: nil,
+                    target: "zh-Hans",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: zhSystem
+                ),
+                "当前本地化缺失时应保守重启"
+            )
+            try assertTrue(
+                AppLanguage.requiresRelaunch(
+                    currentLocalization: "zh-Hans",
+                    target: "system",
+                    availableLocalizations: available,
+                    systemPreferredLanguages: []
+                ),
+                "系统偏好语言为空时切回跟随系统应保守重启"
+            )
+        }
+
         runTest("FRThemeID 调色板与外观动态解析") {
             let midnight = FRThemeID.midnight.palette
             let lightAppearance = NSAppearance(named: .aqua)

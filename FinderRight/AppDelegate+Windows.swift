@@ -49,7 +49,7 @@ extension AppDelegate {
             // 让开红绿灯：即使它们与内容区的层叠顺序变化也不会被拖动条盖住
             bar.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 78),
             // 右上角留给模式胶囊，避免拖动条抢走按钮点击。
-            bar.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -170),
+            bar.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -148),
             bar.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
