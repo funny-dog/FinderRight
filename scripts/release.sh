@@ -54,6 +54,10 @@ run_timed_step() {
   echo ""
   echo ">>> [开始] $name"
   # 不把函数放进 || / if：Bash 会因此忽略函数内部的 errexit，吞掉中间失败。
+  local restore_errexit=0
+  case "$-" in
+    *e*) restore_errexit=1 ;;
+  esac
   local status
   set +e
   (
@@ -61,7 +65,9 @@ run_timed_step() {
     "$@"
   )
   status=$?
-  set -e
+  if [ "$restore_errexit" = "1" ]; then
+    set -e
+  fi
   local end_time
   end_time=$(date +%s)
   local duration=$((end_time - start_time))
@@ -73,7 +79,9 @@ run_timed_step() {
   else
     TIMING_STATUSES+=("失败 (退出码 $status)")
     echo ">>> [失败] $name (耗时 ${duration}s, 退出码 $status)" >&2
-    print_timing_summary
+    if [ "${TIMING_DEFER_SUMMARY:-0}" != "1" ]; then
+      print_timing_summary
+    fi
     return $status
   fi
 }
@@ -440,6 +448,94 @@ prepare_local_release() {
   run_timed_step "安全复核（保留本机已安装版本）" check_installed_app_safety
 }
 
+sync_all_channels() {
+  local version="$1"
+  run_timed_step "确认渠道同步的目标版本" check_sync_version "$version"
+
+  local brew_log brew_meta brew_pid
+  brew_log="$(mktemp "${TMPDIR:-/tmp}/finderright-brew-log-XXXXXX")"
+  brew_meta="$(mktemp "${TMPDIR:-/tmp}/finderright-brew-meta-XXXXXX")"
+
+  echo ""
+  echo ">>> [并行开始] 同步 Homebrew Cask（与官网/Gitee/Cloudflare 链路并行执行）"
+  (
+    local b_start b_end b_rc
+    b_start=$(date +%s)
+    set +e
+    (
+      set -e
+      bash scripts/sync-homebrew-cask.sh "$version"
+    ) >"$brew_log" 2>&1
+    b_rc=$?
+    set -e
+    b_end=$(date +%s)
+    printf '%s\n' "$((b_end - b_start))" >"$brew_meta"
+    exit $b_rc
+  ) &
+  brew_pid=$!
+
+  local web_status=0
+  local prev_defer="${TIMING_DEFER_SUMMARY:-0}"
+  TIMING_DEFER_SUMMARY=1
+
+  set +e
+  run_timed_step "同步官网下载镜像" bash scripts/sync-website-downloads.sh
+  web_status=$?
+  if [ $web_status -eq 0 ]; then
+    run_timed_step "同步 Gitee 发行版" bash scripts/sync-gitee-release.sh
+    web_status=$?
+  fi
+  if [ $web_status -eq 0 ]; then
+    run_timed_step "部署官网到 Cloudflare Workers" deploy_website
+    web_status=$?
+  fi
+  if [ $web_status -eq 0 ]; then
+    run_timed_step "核验官网线上接口 (curl)" verify_website_deployment "$version"
+    web_status=$?
+  fi
+  set -e
+  TIMING_DEFER_SUMMARY="$prev_defer"
+
+  echo ""
+  echo ">>> [等待] 汇合并行任务：同步 Homebrew Cask..."
+  local brew_status=0
+  set +e
+  wait "$brew_pid"
+  brew_status=$?
+  set -e
+
+  echo ""
+  echo "--- 并行输出：同步 Homebrew Cask ---"
+  cat "$brew_log"
+  echo "-----------------------------------"
+
+  local brew_duration="0"
+  if [ -s "$brew_meta" ]; then
+    brew_duration="$(cat "$brew_meta")"
+  fi
+  rm -f "$brew_log" "$brew_meta"
+
+  TIMING_NAMES+=("同步 Homebrew Cask (并行)")
+  TIMING_DURATIONS+=("${brew_duration}s")
+  if [ $brew_status -eq 0 ]; then
+    TIMING_STATUSES+=("成功")
+    echo ">>> [完成] 同步 Homebrew Cask (并行) (耗时 ${brew_duration}s)"
+  else
+    TIMING_STATUSES+=("失败 (退出码 $brew_status)")
+    echo ">>> [失败] 同步 Homebrew Cask (并行) (耗时 ${brew_duration}s, 退出码 $brew_status)" >&2
+  fi
+
+  if [ $web_status -ne 0 ] || [ $brew_status -ne 0 ]; then
+    print_timing_summary
+    if [ $web_status -ne 0 ]; then
+      return $web_status
+    fi
+    return $brew_status
+  fi
+
+  run_timed_step "安全复核（保留本机已安装版本）" check_installed_app_safety
+}
+
 publish_full_pipeline() {
   local version="$1"
   local notes_file="$2"
@@ -458,13 +554,7 @@ publish_full_pipeline() {
     return 0
   fi
 
-  run_timed_step "确认渠道同步的目标版本" check_sync_version "$version"
-  run_timed_step "同步官网下载镜像" bash scripts/sync-website-downloads.sh
-  run_timed_step "同步 Gitee 发行版" bash scripts/sync-gitee-release.sh
-  run_timed_step "部署官网到 Cloudflare Workers" deploy_website
-  run_timed_step "核验官网线上接口 (curl)" verify_website_deployment "$version"
-  run_timed_step "同步 Homebrew Cask" bash scripts/sync-homebrew-cask.sh "$version"
-  run_timed_step "安全复核（保留本机已安装版本）" check_installed_app_safety
+  sync_all_channels "$version"
 }
 
 main() {
@@ -519,13 +609,7 @@ main() {
   # 仅同步模式
   if [ "$SYNC_ONLY" = "1" ]; then
     echo "=== 仅同步全渠道：v$VERSION ==="
-    run_timed_step "确认渠道同步的目标版本" check_sync_version "$VERSION"
-    run_timed_step "同步官网下载镜像" bash scripts/sync-website-downloads.sh
-    run_timed_step "同步 Gitee 发行版" bash scripts/sync-gitee-release.sh
-    run_timed_step "部署官网到 Cloudflare Workers" deploy_website
-    run_timed_step "核验官网线上接口 (curl)" verify_website_deployment "$VERSION"
-    run_timed_step "同步 Homebrew Cask" bash scripts/sync-homebrew-cask.sh "$VERSION"
-    run_timed_step "安全复核（保留本机已安装版本）" check_installed_app_safety
+    sync_all_channels "$VERSION"
     print_timing_summary
     echo "全渠道同步完成：v$VERSION"
     exit 0

@@ -86,6 +86,7 @@ else
   echo "跳过：未安装 node，跳过官网 Worker 的 JS 校验（不影响 App 构建）"
 fi
 bash scripts/test-website-downloads.sh
+bash scripts/test-gitee-release.sh
 bash scripts/test-release.sh"""),
 ]
 

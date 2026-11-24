@@ -21,6 +21,7 @@ python3 - "$PROJECT_DIR" <<'PY'
 SHA-256 后，才写入 gitee-latest.txt，让官网 Worker 开始把国内下载重定向到 Gitee。
 """
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -48,13 +49,16 @@ web_root = os.environ.get("GITEE_WEB", "https://gitee.com")
 web = web_root + f"/{repo}"
 # 令牌只放请求头，避免出现在 URL、错误信息或日志里。
 auth = {"Authorization": "token " + os.environ["GITEE_TOKEN"], "User-Agent": "FinderRight-Release"}
+use_proxy = os.environ.get("GITEE_USE_PROXY") == "1"
 
 
-def call(method, url, data=None, headers=None, authorized=True):
+def call(method, url, data=None, headers=None, authorized=True, force_proxy=None):
     request = urllib.request.Request(url, data=data, method=method,
                                      headers={**(auth if authorized else {"User-Agent": auth["User-Agent"]}), **(headers or {})})
+    should_proxy = use_proxy if force_proxy is None else force_proxy
+    opener = urllib.request.build_opener() if should_proxy else urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with urllib.request.urlopen(request, timeout=300) as response:
+        with opener.open(request, timeout=300) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()
@@ -90,16 +94,31 @@ for name in ["FinderRight.dmg", zip_name]:
     require(files[name + ".sha256"].read_text().split() == [hashes[name], name], f"{name} 与镜像校验文件不符，请重新同步官网镜像")
 
 commit = subprocess.check_output(["git", "-C", str(project), "rev-parse", f"{tag}^{{commit}}"], text=True).strip()
-subprocess.run(["git", "-C", str(project), "fetch", "--quiet", "origin", "main"], check=True)
-require(subprocess.run(["git", "-C", str(project), "merge-base", "--is-ancestor", commit, "origin/main"]).returncode == 0,
-        f"{tag} 不在 GitHub main 上")
-status, body = call("GET", api_root + "/user")
+if subprocess.run(["git", "-C", str(project), "merge-base", "--is-ancestor", commit, "origin/main"]).returncode != 0:
+    subprocess.run(["git", "-C", str(project), "fetch", "--quiet", "origin", "main"], check=True)
+    require(subprocess.run(["git", "-C", str(project), "merge-base", "--is-ancestor", commit, "origin/main"]).returncode == 0,
+            f"{tag} 不在 GitHub main 上")
+try:
+    status, body = call("GET", api_root + "/user")
+except urllib.error.URLError as error:
+    if not use_proxy and urllib.request.getproxies():
+        print(f"直连 Gitee 失败（{error.reason}），回退使用系统代理重试")
+        use_proxy = True
+        status, body = call("GET", api_root + "/user")
+    else:
+        raise
 require(status == 200, f"Gitee 令牌无效或已撤销（HTTP {status}）")
 credential = base64.b64encode(f"{json.loads(body)['login']}:{os.environ['GITEE_TOKEN']}".encode()).decode()
 # 认证头经 GIT_CONFIG_* 环境变量传给 git，不进入命令行参数、远端地址或 .git/config。
 git_env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_COUNT="2",
                GIT_CONFIG_KEY_0="credential.helper", GIT_CONFIG_VALUE_0="",
                GIT_CONFIG_KEY_1=f"http.{web_root}/.extraheader", GIT_CONFIG_VALUE_1="Authorization: Basic " + credential)
+if not use_proxy:
+    git_env.update(
+        GIT_CONFIG_COUNT="3",
+        GIT_CONFIG_KEY_2=f"http.{web_root}/.proxy",
+        GIT_CONFIG_VALUE_2="",
+    )
 # 以 GitHub 上的 main 为准，省去 Gitee 网页上的手动强制同步；分叉或标签冲突时拒绝而不覆盖。
 push = subprocess.run(["git", "-C", str(project), "push", "--quiet", web + ".git",
                        "refs/remotes/origin/main:refs/heads/main", f"refs/tags/{tag}:refs/tags/{tag}"],
@@ -128,12 +147,12 @@ def public_hash(url):
     return hashlib.sha256(body).hexdigest() if status == 200 else None
 
 
-attached = {a["name"]: a for a in call_json("GET", f"/releases/{release_id}/attach_files?per_page=100")}
-for name, path in files.items():
+def sync_asset(item):
+    name, path = item
     url = f"{web}/releases/download/{tag}/{name}"
     current = attached.get(name)
     if current and public_hash(url) == hashes[name]:
-        continue
+        return name, True, f"已存在且校验通过，跳过上传 {name}"
     if current:
         call_json("DELETE", f"/releases/{release_id}/attach_files/{current['id']}")
     boundary = uuid.uuid4().hex
@@ -142,10 +161,22 @@ for name, path in files.items():
     status, body = call("POST", f"{api}/releases/{release_id}/attach_files", data,
                         {"Content-Type": f"multipart/form-data; boundary={boundary}"})
     require(200 <= status < 300, f"上传 {name} 返回 HTTP {status}：{body[:200].decode(errors='replace')}")
-    print(f"已上传 {name}")
+    return name, False, f"已上传 {name}"
 
-for name in files:
+
+def verify_public_asset(name):
     require(public_hash(f"{web}/releases/download/{tag}/{name}") == hashes[name], f"Gitee 公开下载的 {name} 摘要不符")
+
+
+attached = {a["name"]: a for a in call_json("GET", f"/releases/{release_id}/attach_files?per_page=100")}
+with ThreadPoolExecutor(max_workers=len(files)) as pool:
+    need_verify = []
+    for name, verified, message in pool.map(sync_asset, files.items()):
+        print(message)
+        if not verified:
+            need_verify.append(name)
+    if need_verify:
+        list(pool.map(verify_public_asset, need_verify))
 
 # 标记文件最后原子写入：Worker 只在标签一致时重定向，未同步完成的版本仍走官网镜像。
 marker = mirror / "gitee-latest.txt"

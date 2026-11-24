@@ -218,5 +218,71 @@ main 1.12.4 --publish
     run("再次生成临时说明", unique_notes)
     assert len(set((root / "note-paths").read_text().splitlines())) == 2
     assert not list(root.glob("finderright-release-notes-*"))
+
+    parallel_base = '''
+check_sync_version() { :; }
+deploy_website() { echo deploy >> parallel-steps; }
+verify_website_deployment() { echo verify >> parallel-steps; }
+check_installed_app_safety() { echo safety >> parallel-steps; }
+rm -f brew-started web-started brew-finished parallel-steps
+'''
+    run("并行渠道同步均成功并记录耗时", parallel_base + '''
+bash() {
+  case "$1" in
+    scripts/sync-homebrew-cask.sh)
+      touch brew-started
+      i=0
+      while [ ! -f web-started ] && [ $i -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
+      [ -f web-started ] || return 91
+      echo brew >> parallel-steps
+      ;;
+    scripts/sync-website-downloads.sh)
+      touch web-started
+      i=0
+      while [ ! -f brew-started ] && [ $i -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
+      [ -f brew-started ] || return 92
+      echo website >> parallel-steps
+      ;;
+    scripts/sync-gitee-release.sh) echo gitee >> parallel-steps ;;
+    *) return 99 ;;
+  esac
+}
+sync_all_channels 1.12.4
+[ "${#TIMING_NAMES[@]}" -eq 7 ]
+printf '%s\\n' "${TIMING_NAMES[@]}" | grep -qx "同步 Homebrew Cask (并行)"
+''')
+    assert set((root / "parallel-steps").read_text().splitlines()) == {"brew", "website", "gitee", "deploy", "verify", "safety"}
+    assert not list(root.glob("finderright-brew-*"))
+
+    run("并行渠道同步中 Homebrew 失败时阻断安全复核", parallel_base + '''
+bash() {
+  case "$1" in
+    scripts/sync-homebrew-cask.sh) return 44 ;;
+    scripts/sync-website-downloads.sh) echo website >> parallel-steps ;;
+    scripts/sync-gitee-release.sh) echo gitee >> parallel-steps ;;
+    *) return 99 ;;
+  esac
+}
+sync_all_channels 1.12.4
+echo UNREACHABLE
+''', 44)
+    assert "safety" not in (root / "parallel-steps").read_text().splitlines()
+    assert not list(root.glob("finderright-brew-*"))
+
+    run("并行渠道同步中官网链路失败时仍等待 Homebrew 结束再退出", parallel_base + '''
+bash() {
+  case "$1" in
+    scripts/sync-homebrew-cask.sh) sleep 0.2; touch brew-finished ;;
+    scripts/sync-website-downloads.sh) echo website >> parallel-steps ;;
+    scripts/sync-gitee-release.sh) return 45 ;;
+    *) return 99 ;;
+  esac
+}
+sync_all_channels 1.12.4
+echo UNREACHABLE
+''', 45)
+    assert (root / "brew-finished").exists(), "前台失败后未等待并行 Homebrew 任务结束"
+    assert (root / "parallel-steps").read_text().splitlines() == ["website"]
+    assert not list(root.glob("finderright-brew-*"))
 print(f"发布脚本离线回归：{count} 个场景通过，耗时 {time.monotonic()-started:.2f}s（/bin/bash，无网络/发布/部署）")
 PY

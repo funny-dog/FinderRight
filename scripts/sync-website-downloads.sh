@@ -43,10 +43,23 @@ for name, asset in assets.items():
 
 with tempfile.TemporaryDirectory(prefix="finderright-mirror-") as folder:
     source = Path(folder)
-    command = ["gh", "release", "download", tag, "--repo", repo, "--dir", folder]
+    project_root = Path(sys.argv[1])
+    reused = 0
+    missing = []
     for name in names:
-        command += ["--pattern", name]
-    subprocess.run(command, check=True)
+        local = project_root / name
+        if local.is_file() and local.stat().st_size == assets[name]["size"]:
+            digest = hashlib.sha256(local.read_bytes()).hexdigest()
+            if assets[name]["digest"].lower() == "sha256:" + digest:
+                shutil.copyfile(local, source / name)
+                reused += 1
+                continue
+        missing.append(name)
+    if missing:
+        command = ["gh", "release", "download", tag, "--repo", repo, "--dir", folder]
+        for name in missing:
+            command += ["--pattern", name]
+        subprocess.run(command, check=True)
     hashes = {}
     for name in names:
         path = source / name
@@ -57,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="finderright-mirror-") as folder:
         fields = (source / (name + ".sha256")).read_text().split()
         require(fields == [hashes[name], name], f"{name} 校验文件必须引用原文件名并与摘要一致")
 
-    destination = Path(sys.argv[1]) / "website/dist/download"
+    destination = project_root / "website/dist/download"
     staged = []
     try:
         for name in names:
@@ -76,5 +89,5 @@ with tempfile.TemporaryDirectory(prefix="finderright-mirror-") as folder:
 marker = destination / "gitee-latest.txt"
 if marker.exists() and marker.read_text().strip() != tag:
     marker.unlink()
-print(f"已同步 {tag} 的四个原始发布资产，SHA-256 校验通过")
+print(f"已同步 {tag} 的四个原始发布资产（本地复用 {reused} 个，远端下载 {len(missing)} 个），SHA-256 校验通过")
 PY

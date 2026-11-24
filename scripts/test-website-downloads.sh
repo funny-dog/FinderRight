@@ -30,8 +30,11 @@ if args[:2] == ["release", "view"]:
 else:
     assert args[:3] == ["release", "download", "v1.10.1"]
     target = Path(args[args.index("--dir") + 1])
-    for path in (root / "assets").iterdir():
-        shutil.copyfile(path, target / path.name)
+    patterns = [args[i + 1] for i, a in enumerate(args) if a == "--pattern"]
+    with (root / "downloads.log").open("a") as f:
+        f.write(json.dumps(patterns) + "\\n")
+    for pattern in patterns:
+        shutil.copyfile(root / "assets" / pattern, target / pattern)
 ''')
     mock.chmod(0o755)
     env = dict(os.environ, PATH=str(mock.parent) + os.pathsep + os.environ["PATH"], MIRROR_TEST_ROOT=str(root))
@@ -90,5 +93,26 @@ else:
         assert result.returncode != 0, case
         after = {p.relative_to(mirror): p.read_bytes() for p in mirror.rglob("*") if p.is_file()}
         assert after == before, f"{case}: existing mirror changed"
-    print("✓ 镜像同步：原始字节、历史版本保留、Gitee 标记更新与 10 类校验失败保护均通过")
+
+    # 本地已存在完全匹配的构建产物时跳过远端下载。
+    for name, content in payloads.items():
+        (project / name).write_bytes(content)
+    (root / "downloads.log").write_text("")
+    metadata_path.write_text(json.dumps(metadata))
+    for name, content in payloads.items():
+        (source / name).write_bytes(content)
+    result = run()
+    assert result.returncode == 0, result.stderr
+    assert (root / "downloads.log").read_text() == "", "命中本地资产时不应该下载"
+    assert "本地复用 4 个，远端下载 0 个" in result.stdout
+
+    # 若本地某个资产过期或损坏，仅重下该文件，其余仍复用本地。
+    (project / "FinderRight.dmg").write_bytes(b"stale local dmg")
+    (root / "downloads.log").write_text("")
+    result = run()
+    assert result.returncode == 0, result.stderr
+    assert [json.loads(line) for line in (root / "downloads.log").read_text().splitlines()] == [["FinderRight.dmg"]]
+    assert "本地复用 3 个，远端下载 1 个" in result.stdout
+    assert (mirror / "FinderRight.dmg").read_bytes() == payloads["FinderRight.dmg"]
+    print("✓ 镜像同步：原始字节、历史版本保留、Gitee 标记更新、本地复用与 10 类校验失败保护均通过")
 PY
