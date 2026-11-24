@@ -107,3 +107,5 @@
 "点击复制权限" = "Click to copy permissions";
 "已复制权限：%@" = "Copied permissions: %@";
 "代码行数统计…" = "Count Lines of Code…";
+"批量重命名…" = "Batch Rename…";
+"无法打开批量重命名" = "Could not open Batch Rename";

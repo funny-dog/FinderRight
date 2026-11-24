@@ -6,13 +6,14 @@ private func L(_ key: String) -> String { NSLocalizedString(key, comment: "batch
 
 final class BatchRenameModel: ObservableObject {
     enum Mode: Int, CaseIterable {
-        case replace, affix, sequence, date
+        case replace, affix, sequence, date, letterCase
         var title: String {
             switch self {
-            case .replace: return L("查找替换")
-            case .affix: return L("前后缀")
-            case .sequence: return L("序号")
-            case .date: return L("日期")
+            case .replace: return "查找替换"
+            case .affix: return "前后缀"
+            case .sequence: return "序号"
+            case .date: return "日期"
+            case .letterCase: return "大小写"
             }
         }
     }
@@ -25,18 +26,20 @@ final class BatchRenameModel: ObservableObject {
     @Published var prefix = ""
     @Published var suffix = ""
     @Published var sequenceText = ""
-    @Published var start = 1
-    @Published var digits = 2
+    @Published var start = "1"
+    @Published var digits = "2"
     @Published var dateFormat = "yyyy-MM-dd"
     @Published var dateAtStart = true
+    @Published var letterCase = BatchRenameCase.lower
     @Published var isApplying = false
 
     var rule: BatchRenameRule {
         switch mode {
         case .replace: return .replace(find: find, with: replacement, regex: isRegex)
         case .affix: return .affix(prefix: prefix, suffix: suffix)
-        case .sequence: return .sequence(text: sequenceText, start: start, digits: digits)
+        case .sequence: return .sequence(text: sequenceText, start: Int(start) ?? 1, digits: min(max(Int(digits) ?? 1, 1), 8))
         case .date: return .date(format: dateFormat, atStart: dateAtStart)
+        case .letterCase: return .letterCase(letterCase)
         }
     }
 
@@ -51,91 +54,138 @@ struct BatchRenameView: View {
     var body: some View {
         let entries = model.entries
         let changed = entries.filter(\.isChanged)
-        let blocked = changed.contains { $0.problem != nil }
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $model.mode) {
-                ForEach(BatchRenameModel.Mode.allCases, id: \.self) { Text(verbatim: $0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden()
+        let problems = changed.filter { $0.problem != nil }.count
+        VStack(alignment: .leading, spacing: 0) {
+            header
 
-            ruleFields
+            FRSegmentedPicker(label: "改名规则", selection: $model.mode,
+                              options: BatchRenameModel.Mode.allCases.map { ($0, $0.title) })
+                .padding(.top, 14)
+
+            ruleFields.padding(.top, 10)
 
             if model.rule.isInvalid {
-                Text(L("正则表达式不合法")).font(.system(size: 12)).foregroundColor(FRTheme.danger)
+                Label(L("正则表达式不合法"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12)).foregroundColor(FRTheme.warnText).padding(.top, 8)
             }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(entries.indices, id: \.self) { row(entries[$0]) }
-                }
-                .padding(8)
-            }
-            .background(FRTheme.card)
-            .cornerRadius(8)
 
             HStack {
-                Text(verbatim: blocked ? L("有名称冲突或不合法，请调整规则")
-                     : String(format: L("将重命名 %d 项"), changed.count))
-                    .font(.system(size: 12))
-                    .foregroundColor(blocked ? FRTheme.danger : FRTheme.mute)
+                FRCaption("预览")
                 Spacer()
-                Button(L("取消"), action: onCancel).keyboardShortcut(.cancelAction)
-                Button(L("重命名")) { onApply(entries) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(blocked || changed.isEmpty || model.isApplying)
+                FRChip(text: Text(verbatim: String(format: L("%d 项将改名"), changed.count)),
+                       kind: changed.isEmpty ? .neutral : .accent)
             }
+            .padding(.top, 16).padding(.bottom, 6)
+
+            FRCard {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(entries.indices, id: \.self) { index in
+                            if index > 0 { FRDivider() }
+                            row(entries[index])
+                        }
+                    }
+                }
+            }
+            .frame(minHeight: 150)
+
+            HStack(spacing: 8) {
+                if problems > 0 {
+                    Label(String(format: L("%d 项有问题，请调整规则"), problems), systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12)).foregroundColor(FRTheme.warnText)
+                }
+                Spacer(minLength: 0)
+                Button(L("取消"), action: onCancel)
+                    .buttonStyle(FRButtonStyle()).keyboardShortcut(.cancelAction)
+                Button(L("重命名"), action: { onApply(entries) })
+                    .buttonStyle(FRButtonStyle(kind: .primary)).keyboardShortcut(.defaultAction)
+                    .disabled(problems > 0 || changed.isEmpty || model.isApplying)
+            }
+            .padding(.top, 14)
         }
-        .padding(16)
-        .frame(minWidth: 560, minHeight: 420)
+        .padding(18)
+        .frame(minWidth: 520, minHeight: 440)
         .foregroundColor(FRTheme.text)
         .background(FRTheme.window)
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            FRIconChip(systemName: "pencil.line", size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L("批量重命名")).font(.system(size: 14, weight: .semibold))
+                Text(verbatim: String(format: L("已选 %d 项"), model.items.count))
+                    .font(.system(size: 12)).foregroundColor(FRTheme.mute)
+            }
+            Spacer()
+        }
     }
 
     @ViewBuilder private var ruleFields: some View {
         switch model.mode {
         case .replace:
-            HStack {
-                TextField(L("查找"), text: $model.find)
-                TextField(L("替换为"), text: $model.replacement)
-                Toggle(L("正则"), isOn: $model.isRegex).toggleStyle(.checkbox)
+            HStack(spacing: 8) {
+                field("magnifyingglass", L("查找"), $model.find)
+                field("arrow.right", L("替换为"), $model.replacement)
+                FRSwitch(label: "正则", isOn: $model.isRegex)
+                Text(L("正则")).font(.system(size: 12)).foregroundColor(FRTheme.mute)
             }
         case .affix:
-            HStack {
-                TextField(L("前缀"), text: $model.prefix)
-                TextField(L("后缀（扩展名之前）"), text: $model.suffix)
+            HStack(spacing: 8) {
+                field("text.insert", L("前缀"), $model.prefix)
+                field("text.append", L("后缀（扩展名之前）"), $model.suffix)
             }
         case .sequence:
-            HStack {
-                TextField(L("名称文本"), text: $model.sequenceText)
-                Stepper(String(format: L("起始 %d"), model.start), value: $model.start, in: 0...999_999)
-                Stepper(String(format: L("位数 %d"), model.digits), value: $model.digits, in: 1...8)
+            HStack(spacing: 8) {
+                field("textformat", L("名称文本，可留空"), $model.sequenceText)
+                field("number", L("起始"), $model.start).frame(width: 90)
+                field("squareshape.split.3x3", L("位数"), $model.digits).frame(width: 90)
             }
         case .date:
-            HStack {
-                TextField(L("日期格式"), text: $model.dateFormat)
-                Picker("", selection: $model.dateAtStart) {
-                    Text(L("加在开头")).tag(true)
-                    Text(L("加在结尾")).tag(false)
-                }
-                .labelsHidden().frame(width: 110)
+            HStack(spacing: 8) {
+                field("calendar", L("日期格式"), $model.dateFormat)
+                FRSegmentedPicker(label: "日期位置", selection: $model.dateAtStart,
+                                  options: [(true, "加在开头"), (false, "加在结尾")])
+                    .frame(width: 170)
             }
+        case .letterCase:
+            FRSegmentedPicker(label: "大小写", selection: $model.letterCase,
+                              options: [(.lower, "小写"), (.upper, "大写"), (.capitalized, "首字母大写")])
         }
     }
 
+    private func field(_ symbol: String, _ placeholder: String, _ text: Binding<String>) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).foregroundColor(FRTheme.mute).accessibilityHidden(true)
+            TextField("", text: text, prompt: Text(placeholder))
+                .textFieldStyle(.plain).font(.system(size: 13))
+        }
+        .padding(.horizontal, 10).frame(height: 32)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(FRTheme.fieldBorder, lineWidth: 1))
+    }
+
     private func row(_ entry: BatchRenameEntry) -> some View {
-        HStack(spacing: 6) {
-            Text(verbatim: entry.source.lastPathComponent).foregroundColor(FRTheme.mute).lineLimit(1)
+        HStack(spacing: 10) {
+            Text(verbatim: entry.source.lastPathComponent)
+                .foregroundColor(entry.isChanged ? FRTheme.mute : FRTheme.text)
+                .lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if entry.isChanged {
-                Image(systemName: "arrow.right").font(.system(size: 10)).foregroundColor(FRTheme.mute)
+                Image(systemName: "arrow.right").font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(FRTheme.mute).accessibilityHidden(true)
                 Text(verbatim: entry.newName)
-                    .foregroundColor(entry.problem == nil ? FRTheme.text : FRTheme.danger).lineLimit(1)
+                    .fontWeight(.medium)
+                    .foregroundColor(entry.problem == nil ? FRTheme.okText : FRTheme.warnText)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if let problem = entry.problem {
-                    Text(verbatim: Self.text(for: problem)).foregroundColor(FRTheme.danger)
+                    FRChip(text: Text(verbatim: Self.text(for: problem)), kind: .warn)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .font(.system(size: 12))
+        .font(.system(size: 12.5))
+        .padding(.horizontal, 12).padding(.vertical, 7)
     }
 
     private static func text(for problem: BatchRenameEntry.Problem) -> String {
@@ -156,8 +206,8 @@ final class BatchRenameController: NSObject, NSWindowDelegate {
         let model = BatchRenameModel()
         model.items = files
         let window = FRTransientPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
-            minSize: CGSize(width: 560, height: 420), autosaveKey: "batchRename")
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+            minSize: CGSize(width: 520, height: 440), autosaveKey: "batchRename")
         window.title = L("批量重命名")
         window.delegate = self
         window.contentView = NSHostingView(rootView: BatchRenameView(

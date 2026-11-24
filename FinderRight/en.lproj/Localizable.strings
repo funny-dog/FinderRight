@@ -1271,3 +1271,16 @@
 "已重命名 %d 项" = "Renamed %d items";
 "重命名完成 %d 项，%d 项失败" = "Renamed %d items, %d failed";
 "无法打开批量重命名" = "Unable to open Batch Rename";
+"改名规则" = "Rename rule";
+"预览" = "Preview";
+"%d 项将改名" = "%d to rename";
+"%d 项有问题，请调整规则" = "%d have problems; adjust the rule";
+"已选 %d 项" = "%d selected";
+"名称文本，可留空" = "Name text (optional)";
+"起始" = "Start";
+"位数" = "Digits";
+"大小写" = "Letter case";
+"小写" = "lowercase";
+"大写" = "UPPERCASE";
+"首字母大写" = "Capitalized";
+"日期位置" = "Date position";

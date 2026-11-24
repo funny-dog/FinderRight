@@ -13,6 +13,7 @@ enum BatchRenameTests {
             try assertEqual(names(.replace(find: "a", with: "b", regex: false)), ["b2.txt", "b10.txt"])
             try assertEqual(names(.replace(find: "(\\d+)", with: "[$1]", regex: true)), ["a[2].txt", "a[10].txt"])
             try assertEqual(names(.affix(prefix: "x-", suffix: "-y")), ["x-a2-y.txt", "x-a10-y.txt"])
+            try assertEqual(names(.letterCase(.upper)), ["A2.txt", "A10.txt"])
             try assertEqual(names(.sequence(text: "p", start: 1, digits: 3)), ["p001.txt", "p002.txt"])
         }
 

@@ -1,6 +1,10 @@
 import Foundation
 
 /// 批量重命名规则。只改主文件名，扩展名保持不变（文件夹与文件包整体视为主文件名）。
+public enum BatchRenameCase: Equatable {
+    case lower, upper, capitalized
+}
+
 public enum BatchRenameRule: Equatable {
     /// 查找并替换；regex 为 true 时 `with` 支持 `$1` 捕获组
     case replace(find: String, with: String, regex: Bool)
@@ -9,6 +13,8 @@ public enum BatchRenameRule: Equatable {
     case sequence(text: String, start: Int, digits: Int)
     /// 把修改日期按 format 写进名称的开头或结尾，与原名用空格隔开
     case date(format: String, atStart: Bool)
+    /// 修改名称的大小写（扩展名不变）
+    case letterCase(BatchRenameCase)
 
     /// 正则不合法时规则无法生效，供界面提示
     public var isInvalid: Bool {
@@ -93,6 +99,12 @@ public enum BatchRename {
             case .sequence(let text, let start, let digits):
                 let number = String(start + index)
                 newBase = text + String(repeating: "0", count: max(0, digits - number.count)) + number
+            case .letterCase(let style):
+                switch style {
+                case .lower: newBase = base.lowercased()
+                case .upper: newBase = base.uppercased()
+                case .capitalized: newBase = base.capitalized
+                }
             case .date(let format, let atStart):
                 if !format.isEmpty,
                    let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate {
