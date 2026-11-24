@@ -17,6 +17,7 @@ struct FinderRightKitTestsRunner {
         MenuTests.run()
         ShortcutTests.run()
         MiscTests.run()
+        BatchRenameTests.run()
         DeveloperTests.run()
         RegressionTests.run()
 

@@ -619,6 +619,7 @@ class FinderSync: FIFinderSync {
         case "pasteFiles": return #selector(self.pasteFiles(_:))
         case "moveToFavorite": return #selector(self.moveToFavorite(_:))
         case "copyToFavorite": return #selector(self.copyToFavorite(_:))
+        case "batchRename": return #selector(self.batchRename(_:))
         case "manageFavorites": return #selector(self.manageFavorites(_:))
         case "createSymlink": return #selector(self.createSymlink(_:))
         case "archiveOperation": return #selector(self.archiveOperation(_:))

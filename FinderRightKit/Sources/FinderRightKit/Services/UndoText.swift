@@ -17,6 +17,7 @@ public enum UndoText {
         case .decompress: return String(format: localize("解压“%@”"), name)
         case .symlink:    return String(format: localize("创建符号链接（%d 项）"), count)
         case .convertImage: return count == 1 ? String(format: localize("转换“%@”"), name) : String(format: localize("转换图片（%d 项）"), count)
+        case .rename:       return String(format: localize("批量重命名（%d 项）"), count)
         case .scaleImage:   return count == 1 ? String(format: localize("图片处理“%@”"), name) : String(format: localize("图片处理（%d 项）"), count)
         }
     }

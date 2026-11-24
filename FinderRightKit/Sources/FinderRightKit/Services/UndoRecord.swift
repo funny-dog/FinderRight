@@ -89,7 +89,7 @@ public struct FinderUndoSnapshot: Equatable {
 public struct UndoRecord: Equatable {
 
     public enum Kind: String, Codable {
-        case move, copy, cut, paste, createFile, compress, decompress, symlink, convertImage, scaleImage
+        case move, copy, cut, paste, createFile, compress, decompress, symlink, convertImage, scaleImage, rename
     }
 
     public struct Item: Equatable {
@@ -132,7 +132,7 @@ public struct UndoRecord: Equatable {
 
     /// 撤销方式：移动类移回原处，其余（复制品、新建的文件、压缩包、解压产物、符号链接）送进废纸篓
     public var restoresByMoving: Bool {
-        kind == .move || kind == .paste
+        kind == .move || kind == .paste || kind == .rename
     }
 
     /// 去掉已经不在原处的项（被移进废纸篓、删除、改名或挪走）后的记录；没有可撤销的内容时返回 nil。

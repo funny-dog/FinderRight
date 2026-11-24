@@ -211,6 +211,14 @@ final class FinderRightService {
             let files = (req.payload["items"]?.stringArrayValue ?? []).prefix(2).map { URL(fileURLWithPath: $0) }
             DispatchQueue.main.async { FileComparisonController.shared.show(files: files) }
             return IPCResponse(id: req.id, success: true, message: nil)
+        case "batchRename":
+            SharedConfig.shared.reload()
+            guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.batchRename) else {
+                return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
+            }
+            let files = (req.payload["items"]?.stringArrayValue ?? []).map { URL(fileURLWithPath: $0) }
+            DispatchQueue.main.async { BatchRenameController.shared.show(files: files, service: self) }
+            return IPCResponse(id: req.id, success: true, message: nil)
         case "showLineCount":
             SharedConfig.shared.reload()
             guard SharedConfig.shared.developerToolsEnabled && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.lineCount) else {

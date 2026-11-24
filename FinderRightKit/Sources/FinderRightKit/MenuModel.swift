@@ -699,6 +699,11 @@ public enum MenuTreeBuilder {
                         favorites: input.favoriteDirectories
                     ))
                 }
+            case MenuFeatureCatalog.batchRename:
+                if hasExplicitSelection, case .multiple = input.selection {
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint, actionId: "batchRename"))
+                }
             case MenuFeatureCatalog.createSymlink:
                 if hasExplicitSelection {
                     items.append(.action(

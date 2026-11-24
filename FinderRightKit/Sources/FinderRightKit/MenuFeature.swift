@@ -163,6 +163,7 @@ public enum MenuFeatureCatalog {
     public static let paste        = "feature.paste"
     public static let moveTo       = "feature.moveTo"
     public static let copyTo       = "feature.copyTo"
+    public static let batchRename  = "feature.batchRename"
     public static let createSymlink = "feature.createSymlink"
     public static let imageTools   = "feature.imageTools"
     public static let compress     = "feature.compress"
@@ -211,6 +212,8 @@ public enum MenuFeatureCatalog {
                     serviceDeclaration: ServiceMenuDeclaration(message: "moveToFavorite", menuItemTitle: "FinderRight: Move to Favorite Folder…")),
         MenuFeature(id: copyTo,       nameKey: "复制到",         descriptionKey: "把选中项复制到常用目录",     systemImage: "plus.square.on.square", tint: .green,
                     serviceDeclaration: ServiceMenuDeclaration(message: "copyToFavorite", menuItemTitle: "FinderRight: Copy to Favorite Folder…")),
+        MenuFeature(id: batchRename,  nameKey: "批量重命名…",   descriptionKey: "多选文件后按规则批量改名，可预览与撤销", systemImage: "pencil.line", tint: .green,
+                    serviceDeclaration: nil),
         MenuFeature(id: imageTools,   nameKey: "图片",           descriptionKey: "转换图片格式或等比缩放", systemImage: "photo.on.rectangle.angled", tint: .teal,
                     serviceDeclarations: [
                         ServiceMenuDeclaration(message: "convertImageToPNG", menuItemTitle: "FinderRight: Convert to PNG"),
@@ -242,9 +245,9 @@ public enum MenuFeatureCatalog {
     ]
 
     /// 默认关闭的功能：用户从未设置过开关时视为关闭，显式开启后照常显示。
-    /// - 压缩 / 解压与系统能力重叠，默认不占菜单位置。
+    /// - 压缩 / 解压与系统能力重叠，默认不占菜单位置；批量重命名使用频率低，按需开启。
     /// - 开发者工具各项功能默认亦关闭：开启开发者工具总开关后，各项功能仍需按需手动启用。
-    public static let disabledByDefault: Set<String> = Set([compress, decompress] + developerFeatureIds)
+    public static let disabledByDefault: Set<String> = Set([compress, decompress, batchRename] + developerFeatureIds)
 
     public static func feature(forId id: String) -> MenuFeature? {
         all.first { $0.id == id }

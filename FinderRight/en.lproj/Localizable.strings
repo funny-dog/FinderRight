@@ -1243,5 +1243,31 @@
 "已保存到「%@」" = "Saved to “%@”";
 "保存到其他位置…" = "Save to Other Location…";
 "画笔" = "Brush";
-
-
+"批量重命名" = "Batch Rename";
+"批量重命名…" = "Batch Rename…";
+"批量重命名（%d 项）" = "Batch rename (%d items)";
+"多选文件后按规则批量改名，可预览与撤销" = "Rename multiple selected items by a rule, with preview and undo";
+"查找替换" = "Find & Replace";
+"前后缀" = "Prefix / Suffix";
+"序号" = "Numbering";
+"日期" = "Date";
+"正则表达式不合法" = "Invalid regular expression";
+"有名称冲突或不合法，请调整规则" = "Some names conflict or are invalid; adjust the rule";
+"将重命名 %d 项" = "%d items will be renamed";
+"重命名" = "Rename";
+"替换为" = "Replace with";
+"正则" = "Regex";
+"前缀" = "Prefix";
+"后缀（扩展名之前）" = "Suffix (before extension)";
+"名称文本" = "Name text";
+"起始 %d" = "Start %d";
+"位数 %d" = "Digits %d";
+"日期格式" = "Date format";
+"加在开头" = "At start";
+"加在结尾" = "At end";
+"名称不合法" = "Invalid name";
+"名称重复" = "Duplicate name";
+"已存在同名项目" = "Name already exists";
+"已重命名 %d 项" = "Renamed %d items";
+"重命名完成 %d 项，%d 项失败" = "Renamed %d items, %d failed";
+"无法打开批量重命名" = "Unable to open Batch Rename";

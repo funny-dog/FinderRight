@@ -49,6 +49,7 @@ public enum OperationHistoryPresentation {
         case .symlink: return L("创建符号链接")
         case .convertImage: return L("转换图片")
         case .scaleImage: return L("图片处理")
+        case .rename: return L("批量重命名")
         }
     }
 
@@ -64,6 +65,7 @@ public enum OperationHistoryPresentation {
         case .undo: return "arrow.uturn.backward"
         case .symlink: return "link.badge.plus"
         case .convertImage, .scaleImage: return "photo.on.rectangle.angled"
+        case .rename: return "pencil"
         }
     }
 
@@ -170,7 +172,7 @@ public struct OperationHistoryFilter {
         }
     }
 
-    public static let kinds: [OperationRecord.Kind] = [.createFile, .cut, .paste, .move, .copy, .symlink, .compress, .decompress, .convertImage, .scaleImage, .undo]
+    public static let kinds: [OperationRecord.Kind] = [.createFile, .cut, .paste, .move, .copy, .symlink, .compress, .decompress, .convertImage, .scaleImage, .rename, .undo]
     public var searchText = ""
     public var kind: OperationRecord.Kind?
     public var status = Status.all
