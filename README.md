@@ -50,20 +50,39 @@
 
 ### 📸 截图
 
+<div align="center">
 <table>
   <tr>
     <td align="center" valign="middle">
-      <img src="docs/images/menu-new-file.png" alt="FinderRight 空白处右键菜单" width="190" />
+      <img src="docs/images/menu-new-file.png" alt="FinderRight 空白处右键菜单" height="260" />
     </td>
     <td align="center" valign="middle">
-      <img src="docs/images/menu-file-actions.png" alt="FinderRight 选中文件右键菜单" width="218" />
+      <img src="docs/images/menu-file-actions.png" alt="FinderRight 选中项右键菜单" height="260" />
     </td>
   </tr>
   <tr>
     <td align="center"><sub>空白处右键菜单</sub></td>
-    <td align="center"><sub>选中文件右键菜单</sub></td>
+    <td align="center"><sub>选中文件 / 文件夹右键菜单</sub></td>
   </tr>
 </table>
+</div>
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" valign="middle">
+      <img src="docs/images/disk-usage.jpg" alt="FinderRight 磁盘空间占用" height="290" />
+    </td>
+    <td align="center" valign="middle">
+      <img src="docs/images/clipboard.jpg" alt="FinderRight 轻量剪贴板" height="290" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>磁盘空间占用分析</sub></td>
+    <td align="center"><sub>轻量剪贴板与分栏预览</sub></td>
+  </tr>
+</table>
+</div>
 
 <p align="center">
   <img src="docs/images/settings-demo.gif" alt="FinderRight 设置页多主题与界面演示" width="720" />
@@ -245,20 +264,39 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 ### 📸 Screenshots
 
+<div align="center">
 <table>
   <tr>
     <td align="center" valign="middle">
-      <img src="docs/images/menu-new-file.png" alt="FinderRight folder context menu" width="190" />
+      <img src="docs/images/menu-new-file.png" alt="FinderRight folder context menu" height="260" />
     </td>
     <td align="center" valign="middle">
-      <img src="docs/images/menu-file-actions.png" alt="FinderRight file context menu" width="218" />
+      <img src="docs/images/menu-file-actions.png" alt="FinderRight file &amp; folder context menu" height="260" />
     </td>
   </tr>
   <tr>
     <td align="center"><sub>Folder Context Menu</sub></td>
-    <td align="center"><sub>File Context Menu</sub></td>
+    <td align="center"><sub>File &amp; Folder Context Menu</sub></td>
   </tr>
 </table>
+</div>
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" valign="middle">
+      <img src="docs/images/disk-usage.jpg" alt="FinderRight Disk Usage Breakdown" height="290" />
+    </td>
+    <td align="center" valign="middle">
+      <img src="docs/images/clipboard.jpg" alt="FinderRight Lightweight Clipboard &amp; Preview" height="290" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Disk Usage Breakdown</sub></td>
+    <td align="center"><sub>Lightweight Clipboard &amp; Preview</sub></td>
+  </tr>
+</table>
+</div>
 
 <p align="center">
   <img src="docs/images/settings-demo.gif" alt="FinderRight Settings — themes and pages walkthrough" width="720" />
