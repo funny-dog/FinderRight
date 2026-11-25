@@ -70,15 +70,7 @@ struct ChangelogSheet: View {
                     .foregroundColor(FRTheme.text)
 
                 if isCurrent {
-                    Text("当前版本")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundColor(FRTheme.accentText)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(FRTheme.accent.opacity(0.15))
-                        )
+                    FRChip(text: Text("当前版本"), kind: .accent)
                 }
 
                 Spacer(minLength: 0)
@@ -106,34 +98,38 @@ struct ChangelogSheet: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isCurrent ? FRTheme.selection.opacity(0.5) : FRTheme.card)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isCurrent ? FRTheme.selection.opacity(0.45) : FRTheme.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(isCurrent ? FRTheme.accent.opacity(0.5) : FRTheme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isCurrent ? FRTheme.accent.opacity(0.45) : FRTheme.border, lineWidth: 1)
         )
     }
 
     private func typeTag(_ type: ChangelogType) -> some View {
-        let color: Color
+        let foreground: Color
+        let background: Color
         switch type {
         case .feature:
-            color = .green
+            foreground = FRTheme.okText
+            background = FRTheme.okBackground
         case .improvement:
-            color = .blue
+            foreground = FRTheme.accentText
+            background = FRTheme.selection
         case .fix:
-            color = .orange
+            foreground = FRTheme.warnText
+            background = FRTheme.warnBackground
         }
 
         return Text(LocalizedStringKey(type.titleKey))
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundColor(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1.5)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(foreground)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(color.opacity(0.12))
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(background)
             )
     }
 }

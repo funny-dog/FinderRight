@@ -13,6 +13,7 @@ struct ClipboardHistoryView: View {
     @ObservedObject private var service = ClipboardHistoryService.shared
     @ObservedObject var dropState: ClipboardDropState
     @FRState private var selectedId: UUID? = nil
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     private var activeItem: ClipboardItem? {
         if let selectedId, let matched = service.items.first(where: { $0.id == selectedId }) {
@@ -50,6 +51,7 @@ struct ClipboardHistoryView: View {
             }
         }
         .ignoresSafeArea()
+        .id(themeRaw)
         .onAppear {
             if selectedId == nil {
                 selectedId = service.items.first?.id
@@ -126,25 +128,13 @@ struct ClipboardHistoryView: View {
         accessibilityLabelKey: LocalizedStringKey,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundColor(isOn ? FRTheme.accentText : FRTheme.text)
-                .frame(width: 26, height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isOn ? FRTheme.selection : FRTheme.field)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(isOn ? FRTheme.accentText.opacity(0.5) : FRTheme.fieldBorder, lineWidth: 1)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .help(Text(LocalizedStringKey(helpKey)))
-        .accessibilityLabel(Text(accessibilityLabelKey))
-        .accessibilityValue(Text(LocalizedStringKey(isOn ? "已开启" : "已关闭")))
+        ClipboardHeaderIconButton(
+            systemName: systemName,
+            isOn: isOn,
+            helpKey: helpKey,
+            accessibilityLabelKey: accessibilityLabelKey,
+            action: action
+        )
     }
 
     // MARK: - 主体区域
@@ -225,5 +215,40 @@ enum ClipboardHistoryHelpers {
             return NSWorkspace.shared.icon(for: utType)
         }
         return NSWorkspace.shared.icon(for: .item)
+    }
+}
+
+private struct ClipboardHeaderIconButton: View {
+    let systemName: String
+    let isOn: Bool
+    let helpKey: String
+    let accessibilityLabelKey: LocalizedStringKey
+    let action: () -> Void
+
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundColor(isOn || isHovering ? FRTheme.accentText : FRTheme.text)
+                .frame(width: 26, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isOn ? FRTheme.selection : (isHovering ? FRTheme.dropdownHoverFill : FRTheme.field))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(isOn ? FRTheme.accentText.opacity(0.5) : (isHovering ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder), lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+        .help(Text(LocalizedStringKey(helpKey)))
+        .accessibilityLabel(Text(accessibilityLabelKey))
+        .accessibilityValue(Text(LocalizedStringKey(isOn ? "已开启" : "已关闭")))
     }
 }

@@ -58,35 +58,26 @@ struct DeveloperToolsTab: View {
                                 if let feature = MenuFeatureCatalog.feature(forId: id) {
                                     FeatureToggleRow(feature: feature) {
                                         if id == MenuFeatureCatalog.compareFiles {
-                                            Button { FileComparisonController.shared.show(openedFromExternalApplication: false) } label: {
-                                                Image(systemName: "arrow.up.right.square")
+                                            FRIconButton(systemName: "arrow.up.right.square", help: "打开文件比较") {
+                                                FileComparisonController.shared.show(openedFromExternalApplication: false)
                                             }
-                                            .buttonStyle(.frLink)
-                                            .help("打开文件比较")
-                                            .accessibilityLabel("打开文件比较")
                                         } else if id == MenuFeatureCatalog.gitStatus {
-                                            Button { GitStatusController.shared.show(openedFromExternalApplication: false) } label: {
-                                                Image(systemName: "arrow.up.right.square")
+                                            FRIconButton(systemName: "arrow.up.right.square", help: "打开 Git 状态") {
+                                                GitStatusController.shared.show(openedFromExternalApplication: false)
                                             }
-                                            .buttonStyle(.frLink)
-                                            .help("打开 Git 状态")
-                                            .accessibilityLabel("打开 Git 状态")
                                         } else if id == MenuFeatureCatalog.lineCount {
-                                            Button { LineCountController.shared.show(openedFromExternalApplication: false) } label: {
-                                                Image(systemName: "arrow.up.right.square")
+                                            FRIconButton(systemName: "arrow.up.right.square", help: "打开代码行数统计") {
+                                                LineCountController.shared.show(openedFromExternalApplication: false)
                                             }
-                                            .buttonStyle(.frLink)
-                                            .help("打开代码行数统计")
-                                            .accessibilityLabel("打开代码行数统计")
                                         }
                                     }
                                 } else if let command = commands.first(where: { $0.menuId == id }) {
                                     commandRow(command)
                                 }
                             }
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(dropTargetId == id ? FRTheme.selection : Color.clear)
+                            .frDropTarget(dropTargetId == id)
                             .dropDestination(for: String.self) { ids, _ in
                                 guard let source = ids.first else { return false }
                                 return move(source, to: id)
@@ -109,7 +100,7 @@ struct DeveloperToolsTab: View {
 
     private func commandRow(_ command: DeveloperCommand) -> some View {
         HStack(spacing: 12) {
-            FRIconChip(systemName: "terminal")
+            FRIconChip(systemName: "terminal", style: .subtle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: command.name)
                     .font(.system(size: 13, weight: .semibold))
@@ -120,21 +111,19 @@ struct DeveloperToolsTab: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 12)
-            Button { editingCommand = command } label: { Image(systemName: "pencil") }
-                .buttonStyle(.frLink)
-                .help("编辑命令")
-                .accessibilityLabel("编辑命令")
-            Button {
-                commands.removeAll { $0.id == command.id }
-                SharedConfig.shared.developerCommands = commands
-                if !order.isEmpty {
-                    order.removeAll { $0 == command.menuId }
-                    SharedConfig.shared.developerMenuOrder = order
+            HStack(spacing: 2) {
+                FRIconButton(systemName: "pencil", help: "编辑命令") {
+                    editingCommand = command
                 }
-            } label: { Image(systemName: "trash") }
-                .buttonStyle(.frLink)
-                .help("删除命令")
-                .accessibilityLabel("删除命令")
+                FRIconButton(systemName: "trash", help: "删除命令", isDestructive: true) {
+                    commands.removeAll { $0.id == command.id }
+                    SharedConfig.shared.developerCommands = commands
+                    if !order.isEmpty {
+                        order.removeAll { $0 == command.menuId }
+                        SharedConfig.shared.developerMenuOrder = order
+                    }
+                }
+            }
             FRSwitch(label: "启用命令", isOn: Binding(
                 get: { command.isEnabled },
                 set: { enabled in
@@ -157,11 +146,17 @@ struct DeveloperToolsTab: View {
 }
 
 private struct EditDeveloperCommandSheet: View {
+    private enum Field: Hashable {
+        case name
+        case script
+    }
+
     @Environment(\.dismiss) private var dismiss
     let command: DeveloperCommand
     let onSave: (DeveloperCommand) -> Void
     @FRState private var name = ""
     @FRState private var script = ""
+    @FocusState private var focusedField: Field?
 
     private var updated: DeveloperCommand {
         DeveloperCommand(id: command.id, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -173,17 +168,22 @@ private struct EditDeveloperCommandSheet: View {
             Text("自定义命令").font(.system(size: 19, weight: .bold))
             VStack(alignment: .leading, spacing: 6) {
                 Text("名称").font(.system(size: 12, weight: .medium))
-                TextField("菜单名称", text: $name).textFieldStyle(.roundedBorder)
+                FRTextFieldContainer(isFocused: focusedField == .name, height: 32) {
+                    TextField("菜单名称", text: $name)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .focused($focusedField, equals: .name)
+                }
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("命令（zsh）").font(.system(size: 12, weight: .medium))
-                TextEditor(text: $script)
-                    .font(.system(size: 12.5, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(6)
-                    .frame(height: 170)
-                    .background(FRTheme.field)
-                    .cornerRadius(7)
+                FRTextFieldContainer(isFocused: focusedField == .script, height: nil) {
+                    TextEditor(text: $script)
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .focused($focusedField, equals: .script)
+                        .frame(height: 170)
+                }
                 Text("选中项经 \"$@\" 传入，后台运行且不支持交互。")
                     .font(.system(size: 12)).foregroundColor(FRTheme.mute)
             }

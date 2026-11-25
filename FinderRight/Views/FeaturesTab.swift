@@ -50,13 +50,10 @@ struct FeaturesTab: View {
     var body: some View {
         FRPage(title: "功能", subtitle: "选择出现在右键菜单中的功能，拖动调整顺序") {
             menuSection
-            copyPathSection
-            copyFileNameSection
-            copyContentSection
-            openPathSection
+            copyOptionsSection
             clipboardSection
             screenshotSection
-            badgeSection
+            enhancementsSection
             quickLookSection
         }
         .onAppear {
@@ -68,12 +65,12 @@ struct FeaturesTab: View {
         }
     }
 
-    // MARK: 打开路径
+    // MARK: 访达增强
 
-    private var openPathSection: some View {
-        FRSection("打开路径") {
+    private var enhancementsSection: some View {
+        FRSection("访达增强") {
             FRCard {
-                FRRow(title: Text("全局生效"),
+                FRRow(title: Text("打开路径全局快捷键"),
                       subtitle: Text("可在其他应用中用同一快捷键唤起")) {
                     FRSwitch(label: "打开路径快捷键全局生效", isOn: Binding(
                         get: { globalShortcut.isEnabled },
@@ -86,7 +83,22 @@ struct FeaturesTab: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 10)
                 }
+
+                FRDivider()
+
+                // 其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。
+                FRRow(title: Text("自动解决剪切角标冲突")) {
+                    FRSwitch(label: "自动解决角标冲突", isOn: Binding(
+                        get: { badgeOwnershipReclaim },
+                        set: { newValue in
+                            badgeOwnershipReclaim = newValue
+                            SharedConfig.shared.badgeOwnershipReclaim = newValue
+                        }
+                    ))
+                }
             }
+
+            FRFootnote(Text("开启后可能隐藏网盘等扩展的同步角标。"))
         }
     }
 
@@ -273,9 +285,9 @@ struct FeaturesTab: View {
                 .help("拖动调整在右键菜单中的顺序")
             FeatureToggleRow(feature: feature)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(dropTargetId == feature.id ? FRTheme.selection : Color.clear)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frDropTarget(dropTargetId == feature.id)
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             return moveFeature(id, to: feature.id)
@@ -288,13 +300,17 @@ struct FeaturesTab: View {
         }
     }
 
-    // MARK: 复制路径
+    // MARK: 复制选项
 
-    private var copyPathSection: some View {
-        FRSection("复制路径") {
+    private var copyOptionsSection: some View {
+        FRSection("复制选项") {
             FRCard {
-                FRRow(title: Text("复制格式")) {
-                    FRPicker(label: "复制格式", titleKey: copyPathFormat.titleKey, selection: Binding(
+                FRRow(
+                    title: Text("复制路径格式"),
+                    subtitle: Text(verbatim: copyPathExample)
+                        .font(.system(size: 11.5, design: .monospaced))
+                ) {
+                    FRPicker(label: "复制路径格式", titleKey: copyPathFormat.titleKey, selection: Binding(
                         get: { copyPathFormat },
                         set: { newValue in
                             copyPathFormat = newValue
@@ -309,36 +325,13 @@ struct FeaturesTab: View {
 
                 FRDivider()
 
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("示例")
-                        .font(.system(size: 12))
-                        .foregroundColor(FRTheme.mute)
-                    Text(verbatim: copyPathExample)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(FRTheme.text)
-                        .textSelection(.enabled)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 11)
-            }
-
-            FRFootnote(Text(copyPathFormat == .shellEscaped
-                            ? "特殊字符自动加引号，多选以空格分隔。"
-                            : "多选每行一项，同步用于「服务」菜单。"))
-        }
-    }
-
-    // MARK: 复制文件名
-
-    private var copyFileNameSection: some View {
-        FRSection("复制文件名") {
-            FRCard {
-                FRRow(title: Text("复制格式")) {
+                FRRow(
+                    title: Text("复制文件名格式"),
+                    subtitle: Text(verbatim: copyFileNameExample)
+                        .font(.system(size: 11.5, design: .monospaced))
+                ) {
                     FRSegmentedPicker(
-                        label: "复制格式",
+                        label: "复制文件名格式",
                         selection: Binding(
                             get: { copyFileNameFormat },
                             set: { newValue in
@@ -353,34 +346,9 @@ struct FeaturesTab: View {
 
                 FRDivider()
 
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("示例")
-                        .font(.system(size: 12))
-                        .foregroundColor(FRTheme.mute)
-                    Text(verbatim: copyFileNameExample)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(FRTheme.text)
-                        .textSelection(.enabled)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 11)
-            }
-
-            FRFootnote(Text("仅去除普通文件末段扩展名，目录保持原名，多选每行一项。"))
-        }
-    }
-
-    // MARK: 复制文件内容
-
-    private var copyContentSection: some View {
-        FRSection("复制文件内容") {
-            FRCard {
-                FRRow(title: Text("文件大小上限"), subtitle: Text("单选且不超过此大小时显示")) {
+                FRRow(title: Text("复制文件内容上限"), subtitle: Text("单选且不超过此大小时显示")) {
                     let selectedPreset = CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
-                    FRPicker(label: "文件大小上限", titleKey: selectedPreset.titleKey, selection: Binding(
+                    FRPicker(label: "复制文件内容上限", titleKey: selectedPreset.titleKey, selection: Binding(
                         get: {
                             CopyFileContentSizePreset(rawValue: copyFileContentMaxSizeKB) ?? .mb1
                         },
@@ -396,27 +364,7 @@ struct FeaturesTab: View {
                 }
             }
 
-        }
-    }
-
-    // MARK: 剪切角标
-
-    private var badgeSection: some View {
-        FRSection("剪切角标") {
-            FRCard {
-                // 其他访达扩展（如 Keka、Pearcleaner）可能占用角标显示权，导致剪切角标不显示。开启后，仅当所在目录有已剪切的文件时，FinderRight 才会短暂重启这些扩展以取回显示权（每次访达启动至多一次）。
-                FRRow(title: Text("自动解决角标冲突")) {
-                    FRSwitch(label: "自动解决角标冲突", isOn: Binding(
-                        get: { badgeOwnershipReclaim },
-                        set: { newValue in
-                            badgeOwnershipReclaim = newValue
-                            SharedConfig.shared.badgeOwnershipReclaim = newValue
-                        }
-                    ))
-                }
-            }
-
-            FRFootnote(Text("开启后可能隐藏网盘等扩展的同步角标。"))
+            FRFootnote(Text("路径与文件名多选时每行一项（Shell 转义以空格分隔）；文件内容仅单选且不超过上限时显示。"))
         }
     }
 

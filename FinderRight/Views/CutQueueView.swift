@@ -8,17 +8,19 @@ import FinderRightKit
 struct CutQueueView: View {
     @FRState private var paths: [String] = []
     @FRState private var errorMessage: String? = nil
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
             headerBar
-            Divider()
+            FRDivider()
             contentArea
-            Divider()
+            FRDivider()
             footerBar
         }
         .frame(minWidth: 440, minHeight: 280)
         .background(FRTheme.window)
+        .id(themeRaw)
         .onAppear { refresh() }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name(CutQueueChangeNotifier.name))) { _ in
             refresh()
@@ -29,16 +31,14 @@ struct CutQueueView: View {
 
     private var headerBar: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "scissors")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(Color.orange)
+            FRIconChip(systemName: "scissors", size: 32)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(NSLocalizedString("已剪切项目", comment: ""))
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(FRTheme.text)
                 Text(String(format: NSLocalizedString("共 %d 项待移动", comment: ""), paths.count))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundColor(FRTheme.mute)
             }
 
@@ -50,7 +50,8 @@ struct CutQueueView: View {
             .buttonStyle(.frSecondary)
             .disabled(paths.isEmpty)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     // MARK: - 主体列表
@@ -66,7 +67,7 @@ struct CutQueueView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(FRTheme.text)
                     Text(NSLocalizedString("在访达中剪切文件（⌘X）后会显示在这里", comment: ""))
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(FRTheme.mute)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
@@ -77,23 +78,23 @@ struct CutQueueView: View {
                     if let errorMessage {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                             Text(verbatim: errorMessage)
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                             Spacer(minLength: 0)
                         }
                         .foregroundColor(FRTheme.danger)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                         .background(FRTheme.danger.opacity(0.08))
-                        Divider()
+                        FRDivider()
                     }
 
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(paths, id: \.self) { path in
                                 CutQueueRow(path: path, onRemove: { remove(path) })
-                                Divider()
+                                FRDivider()
                             }
                         }
                     }
@@ -107,7 +108,7 @@ struct CutQueueView: View {
     private var footerBar: some View {
         HStack(spacing: 8) {
             Text(NSLocalizedString("在目标目录右键「粘贴」或按 ⌘V 即可移动", comment: ""))
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundColor(FRTheme.mute)
                 .lineLimit(1)
             Spacer(minLength: 8)
@@ -117,7 +118,7 @@ struct CutQueueView: View {
             .buttonStyle(.frSecondary)
             .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
 
@@ -156,6 +157,7 @@ private struct CutQueueRow: View {
     let path: String
     let onRemove: () -> Void
     @FRState private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var fileIcon: NSImage {
         let fm = FileManager.default
@@ -173,16 +175,16 @@ private struct CutQueueRow: View {
             Image(nsImage: fileIcon)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 20, height: 20)
+                .frame(width: 22, height: 22)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: (path as NSString).lastPathComponent)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(FRTheme.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(verbatim: path)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11.5, design: .monospaced))
                     .foregroundColor(FRTheme.mute)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -190,16 +192,14 @@ private struct CutQueueRow: View {
 
             Spacer(minLength: 8)
 
-            Button(NSLocalizedString("移除", comment: "")) {
-                onRemove()
-            }
-            .buttonStyle(.frSecondary)
-            .accessibilityLabel(Text(String(format: NSLocalizedString("移除：%@", comment: ""), path)))
+            FRIconButton(systemName: "xmark", help: "移除", isDestructive: true, action: onRemove)
+                .accessibilityLabel(Text(String(format: NSLocalizedString("移除：%@", comment: ""), path)))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(isHovered ? FRTheme.hover : Color.clear)
         .onHover { isHovered = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
     }
 }
 

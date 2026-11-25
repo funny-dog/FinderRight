@@ -8,6 +8,9 @@ struct StatusFilterChip: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
@@ -20,11 +23,13 @@ struct StatusFilterChip: View {
             .foregroundColor(isSelected ? FRTheme.accentText : FRTheme.text)
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(Capsule().fill(isSelected ? FRTheme.selection : FRTheme.field))
-            .overlay(Capsule().strokeBorder(isSelected ? Color.clear : FRTheme.fieldBorder, lineWidth: 1))
+            .background(Capsule().fill(isSelected ? FRTheme.selection : (isHovering ? FRTheme.dropdownHoverFill : FRTheme.field)))
+            .overlay(Capsule().strokeBorder(isSelected ? Color.clear : (isHovering ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder), lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -34,6 +39,7 @@ struct OperationHistoryRow: View {
     @Binding var isExpanded: Bool
     @FRState private var isHovering = false
     @FRState private var showTechnicalDetails = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var outcome: OperationHistoryPresentation.Outcome { OperationHistoryPresentation.Outcome(record) }
     private var actionTitle: String { OperationHistoryPresentation.actionTitle(record.kind) }
@@ -289,7 +295,11 @@ struct OperationHistoryRow: View {
     // MARK: 动作
 
     private func toggle() {
-        withAnimation(.easeOut(duration: 0.15)) { isExpanded.toggle() }
+        if reduceMotion {
+            isExpanded.toggle()
+        } else {
+            withAnimation(.easeOut(duration: 0.15)) { isExpanded.toggle() }
+        }
     }
 
     private func revealResults() {

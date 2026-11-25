@@ -58,32 +58,37 @@ struct PermissionsTab: View {
 
     /// 运行在 App Translocation 临时副本时的提示（见 AppRuntime.isTranslocated）
     private var translocationNotice: some View {
-        FRCard {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(FRTheme.warnText)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("FinderRight 正在以临时副本运行")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(FRTheme.warnText)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("FinderRight 正在以临时副本运行")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(FRTheme.text)
-                    Text("从下载目录直接打开会导致扩展异常，请拖入「应用程序」文件夹后重开。")
-                        .font(.system(size: 12))
-                        .foregroundColor(FRTheme.mute)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 12)
-
-                Button("打开应用程序文件夹") {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
-                }
-                .buttonStyle(.frSecondary)
+                    .foregroundColor(FRTheme.text)
+                Text("从下载目录直接打开会导致扩展异常，请拖入「应用程序」文件夹后重开。")
+                    .font(.system(size: 12))
+                    .foregroundColor(FRTheme.mute)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
+
+            Spacer(minLength: 8)
+
+            Button("打开应用程序文件夹") {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+            }
+            .buttonStyle(.frSecondary)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(FRTheme.warnBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(FRTheme.warnText.opacity(0.25), lineWidth: 1)
+        )
     }
 }

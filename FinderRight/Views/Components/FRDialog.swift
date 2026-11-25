@@ -272,8 +272,14 @@ final class FRDialogModel: ObservableObject {
 }
 
 private struct FRDialogView: View {
+    private enum FocusField: Hashable {
+        case primary
+        case customExtension
+    }
+
     @ObservedObject var model: FRDialogModel
-    @FocusState private var fieldFocused: Bool
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @FocusState private var focusedField: FocusField?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -327,25 +333,26 @@ private struct FRDialogView: View {
         .padding(.top, 16)
         .padding(.bottom, 16)
         .frame(width: 440, alignment: .leading)
+        .foregroundColor(FRTheme.text)
+        .background(FRTheme.window)
+        .id(themeRaw)
         .onAppear {
             // 等面板成为 key 后再聚焦输入框
-            DispatchQueue.main.async { fieldFocused = true }
+            DispatchQueue.main.async { focusedField = .primary }
         }
     }
 
     @ViewBuilder
     private func button(_ index: Int) -> some View {
         let base = Button(model.buttons[index]) { model.onPress?(index) }
-            .controlSize(.regular)
         if index == 0 {
-            // 非激活面板里系统默认按钮不一定显示蓝色，主按钮显式高亮
-            base.buttonStyle(.borderedProminent)
-                .tint(FRTheme.accent)
+            base.buttonStyle(.frPrimary)
                 .keyboardShortcut(.defaultAction)
         } else if index == model.cancelIndex {
-            base.keyboardShortcut(.cancelAction)
+            base.buttonStyle(.frSecondary)
+                .keyboardShortcut(.cancelAction)
         } else {
-            base
+            base.buttonStyle(.frSecondary)
         }
     }
 
@@ -356,10 +363,11 @@ private struct FRDialogView: View {
             EmptyView()
         case .text(_, let placeholder, let label, _):
             VStack(alignment: .leading, spacing: 6) {
-                field(symbol: "folder") {
+                FRTextFieldContainer(symbol: "folder", isFocused: focusedField == .primary, height: 32) {
                     TextField("", text: $model.text, prompt: Text(placeholder))
                         .textFieldStyle(.plain)
-                        .focused($fieldFocused)
+                        .font(.system(size: 13))
+                        .focused($focusedField, equals: .primary)
                         .onSubmit { model.onPress?(0) }
                         .accessibilityLabel(label)
                 }
@@ -375,10 +383,11 @@ private struct FRDialogView: View {
             }
             .padding(.top, 12)
         case .secure(let placeholder):
-            field(symbol: "key") {
+            FRTextFieldContainer(symbol: "key", isFocused: focusedField == .primary, height: 32) {
                 SecureField("", text: $model.text, prompt: Text(placeholder))
                     .textFieldStyle(.plain)
-                    .focused($fieldFocused)
+                    .font(.system(size: 13))
+                    .focused($focusedField, equals: .primary)
                     .onSubmit { model.onPress?(0) }
             }
             .padding(.top, 12)
@@ -402,10 +411,11 @@ private struct FRDialogView: View {
                 return Text(verbatim: "")
             }()
             VStack(alignment: .leading, spacing: 10) {
-                field(symbol: "doc") {
+                FRTextFieldContainer(symbol: "doc", isFocused: focusedField == .primary, height: 32) {
                     TextField("文件名", text: $model.text)
                         .textFieldStyle(.plain)
-                        .focused($fieldFocused)
+                        .font(.system(size: 13))
+                        .focused($focusedField, equals: .primary)
                         .onSubmit { model.onPress?(0) }
                         .accessibilityLabel(Text("文件名"))
                 }
@@ -416,9 +426,11 @@ private struct FRDialogView: View {
                     if allowsCustom { Text("自定义").tag(extensions.count) }
                 }
                 if allowsCustom && model.selected == extensions.count {
-                    field(symbol: "textformat") {
+                    FRTextFieldContainer(symbol: "textformat", isFocused: focusedField == .customExtension, height: 32) {
                         TextField("自定义后缀，例如 yaml 或 log", text: $model.customExtension)
                             .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+                            .focused($focusedField, equals: .customExtension)
                             .onSubmit { model.onPress?(0) }
                             .accessibilityLabel(Text("自定义文件后缀"))
                     }
@@ -426,20 +438,5 @@ private struct FRDialogView: View {
             }
             .padding(.top, 12)
         }
-    }
-
-    private func field<Content: View>(symbol: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .foregroundStyle(FRTheme.mute)
-                .accessibilityHidden(true)
-            content()
-                .font(.system(size: 13))
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .stroke(fieldFocused ? FRTheme.accent : FRTheme.fieldBorder, lineWidth: fieldFocused ? 1.5 : 1))
     }
 }

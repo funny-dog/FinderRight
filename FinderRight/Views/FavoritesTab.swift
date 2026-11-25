@@ -14,6 +14,7 @@ struct FavoritesTab: View {
     @FRState private var message: String?
     @FRState private var dropTargetPath: String?
     @FRState private var pathInput = ""
+    @FocusState private var pathInputFocused: Bool
 
     private var home: String { IPCBridge.realUserHomeDirectory.path }
 
@@ -36,9 +37,13 @@ struct FavoritesTab: View {
                     .buttonStyle(.frPrimary)
                 }
             } content: {
-                pathInputRow
-
                 FRCard {
+                    pathInputRow
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+
+                    FRDivider()
+
                     FRRow(title: Text("按最近使用排序"), subtitle: Text("最近使用的目录排在前面，与右键菜单同步")) {
                         FRSwitch(label: "按最近使用排序", isOn: Binding(
                             get: { sortByRecent },
@@ -48,9 +53,9 @@ struct FavoritesTab: View {
                             }
                         ))
                     }
-                }
 
-                FRCard {
+                    FRDivider()
+
                     if paths.isEmpty {
                         emptyState
                     } else {
@@ -97,12 +102,16 @@ struct FavoritesTab: View {
 
     /// 手动输入 / 粘贴路径：回车或点「添加」提交，Option-回车换行
     private var pathInputRow: some View {
-        HStack(alignment: .top, spacing: 8) {
-            TextField("粘贴或输入目录路径，如 ~/Downloads", text: $pathInput, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12.5, design: .monospaced))
-                .lineLimit(1...4)
-                .onSubmit(addTypedPaths)
+        HStack(alignment: .center, spacing: 8) {
+            FRTextFieldContainer(symbol: "folder", isFocused: pathInputFocused, height: nil) {
+                TextField("粘贴或输入目录路径，如 ~/Downloads", text: $pathInput, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .foregroundColor(FRTheme.text)
+                    .lineLimit(1...4)
+                    .focused($pathInputFocused)
+                    .onSubmit(addTypedPaths)
+            }
             Button("添加", action: addTypedPaths)
                 .buttonStyle(.frSecondary)
                 .disabled(pathInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -164,19 +173,13 @@ struct FavoritesTab: View {
 
             Spacer(minLength: 8)
 
-            Button {
+            FRIconButton(systemName: "minus.circle", help: "移除", isDestructive: true) {
                 remove(path)
-            } label: {
-                Image(systemName: "minus.circle")
-                    .font(.system(size: 15))
-                    .foregroundColor(FRTheme.mute)
             }
-            .buttonStyle(.plain)
-            .help("移除")
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(dropTargetPath == path ? FRTheme.selection : Color.clear)
+        .frDropTarget(dropTargetPath == path)
         .dropDestination(for: String.self) { dropped, _ in
             guard let moved = dropped.first else { return false }
             return move(moved, to: path)

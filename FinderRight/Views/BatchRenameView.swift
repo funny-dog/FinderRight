@@ -50,6 +50,8 @@ struct BatchRenameView: View {
     @ObservedObject var model: BatchRenameModel
     let onApply: ([BatchRenameEntry]) -> Void
     let onCancel: () -> Void
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @FocusState private var focusedField: String?
 
     var body: some View {
         let entries = model.entries
@@ -107,6 +109,7 @@ struct BatchRenameView: View {
         .frame(minWidth: 520, minHeight: 440)
         .foregroundColor(FRTheme.text)
         .background(FRTheme.window)
+        .id(themeRaw)
     }
 
     private var header: some View {
@@ -127,8 +130,7 @@ struct BatchRenameView: View {
             HStack(spacing: 8) {
                 field("magnifyingglass", L("查找"), $model.find)
                 field("arrow.right", L("替换为"), $model.replacement)
-                FRSwitch(label: "正则", isOn: $model.isRegex)
-                Text(L("正则")).font(.system(size: 12)).foregroundColor(FRTheme.mute)
+                BatchRenameTogglePill(isOn: $model.isRegex)
             }
         case .affix:
             HStack(spacing: 8) {
@@ -155,14 +157,12 @@ struct BatchRenameView: View {
     }
 
     private func field(_ symbol: String, _ placeholder: String, _ text: Binding<String>) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol).foregroundColor(FRTheme.mute).accessibilityHidden(true)
+        FRTextFieldContainer(symbol: symbol, isFocused: focusedField == placeholder, height: 32) {
             TextField("", text: text, prompt: Text(placeholder))
-                .textFieldStyle(.plain).font(.system(size: 13))
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($focusedField, equals: placeholder)
         }
-        .padding(.horizontal, 10).frame(height: 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(FRTheme.fieldBorder, lineWidth: 1))
     }
 
     private func row(_ entry: BatchRenameEntry) -> some View {
@@ -222,4 +222,44 @@ final class BatchRenameController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) { window = nil }
+}
+
+private struct BatchRenameTogglePill: View {
+    @Binding var isOn: Bool
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Text(verbatim: ".*")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                Text(L("正则"))
+                    .font(.system(size: 12, weight: isOn ? .semibold : .medium))
+            }
+            .foregroundColor(isOn ? FRTheme.accentText : (isHovering ? FRTheme.text : FRTheme.mute))
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isOn ? FRTheme.selection : (isHovering ? FRTheme.dropdownHoverFill : FRTheme.field))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        isOn ? FRTheme.accent.opacity(0.5) : (isHovering ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder),
+                        lineWidth: 1
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isOn)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+        .accessibilityLabel(Text(L("正则")))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
 }

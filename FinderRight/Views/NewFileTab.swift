@@ -153,12 +153,12 @@ struct NewFileTab: View {
 
             if item.isCustom {
                 HStack(spacing: 2) {
-                    RowIconButton(systemName: "pencil", help: "编辑模板") { edit(item) }
-                    RowIconButton(systemName: "trash", help: "删除", isDestructive: true) { confirmDelete(item, title: title) }
+                    FRIconButton(systemName: "pencil", help: "编辑模板") { edit(item) }
+                    FRIconButton(systemName: "trash", help: "删除", isDestructive: true) { confirmDelete(item, title: title) }
                 }
             } else {
                 // 内置类型可以随时从下方「已移除的内置类型」恢复，不必确认
-                RowIconButton(systemName: "minus.circle", help: "从列表移除", isDestructive: true) { removeBuiltIn(item) }
+                FRIconButton(systemName: "minus.circle", help: "从列表移除", isDestructive: true) { removeBuiltIn(item) }
             }
 
             FRSwitch(label: LocalizedStringKey(item.name), isOn: Binding(
@@ -169,9 +169,9 @@ struct NewFileTab: View {
                 }
             ))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(dropTargetId == item.id ? FRTheme.selection : Color.clear)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frDropTarget(dropTargetId == item.id)
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             return moveItem(id, to: item.id)
@@ -307,36 +307,6 @@ struct NewFileTab: View {
     }
 }
 
-// MARK: - 行内小按钮
-
-/// 行尾的图标按钮：悬停时显示底色，删除类悬停时变为警示色
-private struct RowIconButton: View {
-    let systemName: String
-    let help: LocalizedStringKey
-    var isDestructive = false
-    let action: () -> Void
-
-    @FRState private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundColor(isHovering ? (isDestructive ? FRTheme.danger : FRTheme.text) : FRTheme.mute)
-                .frame(width: 26, height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isHovering ? FRTheme.hover : Color.clear)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(help)
-        .accessibilityLabel(Text(help))
-    }
-}
-
 // MARK: - 图标视图
 
 private struct NewFileTemplateIcon: View {
@@ -357,6 +327,12 @@ private struct NewFileTemplateIcon: View {
 // MARK: - 编辑/新建模板 Sheet
 
 struct EditTemplateSheet: View {
+    private enum Field: Hashable {
+        case name
+        case ext
+        case content
+    }
+
     let template: FileTemplate?
     @Binding var isPresented: Bool
     let onSave: (FileTemplate) -> Void
@@ -364,6 +340,7 @@ struct EditTemplateSheet: View {
     @FRState private var name: String = ""
     @FRState private var fileExtension: String = ""
     @FRState private var content: String = ""
+    @FocusState private var focusedField: Field?
 
     private var isEditing: Bool { template != nil }
 
@@ -407,33 +384,37 @@ struct EditTemplateSheet: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 field("名称", hint: "可留空，默认显示后缀名") {
-                    TextField("例如：配置文件", text: $name)
-                        .textFieldStyle(.roundedBorder)
+                    FRTextFieldContainer(isFocused: focusedField == .name, height: 32) {
+                        TextField("例如：配置文件", text: $name)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+                            .focused($focusedField, equals: .name)
+                    }
                 }
 
                 field("后缀", hint: nil) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         Text(verbatim: ".")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .foregroundColor(FRTheme.mute)
-                        TextField("conf", text: $fileExtension)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 13, design: .monospaced))
-                            .frame(width: 150)
+                        FRTextFieldContainer(isFocused: focusedField == .ext, height: 32) {
+                            TextField("conf", text: $fileExtension)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13, design: .monospaced))
+                                .focused($focusedField, equals: .ext)
+                        }
+                        .frame(width: 150)
                     }
                 }
 
                 field("默认内容", hint: "新建时自动写入，留空为空白文件") {
-                    TextEditor(text: $content)
-                        .font(.system(size: 12.5, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .frame(height: 120)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(FRTheme.field))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(FRTheme.fieldBorder, lineWidth: 1)
-                        )
+                    FRTextFieldContainer(isFocused: focusedField == .content, height: nil) {
+                        TextEditor(text: $content)
+                            .font(.system(size: 12.5, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .focused($focusedField, equals: .content)
+                            .frame(height: 120)
+                    }
                 }
             }
 

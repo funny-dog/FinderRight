@@ -91,20 +91,19 @@ public final class ClipboardToast {
             onAccent = palette.onAccent.resolved(for: appearance)
             iconSymbol = "checkmark"
         case .warning:
-            accent = .systemOrange
-            onAccent = .white
+            accent = FRColorPair(0xB05E09, 0xE59B3C).resolved(for: appearance)
+            onAccent = FRColorPair(0xFFFFFF, 0x231505).resolved(for: appearance)
             iconSymbol = "exclamationmark.triangle"
         case .result(.success):
-            accent = .systemGreen
-            onAccent = .white
+            accent = FRColorPair(0x118262, 0x3FD1A5).resolved(for: appearance)
+            onAccent = FRColorPair(0xFFFFFF, 0x07241B).resolved(for: appearance)
             iconSymbol = "checkmark"
         case .result(.partial):
-            // 黄底白字看不清，改用深色文字
-            accent = .systemYellow
-            onAccent = .black
+            accent = FRColorPair(0xB05E09, 0xE59B3C).resolved(for: appearance)
+            onAccent = FRColorPair(0xFFFFFF, 0x231505).resolved(for: appearance)
             iconSymbol = "exclamationmark.triangle"
         case .result(.failure):
-            accent = .systemRed
+            accent = FRColorPair(0xC62828, 0xD44848).resolved(for: appearance)
             onAccent = .white
             iconSymbol = "xmark"
         }

@@ -9,17 +9,29 @@ extension AppDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.settingsWindow == nil {
-                let hosting = NSHostingController(rootView: SettingsView())
-                let win = NSWindow(contentViewController: hosting)
+                let win = NSWindow(
+                    contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultFullSize),
+                    // 侧边栏延伸到标题栏下方：隐藏标题文字、标题栏透明。
+                    // 刻意不设 isMovableByWindowBackground：整窗背景拖动会和 SwiftUI 的拖拽排序抢事件，
+                    // 在 macOS 13 上表现为「拖手柄时窗口跟着鼠标走、无法换行」（Issue #7）。
+                    // 拖动窗口改用顶端一条显式的拖动条（installTitleDragBar）
+                    styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                    backing: .buffered,
+                    defer: false
+                )
                 win.title = "FinderRight"
-                // 侧边栏延伸到标题栏下方：隐藏标题文字、标题栏透明。
-                // 刻意不设 isMovableByWindowBackground：整窗背景拖动会和 SwiftUI 的拖拽排序抢事件，
-                // 在 macOS 13 上表现为「拖手柄时窗口跟着鼠标走、无法换行」（Issue #7）。
-                // 拖动窗口改用顶端一条显式的拖动条（installTitleDragBar）
-                win.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
                 win.titlebarAppearsTransparent = true
                 win.titleVisibility = .hidden
                 win.isReleasedWhenClosed = false
+                // NSHostingController/NSHostingView 直接作为 contentView 时会在布局后覆盖 NSWindow.minSize，
+                // 改用普通 NSView 容器包裹并清空 sizingOptions，保证最小尺寸下限稳定生效。
+                let container = NSView(frame: NSRect(origin: .zero, size: SettingsWindowLayout.defaultFullSize))
+                let hostingView = NSHostingView(rootView: SettingsView())
+                hostingView.sizingOptions = []
+                hostingView.autoresizingMask = [.width, .height]
+                hostingView.frame = container.bounds
+                container.addSubview(hostingView)
+                win.contentView = container
                 SettingsPresentation.shared.attach(to: win)
                 installTitleDragBar(in: win)
                 self.settingsWindow = win

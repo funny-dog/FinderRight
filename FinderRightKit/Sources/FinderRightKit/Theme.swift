@@ -4,6 +4,7 @@ import AppKit
 
 /// 用户可选的主题色，存于 UserDefaults 的 `appTheme` 与 SharedConfig，默认午夜薄荷
 public enum FRThemeID: String, CaseIterable, Identifiable {
+    case terracotta
     case midnight
     case sky
     case lavender
@@ -17,6 +18,7 @@ public enum FRThemeID: String, CaseIterable, Identifiable {
 
     public var titleKey: String {
         switch self {
+        case .terracotta: return "暖陶"
         case .midnight: return "午夜薄荷"
         case .sky: return "晴空蓝"
         case .lavender: return "薰衣草紫"
@@ -47,6 +49,7 @@ public enum FRThemeID: String, CaseIterable, Identifiable {
 
     public var palette: FRPalette {
         switch self {
+        case .terracotta: return .terracotta
         case .midnight: return .midnight
         case .sky: return .sky
         case .lavender: return .lavender
@@ -113,6 +116,9 @@ public struct FRColorPair: Equatable {
 public struct FRPalette: Equatable {
     public let window, sidebar, card, border, text, mute: FRColorPair
     public let accent, accentText, onAccent, selection, hover, field, fieldBorder: FRColorPair
+    public let switchOffTrack, switchOffKnob: FRColorPair
+    public let segmentedTrack, segmentedTrackBorder, segmentedThumb, segmentedThumbBorder: FRColorPair
+    public let dropdownFill, dropdownHoverFill, cardShadow: FRColorPair
 
     public init(
         window: FRColorPair, sidebar: FRColorPair, card: FRColorPair, text: FRColorPair, mute: FRColorPair,
@@ -131,57 +137,75 @@ public struct FRPalette: Equatable {
                                 accent.dark.withAlphaComponent(selectionAlpha.dark))
         let ink = text.light
         let white = NSColor(hex: 0xFFFFFF)
+        let black = NSColor(hex: 0x000000)
         border = FRColorPair(ink.withAlphaComponent(0.09), white.withAlphaComponent(0.08))
         hover = FRColorPair(ink.withAlphaComponent(0.05), white.withAlphaComponent(0.06))
         field = FRColorPair(white, white.withAlphaComponent(0.06))
         fieldBorder = FRColorPair(ink.withAlphaComponent(0.16), white.withAlphaComponent(0.14))
+        switchOffTrack = FRColorPair(ink.withAlphaComponent(0.18), white.withAlphaComponent(0.22))
+        switchOffKnob = FRColorPair(white, text.dark.withAlphaComponent(0.88))
+        segmentedTrack = FRColorPair(ink.withAlphaComponent(0.055), black.withAlphaComponent(0.24))
+        segmentedTrackBorder = FRColorPair(ink.withAlphaComponent(0.10), white.withAlphaComponent(0.10))
+        segmentedThumb = FRColorPair(card.light, white.withAlphaComponent(0.15))
+        segmentedThumbBorder = FRColorPair(ink.withAlphaComponent(0.10), white.withAlphaComponent(0.16))
+        dropdownFill = FRColorPair(card.light, white.withAlphaComponent(0.07))
+        dropdownHoverFill = FRColorPair(ink.withAlphaComponent(0.04), white.withAlphaComponent(0.11))
+        cardShadow = FRColorPair(ink.withAlphaComponent(0.04), black.withAlphaComponent(0.22))
     }
+
+    /// 暖纸感 + 陶土红（Claude 风格）
+    public static let terracotta = FRPalette(
+        window: .init(0xFAF9F5, 0x1C1B19), sidebar: .init(0xF2F0E8, 0x151412), card: .init(0xFFFFFF, 0x262522),
+        text: .init(0x141413, 0xF2EFE9), mute: .init(0x6B6860, 0xA39E93),
+        accent: .init(0xB65533, 0xD97757), accentText: .init(0x9E4425, 0xE58B6D), onAccent: .init(0xFFFFFF, 0x1C1410),
+        selectionAlpha: (0.12, 0.16)
+    )
 
     /// 午夜蓝 + 薄荷（默认）
     public static let midnight = FRPalette(
-        window: .init(0xF5F7FB, 0x0F1626), sidebar: .init(0xE8EDF5, 0x0B1220), card: .init(0xFFFFFF, 0x17223A),
-        text: .init(0x0B1220, 0xEAF0FA), mute: .init(0x596680, 0x97A4BD),
-        accent: .init(0x2BD4A0, 0x4FE3B1), accentText: .init(0x0B7A5A, 0x4FE3B1), onAccent: .init(0x04251B, 0x062B20),
-        selectionAlpha: (0.20, 0.16)
+        window: .init(0xF5F7F8, 0x15191E), sidebar: .init(0xEAEFF2, 0x101318), card: .init(0xFFFFFF, 0x1F252C),
+        text: .init(0x0F1720, 0xECF1F5), mute: .init(0x5A6673, 0x99A5B2),
+        accent: .init(0x118262, 0x3FD1A5), accentText: .init(0x0D6B50, 0x56DFB6), onAccent: .init(0xFFFFFF, 0x07241B),
+        selectionAlpha: (0.12, 0.16)
     )
 
     /// 石板灰 + 蓝，接近系统原生观感
     public static let sky = FRPalette(
-        window: .init(0xF5F7FA, 0x0F141C), sidebar: .init(0xEAEEF3, 0x0A0E14), card: .init(0xFFFFFF, 0x18202C),
-        text: .init(0x0F172A, 0xE8EDF5), mute: .init(0x5B6779, 0x98A3B3),
-        accent: .init(0x2F74E8, 0x60A5FA), accentText: .init(0x1D5FD6, 0x7AB4FF), onAccent: .init(0xFFFFFF, 0x0A1B33),
-        selectionAlpha: (0.14, 0.16)
+        window: .init(0xF6F7FA, 0x16181D), sidebar: .init(0xECEFF5, 0x111318), card: .init(0xFFFFFF, 0x20242B),
+        text: .init(0x111722, 0xECEFF5), mute: .init(0x5B6575, 0x9AA3B2),
+        accent: .init(0x2563D8, 0x60A5FA), accentText: .init(0x1D54BF, 0x7AB4FF), onAccent: .init(0xFFFFFF, 0x0A1B33),
+        selectionAlpha: (0.12, 0.16)
     )
 
     /// 冷灰偏紫 + 紫
     public static let lavender = FRPalette(
-        window: .init(0xF7F6FB, 0x13111C), sidebar: .init(0xEEEBF6, 0x0E0C16), card: .init(0xFFFFFF, 0x1D1A2B),
-        text: .init(0x1A1530, 0xEEEAF8), mute: .init(0x676080, 0xA39DB8),
-        accent: .init(0x8B5CF6, 0xA78BFA), accentText: .init(0x6D3FD9, 0xB9A2FF), onAccent: .init(0xFFFFFF, 0x1B1035),
-        selectionAlpha: (0.14, 0.16)
+        window: .init(0xF8F7FA, 0x18171D), sidebar: .init(0xEFEDF5, 0x121117), card: .init(0xFFFFFF, 0x23212A),
+        text: .init(0x1A1726, 0xF0EEF6), mute: .init(0x655F75, 0xA39EB3),
+        accent: .init(0x7648E2, 0xA78BFA), accentText: .init(0x6237C9, 0xBCA5FF), onAccent: .init(0xFFFFFF, 0x1B1035),
+        selectionAlpha: (0.12, 0.16)
     )
 
-    /// 暖灰 + 橙。橙色上白字对比度不足，两种外观都用深色字
+    /// 暖灰 + 温润琥珀 / 焦糖金
     public static let sunset = FRPalette(
-        window: .init(0xFAF7F4, 0x17130F), sidebar: .init(0xF2ECE5, 0x110E0B), card: .init(0xFFFFFF, 0x221C17),
-        text: .init(0x231A12, 0xF3ECE4), mute: .init(0x7A6A5C, 0xB0A293),
-        accent: .init(0xF97316, 0xFB923C), accentText: .init(0xC2550A, 0xFFA868), onAccent: .init(0x2B1405, 0x2B1405),
+        window: .init(0xFAF8F3, 0x1B1A16), sidebar: .init(0xF2EFE6, 0x141310), card: .init(0xFFFFFF, 0x26241E),
+        text: .init(0x1E1A12, 0xF3EFE6), mute: .init(0x6E6658, 0xA8A090),
+        accent: .init(0xD4942A, 0xE6AE48), accentText: .init(0x8C5B08, 0xF0BE5E), onAccent: .init(0x241704, 0x221604),
         selectionAlpha: (0.14, 0.16)
     )
 
     /// 暖灰偏粉 + 玫瑰粉
     public static let sakura = FRPalette(
-        window: .init(0xFBF6F7, 0x171114), sidebar: .init(0xF4EAED, 0x110C0E), card: .init(0xFFFFFF, 0x22191D),
-        text: .init(0x2A1419, 0xF5EAED), mute: .init(0x806670, 0xB8A0A8),
-        accent: .init(0xE64A72, 0xFB7196), accentText: .init(0xC22D55, 0xFF8FAB), onAccent: .init(0xFFFFFF, 0x33081A),
-        selectionAlpha: (0.13, 0.16)
+        window: .init(0xFAF7F8, 0x1C181A), sidebar: .init(0xF3ECEE, 0x151214), card: .init(0xFFFFFF, 0x262123),
+        text: .init(0x24161A, 0xF4ECEE), mute: .init(0x746067, 0xAD9BA1),
+        accent: .init(0xC73A5E, 0xEE7292), accentText: .init(0xA8294B, 0xF792AC), onAccent: .init(0xFFFFFF, 0x2B0B15),
+        selectionAlpha: (0.12, 0.16)
     )
 
     /// 纯中性灰，无彩色强调
     public static let graphite = FRPalette(
-        window: .init(0xF6F6F7, 0x141416), sidebar: .init(0xECECEE, 0x0E0E10), card: .init(0xFFFFFF, 0x1E1E21),
-        text: .init(0x18181B, 0xEDEDF0), mute: .init(0x6B6B73, 0xA1A1AA),
-        accent: .init(0x2A2A2E, 0xE8E8EC), accentText: .init(0x18181B, 0xF4F4F5), onAccent: .init(0xFFFFFF, 0x18181B),
+        window: .init(0xF6F6F7, 0x161618), sidebar: .init(0xECECEE, 0x101012), card: .init(0xFFFFFF, 0x212124),
+        text: .init(0x18181B, 0xEDEDF0), mute: .init(0x66666E, 0xA1A1AA),
+        accent: .init(0x2A2A2E, 0xE4E4E8), accentText: .init(0x18181B, 0xF4F4F5), onAccent: .init(0xFFFFFF, 0x18181B),
         selectionAlpha: (0.08, 0.10)
     )
 }

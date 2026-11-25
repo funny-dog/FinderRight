@@ -804,11 +804,24 @@ enum MenuTests {
             let darkOnAccent = midnight.onAccent.resolved(for: darkAppearance)
             try assertTrue(lightOnAccent != darkOnAccent, "浅色与深色下的 onAccent 应有区分")
 
+            let terracotta = FRThemeID.terracotta.palette
+            try assertTrue(
+                terracotta.window.resolved(for: lightAppearance) != terracotta.window.resolved(for: darkAppearance),
+                "暖陶主题浅色与深色 window 应有区分"
+            )
+            try assertTrue(
+                terracotta.accent.resolved(for: lightAppearance) != terracotta.accent.resolved(for: darkAppearance),
+                "暖陶主题浅色与深色 accent 应有区分"
+            )
+
             // 所有预置主题均应具备有效的标题与色块
             for theme in FRThemeID.allCases {
                 try assertTrue(!theme.titleKey.isEmpty)
                 try assertTrue(theme.palette.accent.light.alphaComponent > 0)
                 try assertTrue(theme.palette.onAccent.light.alphaComponent > 0)
+                try assertTrue(theme.palette.switchOffTrack.light.alphaComponent > 0)
+                try assertTrue(theme.palette.segmentedTrack.light.alphaComponent > 0)
+                try assertTrue(theme.palette.dropdownFill.light.alphaComponent > 0)
             }
         }
 

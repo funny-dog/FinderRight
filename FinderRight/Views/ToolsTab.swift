@@ -97,7 +97,7 @@ struct ToolsTab: View {
                     .resizable()
                     .frame(width: 28, height: 28)
             } else {
-                FRIconChip(systemName: terminal.icon)
+                FRIconChip(systemName: terminal.icon, style: .subtle)
             }
             Text(NSLocalizedString(terminal.name, comment: ""))
                 .font(.system(size: 13, weight: .semibold))
@@ -120,7 +120,7 @@ struct ToolsTab: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(dropTargetTerminalId == terminal.bundleIdentifier ? FRTheme.selection : Color.clear)
+        .frDropTarget(dropTargetTerminalId == terminal.bundleIdentifier)
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             return moveTerminal(id, to: terminal.bundleIdentifier)

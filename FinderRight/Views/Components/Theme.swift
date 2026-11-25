@@ -22,8 +22,8 @@ enum FRTheme {
     /// 强调色（填充用）
     static let accent = themed(\.accent)
     /// 开关关闭态的轨道与滑块：比卡片底色明显亮一档，深色下也能一眼看出轮廓
-    static let switchOffTrack = dynamic(FRColorPair(0xDCDCE1, 0x46464E))
-    static let switchOffKnob = dynamic(FRColorPair(0xFFFFFF, 0xD4D4D8))
+    static let switchOffTrack = themed(\.switchOffTrack)
+    static let switchOffKnob = themed(\.switchOffKnob)
     /// 强调色（文字 / 图标用）：浅色下加深，保证在浅底上的对比度
     static let accentText = themed(\.accentText)
     /// 压在强调色填充上的文字
@@ -38,12 +38,13 @@ enum FRTheme {
     static let fieldBorder = themed(\.fieldBorder)
 
     /// 分段选择器轨道、滑块及下拉触发器动态色
-    static let segmentedTrack = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.055), NSColor(hex: 0x000000, alpha: 0.24)))
-    static let segmentedTrackBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.10)))
-    static let segmentedThumb = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.16)))
-    static let segmentedThumbBorder = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.10), NSColor(hex: 0xFFFFFF, alpha: 0.18)))
-    static let dropdownFill = dynamic(FRColorPair(NSColor(hex: 0xFFFFFF, alpha: 1.0), NSColor(hex: 0xFFFFFF, alpha: 0.07)))
-    static let dropdownHoverFill = dynamic(FRColorPair(NSColor(hex: 0x0B1220, alpha: 0.04), NSColor(hex: 0xFFFFFF, alpha: 0.11)))
+    static let segmentedTrack = themed(\.segmentedTrack)
+    static let segmentedTrackBorder = themed(\.segmentedTrackBorder)
+    static let segmentedThumb = themed(\.segmentedThumb)
+    static let segmentedThumbBorder = themed(\.segmentedThumbBorder)
+    static let dropdownFill = themed(\.dropdownFill)
+    static let dropdownHoverFill = themed(\.dropdownHoverFill)
+    static let cardShadow = themed(\.cardShadow)
 
     /// 状态色：表达含义，不随主题变化
     static let okBackground = dynamic(FRColorPair(NSColor(hex: 0x109664, alpha: 0.12), NSColor(hex: 0x50DCA0, alpha: 0.16)))
@@ -84,23 +85,24 @@ struct FRPage<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundColor(FRTheme.text)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 13))
+                            .font(.system(size: 13.5))
                             .foregroundColor(FRTheme.mute)
                     }
                 }
                 content
             }
-            .padding(.horizontal, 30)
+            .padding(.horizontal, 32)
             .padding(.top, 30)
-            .padding(.bottom, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 32)
+            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }
@@ -170,6 +172,7 @@ struct FRCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FRTheme.card))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(FRTheme.border, lineWidth: 1))
+        .shadow(color: FRTheme.cardShadow, radius: 3, y: 1)
     }
 }
 
@@ -226,26 +229,32 @@ struct FRSwitch: View {
     let label: LocalizedStringKey
     @Binding var isOn: Bool
 
+    @FRState private var isHovering = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let width: CGFloat = 38
     private let height: CGFloat = 22
     private let inset: CGFloat = 2
 
-    /// 开启态滑块：石墨主题的强调色接近白 / 黑，滑块取反色（onAccent）形成明暗反转；其余主题用白色
-    private var onKnob: Color {
-        FRThemeID.current == .graphite ? FRTheme.onAccent : .white
-    }
-
     var body: some View {
+        let activeHover = isHovering && isEnabled
         Button {
-            withAnimation(.easeOut(duration: 0.15)) { isOn.toggle() }
+            if reduceMotion {
+                isOn.toggle()
+            } else {
+                withAnimation(.easeOut(duration: 0.15)) { isOn.toggle() }
+            }
         } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule()
                     .fill(isOn ? FRTheme.accent : FRTheme.switchOffTrack)
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(activeHover ? FRTheme.accentText.opacity(0.4) : Color.clear, lineWidth: 1)
+                    )
                 Circle()
-                    .fill(isOn ? onKnob : FRTheme.switchOffKnob)
+                    .fill(isOn ? FRTheme.onAccent : FRTheme.switchOffKnob)
                     .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                     .padding(inset)
             }
@@ -253,6 +262,8 @@ struct FRSwitch: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: activeHover)
         .opacity(isEnabled ? 1 : 0.45)
         .accessibilityRepresentation {
             Toggle(label, isOn: $isOn)
@@ -270,6 +281,7 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
     @Namespace private var thumbNamespace
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isSmall: Bool { controlSize == .small }
 
@@ -296,8 +308,12 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
                 let isSelected = selection == option.value
                 let isHovered = hovered == option.value
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    if reduceMotion {
                         selection = option.value
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selection = option.value
+                        }
                     }
                 } label: {
                     Text(LocalizedStringKey(option.titleKey))
@@ -308,11 +324,7 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
                         .padding(.vertical, isSmall ? 4 : 5)
                         .background {
                             if isSelected {
-                                Capsule()
-                                    .fill(FRTheme.segmentedThumb)
-                                    .overlay(Capsule().strokeBorder(FRTheme.segmentedThumbBorder, lineWidth: 1))
-                                    .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
-                                    .matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+                                selectedCapsule
                             } else if isHovered {
                                 Capsule()
                                     .fill(FRTheme.hover)
@@ -338,6 +350,19 @@ struct FRSegmentedPicker<Selection: Hashable>: View {
         .opacity(isEnabled ? 1 : 0.45)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text(label))
+    }
+
+    @ViewBuilder
+    private var selectedCapsule: some View {
+        let base = Capsule()
+            .fill(FRTheme.segmentedThumb)
+            .overlay(Capsule().strokeBorder(FRTheme.segmentedThumbBorder, lineWidth: 1))
+            .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+        if reduceMotion {
+            base
+        } else {
+            base.matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+        }
     }
 }
 
@@ -373,6 +398,7 @@ struct FRPicker<Selection: Hashable, Content: View>: View {
     @FRState private var isHovering = false
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         label: LocalizedStringKey,
@@ -448,7 +474,7 @@ struct FRPicker<Selection: Hashable, Content: View>: View {
         .fixedSize(horizontal: !fullWidth, vertical: true)
         .opacity(isEnabled ? 1 : 0.45)
         .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.14), value: activeHover)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: activeHover)
         .accessibilityLabel(Text(label))
     }
 }
@@ -456,11 +482,14 @@ struct FRPicker<Selection: Hashable, Content: View>: View {
 /// 主题色选择：一排可直接点选的色块，选中项外加一圈描边
 struct FRThemeSwatches: View {
     @Binding var selection: FRThemeID
+    @FRState private var hovered: FRThemeID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 6) {
             ForEach(FRThemeID.allCases) { theme in
                 let isSelected = selection == theme
+                let isHovered = hovered == theme
                 Button {
                     selection = theme
                 } label: {
@@ -470,11 +499,22 @@ struct FRThemeSwatches: View {
                         .frame(width: 18, height: 18)
                         .padding(3)
                         .overlay(
-                            Circle().strokeBorder(isSelected ? FRTheme.text.opacity(0.6) : Color.clear, lineWidth: 1.5)
+                            Circle().strokeBorder(
+                                isSelected ? FRTheme.text.opacity(0.6) : (isHovered ? FRTheme.text.opacity(0.28) : Color.clear),
+                                lineWidth: 1.5
+                            )
                         )
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .onHover { inside in
+                    if inside {
+                        hovered = theme
+                    } else if hovered == theme {
+                        hovered = nil
+                    }
+                }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: hovered)
                 .help(Text(LocalizedStringKey(theme.titleKey)))
                 .accessibilityLabel(Text(LocalizedStringKey(theme.titleKey)))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -569,25 +609,37 @@ struct FRButtonStyle: ButtonStyle {
 private struct FRButtonBody: View {
     let kind: FRButtonStyle.Kind
     let configuration: ButtonStyleConfiguration
+    @FRState private var isHovering = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let primary = kind == .primary
+        let activeHover = isHovering && isEnabled
         configuration.label
             .font(.system(size: 12.5, weight: primary ? .semibold : .medium))
             .foregroundColor(primary ? FRTheme.onAccent : FRTheme.text)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(primary ? FRTheme.accent : FRTheme.field)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(primary ? FRTheme.accent : (activeHover ? FRTheme.dropdownHoverFill : FRTheme.field))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(primary && activeHover ? Color.white.opacity(0.10) : Color.clear)
+                    )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(primary ? Color.clear : FRTheme.fieldBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        primary ? Color.clear : (activeHover ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder),
+                        lineWidth: 1
+                    )
             )
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
-            .contentShape(Rectangle())
+            .opacity(isEnabled ? (configuration.isPressed ? (primary ? 0.82 : 0.72) : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { isHovering = $0 }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: activeHover)
     }
 }
 
@@ -605,13 +657,20 @@ struct FRLinkButtonStyle: ButtonStyle {
 
 private struct FRLinkBody: View {
     let configuration: ButtonStyleConfiguration
+    @FRState private var isHovering = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let activeHover = isHovering && isEnabled
         configuration.label
             .font(.system(size: 12, weight: .semibold))
             .foregroundColor(FRTheme.accentText)
+            .underline(activeHover)
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
+            .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: activeHover)
     }
 }
 
@@ -662,15 +721,25 @@ struct FRChip: View {
 
 /// 圆角方块图标（功能、终端、权限等行的前导图标）
 struct FRIconChip: View {
+    enum Style {
+        case accent
+        case subtle
+    }
+
     let systemName: String
     var size: CGFloat = 30
+    var style: Style = .accent
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
         Image(systemName: systemName)
-            .font(.system(size: size * 0.5, weight: .medium))
-            .foregroundColor(FRTheme.accentText)
+            .font(.system(size: size * 0.48, weight: .medium))
+            .foregroundColor(style == .accent ? FRTheme.accentText : FRTheme.text.opacity(0.76))
             .frame(width: size, height: size)
-            .background(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(FRTheme.selection))
+            .background(shape.fill(style == .accent ? FRTheme.selection : FRTheme.hover))
+            .overlay(
+                shape.strokeBorder(style == .subtle ? FRTheme.border : Color.clear, lineWidth: 0.5)
+            )
     }
 }
 
@@ -682,5 +751,92 @@ struct FRGrip: View {
             .foregroundColor(FRTheme.mute.opacity(0.8))
             .frame(width: 18, height: 24)
             .contentShape(Rectangle())
+    }
+}
+
+/// 统一输入框容器：可选前置图标 + 圆角 8 描边 + 悬停 / 焦点态高亮
+struct FRTextFieldContainer<Content: View>: View {
+    var symbol: String? = nil
+    var isFocused: Bool = false
+    var height: CGFloat? = 32
+    @ViewBuilder let content: Content
+
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 12.5))
+                    .foregroundColor(isFocused ? FRTheme.accentText : FRTheme.mute)
+                    .accessibilityHidden(true)
+            }
+            content
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, height == nil ? 6 : 0)
+        .frame(height: height)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: isFocused ? 1.5 : 1)
+        )
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isFocused)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+    }
+
+    private var borderColor: Color {
+        if isFocused { return FRTheme.accent }
+        if isHovering { return FRTheme.text.opacity(0.25) }
+        return FRTheme.fieldBorder
+    }
+}
+
+/// 统一行内图标按钮：26×26 触控区，悬停柔和底色，删除类操作悬停显警示色
+struct FRIconButton: View {
+    let systemName: String
+    let help: LocalizedStringKey
+    var isDestructive: Bool = false
+    let action: () -> Void
+
+    @FRState private var isHovering = false
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let activeHover = isHovering && isEnabled
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundColor(activeHover ? (isDestructive ? FRTheme.danger : FRTheme.text) : FRTheme.mute)
+                .frame(width: 26, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(activeHover ? (isDestructive ? FRTheme.danger.opacity(0.12) : FRTheme.hover) : Color.clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: activeHover)
+        .help(help)
+        .accessibilityLabel(Text(help))
+    }
+}
+
+extension View {
+    /// 拖拽排序目标行反馈：轻柔高亮 + 顶部 2pt 强调色插入指示线
+    func frDropTarget(_ isTargeted: Bool) -> some View {
+        background(isTargeted ? FRTheme.selection.opacity(0.35) : Color.clear)
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(FRTheme.accent)
+                    .frame(height: 2)
+                    .padding(.horizontal, 12)
+                    .opacity(isTargeted ? 1 : 0)
+            }
     }
 }

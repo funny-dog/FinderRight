@@ -11,6 +11,7 @@ struct OperationHistoryView: View {
     @FRState private var expanded: Set<UUID>
     /// 取消调整保留条数时刷新下拉框，让它退回原来的选项
     @FRState private var limitPickerToken = 0
+    @FocusState private var searchFocused: Bool
 
     init(store: RecentOperations = .shared, filter: OperationHistoryFilter = OperationHistoryFilter(),
          expanded: Set<UUID> = []) {
@@ -125,15 +126,12 @@ struct OperationHistoryView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
-                .foregroundColor(FRTheme.mute)
-                .accessibilityHidden(true)
+        FRTextFieldContainer(symbol: "magnifyingglass", isFocused: searchFocused, height: 28) {
             TextField("搜索操作、文件名或位置", text: $filter.searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
                 .foregroundColor(FRTheme.text)
+                .focused($searchFocused)
                 .accessibilityLabel(Text("搜索操作历史"))
             if !filter.searchText.isEmpty {
                 Button { filter.searchText = "" } label: {
@@ -148,10 +146,6 @@ struct OperationHistoryView: View {
                 .accessibilityLabel(Text("清除搜索"))
             }
         }
-        .padding(.horizontal, 9)
-        .frame(height: 28)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(FRTheme.fieldBorder, lineWidth: 1))
         .help(Text("可匹配操作名称、文件名、路径和失败说明；多个关键词用空格分隔。"))
     }
 

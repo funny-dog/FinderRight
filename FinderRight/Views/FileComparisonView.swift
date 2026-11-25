@@ -96,6 +96,7 @@ struct FileComparisonView: View {
     @ObservedObject var model: FileComparisonModel
     @FRState private var leftTargeted = false
     @FRState private var rightTargeted = false
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -128,6 +129,7 @@ struct FileComparisonView: View {
                minHeight: FileComparisonLayout.minimumContentSize.height)
         .foregroundColor(FRTheme.text)
         .background(FRTheme.window)
+        .id(themeRaw)
     }
 
     private var errorMessage: String? {
@@ -158,7 +160,7 @@ struct FileComparisonView: View {
                 .buttonStyle(.frLink)
                 .disabled(model.isLoading)
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 11.5, weight: .medium))
         .padding(.horizontal, 12)
         .frame(height: 30)
     }
@@ -191,11 +193,11 @@ struct FileComparisonView: View {
                         Text(verbatim: url?.lastPathComponent ?? NSLocalizedString("拖入文件或点击选择", comment: ""))
                             .font(.system(size: 13, weight: .semibold)).lineLimit(2)
                         if let error {
-                            Text(verbatim: error).font(.system(size: 11)).foregroundColor(FRTheme.danger)
+                            Text(verbatim: error).font(.system(size: 11.5)).foregroundColor(FRTheme.danger)
                                 .lineLimit(3)
                         } else if let url {
                             Text(verbatim: url.deletingLastPathComponent().path)
-                                .font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                                .font(.system(size: 11.5)).foregroundColor(FRTheme.mute)
                                 .lineLimit(2).truncationMode(.middle)
                         }
                     }
@@ -214,16 +216,13 @@ struct FileComparisonView: View {
         .accessibilityLabel(onLeft ? Text("选择左侧文件") : Text("选择右侧文件"))
         .overlay(alignment: .topTrailing) {
             if url != nil {
-                Button { model.removeFile(onLeft: onLeft) } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundColor(FRTheme.mute)
-                        .frame(width: 26, height: 26)
-                        .contentShape(Rectangle())
+                FRIconButton(
+                    systemName: "xmark",
+                    help: onLeft ? "移除左侧文件" : "移除右侧文件",
+                    isDestructive: true
+                ) {
+                    model.removeFile(onLeft: onLeft)
                 }
-                .buttonStyle(.plain)
-                .help(onLeft ? Text("移除左侧文件") : Text("移除右侧文件"))
-                .accessibilityLabel(onLeft ? Text("移除左侧文件") : Text("移除右侧文件"))
                 .padding(compact ? 4 : 8)
             }
         }

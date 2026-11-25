@@ -16,9 +16,9 @@ struct GeneralTab: View {
 
     var body: some View {
         FRPage(title: "通用", subtitle: "启动、显示与外观") {
-            launchSection
-            updateSection
-            displaySection
+            startupAndUpdatesSection
+            appearanceSection
+            systemEntrySection
         }
         .onAppear {
             menuIconStyle = SharedConfig.shared.menuIconStyle
@@ -32,30 +32,25 @@ struct GeneralTab: View {
         }
     }
 
-    // MARK: 启动
+    // MARK: 启动与更新
 
-    private var launchSection: some View {
-        FRSection("启动") {
-            LaunchAtLoginControl()
-        }
-    }
-
-    private var updateSection: some View {
-        FRSection("更新") {
+    private var startupAndUpdatesSection: some View {
+        FRSection("启动与更新") {
             FRCard {
+                LaunchAtLoginControl(embedInCard: false)
+                FRDivider()
                 // 开启后立即检查，之后每 6 小时检查一次；空闲时下载并安装，完成后自动重启。默认关闭。
                 FRRow(title: Text("自动检查并安装更新")) {
                     FRSwitch(label: "自动检查并安装更新", isOn: $automaticUpdates)
                 }
             }
-            // 关闭后不再发起自动更新；已经开始的更新仍会完成。
         }
     }
 
-    // MARK: 显示
+    // MARK: 外观与系统入口
 
-    private var displaySection: some View {
-        FRSection("显示") {
+    private var appearanceSection: some View {
+        FRSection("外观") {
             FRCard {
                 let theme = FRThemeID(rawValue: themeRaw) ?? .midnight
                 FRRow(title: Text("主题色"), subtitle: Text(LocalizedStringKey(theme.titleKey))) {
@@ -77,7 +72,7 @@ struct GeneralTab: View {
 
                 FRDivider()
 
-                FRRow(title: Text("语言")) {
+                FRRow(title: Text("语言"), subtitle: Text("切换语言后将自动重启应用")) {
                     FRSegmentedPicker(
                         label: "语言",
                         selection: Binding(
@@ -111,9 +106,13 @@ struct GeneralTab: View {
                         }
                     }
                 }
+            }
+        }
+    }
 
-                FRDivider()
-
+    private var systemEntrySection: some View {
+        FRSection("系统入口") {
+            FRCard {
                 FRRow(title: Text("在「服务」中显示 FinderRight"),
                       subtitle: Text("在系统与右键「服务」菜单中显示（云盘目录适用）")) {
                     FRSwitch(label: "在「服务」中显示 FinderRight", isOn: $showServicesMenu)
@@ -154,7 +153,6 @@ struct GeneralTab: View {
                 }
             }
 
-            FRFootnote(Text("切换语言后将自动重启应用"))
             FRFootnote(Text("「服务」菜单语言跟随系统，不受此设置影响。"))
 
             if !showMenuBarIcon && !showDockIcon {

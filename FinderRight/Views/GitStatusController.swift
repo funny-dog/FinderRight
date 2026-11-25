@@ -52,14 +52,14 @@ struct GitActionFeedback: View {
         if model.isPerforming {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("正在执行 Git…").font(.system(size: 11))
+                Text("正在执行 Git…").font(.system(size: 12))
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.bottom, 10)
         } else if let error = model.actionError {
             VStack(alignment: .leading, spacing: 6) {
                 ScrollView {
-                    Text(verbatim: error).font(.system(size: 11)).foregroundColor(FRTheme.danger)
+                    Text(verbatim: error).font(.system(size: 12)).foregroundColor(FRTheme.danger)
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 72)
@@ -70,13 +70,13 @@ struct GitActionFeedback: View {
                         model.perform(.pull(rebase: true), success: NSLocalizedString("已拉取", comment: ""))
                     }
                     .buttonStyle(.frLink)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .disabled(model.isLoading || model.isPerforming)
                 }
             }
             .padding(.horizontal, 12).padding(.bottom, 10)
         } else if let message = model.actionMessage {
-            Text(verbatim: message).font(.system(size: 11)).foregroundColor(FRTheme.okText)
+            Text(verbatim: message).font(.system(size: 12)).foregroundColor(FRTheme.okText)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,28 +87,33 @@ struct GitActionFeedback: View {
 
 struct GitCommitSheet: View {
     @ObservedObject var model: GitStatusModel
+    @FocusState private var messageFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("提交暂存区").font(.system(size: 17, weight: .semibold))
             if let preview = model.commitPreview {
                 Text(verbatim: String(format: NSLocalizedString("%d 个文件 · 整个仓库", comment: ""), preview.files.count))
-                    .font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                    .font(.system(size: 11.5)).foregroundColor(FRTheme.mute)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(preview.files, id: \.self) { path in
-                            Text(verbatim: path).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                            Text(verbatim: path).font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: 90)
                 Text("提交说明").font(.system(size: 12, weight: .medium))
-                TextEditor(text: $model.commitMessage)
-                    .font(.system(size: 12)).scrollContentBackground(.hidden)
-                    .padding(6).frame(height: 100).background(FRTheme.field).cornerRadius(6)
-                    .disabled(model.isPerforming)
-                    .accessibilityLabel("提交说明")
+                FRTextFieldContainer(isFocused: messageFocused, height: nil) {
+                    TextEditor(text: $model.commitMessage)
+                        .font(.system(size: 12.5))
+                        .scrollContentBackground(.hidden)
+                        .focused($messageFocused)
+                        .frame(height: 100)
+                        .disabled(model.isPerforming)
+                        .accessibilityLabel("提交说明")
+                }
                 GitActionFeedback(model: model)
                 HStack {
                     Button("重新载入") { model.prepareCommit() }.buttonStyle(.frLink).disabled(model.isPerforming)
@@ -126,5 +131,6 @@ struct GitCommitSheet: View {
         .padding(20).frame(width: 440)
         .foregroundColor(FRTheme.text).background(FRTheme.window)
         .interactiveDismissDisabled(model.isPerforming)
+        .onAppear { DispatchQueue.main.async { messageFocused = true } }
     }
 }

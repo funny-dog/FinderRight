@@ -340,6 +340,9 @@ struct GitStatusView: View {
     @FRState private var isTargeted = false
     @FRState private var showingNewBranch = false
     @FRState private var branchName = ""
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @FocusState private var repoSearchFocused: Bool
+    @FocusState private var branchNameFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -352,7 +355,7 @@ struct GitStatusView: View {
                         Spacer()
                         Button("整个仓库") { model.showWholeRepository() }.buttonStyle(.frLink)
                     }
-                    .font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                    .font(.system(size: 11.5)).foregroundColor(FRTheme.mute)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     FRDivider()
                 }
@@ -395,6 +398,7 @@ struct GitStatusView: View {
         }
         .frame(minWidth: 520, minHeight: 380)
         .foregroundColor(FRTheme.text).background(isTargeted ? FRTheme.selection : FRTheme.window)
+        .id(themeRaw)
         .dropDestination(for: URL.self) { urls, _ in
             guard !model.isPerforming, urls.count == 1, let url = urls.first, url.isFileURL else { return false }
             model.open(at: url)
@@ -449,7 +453,7 @@ struct GitStatusView: View {
                             }
                             if let upstream = snapshot.upstream {
                                 Text(verbatim: "→ " + upstream)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 11.5))
                                     .foregroundColor(FRTheme.mute)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -467,12 +471,12 @@ struct GitStatusView: View {
                                 }
                             } else if snapshot.hasRemote {
                                 Text("未关联上游")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 11.5))
                                     .foregroundColor(FRTheme.mute)
                                     .lineLimit(1)
                             } else {
                                 Text("仅本地")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 11.5))
                                     .foregroundColor(FRTheme.mute)
                                     .lineLimit(1)
                             }
@@ -481,7 +485,7 @@ struct GitStatusView: View {
                                     model.perform(.fetch, success: NSLocalizedString("已获取远端引用", comment: ""))
                                 }
                                 .buttonStyle(.frLink)
-                                .font(.system(size: 11))
+                                .font(.system(size: 11.5))
                                 .fixedSize()
                                 .disabled(model.isLoading || model.isPerforming)
                                 .help("获取远端最新提交状态（不修改本地文件）")
@@ -498,7 +502,7 @@ struct GitStatusView: View {
                     Text(verbatim: model.isScanning
                          ? NSLocalizedString("正在扫描设备上的仓库…", comment: "")
                          : String(format: NSLocalizedString("已发现 %d 个仓库", comment: ""), model.repositories.count))
-                        .font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                        .font(.system(size: 11.5)).foregroundColor(FRTheme.mute)
                 }
                 .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
@@ -522,16 +526,16 @@ struct GitStatusView: View {
 
     private func statusBadge(_ text: String, foreground: Color, background: Color) -> some View {
         Text(verbatim: text)
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: 11, weight: .medium))
             .foregroundColor(foreground)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(RoundedRectangle(cornerRadius: 4).fill(background))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1.5)
+            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(background))
             .fixedSize()
     }
 
     private var actionBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button("暂存文件") {
                 if let entry = model.selectedEntry { model.perform(.stage(model.paths(for: [entry])), success: "已暂存") }
             }
@@ -542,7 +546,7 @@ struct GitStatusView: View {
             }
             .buttonStyle(.frSecondary)
             .disabled(model.selectedEntry?.hasStaged != true)
-            Menu("批量…") {
+            Menu {
                 Button(LocalizedStringKey(model.directoryFilter == nil ? "全部暂存" : "暂存当前目录")) {
                     model.perform(.stage(model.paths(for: model.visibleEntries.filter(\.hasUnstaged))), success: "已暂存")
                 }
@@ -551,7 +555,22 @@ struct GitStatusView: View {
                     model.perform(.unstage(model.paths(for: model.visibleEntries.filter(\.hasStaged), unstaging: true)), success: "已取消暂存")
                 }
                 .disabled(!model.visibleEntries.contains(where: \.hasStaged))
+            } label: {
+                HStack(spacing: 4) {
+                    Text("批量")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(FRTheme.mute)
+                }
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundColor(FRTheme.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(FRTheme.fieldBorder, lineWidth: 1))
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
             Spacer(minLength: 4)
             Button("提交…") { model.prepareCommit() }
@@ -581,8 +600,13 @@ struct GitStatusView: View {
     private var newBranchSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("新建并切换分支").font(.system(size: 17, weight: .semibold))
-            TextField("分支名称", text: $branchName).textFieldStyle(.roundedBorder)
-                .disabled(model.isPerforming)
+            FRTextFieldContainer(isFocused: branchNameFocused, height: 32) {
+                TextField("分支名称", text: $branchName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($branchNameFocused)
+            }
+            .disabled(model.isPerforming)
             GitActionFeedback(model: model)
             HStack {
                 Spacer()
@@ -601,23 +625,24 @@ struct GitStatusView: View {
         .padding(20).frame(width: 380)
         .foregroundColor(FRTheme.text).background(FRTheme.window)
         .interactiveDismissDisabled(model.isPerforming)
+        .onAppear { DispatchQueue.main.async { branchNameFocused = true } }
     }
 
     private func entryRow(_ entry: GitStatusEntry) -> some View {
         HStack(spacing: 10) {
             Text(verbatim: entry.indexStatus + entry.worktreeStatus)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                 .foregroundColor(entry.isConflict ? FRTheme.danger : FRTheme.accentText)
                 .frame(width: 26, alignment: .leading)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: entry.path).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+                Text(verbatim: entry.path).font(.system(size: 12.5)).lineLimit(1).truncationMode(.middle)
                 if let original = entry.originalPath {
-                    Text(verbatim: "← " + original).font(.system(size: 10)).foregroundColor(FRTheme.mute).lineLimit(1)
+                    Text(verbatim: "← " + original).font(.system(size: 11)).foregroundColor(FRTheme.mute).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            Text(verbatim: statusLabel(entry)).font(.system(size: 10))
+            Text(verbatim: statusLabel(entry)).font(.system(size: 11))
                 .foregroundColor(entry.isConflict ? FRTheme.danger : FRTheme.mute)
         }
         .padding(.vertical, 3)
@@ -638,15 +663,18 @@ struct GitStatusView: View {
             if let entry = model.selectedEntry {
                 HStack(spacing: 8) {
                     if entry.hasStaged && entry.hasUnstaged && !entry.isConflict {
-                        Picker("差异范围", selection: Binding(get: { model.scope }, set: { model.setScope($0) })) {
-                            Text("未暂存").tag(GitDiffScope.unstaged)
-                            Text("已暂存").tag(GitDiffScope.staged)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().frame(width: 160)
-                        .accessibilityLabel("差异范围")
+                        FRSegmentedPicker(
+                            label: "差异范围",
+                            selection: Binding(get: { model.scope }, set: { model.setScope($0) }),
+                            options: [
+                                (GitDiffScope.unstaged, "未暂存"),
+                                (GitDiffScope.staged, "已暂存"),
+                            ]
+                        )
+                        .controlSize(.small)
                     } else {
                         Text(LocalizedStringKey(entry.isConflict ? "冲突：我方与工作区" : (model.scope == .staged ? "已暂存" : (entry.isUntracked ? "未跟踪" : "未暂存"))))
-                            .font(.system(size: 11, weight: .medium)).foregroundColor(FRTheme.mute)
+                            .font(.system(size: 11.5, weight: .medium)).foregroundColor(FRTheme.mute)
                     }
                     Spacer()
                     if let diff = model.comparison {
@@ -654,14 +682,14 @@ struct GitStatusView: View {
                         Text(verbatim: "−\(diff.result.deletions)").foregroundColor(FRTheme.danger)
                     }
                 }
-                .font(.system(size: 11)).padding(.horizontal, 12).frame(height: 34)
+                .font(.system(size: 11.5)).padding(.horizontal, 12).frame(height: 36)
                 FRDivider()
                 HStack {
                     Text(LocalizedStringKey(model.scope == .staged ? "HEAD" : (entry.isConflict ? "我方" : "暂存区")))
                         .frame(maxWidth: .infinity)
                     Text(LocalizedStringKey(model.scope == .staged ? "暂存区" : "工作区")).frame(maxWidth: .infinity)
                 }
-                .font(.system(size: 10)).foregroundColor(FRTheme.mute)
+                .font(.system(size: 11)).foregroundColor(FRTheme.mute)
                 .padding(.vertical, 5).background(FRTheme.card)
                 FRDivider()
             }
@@ -691,25 +719,24 @@ struct GitStatusView: View {
 
     private var repositoryListView: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundColor(FRTheme.mute)
+            FRTextFieldContainer(symbol: "magnifyingglass", isFocused: repoSearchFocused, height: 30) {
                 TextField("搜索仓库名称、分支或路径…", text: $model.repositorySearchQuery)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
+                    .foregroundColor(FRTheme.text)
+                    .focused($repoSearchFocused)
                 if !model.repositorySearchQuery.isEmpty {
                     Button {
                         model.repositorySearchQuery = ""
                     } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundColor(FRTheme.mute)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(FRTheme.mute)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .font(.system(size: 12))
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(FRTheme.field)
-            .cornerRadius(6)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(FRTheme.fieldBorder, lineWidth: 1))
-            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
 
             FRDivider()
 
@@ -724,27 +751,42 @@ struct GitStatusView: View {
                     Image(systemName: "arrow.triangle.branch").font(.system(size: 32, weight: .light)).foregroundColor(FRTheme.accentText)
                     Text(LocalizedStringKey(model.repositories.isEmpty ? "未在设备上检测到 Git 仓库" : "未找到匹配的仓库"))
                         .font(.system(size: 13))
-                    Text("拖入项目文件夹或选择项目").font(.system(size: 11)).foregroundColor(FRTheme.mute)
+                    Text("拖入项目文件夹或选择项目").font(.system(size: 11.5)).foregroundColor(FRTheme.mute)
                     Button("选择项目…", action: chooseProject).buttonStyle(.frSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 4) {
                         ForEach(model.filteredRepositories) { repo in
-                            repositoryRow(repo)
+                            GitRepositoryRow(repo: repo) {
+                                model.open(at: repo.url)
+                            }
                         }
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
                 }
             }
         }
     }
 
-    private func repositoryRow(_ repo: GitRepositoryItem) -> some View {
-        Button {
-            model.open(at: repo.url)
-        } label: {
+    private func chooseProject() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url { model.open(at: url) }
+    }
+}
+
+private struct GitRepositoryRow: View {
+    let repo: GitRepositoryItem
+    let action: () -> Void
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: "folder")
                     .font(.system(size: 15))
@@ -754,18 +796,18 @@ struct GitStatusView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text(verbatim: repo.name)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12.5, weight: .semibold))
                             .foregroundColor(FRTheme.text)
                             .lineLimit(1)
                         if !repo.branch.isEmpty {
                             Label(repo.branch, systemImage: "arrow.triangle.branch")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11.5))
                                 .foregroundColor(FRTheme.mute)
                                 .lineLimit(1)
                         }
                     }
                     Text(verbatim: repo.displayPath)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11.5))
                         .foregroundColor(FRTheme.mute)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -778,32 +820,33 @@ struct GitStatusView: View {
                         Image(systemName: isClean ? "checkmark.circle" : "pencil.circle")
                         Text(verbatim: repo.statusDescription ?? (isClean ? NSLocalizedString("工作区干净", comment: "") : NSLocalizedString("有改动", comment: "")))
                     }
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(isClean ? FRTheme.okText : FRTheme.warnText)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(isClean ? FRTheme.okBackground : FRTheme.warnBackground))
+                    .padding(.horizontal, 7).padding(.vertical, 2.5)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isClean ? FRTheme.okBackground : FRTheme.warnBackground))
                 } else {
                     Text("检测中…")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11.5))
                         .foregroundColor(FRTheme.mute.opacity(0.8))
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(FRTheme.mute.opacity(0.5))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(isHovering ? FRTheme.accentText : FRTheme.mute.opacity(0.5))
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isHovering ? FRTheme.hover : FRTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isHovering ? FRTheme.text.opacity(0.18) : FRTheme.border, lineWidth: 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(RoundedRectangle(cornerRadius: 6).fill(FRTheme.card.opacity(0.5)))
-    }
-
-    private func chooseProject() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url { model.open(at: url) }
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
     }
 }

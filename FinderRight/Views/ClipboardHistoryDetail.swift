@@ -11,6 +11,7 @@ struct ClipboardHistoryRow: View {
     let onCopy: () -> Void
     let onDragEnded: () -> Void
     @FRState private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var imageThumbnail: NSImage? {
         ClipboardPreviewLoader.thumbnail(for: item)
@@ -54,7 +55,7 @@ struct ClipboardHistoryRow: View {
                 onDragEnded: onDragEnded
             )
         }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
             if hovering {
@@ -187,7 +188,7 @@ struct ClipboardDetailPane: View {
                             }
                             if urls.count > 4 {
                                 Text(String(format: NSLocalizedString("另有 %d 项…", comment: ""), urls.count - 4))
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 11.5))
                                     .foregroundColor(FRTheme.mute)
                             }
                         }

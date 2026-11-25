@@ -12,106 +12,97 @@ struct AboutTab: View {
     @FRState private var showingChangelog = false
     @FRState private var showingWebsite = false
 
+    private var hasUpdateAvailable: Bool {
+        if case .updateAvailable = updateStatus { return true }
+        return false
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 14)
 
-            // 应用图标：直接取 App 自身图标，与程序坞 / 访达中显示的保持一致（图标自带边距与投影）
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 112, height: 112)
+                    // 应用图标：直接取 App 自身图标，与程序坞 / 访达中显示的保持一致（图标自带边距与投影）
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 64, height: 64)
 
-            Text(verbatim: "FinderRight")
-                .font(.system(size: 30, weight: .bold))
-                .foregroundColor(FRTheme.text)
-                .padding(.top, 14)
-
-            HStack(spacing: 8) {
-                Text("版本 \(appVersion)")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(FRTheme.mute)
-
-                Button {
-                    showingChangelog = true
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10))
-                        Text("更新日志")
-                            .font(.system(size: 11.5))
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(verbatim: "FinderRight")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(FRTheme.text)
+                        Text("版本 \(appVersion)")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(FRTheme.mute)
                     }
-                    .foregroundColor(FRTheme.accentText)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2.5)
-                    .background(
-                        Capsule()
-                            .fill(FRTheme.accent.opacity(0.12))
-                    )
+                    .padding(.top, 10)
+
+                    Text("增强 macOS Finder 右键菜单的轻量工具。")
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(FRTheme.mute)
+                        .font(.system(size: 13))
+                        .padding(.top, 4)
+
+                    HStack(spacing: 10) {
+                        updateArea
+                        starButton
+                    }
+                    .padding(.top, 14)
+
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            AboutGridCard(
+                                icon: "link",
+                                title: "GitHub 仓库",
+                                subtitle: "源码与版本发布",
+                                trailingSymbol: "arrow.up.right"
+                            ) {
+                                NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight")!)
+                            }
+                            AboutGridCard(
+                                icon: "safari",
+                                title: "官方网站",
+                                subtitle: "介绍与安装包",
+                                trailingSymbol: "chevron.right"
+                            ) {
+                                showingWebsite = true
+                            }
+                        }
+                        HStack(spacing: 10) {
+                            AboutGridCard(
+                                icon: "exclamationmark.bubble",
+                                title: "反馈与建议",
+                                subtitle: "问题与功能想法",
+                                trailingSymbol: "chevron.right"
+                            ) {
+                                showingFeedback = true
+                            }
+                            AboutGridCard(
+                                icon: "sparkles",
+                                title: "更新日志",
+                                subtitle: "各版本功能演进",
+                                trailingSymbol: "chevron.right"
+                            ) {
+                                showingChangelog = true
+                            }
+                        }
+                    }
+                    .padding(.top, 20)
+
+                    // 版权信息
+                    Text(verbatim: "Copyright © 2026 FinderRight · MIT License")
+                        .font(.system(size: 11.5))
+                        .foregroundColor(FRTheme.mute)
+                        .padding(.top, 20)
+
+                    Spacer(minLength: 14)
                 }
-                .buttonStyle(.plain)
-                .help("查看版本更新说明")
+                .padding(.horizontal, 28)
+                .frame(maxWidth: 480)
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }
-            .padding(.top, 4)
-
-            updateArea
-                .padding(.top, 14)
-
-            // 描述
-            Text("增强 macOS Finder 右键菜单的轻量工具。")
-                .multilineTextAlignment(.center)
-                .foregroundColor(FRTheme.mute)
-                .font(.system(size: 13.5))
-                .lineSpacing(3)
-                .padding(.horizontal, 40)
-                .padding(.top, 22)
-
-            // GitHub 链接与 Star 入口：从 Release 直接下载 dmg 的用户通常不会回到仓库页，这里给一个入口
-            HStack(spacing: 10) {
-                Button {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight")!)
-                } label: {
-                    Label("GitHub 仓库", systemImage: "link")
-                }
-                .buttonStyle(.frSecondary)
-
-                Button {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight")!)
-                } label: {
-                    Label("觉得好用？去 GitHub 点个 Star", systemImage: "star")
-                }
-                .buttonStyle(.frPrimary)
-                .help("打开仓库主页，登录 GitHub 后手动点击右上角 Star")
-            }
-            .padding(.top, 24)
-
-            // 反馈入口与官网链接
-            HStack(spacing: 12) {
-                Button {
-                    showingFeedback = true
-                } label: {
-                    Label("反馈与建议", systemImage: "exclamationmark.bubble")
-                }
-                .buttonStyle(.frSecondary)
-                .help("反馈问题或提出功能建议")
-
-                Button {
-                    showingWebsite = true
-                } label: {
-                    Label("官方网站", systemImage: "safari")
-                }
-                .buttonStyle(.frSecondary)
-                .help("访问 FinderRight 官方网站")
-            }
-            .padding(.top, 12)
-
-            Spacer(minLength: 0)
-
-            // 版权信息
-            Text(verbatim: "Copyright © 2026 FinderRight · MIT License")
-                .font(.system(size: 11.5))
-                .foregroundColor(FRTheme.mute)
-                .padding(.bottom, 18)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -129,6 +120,22 @@ struct AboutTab: View {
         // 菜单栏「检查更新…」发起的检查与下载也同步到这里
         .onReceive(NotificationCenter.default.publisher(for: UpdateChecker.statusDidChangeNotification)) { _ in
             updateStatus = UpdateChecker.shared.currentStatus
+        }
+    }
+
+    @ViewBuilder
+    private var starButton: some View {
+        let base = Button {
+            NSWorkspace.shared.open(URL(string: "https://github.com/funny-dog/FinderRight")!)
+        } label: {
+            Label("GitHub Star", systemImage: "star.fill")
+        }
+        .help("打开仓库主页，登录 GitHub 后手动点击右上角 Star")
+
+        if hasUpdateAvailable {
+            base.buttonStyle(.frSecondary)
+        } else {
+            base.buttonStyle(.frPrimary)
         }
     }
 
@@ -224,5 +231,54 @@ struct AboutTab: View {
         UpdateChecker.shared.check(force: force) { newStatus in
             self.updateStatus = newStatus
         }
+    }
+}
+
+private struct AboutGridCard: View {
+    let icon: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let trailingSymbol: String
+    let action: () -> Void
+
+    @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                FRIconChip(systemName: icon, size: 28, style: .subtle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(FRTheme.text)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(FRTheme.mute)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: trailingSymbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(isHovering ? FRTheme.accentText : FRTheme.mute)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isHovering ? FRTheme.hover : FRTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(isHovering ? FRTheme.text.opacity(0.20) : FRTheme.border, lineWidth: 1)
+            )
+            .shadow(color: FRTheme.cardShadow, radius: 3, y: 1)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
     }
 }

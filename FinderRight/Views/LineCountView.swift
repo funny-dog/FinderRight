@@ -73,6 +73,7 @@ final class LineCountModel: ObservableObject {
 struct LineCountView: View {
     @ObservedObject var model: LineCountModel
     @FRState private var isDropTargeted = false
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +87,7 @@ struct LineCountView: View {
         }
         .frame(minWidth: 520, minHeight: 380)
         .background(FRTheme.window)
+        .id(themeRaw)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(FRTheme.accent, lineWidth: 2)
@@ -115,7 +117,7 @@ struct LineCountView: View {
                 }
                 if let path = model.targetURL?.path {
                     Text(path)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 11.5, design: .monospaced))
                         .foregroundColor(FRTheme.mute)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -246,7 +248,7 @@ struct LineCountView: View {
                 Text(NSLocalizedString("总计", comment: ""))
                     .frame(width: 75, alignment: .trailing)
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 11.5, weight: .semibold))
             .foregroundColor(FRTheme.mute)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -308,7 +310,7 @@ struct LineCountView: View {
             Text(String(format: NSLocalizedString("总计：%d 行", comment: ""), result.totalLines))
             Spacer()
             Text(String(format: "%.0f ms", result.durationMs))
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11.5, design: .monospaced))
                 .foregroundColor(FRTheme.mute)
         }
         .font(.system(size: 12))
@@ -345,7 +347,7 @@ struct LineCountView: View {
         case "Shell": return .gray
         case "JSON", "YAML", "TOML", "XML": return Color(red: 0.4, green: 0.7, blue: 0.5)
         case "Markdown": return .teal
-        default: return .secondary
+        default: return FRTheme.mute
         }
     }
 }

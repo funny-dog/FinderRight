@@ -20,8 +20,7 @@ struct CompactSettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 headerView
                 if !isExtensionEnabled {
-                    Button("权限与扩展", action: onOpenPermissions)
-                        .buttonStyle(.frSecondary)
+                    extensionWarningBanner
                 }
                 settingsCard
             }
@@ -79,8 +78,35 @@ struct CompactSettingsView: View {
                         Text(LocalizedStringKey(style.titleKey)).tag(style)
                     }
                 }
+                .controlSize(.small)
             }
         }
+    }
+
+    private var extensionWarningBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(FRTheme.warnText)
+            Text("访达扩展未启用，右键菜单暂不可用")
+                .font(.system(size: 12))
+                .foregroundColor(FRTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Button("前往启用", action: onOpenPermissions)
+                .buttonStyle(.frSecondary)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(FRTheme.warnBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(FRTheme.warnText.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var headerView: some View {

@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @FRState private var currentStep: Int
     @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let totalSteps = 5
 
@@ -34,7 +35,7 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 44)
-                .animation(.easeInOut(duration: 0.25), value: currentStep)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: currentStep)
 
                 // 内容区域：同一时刻只渲染当前步骤
                 ZStack {
@@ -84,8 +85,12 @@ struct OnboardingView: View {
                     HStack(spacing: 10) {
                         if currentStep > 0 {
                             Button("上一步") {
-                                withAnimation(.easeInOut(duration: 0.25)) {
+                                if reduceMotion {
                                     currentStep -= 1
+                                } else {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        currentStep -= 1
+                                    }
                                 }
                             }
                             .buttonStyle(.frSecondary)
@@ -93,8 +98,12 @@ struct OnboardingView: View {
 
                         if currentStep < totalSteps - 1 {
                             Button("下一步") {
-                                withAnimation(.easeInOut(duration: 0.25)) {
+                                if reduceMotion {
                                     currentStep += 1
+                                } else {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        currentStep += 1
+                                    }
                                 }
                             }
                             .keyboardShortcut(.defaultAction)
@@ -240,6 +249,7 @@ struct CompletionStep: View {
     @FRState private var showCheckmark = false
     /// 扩展未启用时不说「一切就绪」，提示右键菜单暂不可用
     @FRState private var extensionEnabled = FinderExtensionChecker.check()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,9 +264,9 @@ struct CompletionStep: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 40, weight: .bold))
                     .foregroundColor(FRTheme.accentText)
-                    .scaleEffect(showCheckmark ? 1.0 : 0.5)
-                    .opacity(showCheckmark ? 1.0 : 0.0)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
+                    .scaleEffect(showCheckmark || reduceMotion ? 1.0 : 0.5)
+                    .opacity(showCheckmark || reduceMotion ? 1.0 : 0.0)
+                    .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
             }
 
             Text(LocalizedStringKey(extensionEnabled ? "一切就绪！" : "差一步就好"))

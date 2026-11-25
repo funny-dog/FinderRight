@@ -109,15 +109,9 @@ struct EditorsTab: View {
             Spacer(minLength: 8)
 
             if isCustom {
-                Button {
+                FRIconButton(systemName: "minus.circle", help: "移除", isDestructive: true) {
                     remove(editor)
-                } label: {
-                    Image(systemName: "minus.circle")
-                        .font(.system(size: 15))
-                        .foregroundColor(FRTheme.mute)
                 }
-                .buttonStyle(.plain)
-                .help("移除")
             }
 
             FRSwitch(label: "右键菜单中显示", isOn: Binding(
@@ -128,9 +122,9 @@ struct EditorsTab: View {
                 }
             ))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(dropTargetEditorId == editor.id ? FRTheme.selection : Color.clear)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frDropTarget(dropTargetEditorId == editor.id)
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             return moveEditor(id, to: editor.id)

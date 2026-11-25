@@ -77,21 +77,52 @@ struct ShortcutsTab: View {
 
     var body: some View {
         FRPage(title: "快捷键", subtitle: "在访达中直接按键触发操作") {
-            FRSection("访达快捷键") {
+            FRSection {
+                HStack {
+                    FRCaption("访达快捷键")
+                    Spacer()
+                    Button("恢复默认…") { confirmRestoreDefaults() }
+                        .buttonStyle(.frLink)
+                        .padding(.trailing, 4)
+                }
+            } content: {
                 if !hasAccessibility {
-                    FRCard {
-                        FRRow(title: Text("快捷键需要「辅助功能」权限"),
-                              subtitle: Text("授权后立即生效且支持剪切/粘贴；未授权需重启访达。")) {
-                            VStack(alignment: .trailing, spacing: 8) {
-                                Button("授权辅助功能…") { requestAccessibility() }
-                                    .buttonStyle(.frPrimary)
-                                Button("前往权限与扩展") {
-                                    SettingsNavigation.shared.selectedTab = .permissions
-                                }
-                                .buttonStyle(.frLink)
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(FRTheme.warnText)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("快捷键需要「辅助功能」权限")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(FRTheme.text)
+                            Text("授权后立即生效且支持剪切/粘贴；未授权需重启访达。")
+                                .font(.system(size: 12))
+                                .foregroundColor(FRTheme.mute)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        HStack(spacing: 8) {
+                            Button("前往设置") {
+                                SettingsNavigation.shared.selectedTab = .permissions
                             }
+                            .buttonStyle(.frSecondary)
+                            Button("授权辅助功能…") { requestAccessibility() }
+                                .buttonStyle(.frPrimary)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(FRTheme.warnBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(FRTheme.warnText.opacity(0.25), lineWidth: 1)
+                    )
                 }
 
                 // 授权后按键拦截立即生效，不用重启；只有退回服务快捷键时才需要
@@ -119,14 +150,6 @@ struct ShortcutsTab: View {
                                      interceptorAvailable: interceptorAvailable(for: action.id),
                                      onToggleRecording: { toggleRecording(for: action.id) },
                                      onClear: { clearShortcut(for: action.id) })
-                    }
-                }
-
-                FRCard {
-                    FRRow(title: Text("恢复默认快捷键"),
-                          subtitle: Text("恢复默认组合，其余清空")) {
-                        Button("恢复默认…") { confirmRestoreDefaults() }
-                            .buttonStyle(.frSecondary)
                     }
                 }
 
@@ -339,9 +362,12 @@ struct ShortcutCell: View {
     let onToggleRecording: () -> Void
     let onClear: () -> Void
 
+    @FRState private var isHoveringKey = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 12) {
-            FRIconChip(systemName: actionIcon)
+            FRIconChip(systemName: actionIcon, style: .subtle)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(actionName))
@@ -364,19 +390,19 @@ struct ShortcutCell: View {
                                         NSLocalizedString(reserved.name, comment: "")))
                         }
                     }
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundColor(FRTheme.warnText)
                 } else if actionId == FinderKeyTakeover.pasteActionId {
                     Text("粘贴到当前文件夹，空白处可用")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(FRTheme.mute)
                 } else if actionId == FinderKeyTakeover.toggleHiddenActionId && !interceptorAvailable {
                     Text("需辅助功能权限，否则仅右键展开时生效")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(FRTheme.mute)
                 } else if let subtitleOverride {
                     Text(verbatim: subtitleOverride)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(subtitleIsWarning ? FRTheme.warnText : FRTheme.mute)
                 }
             }
@@ -401,27 +427,31 @@ struct ShortcutCell: View {
                 .padding(.vertical, 5)
                 .frame(minWidth: 84)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isRecording ? FRTheme.selection : FRTheme.field)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isRecording ? FRTheme.selection : (isHoveringKey ? FRTheme.dropdownHoverFill : FRTheme.field))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(isRecording ? FRTheme.accentText : FRTheme.fieldBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            isRecording ? FRTheme.accentText : (isHoveringKey ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder),
+                            lineWidth: 1
+                        )
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .animation(.easeInOut(duration: 0.15), value: isRecording)
+            .onHover { isHoveringKey = $0 }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isRecording)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHoveringKey)
 
-            Button(action: onClear) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(FRTheme.mute.opacity(0.7))
-            }
-            .buttonStyle(.plain)
-            .opacity(shortcut != nil && !isRecording ? 1 : 0)
-            .help("清除")
+            let canClear = shortcut != nil && !isRecording
+            FRIconButton(systemName: "xmark", help: "清除", isDestructive: true, action: onClear)
+                .opacity(canClear ? 1 : 0)
+                .allowsHitTesting(canClear)
+                .accessibilityHidden(!canClear)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
 
     private func displayString(_ s: ActionShortcut) -> String {

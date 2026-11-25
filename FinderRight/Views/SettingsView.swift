@@ -169,6 +169,18 @@ struct SettingsView: View {
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsView.SettingsTab
 
+    private struct TabGroup: Identifiable {
+        let id: String
+        let titleKey: LocalizedStringKey
+        let tabs: [SettingsView.SettingsTab]
+    }
+
+    private let groups: [TabGroup] = [
+        TabGroup(id: "core", titleKey: "基础", tabs: [.general, .features, .shortcuts]),
+        TabGroup(id: "custom", titleKey: "定制", tabs: [.newFile, .favorites, .tools, .editors]),
+        TabGroup(id: "system", titleKey: "系统", tabs: [.developer, .history, .permissions, .about]),
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 顶部留出红绿灯的位置
@@ -185,10 +197,19 @@ private struct SettingsSidebar: View {
             .padding(.horizontal, 16)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 2) {
-                    ForEach(SettingsView.SettingsTab.allCases, id: \.self) { tab in
-                        SidebarItem(tab: tab, isSelected: selection == tab) {
-                            selection = tab
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(groups) { group in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(group.titleKey)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(FRTheme.mute.opacity(0.85))
+                                .padding(.horizontal, 10)
+                                .padding(.bottom, 4)
+                            ForEach(group.tabs, id: \.self) { tab in
+                                SidebarItem(tab: tab, isSelected: selection == tab) {
+                                    selection = tab
+                                }
+                            }
                         }
                     }
                 }
@@ -197,6 +218,10 @@ private struct SettingsSidebar: View {
             .padding(.horizontal, 10)
 
             Spacer(minLength: 0)
+
+            FRDivider()
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
 
             Text(verbatim: "v\(UpdateChecker.shared.currentAppVersion)")
                 .font(.system(size: 11.5, design: .monospaced))
@@ -215,6 +240,7 @@ private struct SidebarItem: View {
     let isSelected: Bool
     let action: () -> Void
     @FRState private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -234,10 +260,15 @@ private struct SidebarItem: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isSelected ? FRTheme.selection : (isHovering ? FRTheme.hover : Color.clear))
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? FRTheme.accent.opacity(0.18) : Color.clear, lineWidth: 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

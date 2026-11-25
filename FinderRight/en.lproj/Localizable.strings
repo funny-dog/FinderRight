@@ -103,6 +103,7 @@
 "启动" = "Startup";
 "显示" = "Appearance";
 "主题色" = "Theme Color";
+"暖陶" = "Warm Terracotta";
 "午夜薄荷" = "Midnight Mint";
 "晴空蓝" = "Sky Blue";
 "薰衣草紫" = "Lavender";
@@ -1288,3 +1289,31 @@
 "大写" = "UPPERCASE";
 "首字母大写" = "Capitalized";
 "日期位置" = "Date position";
+
+/* Sidebar groups & P1 UI polish */
+"基础" = "Core";
+"定制" = "Customize";
+"系统" = "System";
+"复制选项" = "Copy Options";
+"复制路径格式" = "Copy Path Format";
+"复制文件名格式" = "Copy File Name Format";
+"复制文件内容上限" = "Copy File Content Limit";
+"路径与文件名多选时每行一项（Shell 转义以空格分隔）；文件内容仅单选且不超过上限时显示。" = "Multiple items copy one per line (space-separated for Shell Escaped); file content applies only to single files within the limit.";
+"查看源码、版本发布或点个 Star" = "Source code, releases, and GitHub stars";
+"产品介绍与安装包下载" = "Overview and installer downloads";
+"提交问题反馈或功能建议" = "Report a bug or suggest a feature";
+"查看各版本功能演进" = "See what changed across versions";
+"访达扩展未启用，右键菜单暂不可用" = "Finder extension is off; context menu unavailable";
+"前往启用" = "Enable";
+"源码与版本发布" = "Source code & releases";
+"介绍与安装包" = "Overview & downloads";
+"问题与功能想法" = "Bugs & feature ideas";
+"各版本功能演进" = "Release history";
+"启动与更新" = "Startup & Updates";
+"外观" = "Appearance";
+"系统入口" = "System Integration";
+"访达增强" = "Finder Enhancements";
+"前往设置" = "Open Settings";
+"批量" = "Batch";
+"打开路径全局快捷键" = "Global Go to Path Shortcut";
+"自动解决剪切角标冲突" = "Resolve Cut Badge Conflicts Automatically";

@@ -22,6 +22,7 @@ final class CommandExecution: ObservableObject {
 struct CommandOutputView: View {
     @ObservedObject var execution: CommandExecution
     let directory: URL
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,8 +31,8 @@ struct CommandOutputView: View {
                 .foregroundColor(FRTheme.mute)
                 .textSelection(.enabled)
             CommandOutputTextView(text: execution.output)
-                .background(FRTheme.field)
-                .cornerRadius(8)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(FRTheme.field))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(FRTheme.fieldBorder, lineWidth: 1))
             if execution.truncated {
                 Text("仅显示最后 128 KiB 输出")
                     .font(.system(size: 12))
@@ -68,6 +69,7 @@ struct CommandOutputView: View {
         .frame(minWidth: 520, minHeight: 300)
         .foregroundColor(FRTheme.text)
         .background(FRTheme.window)
+        .id(themeRaw)
     }
 }
 
@@ -88,7 +90,7 @@ private struct CommandOutputTextView: NSViewRepresentable {
         textView.isRichText = false
         textView.drawsBackground = false
         textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textColor = .labelColor
+        textView.textColor = FRThemeID.current.palette.text.resolved(for: scrollView.effectiveAppearance)
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = true
@@ -103,8 +105,9 @@ private struct CommandOutputTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView,
-              textView.string != text else { return }
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        textView.textColor = FRThemeID.current.palette.text.resolved(for: scrollView.effectiveAppearance)
+        guard textView.string != text else { return }
         let clipView = scrollView.contentView
         let docHeight = textView.bounds.height
         let wasAtBottom = docHeight <= clipView.bounds.height || (docHeight - clipView.bounds.maxY) <= 24

@@ -15,6 +15,8 @@ struct FeedbackSheet: View {
     @FRState private var kind: Kind = .bug
     @FRState private var sections: DiagnosticsReport.Sections?
     @FRState private var didCopy = false
+    @FRState private var hoveredKind: Kind?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -113,6 +115,7 @@ struct FeedbackSheet: View {
 
     private func option(_ value: Kind, symbol: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
         let selected = kind == value
+        let hovered = hoveredKind == value
         return Button {
             kind = value
         } label: {
@@ -136,15 +139,19 @@ struct FeedbackSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(selected ? FRTheme.selection : FRTheme.card)
+                    .fill(selected ? FRTheme.selection : (hovered ? FRTheme.hover : FRTheme.card))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(selected ? FRTheme.accent : FRTheme.border, lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? FRTheme.accent : (hovered ? FRTheme.text.opacity(0.22) : FRTheme.border), lineWidth: selected ? 1.5 : 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { inside in
+            if inside { hoveredKind = value } else if hoveredKind == value { hoveredKind = nil }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: hovered)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

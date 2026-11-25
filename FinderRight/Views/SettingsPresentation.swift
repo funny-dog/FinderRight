@@ -4,9 +4,17 @@ import QuartzCore
 
 enum SettingsWindowLayout {
     static let compactSize = NSSize(width: 340, height: 280)
-    static let minimumFullSize = NSSize(width: 680, height: 500)
+    static let minimumFullSize = NSSize(width: 620, height: 440)
     static let defaultFullSize = NSSize(width: 780, height: 620)
     static let duration = 0.28
+
+    /// 将完整模式尺寸钳制到不小于最小完整尺寸。
+    static func clampedFullSize(_ size: NSSize) -> NSSize {
+        NSSize(
+            width: max(size.width, minimumFullSize.width),
+            height: max(size.height, minimumFullSize.height)
+        )
+    }
 
     /// 保持右上角不动；展开超出屏幕时，仅移动到可见区域内。
     static func frame(from current: NSRect, size: NSSize, visibleFrame: NSRect) -> NSRect {
@@ -34,8 +42,7 @@ final class SettingsPresentation: ObservableObject {
         self.defaults = defaults
         isCompact = defaults.bool(forKey: Self.compactKey)
         if let size = defaults.array(forKey: Self.fullSizeKey) as? [Double], size.count == 2 {
-            fullSize = NSSize(width: max(size[0], SettingsWindowLayout.minimumFullSize.width),
-                              height: max(size[1], SettingsWindowLayout.minimumFullSize.height))
+            fullSize = SettingsWindowLayout.clampedFullSize(NSSize(width: size[0], height: size[1]))
         } else {
             fullSize = SettingsWindowLayout.defaultFullSize
         }
@@ -49,6 +56,15 @@ final class SettingsPresentation: ObservableObject {
         window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)
         window.center()
         _ = window.setFrameUsingName(frameName)
+        if !isCompact {
+            let clamped = SettingsWindowLayout.clampedFullSize(window.frame.size)
+            if clamped != window.frame.size {
+                let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+                window.setFrame(SettingsWindowLayout.frame(from: window.frame, size: clamped, visibleFrame: visibleFrame),
+                                display: false)
+            }
+            fullSize = window.frame.size
+        }
         applySizeLimits(to: window)
         window.setFrameAutosaveName(frameName)
     }
@@ -69,8 +85,8 @@ final class SettingsPresentation: ObservableObject {
         let id = UUID()
         transitionID = id
         let currentWindow = window
-        if compact, let currentWindow {
-            fullSize = currentWindow.frame.size
+        if compact, let currentWindow, !isTransitioning {
+            fullSize = SettingsWindowLayout.clampedFullSize(currentWindow.frame.size)
             defaults.set([Double(fullSize.width), Double(fullSize.height)], forKey: Self.fullSizeKey)
         }
         currentWindow?.saveFrame(usingName: frameName)
@@ -82,7 +98,7 @@ final class SettingsPresentation: ObservableObject {
 
         window.minSize = SettingsWindowLayout.compactSize
         window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        let size = compact ? SettingsWindowLayout.compactSize : fullSize
+        let size = compact ? SettingsWindowLayout.compactSize : SettingsWindowLayout.clampedFullSize(fullSize)
         let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
         let target = SettingsWindowLayout.frame(from: window.frame, size: size, visibleFrame: visibleFrame)
         NSAnimationContext.runAnimationGroup { context in

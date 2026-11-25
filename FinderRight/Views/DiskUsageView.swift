@@ -99,17 +99,19 @@ final class DiskUsageModel: ObservableObject {
 struct DiskUsageView: View {
     @ObservedObject var model: DiskUsageModel
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(FRThemeID.storageKey) private var themeRaw = FRThemeID.midnight.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
             headerBar
-            Divider()
+            FRDivider()
             contentArea
-            Divider()
+            FRDivider()
             footerBar
         }
         .frame(minWidth: 480, minHeight: 340)
         .background(FRTheme.window)
+        .id(themeRaw)
     }
 
     // MARK: - 顶栏
@@ -117,40 +119,29 @@ struct DiskUsageView: View {
     private var headerBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: "internaldrive.fill")
-                    .font(.system(size: 26))
-                    .foregroundColor(FRTheme.accent)
+                FRIconChip(systemName: "internaldrive.fill", size: 34)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(model.targetURL?.lastPathComponent ?? NSLocalizedString("磁盘占用", comment: ""))
                             .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(FRTheme.text)
                             .lineLimit(1)
                         if model.copiedFeedback {
-                            Text(NSLocalizedString("已复制路径", comment: ""))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(FRTheme.okText)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(FRTheme.okBackground)
-                                .cornerRadius(4)
+                            FRChip(text: Text(NSLocalizedString("已复制路径", comment: "")), kind: .ok)
                         }
                     }
 
                     HStack(spacing: 4) {
                         Text(model.targetURL?.path ?? "")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11.5, design: .monospaced))
                             .foregroundColor(FRTheme.mute)
                             .lineLimit(1)
                             .truncationMode(.middle)
 
-                        Button(action: { model.copyPath() }) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 10))
-                                .foregroundColor(FRTheme.mute)
+                        FRIconButton(systemName: "doc.on.doc", help: "复制完整路径") {
+                            model.copyPath()
                         }
-                        .buttonStyle(.plain)
-                        .help(NSLocalizedString("复制完整路径", comment: ""))
                     }
                 }
 
@@ -182,7 +173,7 @@ struct DiskUsageView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(volumeInfo)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11.5))
                             .foregroundColor(FRTheme.mute)
                         Spacer()
                     }
@@ -190,7 +181,7 @@ struct DiskUsageView: View {
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.primary.opacity(0.08))
+                                    .fill(FRTheme.segmentedTrack)
                                     .frame(height: 4)
                                 RoundedRectangle(cornerRadius: 2)
                                     .fill(FRTheme.accent)
@@ -202,7 +193,8 @@ struct DiskUsageView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     // MARK: - 主体列表
@@ -252,31 +244,31 @@ struct DiskUsageView: View {
             // 列标头
             HStack(spacing: 8) {
                 Text(NSLocalizedString("名称", comment: ""))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(FRTheme.mute)
                 Spacer()
                 Text(NSLocalizedString("占比", comment: ""))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(FRTheme.mute)
                     .frame(width: 100, alignment: .trailing)
                 Text(NSLocalizedString("大小", comment: ""))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(FRTheme.mute)
                     .frame(width: 75, alignment: .trailing)
                 Text("") // 占位给操作按钮
-                    .frame(width: 24)
+                    .frame(width: 26)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.02))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background(FRTheme.card)
 
-            Divider()
+            FRDivider()
 
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(items) { item in
                         DiskUsageRow(item: item)
-                        Divider().padding(.leading, 38)
+                        FRDivider().padding(.leading, 40)
                     }
                 }
             }
@@ -294,7 +286,7 @@ struct DiskUsageView: View {
                     breakdown.directDirectoryCount,
                     breakdown.directFileCount
                 ))
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundColor(FRTheme.mute)
             }
             Spacer()
@@ -304,7 +296,7 @@ struct DiskUsageView: View {
             .buttonStyle(.frSecondary)
             .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
 }
@@ -314,16 +306,18 @@ struct DiskUsageView: View {
 private struct DiskUsageRow: View {
     let item: DiskUsageItem
     @FRState private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: item.isDirectory ? "folder.fill" : fileSymbol(for: item.name))
                 .font(.system(size: 14))
-                .foregroundColor(item.isDirectory ? Color.accentColor : FRTheme.mute)
+                .foregroundColor(item.isDirectory ? FRTheme.accentText : FRTheme.mute)
                 .frame(width: 18)
 
             Text(item.name)
-                .font(.system(size: 12))
+                .font(.system(size: 12.5))
+                .foregroundColor(FRTheme.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -334,7 +328,7 @@ private struct DiskUsageRow: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(FRTheme.segmentedTrack)
                         RoundedRectangle(cornerRadius: 2)
                             .fill(FRTheme.accent)
                             .frame(width: max(1, geo.size.width * CGFloat(item.percentage)))
@@ -343,31 +337,27 @@ private struct DiskUsageRow: View {
                 .frame(width: 60, height: 6)
 
                 Text(String(format: "%.1f%%", item.percentage * 100))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 11.5, design: .monospaced))
                     .foregroundColor(FRTheme.mute)
-                    .frame(width: 44, alignment: .trailing)
+                    .frame(width: 46, alignment: .trailing)
             }
-            .frame(width: 115, alignment: .trailing)
+            .frame(width: 118, alignment: .trailing)
 
             Text(item.formattedSize)
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundColor(FRTheme.text)
                 .frame(width: 75, alignment: .trailing)
 
-            Button(action: { revealInFinder(path: item.path) }) {
-                Image(systemName: "arrow.up.forward.app")
-                    .font(.system(size: 11))
-                    .foregroundColor(isHovered ? FRTheme.accent : FRTheme.mute.opacity(0.6))
+            FRIconButton(systemName: "arrow.up.forward.app", help: "在访达中定位") {
+                revealInFinder(path: item.path)
             }
-            .buttonStyle(.plain)
-            .frame(width: 24)
-            .help(NSLocalizedString("在访达中定位", comment: ""))
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .background(isHovered ? FRTheme.hover : Color.clear)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
     }
 
     private func revealInFinder(path: String) {

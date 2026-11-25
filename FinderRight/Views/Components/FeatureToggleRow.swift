@@ -17,7 +17,7 @@ struct FeatureToggleRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            FRIconChip(systemName: feature.systemImage)
+            FRIconChip(systemName: feature.systemImage, style: .subtle)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(feature.nameKey))

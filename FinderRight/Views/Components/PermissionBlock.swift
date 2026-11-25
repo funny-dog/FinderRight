@@ -30,7 +30,10 @@ struct PermissionBlock: View {
                         .foregroundColor(granted ? FRTheme.okText : FRTheme.warnText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+                if granted {
+                    FRChip(text: Text(grantedDetail), kind: .ok)
+                }
             }
 
             if !granted {
