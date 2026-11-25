@@ -1119,10 +1119,11 @@
 "正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
 "清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
 
-/* v1.13.5 更新日志 */
+/* v1.14.0 更新日志 */
 "新增「暖陶」主题色并全面优化 7 套主题配色与对比度，升级输入框、图标块与按钮交互反馈" = "Added the Warm Terracotta theme, refined colors and contrast across all 7 themes, and upgraded hover and focus feedback for inputs, icon chips, and buttons";
-"设置侧边栏按「基础 / 定制 / 系统」分组，重构关于页卡片布局与标题排版，并精简国内站说明" = "Grouped the Settings sidebar into Core, Customize, and System, redesigned the About page layout and title alignment, and refined the China Mirror description";
-"修复完整设置窗口最小尺寸限制被重置的问题，以及操作历史「清空历史」按钮文字竖排的问题" = "Fixed the full Settings window minimum size limit being reset and fixed vertical text wrapping on the Clear History button";
+"优化右键菜单剪切队列交互：非空时收拢为「剪切队列」子菜单，已剪切项支持右键「移出剪切队列」，同目录内「粘贴」自动置灰" = "Improved the cut queue context menu: grouped queue actions into a Cut Queue submenu, added Remove from Cut Queue for queued items, and disabled Paste in the same folder";
+"收紧右键菜单上下文过滤（按场景按需显示文件比较、代码行数统计、打开路径、切换隐藏文件与常用目录），设置侧边栏按「基础 / 定制 / 系统」分组并重构关于页布局" = "Refined context menu filtering for file comparison, line count, Go to Path, hidden files, and favorite folders; grouped the Settings sidebar into Core, Customize, and System and redesigned the About page layout";
+"修复访达侧边栏右键菜单项与目标错位、完整设置窗口最小尺寸限制被重置，以及操作历史「清空历史」按钮文字竖排的问题" = "Fixed Finder sidebar context menu items and target resolution, full Settings window minimum size resets, and vertical text wrapping on the Clear History button";
 
 /* v1.13.4 更新日志 */
 "新增批量重命名（默认关闭）：多选后支持查找替换、前后缀、序号、日期与大小写规则，可实时预览、提示冲突并撤销" = "Added Batch Rename (off by default): rename multiple items by find & replace, prefix/suffix, numbering, date, or letter case with live preview, conflict checks, and undo";

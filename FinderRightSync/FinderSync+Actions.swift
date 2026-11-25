@@ -46,8 +46,7 @@ extension FinderSync {
     }
 
     @objc func copyPath(_ sender: NSMenuItem) {
-        let (directory, selected) = currentContext()
-        let urls = selected.isEmpty ? [directory].compactMap { $0 } : selected
+        let urls = resolveMenuTargetURLs()
         guard !urls.isEmpty else { logToFile("copyPath: no items"); return }
         // 主目录必须用真实路径：沙箱扩展里 NSHomeDirectory() 指向自己的容器目录
         let format = SharedConfig.shared.copyPathFormat

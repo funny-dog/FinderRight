@@ -213,6 +213,14 @@ class FinderSync: FIFinderSync {
         return commandDirectory ?? currentContext().directory
     }
 
+    /// 按最近一次菜单上下文返回目标 URL：选中项菜单取 `commandSelection`，侧边栏或容器菜单取 `commandDirectory`。
+    func resolveMenuTargetURLs() -> [URL] {
+        if !commandSelection.isEmpty { return commandSelection }
+        if let dir = commandDirectory { return [dir] }
+        let (directory, selected) = currentContext()
+        return selected.isEmpty ? [directory].compactMap { $0 } : selected
+    }
+
     // MARK: - Directory Observation
 
     /// Finder 开始显示某个受监控目录时调用。目录内有剪切项、且本进程首次观察该目录时，顺带做一次角标归属探测：
