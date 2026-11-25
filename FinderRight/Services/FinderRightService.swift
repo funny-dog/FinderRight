@@ -266,80 +266,211 @@ final class FinderRightService {
     /// 单个请求在 IPC 上最多占用的时间（菜单侧只等 250 ms，这里与之对齐，多留一点写响应的时间）
     static let diskUsageResponseWait: TimeInterval = 0.45
 
-    /// 结果缓存：入口是「进入目录时的预热」，右键时直接命中，才能做到立即显示数字。
+    /// 结果缓存：入口是「进入目录时的预热」与右键/详情窗扫描，命中后直接给出数字。
     ///
-    /// 有效期要覆盖「进入目录 → 停留一会儿 → 右键」这段真实使用间隔，太短会让预热白做；
-    /// 太长又可能显示明显过期的数字。10 分钟是折中，期间同一目录再次进入会重新预热。
+    /// 仅缓存目录；单文件走微秒级 `lstat` 实时读取。
+    /// 缓存配合 FSEvents 被动失效：只移除受变更路径影响的缓存条目，绝不后台重扫，
+    /// 10 分钟 TTL 仅作网络卷或异常事件时的兜底上限。
     private static let diskUsageCache = DiskUsageCache(capacity: 512)
     static let diskUsageCacheTTL: TimeInterval = 600
+
+    /// 缓存失效监听队列与 FSEvents 子树监视器（只负责标脏，不触发扫描）
+    private static let diskUsageWatcherQueue = DispatchQueue(
+        label: "com.finderright.app.diskusage.watcher",
+        qos: .utility
+    )
+    private static var diskUsageWatcherSyncWorkItem: DispatchWorkItem?
+    private static var diskUsageWatchedRootsEmpty = true
+    private static let diskUsageWatcher = SubtreeWatcher(
+        queue: diskUsageWatcherQueue,
+        latency: 0.5
+    ) { changes in
+        handleDiskUsageChanges(changes)
+    }
+
+    private static func handleDiskUsageChanges(_ changes: [FSEventChange]) {
+        if changes.contains(where: \.requiresFullReset) {
+            diskUsageCache.removeAll()
+            ServicesProvider.trace("diskUsage FSEvents 全量失效缓存")
+            syncDiskUsageWatcherNow()
+            return
+        }
+        var removed = 0
+        for change in changes {
+            removed += diskUsageCache.invalidate(
+                changedPath: change.path,
+                includeDescendants: change.includesDescendants
+            )
+        }
+        if removed > 0 {
+            ServicesProvider.trace("diskUsage FSEvents 失效缓存 \(removed) 项")
+            scheduleDiskUsageWatcherSync()
+        }
+    }
+
+    /// 合并同步 FSEvents 监听根目录：首次从空转非空立即启动，后续变化防抖 0.3 秒避免预热期间频繁重建流。
+    private static func scheduleDiskUsageWatcherSync() {
+        diskUsageWatcherQueue.async {
+            if diskUsageWatchedRootsEmpty {
+                diskUsageWatcherSyncWorkItem?.cancel()
+                diskUsageWatcherSyncWorkItem = nil
+                syncDiskUsageWatcherNow()
+                return
+            }
+            diskUsageWatcherSyncWorkItem?.cancel()
+            let item = DispatchWorkItem {
+                diskUsageWatcherSyncWorkItem = nil
+                syncDiskUsageWatcherNow()
+            }
+            diskUsageWatcherSyncWorkItem = item
+            diskUsageWatcherQueue.asyncAfter(deadline: .now() + 0.3, execute: item)
+        }
+    }
+
+    private static func syncDiskUsageWatcherNow() {
+        let roots = diskUsageCache.coveringRoots(ttl: diskUsageCacheTTL)
+        diskUsageWatchedRootsEmpty = roots.isEmpty
+        diskUsageWatcher.watch(roots)
+    }
+
+    /// 供详情弹窗在开始扫描前采集失效版本号，用于回写缓存时避免覆盖更晚的变更。
+    static func currentDiskUsageCacheRevision() -> UInt64 {
+        diskUsageCache.currentRevision()
+    }
+
+    /// 详情弹窗扫描完成后回写根目录与直接子目录缓存，保持菜单与详情窗数字一致。
+    static func recordDiskUsageBreakdown(
+        _ breakdown: DiskUsageBreakdown,
+        rootStamp: DiskUsageStamp?,
+        since startRevision: UInt64
+    ) {
+        var storedAny = false
+        let rootPath = DiskUsage.canonicalPath(for: breakdown.directoryURL)
+        if diskUsageCache.store(
+            breakdown.totalBytes,
+            for: rootPath,
+            stamp: rootStamp,
+            ifNotInvalidatedSince: startRevision
+        ) {
+            storedAny = true
+        }
+        for item in breakdown.items where item.isDirectory {
+            let itemURL = URL(fileURLWithPath: item.path)
+            let canonical = DiskUsage.canonicalPath(for: itemURL)
+            let stamp = DiskUsageStamp.captureDirectory(atPath: item.path)
+            if diskUsageCache.store(
+                item.bytes,
+                for: canonical,
+                stamp: stamp,
+                ifNotInvalidatedSince: startRevision
+            ) {
+                storedAny = true
+            }
+        }
+        if storedAny {
+            scheduleDiskUsageWatcherSync()
+        }
+    }
 
     private func diskUsage(_ req: IPCRequest) -> IPCResponse {
         guard let path = req.payload["path"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: nil)
         }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-        let normalized = url.standardizedFileURL.path
-
-        if let cached = Self.diskUsageCache.value(for: normalized, ttl: Self.diskUsageCacheTTL) {
-            ServicesProvider.trace("diskUsage 命中缓存 bytes=\(cached)")
-            return IPCResponse(id: req.id, success: true, message: String(cached))
-        }
-
-        // 菜单最多等 diskUsageResponseWait；等不到就返回失败，但**后台继续算到底**并写入缓存，
-        // 这样大目录下次右键就能立刻命中缓存（否则每次都在同一处超时，永远算不出来）。
-        let scanDeadline = Date().addingTimeInterval(Self.diskUsageScanTimeout)
-        let outcome = DiskUsageJob.run(
-            url: url,
-            path: normalized,
-            scanDeadline: scanDeadline,
-            waitTimeout: Self.diskUsageResponseWait,
-            cache: Self.diskUsageCache,
-            cacheTTL: Self.diskUsageCacheTTL
-        )
-        guard let outcome else {
-            ServicesProvider.trace("diskUsage 超时返回 path=\((normalized as NSString).lastPathComponent)")
+        guard let probe = DiskUsage.probe(atPath: url.path) else {
             return IPCResponse(id: req.id, success: false, message: nil)
         }
-        return IPCResponse(id: req.id, success: true, message: String(outcome))
+
+        switch probe {
+        case .regularFile(let bytes):
+            // 单文件只需一次微秒级 lstat，不走缓存，体积变化实时反映
+            return IPCResponse(id: req.id, success: true, message: String(bytes))
+
+        case .directory(let stamp):
+            let normalized = DiskUsage.canonicalPath(for: url)
+            if let cached = Self.diskUsageCache.value(
+                for: normalized,
+                ttl: Self.diskUsageCacheTTL,
+                currentStamp: stamp
+            ) {
+                ServicesProvider.trace("diskUsage 命中缓存 bytes=\(cached)")
+                return IPCResponse(id: req.id, success: true, message: String(cached))
+            }
+
+            // 菜单最多等 diskUsageResponseWait；等不到就返回失败，但**后台继续算到底**并写入缓存，
+            // 这样大目录下次右键就能立刻命中缓存（否则每次都在同一处超时，永远算不出来）。
+            let scanDeadline = Date().addingTimeInterval(Self.diskUsageScanTimeout)
+            let outcome = DiskUsageJob.run(
+                url: url,
+                path: normalized,
+                stamp: stamp,
+                scanDeadline: scanDeadline,
+                waitTimeout: Self.diskUsageResponseWait,
+                cache: Self.diskUsageCache,
+                cacheTTL: Self.diskUsageCacheTTL,
+                onStore: { Self.scheduleDiskUsageWatcherSync() }
+            )
+            guard let outcome else {
+                ServicesProvider.trace("diskUsage 超时返回 path=\((normalized as NSString).lastPathComponent)")
+                return IPCResponse(id: req.id, success: false, message: nil)
+            }
+            return IPCResponse(id: req.id, success: true, message: String(outcome))
+        }
     }
 
-    /// 预热一个目录下各项的占用：供扩展在用户「进入目录」时调用。
+    /// 预热一个目录下各子目录的占用：供扩展在用户「进入目录」时调用。
     ///
     /// 必须在后台做且立刻返回：用户浏览目录时会被频繁调用，不能占住 IPC 队列。
-    /// 只预热直接子项、数量有上限，避免浏览超大目录时把机器拖慢。
+    /// 只预热直接子目录（常规文件实时 lstat 不缓存）、数量有上限，避免浏览超大目录时把机器拖慢。
     private func prefetchDiskUsage(_ req: IPCRequest) -> IPCResponse {
         guard let raw = req.payload["directory"]?.stringValue else {
             return IPCResponse(id: req.id, success: false, message: nil)
         }
         let directory = URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+        guard case .directory(let dirStamp) = DiskUsage.probe(atPath: directory.path) else {
+            return IPCResponse(id: req.id, success: false, message: "无法读取目录")
+        }
 
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
             return IPCResponse(id: req.id, success: false, message: "无法读取目录")
         }
+        let normalizedDir = DiskUsage.canonicalPath(for: directory)
         let paths = names.prefix(Self.prefetchItemLimit).map { directory.appendingPathComponent($0).path }
         guard !paths.isEmpty else {
-            let normalizedDir = directory.standardizedFileURL.path
-            Self.diskUsageCache.store(0, for: normalizedDir)
+            if Self.diskUsageCache.store(0, for: normalizedDir, stamp: dirStamp) {
+                Self.scheduleDiskUsageWatcherSync()
+            }
             return IPCResponse(id: req.id, success: true, message: "空目录")
         }
 
         // 排队预热：单个任务串行跑，避免用户快速切换目录时同时开一堆扫描抢 IO
         for path in paths {
             let itemURL = URL(fileURLWithPath: path)
-            let normalized = itemURL.standardizedFileURL.path
             Self.diskUsageQueueForPrefetch.async {
-                if Self.diskUsageCache.value(for: normalized, ttl: Self.diskUsageCacheTTL) != nil { return }
-                let bytes = DiskUsage.allocatedBytes(at: itemURL)
-                if let bytes { Self.diskUsageCache.store(bytes, for: normalized) }
+                guard case .directory(let stamp) = DiskUsage.probe(atPath: itemURL.path) else { return }
+                let normalized = DiskUsage.canonicalPath(for: itemURL)
+                if Self.diskUsageCache.value(for: normalized, ttl: Self.diskUsageCacheTTL, currentStamp: stamp) != nil {
+                    return
+                }
+                let startRevision = Self.diskUsageCache.currentRevision()
+                if let bytes = DiskUsage.allocatedBytes(at: itemURL),
+                   Self.diskUsageCache.store(bytes, for: normalized, stamp: stamp, ifNotInvalidatedSince: startRevision) {
+                    Self.scheduleDiskUsageWatcherSync()
+                }
             }
         }
 
         // 预热目录本身：方便用户在空白处右键时直接命中缓存
-        let normalizedDir = directory.standardizedFileURL.path
         Self.diskUsageQueueForPrefetch.async {
-            if Self.diskUsageCache.value(for: normalizedDir, ttl: Self.diskUsageCacheTTL) != nil { return }
-            let bytes = DiskUsage.allocatedBytes(at: directory)
-            if let bytes { Self.diskUsageCache.store(bytes, for: normalizedDir) }
+            guard case .directory(let currentStamp) = DiskUsage.probe(atPath: directory.path) else { return }
+            if Self.diskUsageCache.value(for: normalizedDir, ttl: Self.diskUsageCacheTTL, currentStamp: currentStamp) != nil {
+                return
+            }
+            let startRevision = Self.diskUsageCache.currentRevision()
+            if let bytes = DiskUsage.allocatedBytes(at: directory),
+               Self.diskUsageCache.store(bytes, for: normalizedDir, stamp: currentStamp, ifNotInvalidatedSince: startRevision) {
+                Self.scheduleDiskUsageWatcherSync()
+            }
         }
         return IPCResponse(id: req.id, success: true, message: "\(paths.count)")
     }

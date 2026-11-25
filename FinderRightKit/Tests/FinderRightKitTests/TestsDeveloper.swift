@@ -95,6 +95,137 @@ enum DeveloperTests {
             try assertNil(cache.value(for: "/x", ttl: 60, now: now), "清空后无值")
         }
 
+        runTest("磁盘占用 probe 实时识别单文件体积变化与目录快照变化") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            let file = dir.appendingPathComponent("grow.bin")
+            try Data(repeating: 0x11, count: 16 * 1024).write(to: file)
+            guard case .regularFile(let beforeBytes) = DiskUsage.probe(atPath: file.path) else {
+                throw TestFailure(message: "常规文件 probe 应返回 .regularFile")
+            }
+            try assertTrue(beforeBytes >= 16 * 1024)
+
+            // 扩大单文件后 probe 应立刻拿到新体积
+            try Data(repeating: 0x22, count: 128 * 1024).write(to: file)
+            guard case .regularFile(let afterBytes) = DiskUsage.probe(atPath: file.path) else {
+                throw TestFailure(message: "修改后常规文件 probe 应返回 .regularFile")
+            }
+            try assertTrue(afterBytes > beforeBytes, "单文件扩容后实时探针应立即变大")
+
+            // 目录快照校验：新增直属文件后快照变化
+            guard case .directory(let stamp1) = DiskUsage.probe(atPath: dir.path) else {
+                throw TestFailure(message: "目录 probe 应返回 .directory")
+            }
+            let cache = DiskUsageCache()
+            let canonicalDir = DiskUsage.canonicalPath(for: dir)
+            cache.store(afterBytes, for: canonicalDir, stamp: stamp1)
+            try assertEqual(cache.value(for: canonicalDir, ttl: 60, currentStamp: stamp1), afterBytes)
+
+            // 模拟直属项变更后的新快照
+            let stampChanged = DiskUsageStamp(
+                device: stamp1.device,
+                fileID: stamp1.fileID,
+                mtimeSeconds: stamp1.mtimeSeconds + 1,
+                mtimeNanoseconds: stamp1.mtimeNanoseconds
+            )
+            try assertNil(cache.value(for: canonicalDir, ttl: 60, currentStamp: stampChanged), "目录快照变化应立刻失效缓存")
+            try assertNil(cache.value(for: canonicalDir, ttl: 60), "快照不匹配时应顺手清除旧条目")
+
+            // 符号链接与不存在路径均返回 nil
+            let link = dir.appendingPathComponent("sym")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+            try assertNil(DiskUsage.probe(atPath: link.path), "符号链接不应返回探测结果")
+            try assertNil(DiskUsage.probe(atPath: dir.appendingPathComponent("missing").path))
+        }
+
+        runTest("磁盘占用 DiskUsageCache 被动路径失效、版本号防回写与最小覆盖根") {
+            let cache = DiskUsageCache(capacity: 32)
+            let now = Date()
+
+            cache.store(1000, for: "/root", now: now)
+            cache.store(600, for: "/root/project", now: now)
+            cache.store(200, for: "/root/project/sub", now: now)
+            cache.store(300, for: "/root/project-other", now: now)
+            cache.store(400, for: "/elsewhere", now: now)
+
+            // 最小覆盖根应合并子路径，且不把 /root/project 误判为 /root/project-other 的祖先
+            try assertEqual(
+                DiskUsageCache.coveringRoots(of: [
+                    "/root/project/sub/",
+                    "/root/project",
+                    "/root/project-other",
+                    "/elsewhere",
+                ]),
+                Set(["/root/project", "/root/project-other", "/elsewhere"])
+            )
+
+            // 深层变更仅失效目标与祖先，不误伤兄弟目录及前缀相似目录
+            let removed = cache.invalidate(changedPath: "/root/project/sub/deep/")
+            try assertEqual(removed, 3, "应失效 /root、/root/project、/root/project/sub 三项")
+            try assertNil(cache.value(for: "/root", ttl: 60, now: now))
+            try assertNil(cache.value(for: "/root/project", ttl: 60, now: now))
+            try assertNil(cache.value(for: "/root/project/sub", ttl: 60, now: now))
+            try assertEqual(cache.value(for: "/root/project-other", ttl: 60, now: now), 300)
+            try assertEqual(cache.value(for: "/elsewhere", ttl: 60, now: now), 400)
+
+            // 子树失效（includeDescendants: true）应一并清除子孙条目
+            cache.store(500, for: "/root/project", now: now)
+            cache.store(100, for: "/root/project/a/b", now: now)
+            let subtreeRemoved = cache.invalidate(changedPath: "/ROOT/PROJECT", includeDescendants: true)
+            try assertEqual(subtreeRemoved, 2, "大小写不敏感的子树失效应清除自身与子孙")
+            try assertNil(cache.value(for: "/root/project/a/b", ttl: 60, now: now))
+
+            // 扫描期间若受影响路径失效，旧扫描结果不得回写污染缓存；无关路径失效则允许写入
+            let revBefore = cache.currentRevision()
+            cache.invalidate(changedPath: "/unrelated/dir")
+            let allowed = cache.store(777, for: "/root/fresh", ifNotInvalidatedSince: revBefore, now: now)
+            try assertTrue(allowed, "无关路径失效不应阻止本次缓存写入")
+            try assertEqual(cache.value(for: "/root/fresh", ttl: 60, now: now), 777)
+
+            let revMidScan = cache.currentRevision()
+            cache.invalidate(changedPath: "/root/scanning/child")
+            let rejected = cache.store(888, for: "/root/scanning", ifNotInvalidatedSince: revMidScan, now: now)
+            try assertTrue(!rejected, "扫描期间子路径已变更，旧结果不应写回缓存")
+            try assertNil(cache.value(for: "/root/scanning", ttl: 60, now: now))
+
+            // removeAll 后旧版本号写入也应被拒绝
+            let revBeforeReset = cache.currentRevision()
+            cache.removeAll()
+            let rejectedAfterReset = cache.store(999, for: "/root/after-reset", ifNotInvalidatedSince: revBeforeReset, now: now)
+            try assertTrue(!rejectedAfterReset, "全量清空后的旧扫描不得回写")
+            try assertTrue(cache.coveringRoots().isEmpty, "清空后覆盖根应为空")
+        }
+
+        runTest("磁盘占用 DiskUsageJob 写入缓存回调与扫描期间失效防污染") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            try Data(repeating: 0x33, count: 32 * 1024).write(to: dir.appendingPathComponent("a.bin"))
+
+            DiskUsageJob.resetForTesting()
+            let cache = DiskUsageCache()
+            let path = DiskUsage.canonicalPath(for: dir)
+
+            var storeCallbacks = 0
+            let lock = NSLock()
+            let result = DiskUsageJob.run(
+                url: dir,
+                path: path,
+                scanDeadline: nil,
+                waitTimeout: 5,
+                cache: cache,
+                cacheTTL: 60,
+                onStore: {
+                    lock.lock()
+                    storeCallbacks += 1
+                    lock.unlock()
+                }
+            )
+            try assertTrue((result ?? 0) >= 32 * 1024)
+            try assertEqual(storeCallbacks, 1, "首次写入缓存应触发 onStore 回调")
+            try assertEqual(cache.value(for: path, ttl: 60), result)
+        }
+
         runTest("磁盘占用 超时后后台继续算完，下次命中缓存") {
             // 这是「大目录永远不显示」的回归测试：调用方等不到结果，
             // 但任务必须继续跑完并写缓存，否则每次右键都超时、永远没有数字。

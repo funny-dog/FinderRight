@@ -190,15 +190,57 @@ public enum DiskUsage {
         )
     }
 
+    // MARK: - 探测与路径规范化
+
+    /// 一次 `lstat` 判定目标类型：
+    /// - 常规文件直接返回分配大小（微秒级，无需进缓存，修改立即反映）；
+    /// - 真实目录返回元数据快照供缓存校验；
+    /// - 符号链接、不存在或特殊文件返回 nil。
+    public static func probe(atPath path: String) -> DiskUsageProbe? {
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return nil }
+        switch info.st_mode & S_IFMT {
+        case S_IFREG:
+            return .regularFile(bytes: Int64(info.st_blocks) * 512)
+        case S_IFDIR:
+            return .directory(stamp: DiskUsageStamp(
+                device: info.st_dev,
+                fileID: info.st_ino,
+                mtimeSeconds: info.st_mtimespec.tv_sec,
+                mtimeNanoseconds: info.st_mtimespec.tv_nsec
+            ))
+        default:
+            return nil
+        }
+    }
+
+    /// 规范化路径键，解析祖先符号链接（如 `/tmp` → `/private/tmp`）并去除结尾斜杠，
+    /// 使缓存键与 FSEvents 上报的真实路径一致；路径不存在时退回标准路径。
+    public static func canonicalPath(for url: URL) -> String {
+        canonicalPath(forPath: url.standardizedFileURL.path)
+    }
+
+    public static func canonicalPath(forPath path: String) -> String {
+        let trimmed = trimTrailingSlash(path)
+        guard let resolved = realpath(trimmed, nil) else { return trimmed }
+        defer { free(resolved) }
+        return trimTrailingSlash(String(cString: resolved))
+    }
+
+    static func trimTrailingSlash(_ path: String) -> String {
+        var result = path
+        while result.count > 1, result.hasSuffix("/") {
+            result.removeLast()
+        }
+        return result
+    }
+
     // MARK: - 单文件
 
     /// 普通文件的分配大小。符号链接、目录、读不到时返回 nil
-    static func regularFileAllocatedSize(atPath path: String) -> Int64?  {
-        var info = stat()
-        // lstat：链接本身按其自身大小计，不跟随到目标
-        guard lstat(path, &info) == 0 else { return nil }
-        guard info.st_mode & S_IFMT == S_IFREG else { return nil }
-        return Int64(info.st_blocks) * 512
+    static func regularFileAllocatedSize(atPath path: String) -> Int64? {
+        guard case .regularFile(let bytes) = probe(atPath: path) else { return nil }
+        return bytes
     }
 
     // MARK: - 目录
@@ -469,54 +511,225 @@ enum BulkDirectoryAttributes {
     }
 }
 
-// MARK: - 结果缓存
+// MARK: - 目录快照与结果缓存
 
-/// 目录占用结果的进程内缓存（带有效期）。
+/// 目录的轻量元数据快照（单次 `lstat` 取得）。
+/// 用于在命中缓存前以微秒级开销校验目录未被替换且直属项未变化。
+public struct DiskUsageStamp: Equatable {
+    public let device: dev_t
+    public let fileID: UInt64
+    public let mtimeSeconds: Int
+    public let mtimeNanoseconds: Int
+
+    public init(device: dev_t, fileID: UInt64, mtimeSeconds: Int, mtimeNanoseconds: Int) {
+        self.device = device
+        self.fileID = fileID
+        self.mtimeSeconds = mtimeSeconds
+        self.mtimeNanoseconds = mtimeNanoseconds
+    }
+
+    /// 采集真实目录的元数据快照；非真实目录（含符号链接或不存在）返回 nil。
+    public static func captureDirectory(atPath path: String) -> DiskUsageStamp? {
+        guard case .directory(let stamp) = DiskUsage.probe(atPath: path) else { return nil }
+        return stamp
+    }
+}
+
+/// 单次 `lstat` 探测结果：区分常规文件（直接拿字节数）与真实目录（拿元数据快照）。
+public enum DiskUsageProbe: Equatable {
+    case regularFile(bytes: Int64)
+    case directory(stamp: DiskUsageStamp)
+}
+
+/// 目录占用结果的进程内缓存（带有效期、目录快照校验与被动路径失效）。
 ///
 /// 大目录扫一次要几秒，而用户常会「关掉菜单、又点开」：命中缓存就能立刻给出数字。
-/// 有效期不宜长——文件随时在变，过期的数字比没有数字更误导。
+/// 配合外部 FSEvents 被动失效：只移除受变更路径影响的缓存条目，不主动重扫，
+/// 下次右键时再按需重新统计。
 public final class DiskUsageCache {
 
     private struct Item {
         let bytes: Int64
         let storedAt: Date
+        let stamp: DiskUsageStamp?
+    }
+
+    private struct InvalidationRecord {
+        let seq: UInt64
+        let lowercasedPath: String
+        let includeDescendants: Bool
     }
 
     private let lock = NSLock()
     private var items: [String: Item] = [:]
     private let capacity: Int
+    private var eventSeq: UInt64 = 0
+    private var fullResetSeq: UInt64 = 0
+    private var recentInvalidations: [InvalidationRecord] = []
+    private static let invalidationHistoryLimit = 128
 
     public init(capacity: Int = 128) {
         self.capacity = max(1, capacity)
     }
 
-    public func value(for path: String, ttl: TimeInterval, now: Date = Date()) -> Int64? {
+    /// 返回当前失效版本号；扫描前记录、扫描后传给 `store(..., ifNotInvalidatedSince:)`，
+    /// 可防止扫描进行期间发生的变更结果被旧扫描覆盖回缓存。
+    public func currentRevision() -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
-        guard let item = items[path] else { return nil }
+        return eventSeq
+    }
+
+    public func value(
+        for path: String,
+        ttl: TimeInterval,
+        currentStamp: DiskUsageStamp? = nil,
+        now: Date = Date()
+    ) -> Int64? {
+        let key = DiskUsage.trimTrailingSlash(path)
+        lock.lock()
+        defer { lock.unlock() }
+        guard let item = items[key] else { return nil }
         if now.timeIntervalSince(item.storedAt) > ttl {
-            items.removeValue(forKey: path)
+            items.removeValue(forKey: key)
+            return nil
+        }
+        if let currentStamp, let storedStamp = item.stamp, storedStamp != currentStamp {
+            items.removeValue(forKey: key)
             return nil
         }
         return item.bytes
     }
 
-    public func store(_ bytes: Int64, for path: String, now: Date = Date()) {
+    /// 写入缓存。若指定了 `ifNotInvalidatedSince` 且期间存在影响该路径的失效事件，
+    /// 则放弃写入并返回 false，避免过期扫描结果污染缓存。
+    @discardableResult
+    public func store(
+        _ bytes: Int64,
+        for path: String,
+        stamp: DiskUsageStamp? = nil,
+        ifNotInvalidatedSince startRevision: UInt64? = nil,
+        now: Date = Date()
+    ) -> Bool {
+        let key = DiskUsage.trimTrailingSlash(path)
         lock.lock()
         defer { lock.unlock() }
-        if items.count >= capacity, items[path] == nil {
+        if let startRevision {
+            if fullResetSeq > startRevision { return false }
+            let lowerKey = key.lowercased()
+            let invalidated = recentInvalidations.contains { record in
+                record.seq > startRevision && Self.invalidationAffects(
+                    cachedLowercased: lowerKey,
+                    changedLowercased: record.lowercasedPath,
+                    includeDescendants: record.includeDescendants
+                )
+            }
+            if invalidated { return false }
+        }
+        if items.count >= capacity, items[key] == nil {
             // 容量满：丢掉最早写入的一项，避免无限增长
             if let oldest = items.min(by: { $0.value.storedAt < $1.value.storedAt })?.key {
                 items.removeValue(forKey: oldest)
             }
         }
-        items[path] = Item(bytes: bytes, storedAt: now)
+        items[key] = Item(bytes: bytes, storedAt: now, stamp: stamp)
+        return true
+    }
+
+    /// 根据文件系统变更路径失效受影响的缓存条目，返回移除数量。
+    /// - 总是移除变更路径本身及所有已缓存祖先目录（子目录变化会改变祖先总大小）；
+    /// - `includeDescendants` 为 true 时（如 FSEvents `MustScanSubDirs` / `RootChanged`），
+    ///   一并移除变更路径下的所有已缓存子孙目录。
+    @discardableResult
+    public func invalidate(changedPath: String, includeDescendants: Bool = false) -> Int {
+        let normalized = DiskUsage.trimTrailingSlash(changedPath)
+        guard !normalized.isEmpty else { return 0 }
+        let lowerChanged = normalized.lowercased()
+
+        lock.lock()
+        defer { lock.unlock() }
+        eventSeq &+= 1
+        recentInvalidations.append(InvalidationRecord(
+            seq: eventSeq,
+            lowercasedPath: lowerChanged,
+            includeDescendants: includeDescendants
+        ))
+        if recentInvalidations.count > Self.invalidationHistoryLimit {
+            let evicted = recentInvalidations.removeFirst()
+            fullResetSeq = max(fullResetSeq, evicted.seq)
+        }
+
+        let keysToRemove = items.keys.filter { key in
+            Self.invalidationAffects(
+                cachedLowercased: key.lowercased(),
+                changedLowercased: lowerChanged,
+                includeDescendants: includeDescendants
+            )
+        }
+        for key in keysToRemove {
+            items.removeValue(forKey: key)
+        }
+        return keysToRemove.count
     }
 
     public func removeAll() {
         lock.lock()
         defer { lock.unlock() }
+        eventSeq &+= 1
+        fullResetSeq = eventSeq
+        recentInvalidations.removeAll()
         items.removeAll()
+    }
+
+    /// 返回当前有效缓存条目的最小覆盖根目录集合，供 FSEvents 监听复用，
+    /// 避免同一目录树下几十个子目录各自重复注册监听路径。
+    public func coveringRoots(ttl: TimeInterval? = nil, now: Date = Date()) -> Set<String> {
+        lock.lock()
+        if let ttl {
+            items = items.filter { now.timeIntervalSince($0.value.storedAt) <= ttl }
+        }
+        let keys = Array(items.keys)
+        lock.unlock()
+        return Self.coveringRoots(of: keys)
+    }
+
+    /// 从一组路径中提炼最小覆盖根目录集合（去掉已被祖先覆盖的子路径）。
+    public static func coveringRoots(of paths: [String]) -> Set<String> {
+        let normalized = paths
+            .map(DiskUsage.trimTrailingSlash)
+            .filter { !$0.isEmpty }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count < rhs.count }
+                return lhs < rhs
+            }
+
+        var roots: [(original: String, lowercased: String)] = []
+        for path in normalized {
+            let lower = path.lowercased()
+            let covered = roots.contains { existing in
+                existing.lowercased == lower || isAncestor(existing.lowercased, of: lower)
+            }
+            if !covered {
+                roots.append((path, lower))
+            }
+        }
+        return Set(roots.map(\.original))
+    }
+
+    private static func invalidationAffects(
+        cachedLowercased: String,
+        changedLowercased: String,
+        includeDescendants: Bool
+    ) -> Bool {
+        if cachedLowercased == changedLowercased { return true }
+        if isAncestor(cachedLowercased, of: changedLowercased) { return true }
+        if includeDescendants && isAncestor(changedLowercased, of: cachedLowercased) { return true }
+        return false
+    }
+
+    static func isAncestor(_ ancestor: String, of path: String) -> Bool {
+        if ancestor == "/" { return path.hasPrefix("/") && path != "/" }
+        return path.hasPrefix(ancestor + "/")
     }
 }
 
@@ -533,6 +746,7 @@ public final class DiskUsageJob {
     /// 同一路径的在途任务：所有等待者各自持有信号量，任务完成时全部唤醒
     private final class Task {
         var waiters: [DispatchSemaphore] = []
+        var resultBytes: Int64?
     }
 
     private static let lock = NSLock()
@@ -543,54 +757,80 @@ public final class DiskUsageJob {
     /// - Parameters:
     ///   - url: 要统计的路径
     ///   - path: 归一化后的缓存键
+    ///   - stamp: 扫描前采集的目录元数据快照，用于缓存校验
     ///   - scanDeadline: 任务自身的计算截止时间
     ///   - waitTimeout: 调用方愿意等待的时间
+    ///   - onStore: 结果成功写入缓存后的回调（例如同步 FSEvents 监听根目录）
     public static func run(
         url: URL,
         path: String,
+        stamp: DiskUsageStamp? = nil,
         scanDeadline: Date?,
         waitTimeout: TimeInterval,
         cache: DiskUsageCache,
         cacheTTL: TimeInterval,
-        queue: DispatchQueue = .global(qos: .userInitiated)
+        queue: DispatchQueue = .global(qos: .userInitiated),
+        onStore: (() -> Void)? = nil
     ) -> Int64? {
-        if let cached = cache.value(for: path, ttl: cacheTTL) { return cached }
+        let key = DiskUsage.trimTrailingSlash(path)
+        if let cached = cache.value(for: key, ttl: cacheTTL, currentStamp: stamp) { return cached }
 
         let mySignal = DispatchSemaphore(value: 0)
         var isNewTask = false
+        let task: Task
 
         lock.lock()
-        if let existing = inFlight[path] {
+        if let existing = inFlight[key] {
             // 已有同一路径的任务在算：登记为等待者，避免重复扫盘
             existing.waiters.append(mySignal)
+            task = existing
         } else {
-            let task = Task()
-            task.waiters.append(mySignal)
-            inFlight[path] = task
+            let created = Task()
+            created.waiters.append(mySignal)
+            inFlight[key] = created
+            task = created
             isNewTask = true
         }
         lock.unlock()
 
         if isNewTask {
             queue.async {
+                let startRevision = cache.currentRevision()
+                let scanStamp = stamp ?? DiskUsageStamp.captureDirectory(atPath: url.path)
                 let bytes = DiskUsage.allocatedBytes(at: url, deadline: scanDeadline)
-                if let bytes { cache.store(bytes, for: path) }
-                // 先摘掉在途登记，再唤醒全部等待者：唤醒后它们直接读缓存
+                var stored = false
+                if let bytes {
+                    stored = cache.store(
+                        bytes,
+                        for: key,
+                        stamp: scanStamp,
+                        ifNotInvalidatedSince: startRevision
+                    )
+                }
+                // 先记录结果并摘掉在途登记，再唤醒全部等待者
                 lock.lock()
-                let waiters = inFlight.removeValue(forKey: path)?.waiters ?? []
+                task.resultBytes = bytes
+                let waiters = inFlight.removeValue(forKey: key)?.waiters ?? []
                 lock.unlock()
                 for waiter in waiters { waiter.signal() }
+                if stored { onStore?() }
             }
         }
 
         if mySignal.wait(timeout: .now() + waitTimeout) != .success {
             // 超时离开：把自己从等待者里摘掉，任务本身继续跑完并写缓存
             lock.lock()
-            inFlight[path]?.waiters.removeAll { $0 === mySignal }
+            inFlight[key]?.waiters.removeAll { $0 === mySignal }
             lock.unlock()
-            return cache.value(for: path, ttl: cacheTTL)
+            return cache.value(for: key, ttl: cacheTTL, currentStamp: stamp)
         }
-        return cache.value(for: path, ttl: cacheTTL)
+        if let cached = cache.value(for: key, ttl: cacheTTL, currentStamp: stamp) {
+            return cached
+        }
+        lock.lock()
+        let fallback = task.resultBytes
+        lock.unlock()
+        return fallback
     }
 
     /// 仅供测试：清空在途状态

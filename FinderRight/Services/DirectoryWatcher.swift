@@ -78,11 +78,183 @@ final class DirectoryWatcher {
     /// FSEvents 报的是真实路径（/private/tmp 而非 /tmp）且文件夹事件带结尾斜杠；
     /// 两边都用 realpath 规范化，取不到（已不存在）时退回原样。比对时再转小写：默认卷不区分大小写，
     /// 在区分大小写的卷上最多多核对一次，不会漏
-    private static func canonical(_ path: String) -> String {
+    static func canonical(_ path: String) -> String {
         var trimmed = path
         while trimmed.count > 1, trimmed.hasSuffix("/") { trimmed.removeLast() }
         guard let resolved = realpath(trimmed, nil) else { return trimmed }
         defer { free(resolved) }
         return String(cString: resolved)
+    }
+}
+
+/// FSEvents 子树变更事件（目录粒度）。
+struct FSEventChange {
+    /// 发生变化的规范路径（去除结尾斜杠）
+    let path: String
+    /// 需要将 path 及其所有子孙路径一并视为变更（如 MustScanSubDirs / RootChanged / Mount）
+    let includesDescendants: Bool
+    /// 内核或用户队列丢事件，调用方应全量失效
+    let requiresFullReset: Bool
+}
+
+/// 递归监视一组目录树的文件系统事件（FSEvents，目录粒度）。
+///
+/// 与只关注直接子项的 `DirectoryWatcher` 不同，这里接收整个子树的变化并回传路径与标志，
+/// 供磁盘占用缓存被动失效与详情弹窗变更提示复用。
+final class SubtreeWatcher {
+
+    private final class CallbackBox {
+        weak var owner: SubtreeWatcher?
+        init(_ owner: SubtreeWatcher) { self.owner = owner }
+    }
+
+    private let queue: DispatchQueue
+    private let latency: CFTimeInterval
+    private let onChanges: ([FSEventChange]) -> Void
+    private let lock = NSLock()
+    private var stream: FSEventStreamRef?
+    private var directories: Set<String> = []
+
+    init(
+        queue: DispatchQueue,
+        latency: CFTimeInterval = 0.5,
+        onChanges: @escaping ([FSEventChange]) -> Void
+    ) {
+        self.queue = queue
+        self.latency = latency
+        self.onChanges = onChanges
+    }
+
+    deinit {
+        let activeStream: FSEventStreamRef? = {
+            lock.lock()
+            defer { lock.unlock() }
+            let s = stream
+            stream = nil
+            return s
+        }()
+        if let activeStream {
+            queue.async {
+                FSEventStreamStop(activeStream)
+                FSEventStreamInvalidate(activeStream)
+                FSEventStreamRelease(activeStream)
+            }
+        }
+    }
+
+    /// 切换监视的根目录集合；集合不变时什么也不做，空集合时停止流以保持零常驻开销。
+    func watch(_ directories: Set<String>) {
+        let normalized = Set(directories.map(DirectoryWatcher.canonical))
+        queue.async { [weak self] in
+            self?.applyWatch(normalized)
+        }
+    }
+
+    /// 停止监视并释放底层 FSEvents 流。
+    func stop() {
+        queue.async { [weak self] in
+            self?.stopOnQueue()
+        }
+    }
+
+    // MARK: - 私有（仅在 queue 上执行）
+
+    private func applyWatch(_ normalized: Set<String>) {
+        guard normalized != directories else { return }
+        stopOnQueue()
+        directories = normalized
+        guard !normalized.isEmpty else { return }
+
+        let box = CallbackBox(self)
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(box).toOpaque(),
+            retain: { ptr in
+                guard let ptr else { return nil }
+                _ = Unmanaged<CallbackBox>.fromOpaque(ptr).retain()
+                return ptr
+            },
+            release: { ptr in
+                guard let ptr else { return }
+                Unmanaged<CallbackBox>.fromOpaque(ptr).release()
+            },
+            copyDescription: nil
+        )
+        let callback: FSEventStreamCallback = { _, info, count, paths, flags, _ in
+            guard let info else { return }
+            let box = Unmanaged<CallbackBox>.fromOpaque(info).takeUnretainedValue()
+            guard let watcher = box.owner else { return }
+            let eventPaths = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
+            let eventFlags = Array(UnsafeBufferPointer(start: flags, count: count))
+            watcher.handle(paths: eventPaths, flags: eventFlags)
+        }
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot)
+        guard let created = FSEventStreamCreate(
+            nil,
+            callback,
+            &context,
+            Array(normalized) as CFArray,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            latency,
+            flags
+        ) else {
+            NSLog("[SubtreeWatcher] 无法创建 FSEvents 监视：%d 个文件夹", normalized.count)
+            directories = []
+            return
+        }
+        lock.lock()
+        stream = created
+        lock.unlock()
+        FSEventStreamSetDispatchQueue(created, queue)
+        FSEventStreamStart(created)
+    }
+
+    private func stopOnQueue() {
+        directories = []
+        let activeStream: FSEventStreamRef? = {
+            lock.lock()
+            defer { lock.unlock() }
+            let s = stream
+            stream = nil
+            return s
+        }()
+        guard let activeStream else { return }
+        FSEventStreamStop(activeStream)
+        FSEventStreamInvalidate(activeStream)
+        FSEventStreamRelease(activeStream)
+    }
+
+    private func handle(paths: [String], flags: [FSEventStreamEventFlags]) {
+        let ignoreMask = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagHistoryDone | kFSEventStreamEventFlagEventIdsWrapped
+        )
+        let fullResetMask = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagUserDropped
+        )
+        let subtreeMask = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagMustScanSubDirs
+                | kFSEventStreamEventFlagRootChanged
+                | kFSEventStreamEventFlagMount
+                | kFSEventStreamEventFlagUnmount
+        )
+
+        var changes: [FSEventChange] = []
+        changes.reserveCapacity(paths.count)
+        for (rawPath, flag) in zip(paths, flags) {
+            if flag & ignoreMask != 0, flag & ~ignoreMask == 0 { continue }
+            let fullReset = (flag & fullResetMask) != 0
+            let includesDescendants = (flag & subtreeMask) != 0
+            let normalized = DirectoryWatcher.canonical(rawPath)
+            changes.append(FSEventChange(
+                path: normalized,
+                includesDescendants: includesDescendants,
+                requiresFullReset: fullReset
+            ))
+        }
+        guard !changes.isEmpty else { return }
+        // 延后到下一次 queue 调度，避免回调内部同步停止或重建流导致重入
+        queue.async { [weak self] in
+            self?.onChanges(changes)
+        }
     }
 }

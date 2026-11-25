@@ -12,8 +12,11 @@ final class DiskUsageModel: ObservableObject {
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: String?
     @Published var copiedFeedback: Bool = false
+    @Published private(set) var hasExternalChanges: Bool = false
 
     private let queue = DispatchQueue(label: "com.finderright.app.disk-usage-scan", qos: .userInitiated)
+    private let watcherQueue = DispatchQueue(label: "com.finderright.app.disk-usage-watch", qos: .utility)
+    private var watcher: SubtreeWatcher?
     private var scanRevision = 0
     private var scanOperation: BlockOperation?
 
@@ -23,6 +26,20 @@ final class DiskUsageModel: ObservableObject {
         error = nil
         volumeInfo = nil
         volumeUsageRatio = nil
+        hasExternalChanges = false
+
+        let canonicalRoot = DiskUsage.canonicalPath(for: url)
+        if watcher == nil {
+            watcher = SubtreeWatcher(queue: watcherQueue, latency: 0.5) { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, self.targetURL != nil else { return }
+                    if !self.hasExternalChanges {
+                        self.hasExternalChanges = true
+                    }
+                }
+            }
+        }
+        watcher?.watch([canonicalRoot])
         refresh()
     }
 
@@ -33,14 +50,24 @@ final class DiskUsageModel: ObservableObject {
         scanOperation?.cancel()
         isLoading = true
         error = nil
+        hasExternalChanges = false
 
         updateVolumeInfo(for: url)
 
+        let startCacheRevision = FinderRightService.currentDiskUsageCacheRevision()
         let operation = BlockOperation()
         operation.addExecutionBlock { [weak self, weak operation] in
             guard let operation, !operation.isCancelled else { return }
+            let rootStamp = DiskUsageStamp.captureDirectory(atPath: url.path)
             let breakdown = DiskUsage.inspectDirectChildren(at: url) {
                 operation.isCancelled
+            }
+            if let breakdown, !operation.isCancelled {
+                FinderRightService.recordDiskUsageBreakdown(
+                    breakdown,
+                    rootStamp: rootStamp,
+                    since: startCacheRevision
+                )
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.scanRevision == revision, !operation.isCancelled else { return }
@@ -90,6 +117,9 @@ final class DiskUsageModel: ObservableObject {
         scanRevision += 1
         scanOperation?.cancel()
         scanOperation = nil
+        watcher?.stop()
+        watcher = nil
+        hasExternalChanges = false
         isLoading = false
     }
 }
@@ -129,6 +159,12 @@ struct DiskUsageView: View {
                             .lineLimit(1)
                         if model.copiedFeedback {
                             FRChip(text: Text(NSLocalizedString("已复制路径", comment: "")), kind: .ok)
+                        } else if model.hasExternalChanges && !model.isLoading {
+                            Button(action: { model.refresh() }) {
+                                FRChip(text: Text(NSLocalizedString("内容已变更，点击刷新", comment: "")), kind: .warn)
+                            }
+                            .buttonStyle(.plain)
+                            .help(NSLocalizedString("重新统计 (⌘R)", comment: ""))
                         }
                     }
 

@@ -868,6 +868,7 @@
 "复制完整路径" = "Copy Full Path";
 "大小" = "Size";
 "已复制路径" = "Path copied";
+"内容已变更，点击刷新" = "Changed, click to refresh";
 "无法统计该目录的磁盘占用，请检查读取权限" = "Unable to calculate disk usage for this folder. Check read permissions";
 "正在统计…" = "Calculating…";
 "正在统计直接子项占用…" = "Calculating usage of direct children…";
