@@ -50,12 +50,25 @@
 
 ### 📸 截图
 
+<table>
+  <tr>
+    <td align="center" valign="middle">
+      <img src="docs/images/menu-new-file.png" alt="FinderRight 空白处右键菜单" width="190" />
+    </td>
+    <td align="center" valign="middle">
+      <img src="docs/images/menu-file-actions.png" alt="FinderRight 选中文件右键菜单" width="218" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>空白处右键菜单</sub></td>
+    <td align="center"><sub>选中文件右键菜单</sub></td>
+  </tr>
+</table>
+
 <p align="center">
-  <img src="docs/images/menu-new-file.png" alt="FinderRight 空白处右键菜单" height="340" />
-  &ensp;
-  <img src="docs/images/menu-file-actions.png" alt="FinderRight 选中文件右键菜单" height="340" />
-  &ensp;
-  <img src="docs/images/settings-demo.gif" alt="FinderRight 设置页多主题与界面演示" height="340" />
+  <img src="docs/images/settings-demo.gif" alt="FinderRight 设置页多主题与界面演示" width="720" />
+  <br />
+  <sub>设置界面：7 套主题色、深浅色模式与功能页演示</sub>
 </p>
 
 ### 📥 安装
@@ -232,12 +245,25 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 
 ### 📸 Screenshots
 
+<table>
+  <tr>
+    <td align="center" valign="middle">
+      <img src="docs/images/menu-new-file.png" alt="FinderRight folder context menu" width="190" />
+    </td>
+    <td align="center" valign="middle">
+      <img src="docs/images/menu-file-actions.png" alt="FinderRight file context menu" width="218" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Folder Context Menu</sub></td>
+    <td align="center"><sub>File Context Menu</sub></td>
+  </tr>
+</table>
+
 <p align="center">
-  <img src="docs/images/menu-new-file.png" alt="FinderRight folder context menu" height="340" />
-  &ensp;
-  <img src="docs/images/menu-file-actions.png" alt="FinderRight file context menu" height="340" />
-  &ensp;
-  <img src="docs/images/settings-demo.gif" alt="FinderRight Settings — themes and pages walkthrough" height="340" />
+  <img src="docs/images/settings-demo.gif" alt="FinderRight Settings — themes and pages walkthrough" width="720" />
+  <br />
+  <sub>Settings: 7 themes, Light/Dark mode, and preference tabs</sub>
 </p>
 
 > The screenshots show the Chinese interface; FinderRight is also fully available in English.
