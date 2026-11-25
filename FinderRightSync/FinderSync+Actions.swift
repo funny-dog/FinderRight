@@ -46,7 +46,8 @@ extension FinderSync {
     }
 
     @objc func copyPath(_ sender: NSMenuItem) {
-        let urls = currentContext().selectedItems
+        let (directory, selected) = currentContext()
+        let urls = selected.isEmpty ? [directory].compactMap { $0 } : selected
         guard !urls.isEmpty else { logToFile("copyPath: no items"); return }
         // 主目录必须用真实路径：沙箱扩展里 NSHomeDirectory() 指向自己的容器目录
         let format = SharedConfig.shared.copyPathFormat
@@ -263,6 +264,34 @@ extension FinderSync {
         }
     }
 
+    @objc func removeFromCutQueue(_ sender: NSMenuItem) {
+        let urls = currentContext().selectedItems
+        guard !urls.isEmpty else { logToFile("removeFromCutQueue: no items"); return }
+        let paths = urls.map { $0.path }
+        let normalized = Set(paths.map(normalizePath))
+        logToFile("removeFromCutQueue ipc (async) → count=\(paths.count)")
+
+        cutBadgeLock.lock()
+        inMemoryCutPaths.subtract(normalized)
+        cutBadgeLock.unlock()
+
+        for url in urls {
+            FIFinderSyncController.default().setBadgeIdentifier("", for: url)
+            FIFinderSyncController.default().setBadgeIdentifier("", for: url.standardizedFileURL)
+        }
+
+        IPCClient.shared.callAsync(action: "removeFromCutQueue", payload: [
+            "paths": .stringArray(paths)
+        ]) { [weak self] r in
+            logToFile("removeFromCutQueue ipc result: success=\(r.success) msg=\(r.message ?? "")")
+            guard !r.success else { return }
+            DispatchQueue.main.async {
+                reconcileCutBadgesWithQueue()
+            }
+            ClipboardToast.show(message: r.message ?? (self?.L("移除剪切项失败") ?? NSLocalizedString("移除剪切项失败", comment: "")), style: .failure)
+        }
+    }
+
     @objc func cancelCut(_ sender: NSMenuItem) {
         let cutPaths = currentCutQueuePaths()
         logToFile("cancelCut ipc (async) → clearing \(cutPaths.count) badges")
@@ -443,8 +472,7 @@ extension FinderSync {
     }
 
     @objc func lineCount(_ sender: NSMenuItem) {
-        let (directory, selected) = currentContext()
-        guard let target = selected.first ?? directory else { return }
+        guard let target = commandSelection.first ?? commandDirectory else { return }
         logToFile("lineCount ipc (async) → target=\(target.path)")
         IPCClient.shared.callAsync(action: "showLineCount", payload: ["path": .string(target.path)]) { r in
             logToFile("lineCount ipc result: success=\(r.success) msg=\(r.message ?? "")")

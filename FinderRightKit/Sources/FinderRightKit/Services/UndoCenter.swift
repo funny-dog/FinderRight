@@ -9,6 +9,9 @@ public struct UndoMenuState: Codable, Equatable {
 
     public static let fileName = "undo-state.json"
 
+    /// 延迟剪切尚未改动磁盘文件，右键菜单已有独立的剪切队列与移出入口，避免与「取消剪切」重复；⌘Z 撤销照常生效。
+    public var showsInContextMenu: Bool { kind != .cut }
+
     public init(kind: UndoRecord.Kind, count: Int, name: String) {
         self.kind = kind
         self.count = count

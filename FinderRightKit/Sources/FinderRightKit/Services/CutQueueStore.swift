@@ -73,8 +73,16 @@ public struct CutQueueStore {
     /// 调用方须与 take/finish 共用串行队列；在途时拒绝修改，保留完整的失败恢复记录。
     @discardableResult
     public func remove(_ path: String) throws -> [String] {
+        try remove(contentsOf: [path])
+    }
+
+    /// 批量移除指定路径；按规范化路径比对，在途时拒绝修改，保留完整的失败恢复记录。
+    @discardableResult
+    public func remove<S: Sequence>(contentsOf paths: S) throws -> [String] where S.Element == String {
         guard try inflightFiles().isEmpty else { throw RemovalError.pasteInProgress }
-        let remaining = read().filter { $0 != path }
+        let targets = Set(paths.map(BadgeOwnershipProbe.normalize))
+        guard !targets.isEmpty else { return read() }
+        let remaining = read().filter { !targets.contains(BadgeOwnershipProbe.normalize($0)) }
         try write(remaining)
         return remaining
     }

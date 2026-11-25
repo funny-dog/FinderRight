@@ -153,7 +153,7 @@ final class FinderRightService {
             return IPCResponse(id: req.id, success: true, message: nil)
         case "showCutQueueDetail":
             SharedConfig.shared.reload()
-            guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.cut) else {
+            guard SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.cut) || !Self.pendingCutPaths().isEmpty else {
                 return IPCResponse(id: req.id, success: false, message: NSLocalizedString("此功能已关闭，请在设置中启用", comment: ""))
             }
             DispatchQueue.main.async { CutQueueController.shared.show() }
@@ -181,6 +181,8 @@ final class FinderRightService {
             return toggleHiddenFiles(req)
         case "cutFiles":
             return cutFiles(req)
+        case "removeFromCutQueue":
+            return removeFromCutQueue(req)
         case "pasteFiles":
             return pasteFiles(req)
         case "cancelCut":

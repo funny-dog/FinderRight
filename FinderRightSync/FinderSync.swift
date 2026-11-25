@@ -204,14 +204,13 @@ class FinderSync: FIFinderSync {
     }
 
     func resolveWorkingDirectory() -> URL? {
-        let (target, selected) = currentContext()
-        if let first = selected.first {
+        if let first = commandSelection.first {
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir), isDir.boolValue {
                 return first
             }
         }
-        return target
+        return commandDirectory ?? currentContext().directory
     }
 
     // MARK: - Directory Observation
@@ -408,23 +407,40 @@ class FinderSync: FIFinderSync {
             } else {
                 let isText = FileContentReader.isEligible(url: first, maxBytes: SharedConfig.shared.copyFileContentMaxBytes)
                 let isArchive = ArchiveKind.isArchive(fileName: first.lastPathComponent)
-                selectionKind = .singleFile(isTextEligible: isText, isArchive: isArchive, isRegularFile: FileHasher.isRegularFile(first))
+                let isLineCountable = LineCounter.isSupportedFile(first)
+                let isComparable = ComparisonDocument.isMenuEligible(first)
+                selectionKind = .singleFile(
+                    isTextEligible: isText,
+                    isArchive: isArchive,
+                    isRegularFile: FileHasher.isRegularFile(first),
+                    isLineCountable: isLineCountable,
+                    isComparable: isComparable
+                )
             }
         } else {
             let hasRegular = selected.prefix(50).contains(where: FileHasher.isRegularFile)
             let hasArchives = selected.contains(where: { ArchiveKind.isArchive(fileName: $0.lastPathComponent) })
-            selectionKind = .multiple(count: selected.count, hasRegularFiles: hasRegular, hasArchives: hasArchives)
+            let canCompare = selected.count == 2 && selected.allSatisfy(ComparisonDocument.isMenuEligible)
+            selectionKind = .multiple(
+                count: selected.count,
+                hasRegularFiles: hasRegular,
+                hasArchives: hasArchives,
+                canCompareFiles: canCompare
+            )
         }
-        directoryTreeTarget = location == .container ? directory
+        let isContainerContext = location == .container || location == .sidebar
+        directoryTreeTarget = isContainerContext ? directory
             : (selectionKind == .singleFolder ? selected.first : nil)
         activeDeveloperCommands = SharedConfig.shared.developerToolsEnabled ? SharedConfig.shared.developerCommands : []
-        commandSelection = location == .container ? [] : selected
+        commandSelection = isContainerContext ? [] : selected
         commandDirectory = directory
 
         // 剪切队列状态判断
-        let selectedPaths = Set(selected.map(\.path))
-        let isSubset = !selectedPaths.isEmpty && selectedPaths.isSubset(of: cutPaths)
-        let cutState = CutState(count: cutPaths.count, isSelectionSubsetOfCut: isSubset)
+        let cutState = CutState.evaluate(
+            cutPaths: cutPaths,
+            selectedPaths: selected.map(\.path),
+            targetDirectory: directory?.path
+        )
 
         // 新建文件模板缓存与纯数据
         let customTemplates = SharedConfig.shared.customFileTemplates
@@ -471,8 +487,10 @@ class FinderSync: FIFinderSync {
             return MenuFavoriteData(path: path, displayName: name, isUnavailable: isUnav, canTransfer: canTransfer, tag: index, canCopy: canCopy)
         }
 
-        let undoTitle: String? = UndoMenuState.read().map { UndoText.menuTitle(for: $0, localize: self.L) }
-        let imageState: ImageMenuState? = location != .container
+        let undoTitle: String? = UndoMenuState.read().flatMap {
+            $0.showsInContextMenu ? UndoText.menuTitle(for: $0, localize: self.L) : nil
+        }
+        let imageState: ImageMenuState? = location == .items
             && SharedConfig.shared.isActionEnabled(MenuFeatureCatalog.imageTools)
             ? ImageMenuState.evaluate(selection: selected) : nil
 
@@ -562,7 +580,7 @@ class FinderSync: FIFinderSync {
         location: MenuTargetLocation
     ) -> (title: String, toolTip: String, target: URL)? {
         let targetURL: URL?
-        if location == .container {
+        if location == .container || location == .sidebar {
             targetURL = directory
         } else if selected.count == 1 {
             targetURL = selected.first
@@ -615,6 +633,7 @@ class FinderSync: FIFinderSync {
         case "openTerminal": return #selector(self.openTerminal(_:))
         case "openEditor": return #selector(self.openEditorWith(_:))
         case "cutFiles": return #selector(self.cutFiles(_:))
+        case "removeFromCutQueue": return #selector(self.removeFromCutQueue(_:))
         case "cancelCut": return #selector(self.cancelCut(_:))
         case "pasteFiles": return #selector(self.pasteFiles(_:))
         case "moveToFavorite": return #selector(self.moveToFavorite(_:))

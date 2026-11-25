@@ -1,9 +1,11 @@
 /* FinderRight Finder extension — right-click menu (English) */
 
 /* Top-level menu items */
-"剪切 (已在剪切队列)" = "Cut (In Queue)";
-"已剪切 %d 项…" = "%d Item(s) Cut…";
-"粘贴 (已剪切 %d 项)" = "Paste (%d Item(s) Cut)";
+"移出剪切队列" = "Remove from Cut Queue";
+"剪切队列 (%d)" = "Cut Queue (%d)";
+"查看详情…" = "View Details…";
+"粘贴 (%d 项)" = "Paste (%d)";
+"移除剪切项失败" = "Failed to remove from cut queue";
 "已剪切" = "Cut";
 
 /* Menu item titles */
@@ -49,7 +51,6 @@
 /* Favorites: move / copy to */
 "移动到" = "Move To";
 "复制到" = "Copy To";
-"尚未添加常用目录" = "No Favorite Folders Yet";
 "管理常用目录…" = "Manage Favorite Folders…";
 
 /* 撤销上一次操作 */

@@ -29,5 +29,11 @@ struct CutQueueRemovalChecks {
         try store.remove("/missing")
         precondition(store.read() == ["/b"])
         print("✓ 粘贴结算后允许移除，过期菜单路径不影响其余项目")
+        let nfdName = "/tmp/" + "café".decomposedStringWithCanonicalMapping
+        let nfcName = "/tmp/" + "café".precomposedStringWithCanonicalMapping
+        try store.write(["/b", nfdName, "/c"])
+        let afterBatch = try store.remove(contentsOf: ["/b", nfcName])
+        precondition(afterBatch == ["/c"] && store.read() == ["/c"])
+        print("✓ 批量移除支持多选与规范化路径匹配")
     }
 }

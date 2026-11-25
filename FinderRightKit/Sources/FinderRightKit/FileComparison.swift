@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 public enum FileComparisonError: LocalizedError, Equatable {
     case notText, tooLarge, tooManyLines, comparisonFailed
@@ -20,6 +21,20 @@ public struct ComparisonDocument: Equatable {
     public let hasFinalNewline: Bool
     public let lineEndings: String
     public static let maxBytes = 1024 * 1024
+
+    /// 右键菜单展示前的快速过滤：不读文件内容，仅排除目录、超限文件与明显的图片/音视频/压缩包；
+    /// 无扩展名或未知扩展名默认放行，点击时再由 `read(_:)` 校验编码。
+    public static func isMenuEligible(_ url: URL) -> Bool {
+        guard FileContentReader.isEligible(url: url, maxBytes: Int64(maxBytes)),
+              !ArchiveKind.isArchive(fileName: url.lastPathComponent) else {
+            return false
+        }
+        if let type = UTType(filenameExtension: url.pathExtension),
+           type.conforms(to: .image) || type.conforms(to: .audiovisualContent) || type.conforms(to: .archive) {
+            return false
+        }
+        return true
+    }
 
     public static func read(_ url: URL) throws -> ComparisonDocument {
         guard url.isFileURL,

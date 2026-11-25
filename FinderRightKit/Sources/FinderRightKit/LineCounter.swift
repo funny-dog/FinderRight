@@ -169,6 +169,11 @@ public enum LineCounter {
         "ini": LanguageDef(name: "INI", spec: semicolonSpec),
     ]
 
+    /// 判断单文件扩展名是否在支持的代码语言列表内（用于菜单快速过滤）
+    public static func isSupportedFile(_ url: URL) -> Bool {
+        extensionMap[url.pathExtension.lowercased()] != nil
+    }
+
     /// 对目标目录或文件执行代码行数统计
     public static func count(
         at targetURL: URL,

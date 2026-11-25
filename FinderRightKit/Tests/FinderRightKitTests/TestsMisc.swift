@@ -98,16 +98,14 @@ enum MiscTests {
             let nodes = MenuTreeBuilder.buildMenuTree(input: input)
             let ids = nodes.map(\.id)
 
-            // 空白处应该有新建文件、打开路径、终端、粘贴（disabled）、切换隐藏文件
+            // 空白处应该有新建文件、打开路径、终端、切换隐藏文件；无剪切队列时不显示灰色粘贴
             try assertTrue(ids.contains(MenuFeatureCatalog.newFile))
             try assertTrue(ids.contains(MenuFeatureCatalog.goToDirectory))
             try assertTrue(ids.contains(MenuFeatureCatalog.openTerminal))
-            try assertTrue(ids.contains(MenuFeatureCatalog.paste))
             try assertTrue(ids.contains(MenuFeatureCatalog.toggleHidden))
-
-            // 粘贴项无剪切时应置灰
-            let pasteNode = nodes.first { $0.id == MenuFeatureCatalog.paste }!
-            try assertTrue(!pasteNode.isEnabled)
+            try assertTrue(ids.contains(MenuFeatureCatalog.lineCount))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.paste))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.compareFiles))
 
             // 不应有依赖选中项的操作
             try assertTrue(!ids.contains(MenuFeatureCatalog.copyPath))
@@ -122,19 +120,59 @@ enum MiscTests {
             try assertTrue(!ids.contains(MenuFeatureCatalog.decompress))
         }
 
+        runTest("菜单单一数据源：侧边栏（sidebar）仅展示容器级操作，不混入选中项动作") {
+            let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
+            let templates = [MenuTemplateData(id: "txt", displayName: "纯文本", systemImage: "doc.text", tint: .blue, tag: 0)]
+            let terminals = [MenuTerminalData(bundleIdentifier: "com.apple.Terminal", name: "终端", icon: nil, tag: 0)]
+            let editors = [MenuEditorData(bundleIdentifier: "com.microsoft.VSCode", name: "VS Code", icon: nil, tag: 0)]
+            let favs = [MenuFavoriteData(path: "/Users/test/Downloads", displayName: "下载", isUnavailable: false, canTransfer: true, tag: 0)]
+            // 即便主窗口当前有选中文件/文件夹，侧边栏右键也只按容器展示
+            let input = MenuBuildInput(
+                location: .sidebar,
+                selection: .singleFolder,
+                enabledFeatureIds: allFeatures,
+                newFileTemplates: templates,
+                terminals: terminals,
+                editors: editors,
+                favoriteDirectories: favs
+            )
+            let ids = MenuTreeBuilder.buildMenuTree(input: input).map(\.id)
+
+            try assertTrue(ids.contains(MenuFeatureCatalog.newFile))
+            try assertTrue(ids.contains(MenuFeatureCatalog.copyPath))
+            try assertTrue(ids.contains(MenuFeatureCatalog.goToDirectory))
+            try assertTrue(ids.contains(MenuFeatureCatalog.openTerminal))
+            try assertTrue(ids.contains(MenuFeatureCatalog.openEditor))
+            try assertTrue(ids.contains(MenuFeatureCatalog.toggleHidden))
+            try assertTrue(ids.contains(MenuFeatureCatalog.copyDirectoryTree))
+            try assertTrue(ids.contains(MenuFeatureCatalog.gitStatus))
+            try assertTrue(ids.contains(MenuFeatureCatalog.lineCount))
+
+            // 不能出现针对选中对象的破坏性/文件管理操作
+            try assertTrue(!ids.contains(MenuFeatureCatalog.cut))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.moveTo))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.copyTo))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.compress))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.copyFileName))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.createSymlink))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.compareFiles))
+        }
+
         runTest("菜单单一数据源：单选普通文本文件分支") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
             let editors = [MenuEditorData(bundleIdentifier: "com.microsoft.VSCode", name: "VS Code", icon: nil, tag: 0)]
+            let favs = [MenuFavoriteData(path: "/Users/test/Downloads", displayName: "下载", isUnavailable: false, canTransfer: true, tag: 0)]
             let input = MenuBuildInput(
                 location: .items,
-                selection: .singleFile(isTextEligible: true, isArchive: false),
+                selection: .singleFile(isTextEligible: true, isArchive: false, isLineCountable: true, isComparable: true),
                 enabledFeatureIds: allFeatures,
-                editors: editors
+                editors: editors,
+                favoriteDirectories: favs
             )
             let nodes = MenuTreeBuilder.buildMenuTree(input: input)
             let ids = nodes.map(\.id)
 
-            // 单选文本文件包含复制内容与哈希，包含打开编辑器，不包含解压与新建文件
+            // 单选文本代码文件包含复制内容、哈希、打开编辑器、常用目录、代码行数与比较文件；不包含目录级操作
             try assertTrue(ids.contains(MenuFeatureCatalog.copyPath))
             try assertTrue(ids.contains(MenuFeatureCatalog.copyFileName))
             try assertTrue(ids.contains(MenuFeatureCatalog.copyFileContent))
@@ -142,35 +180,47 @@ enum MiscTests {
             try assertTrue(ids.contains(MenuFeatureCatalog.openEditor))
             try assertTrue(ids.contains(MenuFeatureCatalog.cut))
             try assertTrue(ids.contains(MenuFeatureCatalog.moveTo))
+            try assertTrue(ids.contains(MenuFeatureCatalog.copyTo))
             try assertTrue(ids.contains(MenuFeatureCatalog.createSymlink))
             try assertTrue(ids.contains(MenuFeatureCatalog.compress))
+            try assertTrue(ids.contains(MenuFeatureCatalog.lineCount))
+            try assertTrue(ids.contains(MenuFeatureCatalog.compareFiles))
             try assertTrue(!ids.contains(MenuFeatureCatalog.decompress))
             try assertTrue(!ids.contains(MenuFeatureCatalog.newFile))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.goToDirectory))
+            try assertTrue(!ids.contains(MenuFeatureCatalog.toggleHidden))
         }
 
         runTest("菜单单一数据源：单选非文本普通文件与文件夹差异") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
-            // 非文本普通文件：无 copyFileContent，有 copyFileHash
+            let favs = [MenuFavoriteData(path: "/Users/test/Downloads", displayName: "下载", isUnavailable: false, canTransfer: true, tag: 0)]
+            // 非文本非代码普通文件（如图片/压缩包）：无 copyFileContent、无 lineCount、无 compareFiles，有 copyFileHash
             let fileInput = MenuBuildInput(
                 location: .items,
-                selection: .singleFile(isTextEligible: false, isArchive: false),
-                enabledFeatureIds: allFeatures
+                selection: .singleFile(isTextEligible: false, isArchive: false, isLineCountable: false, isComparable: false),
+                enabledFeatureIds: allFeatures,
+                favoriteDirectories: favs
             )
-            let fileNodes = MenuTreeBuilder.buildMenuTree(input: fileInput)
-            try assertTrue(!fileNodes.map(\.id).contains(MenuFeatureCatalog.copyFileContent))
-            try assertTrue(fileNodes.map(\.id).contains(MenuFeatureCatalog.copyFileHash))
+            let fileIds = MenuTreeBuilder.buildMenuTree(input: fileInput).map(\.id)
+            try assertTrue(!fileIds.contains(MenuFeatureCatalog.copyFileContent))
+            try assertTrue(!fileIds.contains(MenuFeatureCatalog.lineCount))
+            try assertTrue(!fileIds.contains(MenuFeatureCatalog.compareFiles))
+            try assertTrue(fileIds.contains(MenuFeatureCatalog.copyFileHash))
 
-            // 文件夹：无 copyFileContent，无 copyFileHash，无 decompress，有 cut/moveTo/compress
+            // 文件夹：无 copyFileContent/copyFileHash/decompress/compareFiles，有 cut/moveTo/compress/lineCount
             let folderInput = MenuBuildInput(
                 location: .items,
                 selection: .singleFolder,
-                enabledFeatureIds: allFeatures
+                enabledFeatureIds: allFeatures,
+                favoriteDirectories: favs
             )
             let folderNodes = MenuTreeBuilder.buildMenuTree(input: folderInput)
             let folderIds = folderNodes.map(\.id)
             try assertTrue(!folderIds.contains(MenuFeatureCatalog.copyFileContent))
             try assertTrue(!folderIds.contains(MenuFeatureCatalog.copyFileHash))
             try assertTrue(!folderIds.contains(MenuFeatureCatalog.decompress))
+            try assertTrue(!folderIds.contains(MenuFeatureCatalog.compareFiles))
+            try assertTrue(folderIds.contains(MenuFeatureCatalog.lineCount))
             try assertTrue(folderIds.contains(MenuFeatureCatalog.cut))
             try assertTrue(folderIds.contains(MenuFeatureCatalog.compress))
             try assertTrue(folderIds.contains(MenuFeatureCatalog.moveTo))
@@ -193,33 +243,87 @@ enum MiscTests {
             try assertTrue(ids.contains(MenuFeatureCatalog.compress))
         }
 
-        runTest("菜单单一数据源：剪切队列与取消剪切联动及文案格式化") {
+        runTest("菜单单一数据源：剪切队列收拢为子菜单、已剪切项显示移出与粘贴文案格式化") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
             let input = MenuBuildInput(
                 location: .items,
                 selection: .singleFolder,
                 enabledFeatureIds: allFeatures,
-                cutState: CutState(count: 3, isSelectionSubsetOfCut: true)
+                cutState: CutState(count: 3, isSelectionSubsetOfCut: true, canPasteInCurrentDirectory: true)
             )
             let nodes = MenuTreeBuilder.buildMenuTree(input: input)
 
-            // 剪切项标题应为已在队列提示
+            // 选中项已在剪切队列时，剪切项变为可执行的「移出剪切队列」且不带剪切快捷键
             let cutNode = nodes.first { $0.id == MenuFeatureCatalog.cut }!
-            try assertEqual(cutNode.titleKey, "剪切 (已在剪切队列)")
+            try assertEqual(cutNode.titleKey, "移出剪切队列")
+            try assertEqual(cutNode.kind, .action(actionId: "removeFromCutQueue", tag: 0))
+            try assertNil(cutNode.shortcutId)
 
-            // 应跟随已剪切详情与取消剪切项
-            let showCutNode = nodes.first { $0.id == "action.showCutQueue" }!
-            try assertEqual(showCutNode.title, .formatted(key: "已剪切 %d 项…", count: 3))
-            try assertEqual(showCutNode.kind, .action(actionId: "showCutQueueDetail", tag: 0))
-            try assertTrue(nodes.contains(where: { $0.id == "action.cancelCut" }))
-
-            // 粘贴项格式化文案与高亮启用
-            let pasteNode = nodes.first { $0.id == MenuFeatureCatalog.paste }!
+            // 粘贴项精简文案并高亮启用
+            let pasteIdx = nodes.firstIndex { $0.id == MenuFeatureCatalog.paste }!
+            let pasteNode = nodes[pasteIdx]
             try assertTrue(pasteNode.isEnabled)
-            try assertEqual(pasteNode.title, .formatted(key: "粘贴 (已剪切 %d 项)", count: 3))
+            try assertEqual(pasteNode.title, .formatted(key: "粘贴 (%d 项)", count: 3))
+
+            // 剪切队列收拢为一个子菜单紧随粘贴之后，包含查看详情与取消剪切
+            let queueIdx = nodes.firstIndex { $0.id == "submenu.cutQueue" }!
+            try assertEqual(queueIdx, pasteIdx + 1, "剪切队列子菜单应紧随粘贴之后")
+            let queueNode = nodes[queueIdx]
+            try assertEqual(queueNode.title, .formatted(key: "剪切队列 (%d)", count: 3))
+            guard case .submenu(let children) = queueNode.kind else {
+                throw TestFailure(message: "submenu.cutQueue 必须是 submenu")
+            }
+            try assertEqual(children.map(\.id), ["action.showCutQueue", "action.cancelCut"])
+            try assertEqual(children[0].titleKey, "查看详情…")
+            try assertEqual(children[0].kind, .action(actionId: "showCutQueueDetail", tag: 0))
+            try assertEqual(children[1].titleKey, "取消剪切")
+            try assertEqual(children[1].kind, .action(actionId: "cancelCut", tag: 0))
         }
 
-        runTest("菜单单一数据源：关闭剪切开关时取消剪切兜底插入粘贴之后") {
+        runTest("菜单单一数据源：同目录剪切项在选中项隐藏粘贴、在空白处置灰粘贴") {
+            let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
+            let sameDirState = CutState.evaluate(
+                cutPaths: ["/Users/demo/Desktop/a.txt", "/Users/demo/Desktop/b.txt"],
+                selectedPaths: ["/Users/demo/Desktop/a.txt"],
+                targetDirectory: "/Users/demo/Desktop"
+            )
+            try assertEqual(sameDirState.count, 2)
+            try assertTrue(sameDirState.isSelectionSubsetOfCut)
+            try assertTrue(!sameDirState.canPasteInCurrentDirectory)
+
+            // 选中项上不显示无意义的同目录粘贴，剪切队列子菜单紧随移出项之后
+            let itemNodes = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+                location: .items,
+                selection: .singleFile(isTextEligible: true, isArchive: false),
+                enabledFeatureIds: allFeatures,
+                cutState: sameDirState
+            ))
+            try assertTrue(!itemNodes.contains { $0.id == MenuFeatureCatalog.paste })
+            let cutIdx = itemNodes.firstIndex { $0.id == MenuFeatureCatalog.cut }!
+            let queueIdx = itemNodes.firstIndex { $0.id == "submenu.cutQueue" }!
+            try assertEqual(queueIdx, cutIdx + 1)
+
+            // 空白处保留置灰的粘贴项，提示不能贴回原目录
+            let containerNodes = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+                location: .container,
+                selection: .empty,
+                enabledFeatureIds: allFeatures,
+                cutState: sameDirState
+            ))
+            let pasteNode = containerNodes.first { $0.id == MenuFeatureCatalog.paste }!
+            try assertTrue(!pasteNode.isEnabled)
+            try assertEqual(pasteNode.title, .formatted(key: "粘贴 (%d 项)", count: 2))
+
+            // 混合来源队列在原目录仍可粘贴（至少有一项来自其他目录）
+            let mixedState = CutState.evaluate(
+                cutPaths: ["/Users/demo/Desktop/a.txt", "/Users/demo/Downloads/c.txt"],
+                selectedPaths: ["/Users/demo/Desktop/a.txt"],
+                targetDirectory: "/Users/demo/Desktop"
+            )
+            try assertTrue(mixedState.canPasteInCurrentDirectory)
+        }
+
+        runTest("菜单单一数据源：关闭剪切开关时剪切队列子菜单兜底插入粘贴之后") {
             var features = Set(MenuFeatureCatalog.all.map(\.id))
             features.remove(MenuFeatureCatalog.cut) // 关闭剪切
             let input = MenuBuildInput(
@@ -233,26 +337,29 @@ enum MiscTests {
 
             try assertTrue(!ids.contains(MenuFeatureCatalog.cut))
             let pasteIdx = ids.firstIndex(of: MenuFeatureCatalog.paste)!
-            let cancelCutIdx = ids.firstIndex(of: "action.cancelCut")!
-            try assertEqual(cancelCutIdx, pasteIdx + 1, "取消剪切应紧随粘贴之后插入")
+            let queueIdx = ids.firstIndex(of: "submenu.cutQueue")!
+            try assertEqual(queueIdx, pasteIdx + 1, "剪切队列子菜单应紧随粘贴之后插入")
+        }
+
+        runTest("UndoMenuState：右键菜单跳过延迟剪切撤销，其余操作正常展示") {
+            try assertTrue(!UndoMenuState(kind: .cut, count: 3, name: "").showsInContextMenu)
+            try assertTrue(UndoMenuState(kind: .paste, count: 3, name: "Dest").showsInContextMenu)
+            try assertTrue(UndoMenuState(kind: .move, count: 1, name: "Dest").showsInContextMenu)
+            try assertTrue(UndoMenuState(kind: .createFile, count: 1, name: "a.txt").showsInContextMenu)
         }
 
         runTest("菜单单一数据源：常用目录子菜单与状态展示") {
             let allFeatures = Set(MenuFeatureCatalog.all.map(\.id))
-            // 场景 1：无常用目录
+            // 场景 1：无常用目录时隐藏「移动到」与「复制到」
             let emptyInput = MenuBuildInput(
                 location: .items,
                 selection: .singleFolder,
                 enabledFeatureIds: allFeatures,
                 favoriteDirectories: []
             )
-            let emptyNodes = MenuTreeBuilder.buildMenuTree(input: emptyInput)
-            let moveToNode1 = emptyNodes.first { $0.id == MenuFeatureCatalog.moveTo }!
-            guard case .submenu(let children1) = moveToNode1.kind else {
-                throw TestFailure(message: "moveTo 必须是 submenu")
-            }
-            try assertEqual(children1[0].titleKey, "尚未添加常用目录")
-            try assertTrue(!children1[0].isEnabled)
+            let emptyIds = MenuTreeBuilder.buildMenuTree(input: emptyInput).map(\.id)
+            try assertTrue(!emptyIds.contains(MenuFeatureCatalog.moveTo))
+            try assertTrue(!emptyIds.contains(MenuFeatureCatalog.copyTo))
 
             // 场景 2：有常用目录且包含不可用目录
             let favs = [
@@ -274,6 +381,29 @@ enum MiscTests {
             try assertTrue(children2[0].isEnabled)
             try assertEqual(children2[1].title, .unavailableDirectory("外部盘"))
             try assertTrue(!children2[1].isEnabled)
+        }
+
+        runTest("菜单单一数据源：代码行数统计与比较文件快速文件过滤") {
+            let dir = makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let swiftFile = dir.appendingPathComponent("Main.swift")
+            let makefile = dir.appendingPathComponent("Makefile")
+            let pngFile = dir.appendingPathComponent("image.png")
+            let zipFile = dir.appendingPathComponent("archive.zip")
+            try "let a = 1\n".write(to: swiftFile, atomically: true, encoding: .utf8)
+            try "all:\n\techo hi\n".write(to: makefile, atomically: true, encoding: .utf8)
+            try Data([0x89, 0x50, 0x4E, 0x47]).write(to: pngFile)
+            try Data([0x50, 0x4B, 0x03, 0x04]).write(to: zipFile)
+
+            try assertTrue(LineCounter.isSupportedFile(swiftFile))
+            try assertTrue(!LineCounter.isSupportedFile(pngFile))
+            try assertTrue(!LineCounter.isSupportedFile(zipFile))
+
+            try assertTrue(ComparisonDocument.isMenuEligible(swiftFile))
+            try assertTrue(ComparisonDocument.isMenuEligible(makefile))
+            try assertTrue(!ComparisonDocument.isMenuEligible(pngFile))
+            try assertTrue(!ComparisonDocument.isMenuEligible(zipFile))
+            try assertTrue(!ComparisonDocument.isMenuEligible(dir))
         }
 
         runTest("菜单单一数据源：整棵目录菜单区分同目录复制与移动") {

@@ -89,13 +89,33 @@ extension FinderRightService {
         }
     }
 
+    /// 从剪切队列中移除指定路径（右键菜单「移出剪切队列」调用）。
+    func removeFromCutQueue(_ req: IPCRequest) -> IPCResponse {
+        guard let paths = req.payload["paths"]?.stringArrayValue, !paths.isEmpty else {
+            return IPCResponse(id: req.id, success: false, message: "removeFromCutQueue 参数缺失：paths")
+        }
+        do {
+            try Self.removePendingCutPaths(paths)
+            return IPCResponse(id: req.id, success: true, message: "已移出剪切队列")
+        } catch CutQueueStore.RemovalError.pasteInProgress {
+            return IPCResponse(id: req.id, success: false, message: L("正在粘贴，请完成后再移除剪切项"))
+        } catch {
+            serviceLog("removeFromCutQueue 移除失败: \(error)")
+            return IPCResponse(id: req.id, success: false, message: String(format: L("移除剪切项失败：%@"), error.localizedDescription))
+        }
+    }
+
     static func pendingCutPaths() -> [String] {
         cutPasteQueue.sync { CutQueueStore().read() }
     }
 
     /// 菜单栏入口与 IPC 剪切/粘贴共用短事务，避免快照过期后移除在途项目。
     static func removePendingCutPath(_ path: String) throws {
-        try mutatePendingCutQueue { try $0.remove(path) }
+        try removePendingCutPaths([path])
+    }
+
+    static func removePendingCutPaths(_ paths: [String]) throws {
+        try mutatePendingCutQueue { try $0.remove(contentsOf: paths) }
     }
 
     /// 菜单弹窗「全部清空」：仅在无粘贴批次在途时清空待剪切队列，保留与单条移除一致的安全校验。

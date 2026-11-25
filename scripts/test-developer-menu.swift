@@ -64,14 +64,22 @@ struct DeveloperMenuChecks {
         let disabledMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
             location: .items, selection: .singleFolder, enabledFeatureIds: []))
         assert(disabledMenu.isEmpty)
-        for selection in [SelectionKind.empty, .singleFolder, .singleFile(isTextEligible: true, isArchive: false),
-                          .multiple(count: 2, hasRegularFiles: true, hasArchives: false)] {
+        for selection in [SelectionKind.singleFile(isTextEligible: true, isArchive: false, isComparable: true),
+                          .multiple(count: 2, hasRegularFiles: true, hasArchives: false, canCompareFiles: true)] {
             let menu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
                 location: .items, selection: selection, enabledFeatureIds: [compare]))
             assert(menu.map(\.id) == [compare])
             guard case .action(let action, _) = menu[0].kind else { fatalError("文件比较必须直接显示") }
             assert(action == "compareFiles")
         }
+        for selection in [SelectionKind.empty, .singleFolder,
+                          .singleFile(isTextEligible: false, isArchive: false, isComparable: false),
+                          .multiple(count: 3, hasRegularFiles: true, hasArchives: false, canCompareFiles: false)] {
+            assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+                location: .items, selection: selection, enabledFeatureIds: [compare])).isEmpty)
+        }
+        assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .container, selection: .empty, enabledFeatureIds: [compare])).isEmpty)
 
         for selection in [SelectionKind.empty, .singleFolder, .singleFile(isTextEligible: true, isArchive: false)] {
             let menu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
@@ -100,10 +108,10 @@ struct DeveloperMenuChecks {
         assert(reloaded.developerCommand(id: command.id) == nil)
         reloaded.developerCommands = [command]
         let commandMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
-            location: .items, selection: .singleFolder, enabledFeatureIds: [relative, tree, MenuFeatureCatalog.toggleHidden],
-            menuOrder: [tree, MenuFeatureCatalog.toggleHidden, relative],
+            location: .items, selection: .singleFolder, enabledFeatureIds: [relative, tree, MenuFeatureCatalog.copyPath],
+            menuOrder: [tree, MenuFeatureCatalog.copyPath, relative],
             developerMenuOrder: [command.menuId, tree, relative], developerCommands: [command]))
-        assert(commandMenu.map(\.id) == [MenuFeatureCatalog.toggleHidden, command.menuId, tree, relative])
+        assert(commandMenu.map(\.id) == [MenuFeatureCatalog.copyPath, command.menuId, tree, relative])
         guard case .action(let action, _) = commandMenu[1].kind else { fatalError("自定义命令必须直接显示") }
         assert(action == "runCustomCommand")
         let hiddenCommandMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
@@ -128,6 +136,12 @@ struct DeveloperMenuChecks {
         let lineMenu = MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
             location: .items, selection: .singleFolder, enabledFeatureIds: [lines]))
         assert(lineMenu.map(\.id) == [lines])
+        assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .items, selection: .singleFile(isTextEligible: true, isArchive: false, isLineCountable: true),
+            enabledFeatureIds: [lines])).map(\.id) == [lines])
+        assert(MenuTreeBuilder.buildMenuTree(input: MenuBuildInput(
+            location: .items, selection: .singleFile(isTextEligible: false, isArchive: false, isLineCountable: false),
+            enabledFeatureIds: [lines])).isEmpty)
 
         print("✓ 开发者菜单：默认关闭、配置保留、底部排序、同级入口、选择条件和服务显隐通过")
     }

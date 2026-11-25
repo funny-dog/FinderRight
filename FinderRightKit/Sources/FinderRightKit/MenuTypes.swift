@@ -12,8 +12,8 @@ public enum MenuTargetLocation: Equatable {
 public enum SelectionKind: Equatable {
     case empty                                                          // 空白处（无选中项）
     case singleFolder                                                   // 单个文件夹
-    case singleFile(isTextEligible: Bool, isArchive: Bool, isRegularFile: Bool = true)              // 单个普通文件
-    case multiple(count: Int, hasRegularFiles: Bool, hasArchives: Bool) // 多个文件/文件夹
+    case singleFile(isTextEligible: Bool, isArchive: Bool, isRegularFile: Bool = true, isLineCountable: Bool = false, isComparable: Bool = true) // 单个普通文件
+    case multiple(count: Int, hasRegularFiles: Bool, hasArchives: Bool, canCompareFiles: Bool = false) // 多个文件/文件夹
 }
 
 /// 模板纯数据
@@ -88,10 +88,39 @@ public struct MenuFavoriteData: Equatable {
 public struct CutState: Equatable {
     public let count: Int
     public let isSelectionSubsetOfCut: Bool
+    /// 当前浏览目录是否可粘贴（队列中至少有一项来自其他目录，或未知目标目录）
+    public let canPasteInCurrentDirectory: Bool
 
-    public init(count: Int, isSelectionSubsetOfCut: Bool) {
+    public init(count: Int, isSelectionSubsetOfCut: Bool, canPasteInCurrentDirectory: Bool = true) {
         self.count = count
         self.isSelectionSubsetOfCut = isSelectionSubsetOfCut
+        self.canPasteInCurrentDirectory = canPasteInCurrentDirectory
+    }
+
+    public static func evaluate(
+        cutPaths: Set<String>,
+        selectedPaths: [String],
+        targetDirectory: String?
+    ) -> CutState {
+        let normalizedCut = Set(cutPaths.map(BadgeOwnershipProbe.normalize))
+        let normalizedSelected = Set(selectedPaths.map(BadgeOwnershipProbe.normalize))
+        let isSubset = !normalizedSelected.isEmpty && normalizedSelected.isSubset(of: normalizedCut)
+        let canPaste: Bool
+        if normalizedCut.isEmpty {
+            canPaste = false
+        } else if let targetDirectory {
+            let target = BadgeOwnershipProbe.normalize(targetDirectory)
+            canPaste = normalizedCut.contains {
+                BadgeOwnershipProbe.normalize(($0 as NSString).deletingLastPathComponent) != target
+            }
+        } else {
+            canPaste = true
+        }
+        return CutState(
+            count: normalizedCut.count,
+            isSelectionSubsetOfCut: isSubset,
+            canPasteInCurrentDirectory: canPaste
+        )
     }
 }
 
@@ -356,6 +385,27 @@ extension MenuDataNode {
         MenuDataNode(
             id: id,
             title: .key(titleKey),
+            systemImage: systemImage,
+            tint: tint,
+            shortcutId: shortcutId,
+            isEnabled: isEnabled,
+            kind: .submenu(children: children)
+        )
+    }
+
+    public static func formattedSubmenu(
+        id: String,
+        titleKey: String,
+        count: Int,
+        systemImage: String? = nil,
+        tint: MenuTint = .blue,
+        shortcutId: String? = nil,
+        isEnabled: Bool = true,
+        children: [MenuDataNode]
+    ) -> MenuDataNode {
+        MenuDataNode(
+            id: id,
+            title: .formatted(key: titleKey, count: count),
             systemImage: systemImage,
             tint: tint,
             shortcutId: shortcutId,

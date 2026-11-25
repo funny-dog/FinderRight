@@ -120,7 +120,8 @@ extension FinderSync {
             logToFile("openEditorWith: bad tag \(idx)"); return
         }
         let bundleId = menuIds[idx]
-        let urls = currentContext().selectedItems
+        let (directory, selected) = currentContext()
+        let urls = selected.isEmpty ? [directory].compactMap { $0 } : selected
         guard !urls.isEmpty else { logToFile("openEditorWith: no items"); return }
         let paths = urls.map(\.path)
         logToFile("openEditorWith ipc (async) → bundle=\(bundleId) count=\(paths.count)")

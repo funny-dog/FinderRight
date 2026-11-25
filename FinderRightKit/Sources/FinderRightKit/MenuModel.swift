@@ -15,46 +15,72 @@ public enum MenuTreeBuilder {
         let hasRegularFiles: Bool
         let hasArchiveFiles: Bool
 
-        switch input.selection {
-        case .empty:
+        if input.location == .sidebar {
+            // 侧边栏右键目标始终是该侧边栏文件夹（容器），不混入主窗口的选中项操作
             isContainerLike = true
             hasSelection = false
             hasExplicitSelection = false
             isSingleTextFile = false
             hasRegularFiles = false
             hasArchiveFiles = false
-        case .singleFolder:
-            isContainerLike = input.location == .container || input.location == .sidebar
-            hasSelection = true
-            hasExplicitSelection = input.location != .container
-            isSingleTextFile = false
-            hasRegularFiles = false
-            hasArchiveFiles = false
-        case .singleFile(let isText, let isArchive, let regular):
-            isContainerLike = input.location == .container || input.location == .sidebar
-            hasSelection = true
-            hasExplicitSelection = input.location != .container
-            isSingleTextFile = isText
-            hasRegularFiles = regular
-            hasArchiveFiles = isArchive
-        case .multiple(let count, let regular, let archives):
-            isContainerLike = input.location == .container || input.location == .sidebar || count == 0
-            hasSelection = count > 0
-            hasExplicitSelection = count > 0 && input.location != .container
-            isSingleTextFile = false
-            hasRegularFiles = regular
-            hasArchiveFiles = archives
+        } else {
+            switch input.selection {
+            case .empty:
+                isContainerLike = true
+                hasSelection = false
+                hasExplicitSelection = false
+                isSingleTextFile = false
+                hasRegularFiles = false
+                hasArchiveFiles = false
+            case .singleFolder:
+                isContainerLike = input.location == .container
+                hasSelection = true
+                hasExplicitSelection = input.location == .items
+                isSingleTextFile = false
+                hasRegularFiles = false
+                hasArchiveFiles = false
+            case .singleFile(let isText, let isArchive, let regular, _, _):
+                isContainerLike = input.location == .container
+                hasSelection = true
+                hasExplicitSelection = input.location == .items
+                isSingleTextFile = isText
+                hasRegularFiles = regular
+                hasArchiveFiles = isArchive
+            case .multiple(let count, let regular, let archives, _):
+                isContainerLike = input.location == .container || count == 0
+                hasSelection = count > 0
+                hasExplicitSelection = count > 0 && input.location == .items
+                isSingleTextFile = false
+                hasRegularFiles = regular
+                hasArchiveFiles = archives
+            }
         }
 
         let hasCut = input.cutState.count > 0
 
-        func makeCancelCutItem() -> MenuDataNode {
-            .action(
-                id: "action.cancelCut",
-                titleKey: "取消剪切",
-                systemImage: "xmark.circle",
-                tint: .red,
-                actionId: "cancelCut"
+        func makeCutQueueSubmenu() -> MenuDataNode {
+            .formattedSubmenu(
+                id: "submenu.cutQueue",
+                titleKey: "剪切队列 (%d)",
+                count: input.cutState.count,
+                systemImage: "tray.full",
+                tint: .orange,
+                children: [
+                    .action(
+                        id: "action.showCutQueue",
+                        titleKey: "查看详情…",
+                        systemImage: "list.bullet",
+                        tint: .orange,
+                        actionId: "showCutQueueDetail"
+                    ),
+                    .action(
+                        id: "action.cancelCut",
+                        titleKey: "取消剪切",
+                        systemImage: "xmark.circle",
+                        tint: .red,
+                        actionId: "cancelCut"
+                    )
+                ]
             )
         }
 
@@ -114,7 +140,7 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.copyPath:
-                if hasSelection {
+                if hasSelection || input.location == .sidebar {
                     items.append(.action(
                         id: MenuFeatureCatalog.copyPath,
                         titleKey: "复制路径",
@@ -131,21 +157,32 @@ public enum MenuTreeBuilder {
                                          actionId: "copyProjectRelativePath", shortcutId: "shortcut.copyProjectRelativePath"))
                 }
             case MenuFeatureCatalog.copyDirectoryTree:
-                if input.selection == .singleFolder || (input.selection == .empty && input.location == .container) {
+                if input.location == .sidebar
+                    || (input.location == .container && input.selection == .empty)
+                    || (input.location == .items && input.selection == .singleFolder) {
                     items.append(.action(id: feature.id, titleKey: feature.nameKey,
                                          systemImage: feature.systemImage, tint: feature.tint,
                                          actionId: "copyDirectoryTree", shortcutId: "shortcut.copyDirectoryTree"))
                 }
             case MenuFeatureCatalog.gitStatus:
                 switch input.selection {
-                case .multiple where input.location != .container: break
+                case .multiple where !isContainerLike: break
                 default:
                     items.append(.action(id: feature.id, titleKey: feature.nameKey,
                                          systemImage: feature.systemImage, tint: feature.tint, actionId: "gitStatus"))
                 }
             case MenuFeatureCatalog.compareFiles:
-                items.append(.action(id: feature.id, titleKey: feature.nameKey,
-                                     systemImage: feature.systemImage, tint: feature.tint, actionId: "compareFiles"))
+                guard input.location == .items else { break }
+                switch input.selection {
+                case .singleFile(_, _, _, _, let isComparable) where isComparable:
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint, actionId: "compareFiles"))
+                case .multiple(let count, _, _, let canCompare) where count == 2 && canCompare:
+                    items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                         systemImage: feature.systemImage, tint: feature.tint, actionId: "compareFiles"))
+                default:
+                    break
+                }
             case MenuFeatureCatalog.filePermissions:
                 if let title = input.filePermissionsTitle {
                     items.append(.dynamicAction(
@@ -159,11 +196,20 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.lineCount:
-                switch input.selection {
-                case .multiple where input.location != .container: break
-                default:
+                if isContainerLike {
                     items.append(.action(id: feature.id, titleKey: feature.nameKey,
                                          systemImage: feature.systemImage, tint: feature.tint, actionId: "lineCount"))
+                } else {
+                    switch input.selection {
+                    case .empty, .singleFolder:
+                        items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                             systemImage: feature.systemImage, tint: feature.tint, actionId: "lineCount"))
+                    case .singleFile(_, _, _, let isLineCountable, _) where isLineCountable:
+                        items.append(.action(id: feature.id, titleKey: feature.nameKey,
+                                             systemImage: feature.systemImage, tint: feature.tint, actionId: "lineCount"))
+                    default:
+                        break
+                    }
                 }
             case MenuFeatureCatalog.copyFileName:
                 if hasSelection {
@@ -207,14 +253,16 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.goToDirectory:
-                items.append(.action(
-                    id: MenuFeatureCatalog.goToDirectory,
-                    titleKey: "打开路径…",
-                    systemImage: "arrow.right.circle",
-                    tint: .cyan,
-                    actionId: "goToDirectory",
-                    shortcutId: "shortcut.goToDirectory"
-                ))
+                if isContainerLike {
+                    items.append(.action(
+                        id: MenuFeatureCatalog.goToDirectory,
+                        titleKey: "打开路径…",
+                        systemImage: "arrow.right.circle",
+                        tint: .cyan,
+                        actionId: "goToDirectory",
+                        shortcutId: "shortcut.goToDirectory"
+                    ))
+                }
             case MenuFeatureCatalog.openTerminal:
                 if !input.terminals.isEmpty {
                     let children = input.terminals.map { t in
@@ -237,7 +285,7 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.openEditor:
-                if hasSelection && !input.editors.isEmpty {
+                if (hasSelection || input.location == .sidebar) && !input.editors.isEmpty {
                     let children = input.editors.map { e in
                         MenuDataNode.dynamicAction(
                             id: "openEditor.\(e.bundleIdentifier)",
@@ -259,54 +307,41 @@ public enum MenuTreeBuilder {
                 }
             case MenuFeatureCatalog.cut:
                 if hasExplicitSelection {
-                    let cutTitleKey = input.cutState.isSelectionSubsetOfCut ? "剪切 (已在剪切队列)" : "剪切"
-                    items.append(.action(
-                        id: MenuFeatureCatalog.cut,
-                        titleKey: cutTitleKey,
-                        systemImage: "scissors",
-                        tint: .orange,
-                        actionId: "cutFiles",
-                        shortcutId: "shortcut.cut"
-                    ))
-                }
-                if hasCut {
-                    items.append(.formattedAction(
-                        id: "action.showCutQueue",
-                        titleKey: "已剪切 %d 项…",
-                        count: input.cutState.count,
-                        systemImage: "scissors",
-                        tint: .orange,
-                        actionId: "showCutQueueDetail"
-                    ))
-                    items.append(makeCancelCutItem())
-                }
-            case MenuFeatureCatalog.paste:
-                if hasCut || isContainerLike {
-                    if hasCut {
-                        items.append(.formattedAction(
-                            id: MenuFeatureCatalog.paste,
-                            titleKey: "粘贴 (已剪切 %d 项)",
-                            count: input.cutState.count,
-                            systemImage: "doc.on.clipboard",
+                    if input.cutState.isSelectionSubsetOfCut {
+                        items.append(.action(
+                            id: MenuFeatureCatalog.cut,
+                            titleKey: "移出剪切队列",
+                            systemImage: "minus.circle",
                             tint: .orange,
-                            actionId: "pasteFiles",
-                            shortcutId: "shortcut.paste",
-                            isEnabled: true
+                            actionId: "removeFromCutQueue"
                         ))
                     } else {
                         items.append(.action(
-                            id: MenuFeatureCatalog.paste,
-                            titleKey: "粘贴",
-                            systemImage: "doc.on.clipboard",
+                            id: MenuFeatureCatalog.cut,
+                            titleKey: "剪切",
+                            systemImage: "scissors",
                             tint: .orange,
-                            actionId: "pasteFiles",
-                            shortcutId: "shortcut.paste",
-                            isEnabled: false
+                            actionId: "cutFiles",
+                            shortcutId: "shortcut.cut"
                         ))
                     }
                 }
+            case MenuFeatureCatalog.paste:
+                let canPaste = hasCut && input.cutState.canPasteInCurrentDirectory
+                if hasCut && (canPaste || isContainerLike) {
+                    items.append(.formattedAction(
+                        id: MenuFeatureCatalog.paste,
+                        titleKey: "粘贴 (%d 项)",
+                        count: input.cutState.count,
+                        systemImage: "doc.on.clipboard",
+                        tint: .orange,
+                        actionId: "pasteFiles",
+                        shortcutId: "shortcut.paste",
+                        isEnabled: canPaste
+                    ))
+                }
             case MenuFeatureCatalog.moveTo:
-                if hasExplicitSelection {
+                if hasExplicitSelection && !input.favoriteDirectories.isEmpty {
                     items.append(buildFavoritesSubmenu(
                         featureId: MenuFeatureCatalog.moveTo,
                         titleKey: "移动到",
@@ -316,7 +351,7 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.copyTo:
-                if hasExplicitSelection {
+                if hasExplicitSelection && !input.favoriteDirectories.isEmpty {
                     items.append(buildFavoritesSubmenu(
                         featureId: MenuFeatureCatalog.copyTo,
                         titleKey: "复制到",
@@ -434,26 +469,30 @@ public enum MenuTreeBuilder {
                     ))
                 }
             case MenuFeatureCatalog.toggleHidden:
-                items.append(.action(
-                    id: MenuFeatureCatalog.toggleHidden,
-                    titleKey: "切换隐藏文件",
-                    systemImage: "eye",
-                    tint: .pink,
-                    actionId: "toggleHiddenFiles",
-                    shortcutId: "shortcut.toggleHidden"
-                ))
+                if isContainerLike {
+                    items.append(.action(
+                        id: MenuFeatureCatalog.toggleHidden,
+                        titleKey: "切换隐藏文件",
+                        systemImage: "eye",
+                        tint: .pink,
+                        actionId: "toggleHiddenFiles",
+                        shortcutId: "shortcut.toggleHidden"
+                    ))
+                }
             default:
                 break
             }
         }
 
-        // 当「剪切」功能被用户关闭但剪切队列不为空时，补齐「取消剪切」
-        if hasCut && !featureOn(MenuFeatureCatalog.cut) {
-            let cancelCut = makeCancelCutItem()
+        // 剪切队列非空时统一收拢为一个子菜单（紧随粘贴之后，若无粘贴则紧随剪切，关闭开关时兜底追加）
+        if hasCut {
+            let cutQueueMenu = makeCutQueueSubmenu()
             if let pasteIndex = items.firstIndex(where: { $0.id == MenuFeatureCatalog.paste }) {
-                items.insert(cancelCut, at: pasteIndex + 1)
+                items.insert(cutQueueMenu, at: pasteIndex + 1)
+            } else if let cutIndex = items.firstIndex(where: { $0.id == MenuFeatureCatalog.cut }) {
+                items.insert(cutQueueMenu, at: cutIndex + 1)
             } else {
-                items.append(cancelCut)
+                items.append(cutQueueMenu)
             }
         }
 
@@ -476,27 +515,17 @@ public enum MenuTreeBuilder {
         favorites: [MenuFavoriteData]
     ) -> MenuDataNode {
         var children: [MenuDataNode] = []
-        if favorites.isEmpty {
-            children.append(.action(
-                id: "\(featureId).empty",
-                titleKey: "尚未添加常用目录",
-                tint: .gray,
-                actionId: "",
-                isEnabled: false
+        for fav in favorites {
+            let title: MenuDataNode.Title = fav.isUnavailable ? .unavailableDirectory(fav.displayName) : .dynamic(fav.displayName)
+            children.append(MenuDataNode(
+                id: "\(featureId).\(fav.tag)",
+                title: title,
+                systemImage: "folder",
+                tint: .cyan,
+                isEnabled: !fav.isUnavailable && (featureId == MenuFeatureCatalog.copyTo ? fav.canCopy : fav.canTransfer),
+                toolTip: fav.path,
+                kind: .action(actionId: actionId, tag: fav.tag)
             ))
-        } else {
-            for fav in favorites {
-                let title: MenuDataNode.Title = fav.isUnavailable ? .unavailableDirectory(fav.displayName) : .dynamic(fav.displayName)
-                children.append(MenuDataNode(
-                    id: "\(featureId).\(fav.tag)",
-                    title: title,
-                    systemImage: "folder",
-                    tint: .cyan,
-                    isEnabled: !fav.isUnavailable && (featureId == MenuFeatureCatalog.copyTo ? fav.canCopy : fav.canTransfer),
-                    toolTip: fav.path,
-                    kind: .action(actionId: actionId, tag: fav.tag)
-                ))
-            }
         }
         children.append(.separator(id: "\(featureId).separator"))
         children.append(.action(
