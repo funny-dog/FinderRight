@@ -2,9 +2,9 @@
 
 # FinderRight
 
-**给 Finder 加上右键新建文件、打开终端和剪切粘贴。**
+**全面增强 macOS Finder：右键文件操作、扩展空格预览、开发者工具与剪贴板截图一站补齐。**
 
-**Create files, open a terminal, and cut & paste from Finder’s right-click menu.**
+**Supercharge macOS Finder with right-click file actions, extended Quick Look previews, developer tools, clipboard history, and quick screenshots.**
 
 免费开源 · 文件操作在本地完成 / Free & open source · File operations stay on your Mac
 
@@ -51,9 +51,11 @@
 ### 📸 截图
 
 <p align="center">
-  <img src="docs/images/menu-new-file.png" alt="FinderRight 右键菜单" height="360" />
-  &emsp;
-  <img src="docs/images/settings-shortcuts.png" alt="FinderRight 快捷键设置" height="360" />
+  <img src="docs/images/menu-new-file.png" alt="FinderRight 空白处右键菜单" height="340" />
+  &ensp;
+  <img src="docs/images/menu-file-actions.png" alt="FinderRight 选中文件右键菜单" height="340" />
+  &ensp;
+  <img src="docs/images/settings-demo.gif" alt="FinderRight 设置页多主题与界面演示" height="340" />
 </p>
 
 ### 📥 安装
@@ -231,9 +233,11 @@ bash scripts/build.sh          # 产出 .app 与 DMG / ZIP
 ### 📸 Screenshots
 
 <p align="center">
-  <img src="docs/images/menu-new-file.png" alt="FinderRight right-click menu" height="360" />
-  &emsp;
-  <img src="docs/images/settings-shortcuts.png" alt="FinderRight Settings — Keyboard Shortcuts" height="360" />
+  <img src="docs/images/menu-new-file.png" alt="FinderRight folder context menu" height="340" />
+  &ensp;
+  <img src="docs/images/menu-file-actions.png" alt="FinderRight file context menu" height="340" />
+  &ensp;
+  <img src="docs/images/settings-demo.gif" alt="FinderRight Settings — themes and pages walkthrough" height="340" />
 </p>
 
 > The screenshots show the Chinese interface; FinderRight is also fully available in English.
