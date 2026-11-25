@@ -327,7 +327,6 @@
 "1. 点击上方按钮，会跳转到「辅助功能」列表" = "1. Click the button above to jump to the Accessibility list";
 "2. 找到 FinderRight 并打开开关；如果列表里没有，点 + 添加 FinderRight.app" = "2. Find FinderRight and turn it on; if it's not listed, click + and add FinderRight.app";
 "3. 版本更新后若未生效：先选中 FinderRight 点「-」删除旧项，再点「+」重新添加" = "3. After updates: if still inactive, select FinderRight, click \"-\" to remove the old entry, then click \"+\" to re-add";
-"4. 回到此处点击「重新检测」" = "4. Come back and click \"Re-check\"";
 
 /* Terminal */
 "系统默认" = "System Default";
@@ -394,7 +393,6 @@
 "新版启动失败，旧版本备份保留在 %@/FinderRight.old.app" = "The new version failed to launch. The backup of the old version is kept at %@/FinderRight.old.app";
 "新版启动失败" = "The new version failed to launch";
 "上次更新尚未完成确认，本次更新已暂停；旧版本备份保留在 %@/FinderRight.old.app，打开 FinderRight 完成确认后会自动清理" = "The previous update is still awaiting confirmation, so this update was paused. The old-version backup is kept at %@/FinderRight.old.app and is cleaned up automatically after FinderRight confirms it on launch";
-"正在检查更新…" = "Checking for updates…";
 "刚刚检查" = "Checked just now";
 "%d 分钟前检查" = "Checked %d minutes ago";
 "%d 小时前检查" = "Checked %d hours ago";
@@ -787,7 +785,6 @@
 "链接" = "link";
 "所选项目中没有可计算哈希的文件" = "The selection contains no files to hash";
 "正在计算 %@…" = "Computing %@…";
-"已复制 %@" = "Copied %@";
 "已复制 %d 个文件的 %@，%d 项未计算" = "Copied %2$@ of %1$d files; %3$d items skipped";
 "按最近使用排序" = "Sort by Recent Use";
 "最近使用的目录排在前面，与右键菜单同步" = "Recently used folders first, synced with context menu";
@@ -886,7 +883,6 @@
 "更新日志" = "What's New";
 "FinderRight 的功能演进与最新改进" = "Evolution and improvements in FinderRight";
 "当前版本" = "Current";
-"完成" = "Done";
 "在 GitHub Releases 查看完整历史" = "View Full History on GitHub Releases";
 "查看版本更新说明" = "View release notes";
 "新增" = "New";
@@ -1075,15 +1071,11 @@
 "代码行数统计" = "Count Lines of Code";
 "统计各语言代码、注释与空行" = "Count code, comments, and blank lines";
 "打开代码行数统计" = "Open Line Count";
-"在访达中显示" = "Show in Finder";
 "正在扫描并统计代码行数…" = "Scanning and counting lines of code…";
 "无法统计该目录，请检查读取权限" = "Unable to analyze this directory; check read permissions";
-"重试" = "Retry";
 "未找到可识别的代码文件" = "No recognized code files found";
 "请选择需要统计代码行数的目录" = "Select a directory to count lines of code";
 "选择目录…" = "Choose Directory…";
-"选择" = "Choose";
-"语言" = "Language";
 "文件" = "Files";
 "代码" = "Code";
 "注释" = "Comments";
@@ -1126,6 +1118,11 @@
 "请选择或拖入需要统计代码的目录或文件" = "Select or drop a directory or file to count lines of code";
 "正在粘贴，请完成后再清空剪切队列" = "Paste is in progress. Please wait until it finishes before clearing the cut queue.";
 "清空剪切队列失败：%@" = "Failed to clear cut queue: %@";
+
+/* v1.13.5 更新日志 */
+"新增「暖陶」主题色并全面优化 7 套主题配色与对比度，升级输入框、图标块与按钮交互反馈" = "Added the Warm Terracotta theme, refined colors and contrast across all 7 themes, and upgraded hover and focus feedback for inputs, icon chips, and buttons";
+"设置侧边栏按「基础 / 定制 / 系统」分组，重构关于页卡片布局与标题排版，并精简国内站说明" = "Grouped the Settings sidebar into Core, Customize, and System, redesigned the About page layout and title alignment, and refined the China Mirror description";
+"修复完整设置窗口最小尺寸限制被重置的问题，以及操作历史「清空历史」按钮文字竖排的问题" = "Fixed the full Settings window minimum size limit being reset and fixed vertical text wrapping on the Clear History button";
 
 /* v1.13.4 更新日志 */
 "新增批量重命名（默认关闭）：多选后支持查找替换、前后缀、序号、日期与大小写规则，可实时预览、提示冲突并撤销" = "Added Batch Rename (off by default): rename multiple items by find & replace, prefix/suffix, numbering, date, or letter case with live preview, conflict checks, and undo";
@@ -1299,10 +1296,6 @@
 "复制文件名格式" = "Copy File Name Format";
 "复制文件内容上限" = "Copy File Content Limit";
 "路径与文件名多选时每行一项（Shell 转义以空格分隔）；文件内容仅单选且不超过上限时显示。" = "Multiple items copy one per line (space-separated for Shell Escaped); file content applies only to single files within the limit.";
-"查看源码、版本发布或点个 Star" = "Source code, releases, and GitHub stars";
-"产品介绍与安装包下载" = "Overview and installer downloads";
-"提交问题反馈或功能建议" = "Report a bug or suggest a feature";
-"查看各版本功能演进" = "See what changed across versions";
 "访达扩展未启用，右键菜单暂不可用" = "Finder extension is off; context menu unavailable";
 "前往启用" = "Enable";
 "源码与版本发布" = "Source code & releases";

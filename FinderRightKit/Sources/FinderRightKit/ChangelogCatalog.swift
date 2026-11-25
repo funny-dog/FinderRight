@@ -45,6 +45,15 @@ public enum ChangelogCatalog {
 
     public static let entries: [ChangelogRelease] = [
         ChangelogRelease(
+            version: "1.13.5",
+            date: "2026-11-26",
+            items: [
+                ChangelogEntry(type: .feature, textKey: "新增「暖陶」主题色并全面优化 7 套主题配色与对比度，升级输入框、图标块与按钮交互反馈"),
+                ChangelogEntry(type: .improvement, textKey: "设置侧边栏按「基础 / 定制 / 系统」分组，重构关于页卡片布局与标题排版，并精简国内站说明"),
+                ChangelogEntry(type: .fix, textKey: "修复完整设置窗口最小尺寸限制被重置的问题，以及操作历史「清空历史」按钮文字竖排的问题")
+            ]
+        ),
+        ChangelogRelease(
             version: "1.13.4",
             date: "2026-11-25",
             items: [

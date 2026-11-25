@@ -47,7 +47,7 @@ struct CutQueueView: View {
             Button(NSLocalizedString("全部清空", comment: "")) {
                 clearAll()
             }
-            .buttonStyle(.frSecondary)
+            .buttonStyle(.frDestructive)
             .disabled(paths.isEmpty)
         }
         .padding(.horizontal, 16)

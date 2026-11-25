@@ -601,14 +601,16 @@ struct FRButtonStyle: ButtonStyle {
     }
 
     var kind: Kind = .secondary
+    var isCapsule: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        FRButtonBody(kind: kind, configuration: configuration)
+        FRButtonBody(kind: kind, isCapsule: isCapsule, configuration: configuration)
     }
 }
 
 private struct FRButtonBody: View {
     let kind: FRButtonStyle.Kind
+    let isCapsule: Bool
     let configuration: ButtonStyleConfiguration
     @FRState private var isHovering = false
     @Environment(\.isEnabled) private var isEnabled
@@ -616,9 +618,9 @@ private struct FRButtonBody: View {
 
     private var activeHover: Bool { isHovering && isEnabled }
 
-    // 危险操作与同行的 FRPicker 胶囊保持同高同形（高 28、圆角 14 即胶囊）
+    // 胶囊危险按钮（高 28、圆角 14）用于与同行 FRPicker 胶囊对齐；常规按钮统一圆角 8
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: kind == .destructive ? 14 : 8, style: .continuous)
+        RoundedRectangle(cornerRadius: isCapsule ? 14 : 8, style: .continuous)
     }
 
     private var textColor: Color {
@@ -632,7 +634,7 @@ private struct FRButtonBody: View {
     private var fillColor: Color {
         switch kind {
         case .primary: return FRTheme.accent
-        case .destructive: return activeHover ? FRTheme.dropdownHoverFill : FRTheme.dropdownFill
+        case .destructive: return activeHover ? FRTheme.dropdownHoverFill : (isCapsule ? FRTheme.dropdownFill : FRTheme.field)
         case .secondary: return activeHover ? FRTheme.dropdownHoverFill : FRTheme.field
         }
     }
@@ -653,21 +655,20 @@ private struct FRButtonBody: View {
 
     var body: some View {
         let primary = kind == .primary
-        let destructive = kind == .destructive
         configuration.label
             .font(.system(size: 12.5, weight: primary ? .semibold : .medium))
             .foregroundColor(textColor)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, destructive ? 14 : 12)
-            .padding(.vertical, destructive ? 0 : 5)
-            .frame(height: destructive ? 28 : nil)
+            .padding(.horizontal, isCapsule ? 14 : 12)
+            .padding(.vertical, isCapsule ? 0 : 5)
+            .frame(height: isCapsule ? 28 : nil)
             .background(
                 shape.fill(fillColor)
                     .overlay(shape.fill(primary && activeHover ? Color.white.opacity(0.10) : Color.clear))
             )
             .overlay(shape.strokeBorder(borderColor, lineWidth: 1))
-            .shadow(color: .black.opacity(destructive ? 0.06 : 0), radius: 2, y: 1)
+            .shadow(color: .black.opacity(isCapsule ? 0.06 : 0), radius: 2, y: 1)
             .opacity(pressedOpacity)
             .contentShape(shape)
             .onHover { isHovering = $0 }
@@ -679,6 +680,7 @@ extension ButtonStyle where Self == FRButtonStyle {
     static var frSecondary: FRButtonStyle { FRButtonStyle(kind: .secondary) }
     static var frPrimary: FRButtonStyle { FRButtonStyle(kind: .primary) }
     static var frDestructive: FRButtonStyle { FRButtonStyle(kind: .destructive) }
+    static var frDestructiveCapsule: FRButtonStyle { FRButtonStyle(kind: .destructive, isCapsule: true) }
 }
 
 /// 文字链接式按钮（小号强调色文字）

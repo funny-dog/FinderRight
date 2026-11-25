@@ -98,9 +98,9 @@ struct BatchRenameView: View {
                 }
                 Spacer(minLength: 0)
                 Button(L("取消"), action: onCancel)
-                    .buttonStyle(FRButtonStyle()).keyboardShortcut(.cancelAction)
+                    .buttonStyle(.frSecondary).keyboardShortcut(.cancelAction)
                 Button(L("重命名"), action: { onApply(entries) })
-                    .buttonStyle(FRButtonStyle(kind: .primary)).keyboardShortcut(.defaultAction)
+                    .buttonStyle(.frPrimary).keyboardShortcut(.defaultAction)
                     .disabled(problems > 0 || changed.isEmpty || model.isApplying)
             }
             .padding(.top, 14)
