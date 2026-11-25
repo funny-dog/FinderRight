@@ -1125,6 +1125,7 @@
 "优化右键菜单剪切队列交互：非空时收拢为「剪切队列」子菜单，已剪切项支持右键「移出剪切队列」，同目录内「粘贴」自动置灰" = "Improved the cut queue context menu: grouped queue actions into a Cut Queue submenu, added Remove from Cut Queue for queued items, and disabled Paste in the same folder";
 "收紧右键菜单上下文过滤（按场景按需显示文件比较、代码行数统计、打开路径、切换隐藏文件与常用目录），设置侧边栏按「基础 / 定制 / 系统」分组并重构关于页布局" = "Refined context menu filtering for file comparison, line count, Go to Path, hidden files, and favorite folders; grouped the Settings sidebar into Core, Customize, and System and redesigned the About page layout";
 "修复访达侧边栏右键菜单项与目标错位、完整设置窗口最小尺寸限制被重置，以及操作历史「清空历史」按钮文字竖排的问题" = "Fixed Finder sidebar context menu items and target resolution, full Settings window minimum size resets, and vertical text wrapping on the Clear History button";
+"修复磁盘占用缓存未随目录变化及时更新的问题：单文件改为实时统计，目录变更自动失效缓存，并在详情窗提示点击刷新" = "Fixed stale disk usage cache after folder changes: single files are now measured in real time, folder caches invalidate automatically on changes, and the breakdown window prompts to refresh";
 
 /* v1.13.4 更新日志 */
 "新增批量重命名（默认关闭）：多选后支持查找替换、前后缀、序号、日期与大小写规则，可实时预览、提示冲突并撤销" = "Added Batch Rename (off by default): rename multiple items by find & replace, prefix/suffix, numbering, date, or letter case with live preview, conflict checks, and undo";

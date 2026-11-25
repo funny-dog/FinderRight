@@ -51,7 +51,8 @@ public enum ChangelogCatalog {
                 ChangelogEntry(type: .feature, textKey: "新增「暖陶」主题色并全面优化 7 套主题配色与对比度，升级输入框、图标块与按钮交互反馈"),
                 ChangelogEntry(type: .improvement, textKey: "优化右键菜单剪切队列交互：非空时收拢为「剪切队列」子菜单，已剪切项支持右键「移出剪切队列」，同目录内「粘贴」自动置灰"),
                 ChangelogEntry(type: .improvement, textKey: "收紧右键菜单上下文过滤（按场景按需显示文件比较、代码行数统计、打开路径、切换隐藏文件与常用目录），设置侧边栏按「基础 / 定制 / 系统」分组并重构关于页布局"),
-                ChangelogEntry(type: .fix, textKey: "修复访达侧边栏右键菜单项与目标错位、完整设置窗口最小尺寸限制被重置，以及操作历史「清空历史」按钮文字竖排的问题")
+                ChangelogEntry(type: .fix, textKey: "修复访达侧边栏右键菜单项与目标错位、完整设置窗口最小尺寸限制被重置，以及操作历史「清空历史」按钮文字竖排的问题"),
+                ChangelogEntry(type: .fix, textKey: "修复磁盘占用缓存未随目录变化及时更新的问题：单文件改为实时统计，目录变更自动失效缓存，并在详情窗提示点击刷新")
             ]
         ),
         ChangelogRelease(
