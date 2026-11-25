@@ -29,15 +29,15 @@ struct AboutTab: View {
                         .scaledToFit()
                         .frame(width: 64, height: 64)
 
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: "FinderRight")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(FRTheme.text)
-                        Text("版本 \(appVersion)")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(FRTheme.mute)
-                    }
-                    .padding(.top, 10)
+                    Text(verbatim: "FinderRight")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(FRTheme.text)
+                        .padding(.top, 10)
+
+                    Text("版本 \(appVersion)")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(FRTheme.mute)
+                        .padding(.top, 2)
 
                     Text("增强 macOS Finder 右键菜单的轻量工具。")
                         .multilineTextAlignment(.center)

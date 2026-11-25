@@ -597,6 +597,7 @@ struct FRButtonStyle: ButtonStyle {
     enum Kind {
         case secondary
         case primary
+        case destructive
     }
 
     var kind: Kind = .secondary
@@ -613,31 +614,62 @@ private struct FRButtonBody: View {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var activeHover: Bool { isHovering && isEnabled }
+
+    // 危险操作与同行的 FRPicker 胶囊保持同高同形（高 28、圆角 14 即胶囊）
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: kind == .destructive ? 14 : 8, style: .continuous)
+    }
+
+    private var textColor: Color {
+        switch kind {
+        case .primary: return FRTheme.onAccent
+        case .destructive: return FRTheme.danger
+        case .secondary: return FRTheme.text
+        }
+    }
+
+    private var fillColor: Color {
+        switch kind {
+        case .primary: return FRTheme.accent
+        case .destructive: return activeHover ? FRTheme.dropdownHoverFill : FRTheme.dropdownFill
+        case .secondary: return activeHover ? FRTheme.dropdownHoverFill : FRTheme.field
+        }
+    }
+
+    private var borderColor: Color {
+        switch kind {
+        case .primary: return .clear
+        case .destructive: return activeHover ? FRTheme.danger.opacity(0.45) : FRTheme.fieldBorder
+        case .secondary: return activeHover ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder
+        }
+    }
+
+    private var pressedOpacity: Double {
+        guard isEnabled else { return 0.45 }
+        guard configuration.isPressed else { return 1 }
+        return kind == .primary ? 0.82 : 0.72
+    }
+
     var body: some View {
         let primary = kind == .primary
-        let activeHover = isHovering && isEnabled
+        let destructive = kind == .destructive
         configuration.label
             .font(.system(size: 12.5, weight: primary ? .semibold : .medium))
-            .foregroundColor(primary ? FRTheme.onAccent : FRTheme.text)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
+            .foregroundColor(textColor)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, destructive ? 14 : 12)
+            .padding(.vertical, destructive ? 0 : 5)
+            .frame(height: destructive ? 28 : nil)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(primary ? FRTheme.accent : (activeHover ? FRTheme.dropdownHoverFill : FRTheme.field))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(primary && activeHover ? Color.white.opacity(0.10) : Color.clear)
-                    )
+                shape.fill(fillColor)
+                    .overlay(shape.fill(primary && activeHover ? Color.white.opacity(0.10) : Color.clear))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        primary ? Color.clear : (activeHover ? FRTheme.accentText.opacity(0.35) : FRTheme.fieldBorder),
-                        lineWidth: 1
-                    )
-            )
-            .opacity(isEnabled ? (configuration.isPressed ? (primary ? 0.82 : 0.72) : 1) : 0.45)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(shape.strokeBorder(borderColor, lineWidth: 1))
+            .shadow(color: .black.opacity(destructive ? 0.06 : 0), radius: 2, y: 1)
+            .opacity(pressedOpacity)
+            .contentShape(shape)
             .onHover { isHovering = $0 }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: activeHover)
     }
@@ -646,6 +678,7 @@ private struct FRButtonBody: View {
 extension ButtonStyle where Self == FRButtonStyle {
     static var frSecondary: FRButtonStyle { FRButtonStyle(kind: .secondary) }
     static var frPrimary: FRButtonStyle { FRButtonStyle(kind: .primary) }
+    static var frDestructive: FRButtonStyle { FRButtonStyle(kind: .destructive) }
 }
 
 /// 文字链接式按钮（小号强调色文字）

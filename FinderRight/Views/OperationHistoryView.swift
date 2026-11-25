@@ -75,7 +75,7 @@ struct OperationHistoryView: View {
                     }
                     .id(limitPickerToken)
                     Button("清空历史", action: clearHistory)
-                        .buttonStyle(.frSecondary)
+                        .buttonStyle(.frDestructive)
                         .disabled(records.isEmpty)
                 }
             }
