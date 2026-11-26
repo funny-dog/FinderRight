@@ -50,19 +50,36 @@ public struct LineCountResult: Equatable {
 
     /// 格式化为类似 cloc 的纯文本表格，便于复制分享
     public func formatTable() -> String {
-        let separator = "-------------------------------------------------------------------------------"
-        let doubleSeparator = "==============================================================================="
-        var lines: [String] = []
-        lines.append(separator)
-        lines.append(String(format: "%-20s %10s %12s %12s %12s", "Language", "Files", "Blank", "Comment", "Code"))
-        lines.append(doubleSeparator)
+        func padRight(_ text: String, width: Int) -> String {
+            text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
+        }
+        func padLeft(_ text: String, width: Int) -> String {
+            text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
+        }
+        func formatRow(_ language: String, _ files: String, _ blank: String, _ comment: String, _ code: String) -> String {
+            [
+                padRight(language, width: 20),
+                padLeft(files, width: 10),
+                padLeft(blank, width: 12),
+                padLeft(comment, width: 12),
+                padLeft(code, width: 12),
+            ].joined(separator: " ")
+        }
+
+        let separator = String(repeating: "-", count: 70)
+        let doubleSeparator = String(repeating: "=", count: 70)
+        var lines: [String] = [
+            separator,
+            formatRow("Language", "Files", "Blank", "Comment", "Code"),
+            doubleSeparator,
+        ]
         for stat in languages {
-            lines.append(String(format: "%-20s %10d %12d %12d %12d", stat.language, stat.files, stat.blank, stat.comment, stat.code))
+            lines.append(formatRow(stat.language, "\(stat.files)", "\(stat.blank)", "\(stat.comment)", "\(stat.code)"))
         }
         lines.append(separator)
-        lines.append(String(format: "%-20s %10d %12d %12d %12d", "SUM:", totalFiles, totalBlank, totalComment, totalCode))
+        lines.append(formatRow("SUM:", "\(totalFiles)", "\(totalBlank)", "\(totalComment)", "\(totalCode)"))
         lines.append(separator)
-        lines.append(String(format: "Total lines: %d | Time: %.1fms", totalLines, durationMs))
+        lines.append("Total lines: \(totalLines) | Time: \(String(format: "%.1f", durationMs))ms")
         return lines.joined(separator: "\n")
     }
 }

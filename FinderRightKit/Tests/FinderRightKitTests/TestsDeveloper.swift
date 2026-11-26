@@ -803,6 +803,15 @@ enum DeveloperTests {
             try assertTrue(dirResult != nil, "目录统计应成功")
             try assertEqual(dirResult?.totalFiles, 1, "应忽略 node_modules 下的文件")
             try assertEqual(dirResult?.languages.count, 1)
+
+            // 验证纯文本表格格式化（避免 String(format:) 误用 %s 导致崩溃）
+            let table = (dirResult?.formatTable() ?? "")
+            let tableLines = table.components(separatedBy: "\n")
+            try assertEqual(tableLines.count, 8, "单语言表格应有 8 行")
+            try assertEqual(tableLines[1], "Language                  Files        Blank      Comment         Code")
+            try assertEqual(tableLines[3], "Swift                         1            1            4            4")
+            try assertEqual(tableLines[5], "SUM:                          1            1            4            4")
+            try assertTrue(tableLines[7].hasPrefix("Total lines: 9 | Time: "), "汇总尾行格式应正确")
         }
     }
 }
